@@ -1,0 +1,70 @@
+# Pomi
+
+Pomi is a self-hostable focus timer for work and break sessions, intentions,
+tasks, statistics, and optional AI-assisted task capture. The repository
+contains a NestJS backend, a React web client, Tauri desktop and mobile shells,
+and a Wear OS companion.
+
+## Local development
+
+Requirements: Node.js 24, pnpm 9.15.5, and Docker with Compose.
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+cp packages/backend/.env.example packages/backend/.env
+pnpm docker:dev:detached
+pnpm dev:migrate
+pnpm dev:frontend
+```
+
+Run the main checks with:
+
+```bash
+pnpm -r run build
+pnpm lint
+pnpm test:unit
+pnpm test:integration
+pnpm test:browser
+pnpm test:native
+```
+
+## Self-hosting
+
+The production Compose stack runs the backend, PostgreSQL, and Redis. Copy the
+production environment example, set `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, and
+`JWT_SECRET`, then start it:
+
+```bash
+cp packages/backend/.env.production.example pomi.env
+docker compose --env-file pomi.env -f packages/backend/docker-compose.yml up -d --build
+```
+
+It binds to `127.0.0.1:3000` by default. Put an HTTPS reverse proxy in front of
+it. Web deployments must also set their exact frontend origin in
+`CORS_ORIGINS`. See [the self-hosting guide](docs/self-hosting.md) for upgrades
+and optional integrations.
+
+## Optional services
+
+Sentry, OpenRouter, GitHub feedback, Firebase, and APNs remain disabled unless
+their credentials are supplied. Android Firebase builds additionally require a
+local `google-services.json` from the operator's Firebase project; the file is
+ignored and must not be committed.
+
+## Contributing and security
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Report
+security issues privately as described in [SECURITY.md](SECURITY.md).
+
+## Third-party review
+
+Dependency licenses and asset notices still need a dedicated review before
+redistributing compiled builds. Check and preserve every applicable third-party
+license and notice.
+
+## License
+
+Pomi is source-available under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). Commercial use or distribution
+requires separate permission from the licensor.

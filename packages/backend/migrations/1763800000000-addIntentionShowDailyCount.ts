@@ -1,0 +1,15 @@
+import { MigrationInterface, QueryRunner } from 'typeorm';
+
+export class AddIntentionShowDailyCount1763800000000 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE "preferences" ADD COLUMN "intentionShowDailyCount" boolean NOT NULL DEFAULT false`
+    );
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE "preferences" DROP COLUMN "intentionShowDailyCount"`
+    );
+  }
+}

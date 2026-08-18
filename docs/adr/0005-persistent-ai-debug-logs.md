@@ -1,0 +1,7 @@
+# Persist Assistant Debug Logs Behind an Explicit Debug Toggle
+
+Pomi persists Assistant and AI Task capture debug logs when a developer enables the debug-panel toggle, even though normal Assistant privacy rules avoid storing audio, prompts, transcripts, and model output. This intentionally supersedes the debug-only portion of ADR 0003 because voice and task-capture failures often need review after reloads or backend processing, and session-only logs would lose the OpenRouter output that explains the failure.
+
+Persistent debug logs stay off by default and never store voice recordings, generated spoken-reply audio, raw transcription envelopes, system prompts, or expanded prompts containing full Task or intention context. Logs may store the current user's final prompt or transcript, the normalized Task inputs and safe timer command passed to Pomi modules, invalid AI content needed to explain a parsing failure, intention-resolution notes, errors, and per-stage processing timings.
+
+Task-view dictation and its eventual Task capture share one debug entry. A successful dictation that is never submitted remains as a dictated-only entry; final submission replaces transcript-only input with the submitted prompt. The per-user toggle persists until turned off; turning it off warns the user and deletes that user's stored logs. The backend keeps only the latest 50 entries per user and exposes a clear-all action so this remains a diagnostic buffer, not a long-term archive.

@@ -1,0 +1,157 @@
+name: PR E2E
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      acceptance_timing:
+        description: Run ten parallel and three serial measured suites
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: pr-e2e-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PLAYWRIGHT_CI_WORKERS: '4'
+      PLAYWRIGHT_FULLY_PARALLEL: '1'
+      POMI_BACKEND_PORT: '3000'
+      POMI_DB_PORT: '5432'
+      POMI_REDIS_PORT: '6379'
+      POMI_BACKEND_BASE_URL: 'http://localhost:3000'
+      POMI_BACKEND_HEALTH_URL: 'http://localhost:3000/health'
+      NEST_PORT: '3000'
+      DATABASE_URL: 'postgres://user:password@localhost:5432/pomodoro'
+      REDIS_URL: 'redis://localhost:6379'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare backend env file
+        run: cp packages/backend/.env.example packages/backend/.env
+
+      - name: Build workspace
+        run: pnpm -r run build
+
+      - name: Install Playwright dependencies
+        timeout-minutes: 5
+        run: pnpm exec playwright install-deps chromium
+
+      - name: Verify Chrome browser
+        run: google-chrome --version
+
+      - name: Start database services
+        run: docker compose -f packages/backend/docker-compose.dev.yml -p pomi up -d db redis
+
+      - name: Wait for database services
+        run: |
+          for i in $(seq 1 60); do
+            if docker compose -f packages/backend/docker-compose.dev.yml -p pomi exec -T db pg_isready -U user -d pomodoro >/dev/null 2>&1 &&
+              [ "$(docker compose -f packages/backend/docker-compose.dev.yml -p pomi exec -T redis redis-cli ping 2>/dev/null)" = "PONG" ]; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Database services did not become ready in time"
+          docker compose -f packages/backend/docker-compose.dev.yml -p pomi logs --no-color db redis || true
+          exit 1
+
+      - name: Run backend migrations
+        run: pnpm --filter @pomi/backend migration:run
+
+      - name: Start backend
+        run: |
+          pnpm --filter @pomi/backend start:prod > backend.log 2>&1 &
+          echo "$!" > backend.pid
+
+      - name: Wait for backend health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS "$POMI_BACKEND_HEALTH_URL" >/dev/null; then
+              exit 0
+            fi
+            if [ -f backend.pid ] && ! kill -0 "$(cat backend.pid)" 2>/dev/null; then
+              echo "Backend exited before becoming healthy"
+              cat backend.log
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "Backend did not become healthy in time"
+          cat backend.log
+          exit 1
+
+      - name: Run e2e suite
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.acceptance_timing != true }}
+        timeout-minutes: 20
+        run: pnpm test:e2e
+
+      - name: Measure E2E acceptance timing
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.acceptance_timing == true }}
+        timeout-minutes: 30
+        run: pnpm test:e2e:timing
+
+      - name: Upload E2E acceptance timing
+        if: ${{ success() && github.event_name == 'workflow_dispatch' && inputs.acceptance_timing == true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-acceptance-timing
+          if-no-files-found: error
+          retention-days: 14
+          path: docs/testing/results
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          if-no-files-found: ignore
+          path: |
+            playwright-report
+            test-results
+            backend.log
+            docs/testing/results
+
+      - name: Print backend logs on failure
+        if: failure()
+        run: |
+          if [ -f backend.log ]; then
+            echo "::group::backend.log"
+            cat backend.log
+            echo "::endgroup::"
+          fi
+          docker compose -f packages/backend/docker-compose.dev.yml -p pomi logs --no-color db redis || true
+
+      - name: Stop frontend and backend
+        if: always()
+        run: |
+          if [ -f backend.pid ]; then
+            kill "$(cat backend.pid)" 2>/dev/null || true
+            sleep 1
+            kill -9 "$(cat backend.pid)" 2>/dev/null || true
+          fi
+          docker compose -f packages/backend/docker-compose.dev.yml -p pomi down -v --remove-orphans || true

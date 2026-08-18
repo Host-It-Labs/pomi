@@ -1,0 +1,59 @@
+{
+  "name": "@pomi/frontend",
+  "version": "0.1.0",
+  "description": "Pomi web, desktop, and mobile client.",
+  "author": "William Guinaudie",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NeoHuncho/pomi.git",
+    "directory": "packages/frontend"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "node ../../scripts/vite-dev.mjs",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "dependencies": {
+    "@choochmeque/tauri-plugin-notifications-api": "0.4.3",
+    "@pomi/shared": "workspace:*",
+    "@sentry/react": "^9.46.0",
+    "@tailwindcss/vite": "^4.0.12",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-deep-link": "^2.2.0",
+    "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-global-shortcut": "~2",
+    "@tauri-apps/plugin-http": "^2.4.2",
+    "@tauri-apps/plugin-opener": "~2",
+    "@tauri-apps/plugin-os": "^2.2.1",
+    "@tauri-apps/plugin-shell": "^2.2.0",
+    "@ts-rest/core": "^3.52.0",
+    "clsx": "^2.1.1",
+    "fflate": "^0.8.3",
+    "framer-motion": "^12.9.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-icons": "^5.5.0",
+    "socket.io-client": "^4.8.1",
+    "tailwindcss": "^4.0.12",
+    "tauri-plugin-android-battery-optimization-api": "^0.1.0",
+    "uuid": "^11.1.0",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.4.1",
+    "@types/node": "^24.0.0",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.3"
+  }
+}

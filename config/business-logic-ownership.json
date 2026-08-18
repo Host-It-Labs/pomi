@@ -1,0 +1,291 @@
+{
+  "version": 1,
+  "policy": "Every main product domain has an executable specification at its cheapest reliable layer. The manifest is checked after the TypeScript suite has passed; it is not a substitute for running the listed tests.",
+  "domains": [
+    {
+      "id": "auth-preferences",
+      "name": "Authentication and preferences",
+      "sources": [
+        "packages/backend/src/auth/auth.service.ts",
+        "packages/backend/src/preferences/preferences.service.ts"
+      ],
+      "specifications": [
+        "packages/backend/test/unit/auth-stale-user.test.ts",
+        "packages/backend/test/unit/preferences.service.test.ts",
+        "packages/backend/test/integration/app.integration.test.ts",
+        "packages/frontend/src/stores/preferencesStore.network.test.ts",
+        "packages/frontend/src/test/authExtensionsBehavior.test.tsx",
+        "e2e/journeys.spec.ts"
+      ],
+      "journey": 1,
+      "rules": [
+        {
+          "name": "deleted accounts lose REST and socket access",
+          "specification": "packages/backend/test/unit/auth-stale-user.test.ts",
+          "title": "rejects a valid REST token for a deleted user"
+        },
+        {
+          "name": "reading preferences never overwrites a newer snapshot",
+          "specification": "packages/backend/test/unit/preferences.service.test.ts",
+          "title": "does not write a stale snapshot"
+        },
+        {
+          "name": "failed preference bootstrap remains retryable without inventing state",
+          "specification": "packages/frontend/src/stores/preferencesStore.network.test.ts",
+          "title": "failed settings read remains retryable and does not invent preferences"
+        },
+        {
+          "name": "authentication stores only the session confirmed by the REST boundary",
+          "specification": "packages/frontend/src/test/authExtensionsBehavior.test.tsx",
+          "title": "records the confirmed session"
+        },
+        {
+          "name": "account lifecycle persists across reload, logout and login",
+          "specification": "e2e/journeys.spec.ts",
+          "title": "creates an account, reloads authenticated, logs out, and logs in again",
+          "journey": 1
+        }
+      ]
+    },
+    {
+      "id": "intentions",
+      "name": "Intentions and hierarchy",
+      "sources": ["packages/backend/src/intentions/intentions.service.ts"],
+      "specifications": [
+        "packages/backend/test/unit/intentions.service.test.ts",
+        "packages/frontend/src/test/timer-intention-session-legacy-replacement.test.tsx",
+        "e2e/journeys.spec.ts"
+      ],
+      "journey": 2,
+      "rules": [
+        {
+          "name": "symbol-only titles still receive stable slugs",
+          "specification": "packages/backend/test/unit/intentions.service.test.ts",
+          "title": "generates non-empty slugs for symbol-only titles"
+        },
+        {
+          "name": "a parent with children requires and preserves an explicit child selection",
+          "specification": "packages/frontend/src/test/timer-intention-session-legacy-replacement.test.tsx",
+          "title": "requires an explicit sub-intention and submits the preserved parent-child pair"
+        },
+        {
+          "name": "parent and sub-intention selection records a Timer",
+          "specification": "e2e/journeys.spec.ts",
+          "title": "enables Intentions, selects a Parent and Sub-intention, then records a Timer",
+          "journey": 2
+        }
+      ]
+    },
+    {
+      "id": "timer-session",
+      "name": "Timer and session transitions",
+      "sources": [
+        "packages/backend/src/timer/timer.service.ts",
+        "packages/backend/src/timer/timer-session.service.ts"
+      ],
+      "specifications": [
+        "packages/backend/test/unit/timer-session.service.test.ts",
+        "packages/frontend/src/components/timerSessionPresentation.test.tsx",
+        "packages/frontend/src/test/timer-intention-session-legacy-replacement.test.tsx",
+        "e2e/journeys.spec.ts"
+      ],
+      "journeys": [2, 3, 4],
+      "rules": [
+        {
+          "name": "running sessions update remaining time deterministically",
+          "specification": "packages/backend/test/unit/timer-session.service.test.ts",
+          "title": "updates running remaining time and existing session state deterministically"
+        },
+        {
+          "name": "advanced skip asks for a log decision only after elapsed work",
+          "specification": "packages/frontend/src/test/timer-intention-session-legacy-replacement.test.tsx",
+          "title": "requires a log decision after elapsed work"
+        },
+        {
+          "name": "an extension remains attached to its originating session slot",
+          "specification": "packages/frontend/src/test/timer-intention-session-legacy-replacement.test.tsx",
+          "title": "keeps an extension on the originating session marker"
+        },
+        {
+          "name": "primary Timer actions include undo and reset",
+          "specification": "e2e/journeys.spec.ts",
+          "title": "confirms primary Timer start, pause, add-five, undo, and reset actions",
+          "journey": 3
+        },
+        {
+          "name": "long-break session state survives reload",
+          "specification": "e2e/journeys.spec.ts",
+          "title": "runs a Session through Long break and persists native Timer state across reload",
+          "journey": 4
+        }
+      ]
+    },
+    {
+      "id": "tasks",
+      "name": "Tasks, recurrence, ordering and completion",
+      "sources": ["packages/backend/src/tasks/tasks.service.ts"],
+      "specifications": [
+        "packages/backend/test/unit/tasks.service.test.ts",
+        "packages/frontend/src/components/tasks/taskEditorBehavior.test.tsx",
+        "packages/frontend/src/components/tasks/taskInlineProperties.test.tsx",
+        "e2e/journeys.spec.ts"
+      ],
+      "journeys": [5, 6, 7, 8, 9],
+      "rules": [
+        {
+          "name": "manual ordering changes an entire Intention family",
+          "specification": "packages/backend/test/unit/tasks.service.test.ts",
+          "title": "manual ordering updates one complete Intention family"
+        },
+        {
+          "name": "linked Intention changes are explicit confirmed Task updates",
+          "specification": "packages/frontend/src/components/tasks/taskInlineProperties.test.tsx",
+          "title": "makes linked intention selection an explicit confirmed Task update"
+        },
+        {
+          "name": "recurring Tasks cannot lose their required schedule",
+          "specification": "packages/frontend/src/components/tasks/taskInlineProperties.test.tsx",
+          "title": "protects recurrence scheduling"
+        },
+        {
+          "name": "completion preserves a recurring successor contract",
+          "specification": "e2e/journeys.spec.ts",
+          "title": "completes, undoes, and archives a recurring Task without violating its successor contract",
+          "journey": 7
+        },
+        {
+          "name": "manual Task ordering survives refresh",
+          "specification": "e2e/journeys.spec.ts",
+          "title": "persists manual Task ordering across refresh",
+          "journey": 8
+        }
+      ]
+    },
+    {
+      "id": "accepted-actions",
+      "name": "Accepted-action FIFO and authoritative reconciliation",
+      "sources": [
+        "packages/backend/src/user-actions/user-actions.service.ts",
+        "packages/backend/src/user-actions/user-actions.store.ts",
+        "packages/frontend/src/utils/userActionQueue.ts"
+      ],
+      "specifications": [
+        "packages/backend/test/unit/user-actions.contract.test.ts",
+        "packages/backend/test/unit/user-actions.store.test.ts",
+        "packages/frontend/src/utils/userActionQueue.test.tsx",
+        "packages/frontend/src/utils/socketManager.test.ts",
+        "e2e/journeys.spec.ts"
+      ],
+      "journey": 12,
+      "rules": [
+        {
+          "name": "server queues remain FIFO and isolated per user",
+          "specification": "packages/backend/test/unit/user-actions.store.test.ts",
+          "title": "keeps FIFO order per user and isolates separate user queues"
+        },
+        {
+          "name": "client reconciliation precedes accepted-action resolution",
+          "specification": "packages/frontend/src/utils/userActionQueue.test.tsx",
+          "title": "reconciles authoritative state before resolving an accepted action"
+        },
+        {
+          "name": "socket reconnect preserves accepted-action HTTP retry backoff until readiness",
+          "specification": "packages/frontend/src/utils/socketManager.test.ts",
+          "title": "does not preempt the HTTP retry backoff after socket connection"
+        },
+        {
+          "name": "delayed FIFO actions reconnect and reconcile authoritatively",
+          "specification": "e2e/journeys.spec.ts",
+          "title": "preserves accepted-action FIFO through delayed indication, reconnect, and authoritative reconciliation",
+          "journey": 12
+        }
+      ]
+    },
+    {
+      "id": "statistics",
+      "name": "Statistics and work-timer activity",
+      "sources": ["packages/backend/src/statistics/statistics.service.ts"],
+      "specifications": [
+        "packages/backend/test/unit/statistics.service.test.ts",
+        "packages/backend/test/integration/watch.integration.test.ts",
+        "packages/frontend/src/test/statisticsLogsActionBehavior.test.tsx",
+        "e2e/journeys.spec.ts"
+      ],
+      "journey": 11,
+      "rules": [
+        {
+          "name": "completed work records unique valid intention links",
+          "specification": "packages/backend/test/unit/statistics.service.test.ts",
+          "title": "records every selected intention once and retains only valid parent/sub-intention links"
+        },
+        {
+          "name": "deleting a work log refreshes history only after confirmed mutation",
+          "specification": "packages/frontend/src/test/statisticsLogsActionBehavior.test.tsx",
+          "title": "deletes a selected recorded log, refreshes Timer history, and reports the confirmed change"
+        },
+        {
+          "name": "real activity produces statistics and work-Timer logs",
+          "specification": "e2e/journeys.spec.ts",
+          "title": "produces real Timer and Task activity for statistics and work-Timer logs",
+          "journey": 11
+        }
+      ]
+    },
+    {
+      "id": "user-data-transfer",
+      "name": "Administrator import and export",
+      "sources": ["packages/backend/src/system/user-data-transfer.service.ts"],
+      "specifications": [
+        "packages/backend/test/unit/user-data-transfer.service.test.ts",
+        "e2e/journeys.spec.ts"
+      ],
+      "journey": 13,
+      "rules": [
+        {
+          "name": "import remaps IDs while preserving relationships",
+          "specification": "packages/backend/test/unit/user-data-transfer.service.test.ts",
+          "title": "assigns fresh IDs and remaps related imported rows"
+        },
+        {
+          "name": "administrator export and import restores complete data",
+          "specification": "e2e/journeys.spec.ts",
+          "title": "exports and imports complete user data as an administrator",
+          "journey": 13
+        }
+      ]
+    },
+    {
+      "id": "watch-wear",
+      "name": "Watch HTTP contract and Wear state/presentation",
+      "sources": [
+        "packages/shared/src/watchSurface.ts",
+        "packages/backend/src/watch/watch.service.ts"
+      ],
+      "specifications": [
+        "packages/shared/src/watchSurface.test.ts",
+        "packages/backend/test/integration/watch.integration.test.ts",
+        "packages/frontend/src-tauri/gen/android/wear/src/test/java/app/pomi/community/watch/WatchStateTest.kt",
+        "e2e/journeys.spec.ts"
+      ],
+      "journey": 12,
+      "rules": [
+        {
+          "name": "Watch status has stable timer Assistant and Task slots",
+          "specification": "packages/shared/src/watchSurface.test.ts",
+          "title": "projects logged-in empty state into stable slots"
+        },
+        {
+          "name": "Watch accepted actions start and pause the authoritative Timer",
+          "specification": "packages/backend/test/integration/watch.integration.test.ts",
+          "title": "starts and pauses Timer through the accepted-action gateway"
+        },
+        {
+          "name": "Watch reconciliation follows the accepted-action workflow",
+          "specification": "e2e/journeys.spec.ts",
+          "title": "preserves accepted-action FIFO through delayed indication, reconnect, and authoritative reconciliation",
+          "journey": 12
+        }
+      ]
+    }
+  ]
+}

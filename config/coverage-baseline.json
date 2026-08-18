@@ -1,0 +1,13 @@
+{
+  "baseline": {
+    "lines": { "covered": 4138, "total": 15501 },
+    "statements": { "covered": 4297, "total": 16204 },
+    "functions": { "covered": 996, "total": 3628 },
+    "branches": { "covered": 2897, "total": 12873 }
+  },
+  "critical": [
+    "packages/shared/src/api/contract.ts",
+    "packages/shared/src/watchSurface.ts",
+    "packages/backend/src/timer/timer-session.service.ts"
+  ]
+}

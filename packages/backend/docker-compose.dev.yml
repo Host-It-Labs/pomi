@@ -1,0 +1,43 @@
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: packages/backend/Dockerfile.dev
+    ports:
+      - '${POMI_BACKEND_PORT:-3000}:3000'
+    volumes:
+      - ../..:/app
+      - /app/node_modules
+      - /app/packages/backend/node_modules
+      - /app/packages/shared/node_modules
+    depends_on:
+      - db
+      - redis
+    env_file:
+      - ./.env
+    environment:
+      - DATABASE_URL=postgres://user:password@db:5432/pomodoro
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=development
+      - NEST_PORT=3000
+      - GITHUB_FEEDBACK_TOKEN=${GITHUB_FEEDBACK_TOKEN:-}
+      - GITHUB_FEEDBACK_REPOSITORY=${GITHUB_FEEDBACK_REPOSITORY:-}
+      - GITHUB_FEEDBACK_LABEL=${GITHUB_FEEDBACK_LABEL:-ignore}
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: pomodoro
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    ports:
+      - '${POMI_DB_PORT:-5432}:5432'
+
+  redis:
+    image: redis:alpine
+    ports:
+      - '${POMI_REDIS_PORT:-6379}:6379'
+
+# No named volumes needed for dev DB and Redis

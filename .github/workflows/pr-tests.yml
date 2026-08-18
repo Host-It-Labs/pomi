@@ -1,0 +1,194 @@
+name: PR Tests
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: pr-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typescript:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: pomodoro
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user -d pomodoro"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      CI: 'true'
+      NODE_ENV: test
+      DATABASE_URL: postgres://user:password@localhost:5432/pomodoro
+      REDIS_URL: redis://localhost:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare backend environment
+        run: cp packages/backend/.env.example packages/backend/.env
+
+      - name: Build
+        run: pnpm -r run build
+
+      - name: Verify multilingual UI coverage
+        run: pnpm test:i18n
+
+      - name: Run migrations
+        run: pnpm --filter @pomi/backend migration:run
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Vitest business specifications, integration, browser, and coverage reporting
+        run: pnpm test:business
+
+      - name: Audit public-source boundary
+        run: pnpm audit:public-source
+
+      - name: Test public snapshot generation
+        run: pnpm test:public-snapshot
+
+      - name: Upload TypeScript coverage and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-coverage-and-diagnostics
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            coverage
+            test-results
+            playwright-report
+
+  wear:
+    name: Wear
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Run Wear tests and coverage
+        working-directory: packages/frontend/src-tauri/gen/android
+        run: ./gradlew --settings-file wear.settings.gradle :wear:testDebugUnitTest :wear:koverVerifyDebug :wear:koverXmlReportDebug
+
+      - name: Upload Wear diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wear-test-diagnostics
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            packages/frontend/src-tauri/gen/android/wear/build/reports/tests
+            packages/frontend/src-tauri/gen/android/wear/build/reports/kover
+            packages/frontend/src-tauri/gen/android/wear/build/test-results
+
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/frontend/src-tauri
+
+      - name: Check formatting
+        working-directory: packages/frontend/src-tauri
+        run: cargo fmt --check
+
+      - name: Check Rust
+        working-directory: packages/frontend/src-tauri
+        run: cargo check
+
+      - name: Run Rust tests
+        working-directory: packages/frontend/src-tauri
+        run: cargo test
+
+  tests:
+    name: tests
+    if: always()
+    needs:
+      - typescript
+      - wear
+      - rust
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all test jobs passed
+        env:
+          TYPESCRIPT_RESULT: ${{ needs.typescript.result }}
+          WEAR_RESULT: ${{ needs.wear.result }}
+          RUST_RESULT: ${{ needs.rust.result }}
+        run: |
+          if [ "$TYPESCRIPT_RESULT" != "success" ] || \
+             [ "$WEAR_RESULT" != "success" ] || \
+             [ "$RUST_RESULT" != "success" ]; then
+            echo "TypeScript: $TYPESCRIPT_RESULT"
+            echo "Wear: $WEAR_RESULT"
+            echo "Rust: $RUST_RESULT"
+            exit 1
+          fi

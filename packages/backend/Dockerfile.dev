@@ -1,0 +1,28 @@
+FROM node:24-alpine
+
+WORKDIR /app
+
+# Copy workspace configuration files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Copy package.json files from all workspaces
+COPY packages/backend/package.json ./packages/backend/
+COPY packages/shared/package.json ./packages/shared/
+
+# Install dependencies using pnpm workspaces
+RUN corepack enable
+RUN corepack prepare pnpm@9.15.5 --activate
+RUN pnpm install --frozen-lockfile
+
+# Copy shared package source to build it
+COPY packages/shared/src ./packages/shared/src
+COPY packages/shared/tsconfig.json ./packages/shared/
+
+# Build shared package using tsc from backend node_modules
+RUN /app/packages/backend/node_modules/.bin/tsc --project /app/packages/shared/tsconfig.json
+
+# The source code will be mounted as a volume
+ENTRYPOINT ["/app/packages/backend/docker-entrypoint-dev.sh"]
+CMD ["pnpm", "dev:backend"]
+
+EXPOSE 3000

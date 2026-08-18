@@ -1,0 +1,40 @@
+#!/bin/sh
+set -e
+
+echo "🎨 Formatting staged files with Prettier..."
+FORMATTED_FILE_COUNT=0
+while IFS= read -r file; do
+  [ -n "$file" ] || continue
+  pnpm exec prettier --write -- "$file"
+  git add -- "$file"
+  FORMATTED_FILE_COUNT=$((FORMATTED_FILE_COUNT + 1))
+done <<EOF
+$(
+  git diff --cached --name-only --diff-filter=ACMR | \
+    grep -E '\.(js|jsx|ts|tsx|json|md|css|scss|html|yml|yaml)$' || true
+)
+EOF
+
+if [ "$FORMATTED_FILE_COUNT" -eq 0 ]; then
+  echo "No staged files require Prettier formatting."
+fi
+
+# Migration guard: warn if entity files changed without migration files
+STAGED_ENTITY_FILES="$(
+  git diff --cached --name-only --diff-filter=ACMR | \
+    grep -E 'packages/backend/src/.*\.entity\.(ts|js)$' || true
+)"
+STAGED_MIGRATION_FILES="$(
+  git diff --cached --name-only --diff-filter=ACMR | \
+    grep -E 'packages/backend/migrations/' || true
+)"
+
+if [ -n "$STAGED_ENTITY_FILES" ] && [ -z "$STAGED_MIGRATION_FILES" ]; then
+  echo ""
+  echo "⚠️  Entity files modified without a migration:"
+  echo "$STAGED_ENTITY_FILES"
+  echo ""
+  echo "If the entity schema changed, generate a migration:"
+  echo "  cd packages/backend && pnpm migration:generate migrations/<MigrationName>"
+  echo ""
+fi

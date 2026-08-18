@@ -1,0 +1,25 @@
+node_modules
+dist
+.DS_Store
+*.js
+*.js.map
+!*.config.js
+!eslint.config.js
+*.d.ts
+!src/**/*.d.ts
+tsconfig.tsbuildinfo
+
+# Playwright
+test-results/
+playwright-report/
+coverage/
+**/.vitest-attachments/
+**/__screenshots__/
+playwright/.cache/
+.playwright/
+.playwright-mcp*
+.pnpm-store/
+.pomi/
+.superpowers/
+config/current-work.env
+config/pomi-automation.env
