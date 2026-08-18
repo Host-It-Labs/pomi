@@ -41,7 +41,7 @@
     "@nestjs/typeorm": "^11.0.0",
     "@nestjs/websockets": "^11.0.11",
     "@pomi/shared": "workspace:*",
-    "@sentry/nestjs": "^9.46.0",
+    "@sentry/nestjs": "^10.70.0",
     "@socket.io/redis-adapter": "^8.3.0",
     "@ts-rest/nest": "^3.52.0",
     "@types/bcrypt": "^5.0.2",
