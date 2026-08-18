@@ -1,0 +1,108 @@
+[
+  {
+    "id": 1,
+    "title": "Example project",
+    "description": "Synthetic tasks for importer tests.",
+    "identifier": "example-project",
+    "is_archived": false,
+    "tasks": [
+      {
+        "id": 101,
+        "title": "Prepare the weekly review",
+        "description": "Collect notes and identify the next actions.",
+        "done": false,
+        "done_at": "0001-01-01T00:00:00Z",
+        "due_date": "2030-04-15T09:30:00Z",
+        "reminders": null,
+        "project_id": 1,
+        "repeat_after": 604800,
+        "repeat_mode": 0,
+        "priority": 3,
+        "start_date": "0001-01-01T00:00:00Z",
+        "end_date": "0001-01-01T00:00:00Z",
+        "assignees": null,
+        "labels": [
+          {
+            "id": 11,
+            "title": "work",
+            "description": "",
+            "hex_color": "2563eb",
+            "created_by": null,
+            "created": "2030-01-01T10:00:00Z",
+            "updated": "2030-01-01T10:00:00Z"
+          }
+        ],
+        "hex_color": "",
+        "percent_done": 0,
+        "identifier": "EXAMPLE-1",
+        "index": 1,
+        "related_tasks": {},
+        "attachments": null,
+        "cover_image_attachment_id": 0,
+        "is_favorite": false,
+        "created": "2030-01-01T10:00:00Z",
+        "updated": "2030-01-02T10:00:00Z",
+        "bucket_id": 0,
+        "position": 0,
+        "reactions": null,
+        "created_by": {
+          "id": 1,
+          "name": "Example User",
+          "username": "example-user",
+          "created": "2030-01-01T10:00:00Z",
+          "updated": "2030-01-01T10:00:00Z"
+        },
+        "comments": null
+      },
+      {
+        "id": 102,
+        "title": "Take a screen break",
+        "description": "Stand up and move for a few minutes.",
+        "done": false,
+        "done_at": "0001-01-01T00:00:00Z",
+        "due_date": "2030-04-15T11:00:00Z",
+        "reminders": null,
+        "project_id": 1,
+        "repeat_after": 86400,
+        "repeat_mode": 0,
+        "priority": 1,
+        "start_date": "0001-01-01T00:00:00Z",
+        "end_date": "0001-01-01T00:00:00Z",
+        "assignees": null,
+        "labels": [
+          {
+            "id": 12,
+            "title": "break",
+            "description": "",
+            "hex_color": "16a34a",
+            "created_by": null,
+            "created": "2030-01-01T10:00:00Z",
+            "updated": "2030-01-01T10:00:00Z"
+          }
+        ],
+        "hex_color": "",
+        "percent_done": 0,
+        "identifier": "EXAMPLE-2",
+        "index": 2,
+        "related_tasks": {},
+        "attachments": null,
+        "cover_image_attachment_id": 0,
+        "is_favorite": false,
+        "created": "2030-01-01T10:05:00Z",
+        "updated": "2030-01-01T10:05:00Z",
+        "bucket_id": 0,
+        "position": 0,
+        "reactions": null,
+        "created_by": {
+          "id": 1,
+          "name": "Example User",
+          "username": "example-user",
+          "created": "2030-01-01T10:00:00Z",
+          "updated": "2030-01-01T10:00:00Z"
+        },
+        "comments": null
+      }
+    ],
+    "child_projects": []
+  }
+]

@@ -1,0 +1,9 @@
+# Share Task Interpretation Across Capture Surfaces
+
+Typed AI Task capture, Task-view dictation submission, and Task requests inside Assistant voice use one `AssistantInputInterpreter` interface. Voice keeps timer-command classification as mode-specific behavior, but its Task prompt, output normalization, title policy, intention resolution, JSON repair, and diagnostics are shared with typed capture.
+
+Task titles target 8 to 10 words and never exceed 15. Every meaningful source detail must appear exactly once: action wording belongs in the title, due date/time, priority, recurrence, Task Timer type, and linked intention wording belong in Task fields, and exact source fragments that cannot be mapped confidently are appended at the bottom of description after a blank line, without a label and without duplicating structured fields. Explicit Work, Break, or Long-break wording overrides creation context; otherwise the selected filter or current Timer type applies, with Work as fallback. Intention resolution uses active existing Intentions of the Task Timer type, prefers confident matches from user text over model-supplied slugs, and leaves ambiguous or invalid requests unlinked. Parent intentions require a confidently inferred Sub-intention.
+
+Malformed model JSON gets one repair attempt. If typed capture still cannot produce structured output, Pomi creates a short reviewable fallback Task and preserves the original request in description. Assistant voice does not guess a fallback Task because the recording may have requested only a timer action.
+
+Interactive Task creation applies the user's Default Task due date when no date is supplied. Recurring AI Task capture is the exception: if recurrence has no explicit date and the ordinary default is Off, tomorrow is still used as the first recurrence anchor.

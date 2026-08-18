@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "pnpm test:e2e:timing",
+  "percentileMethod": "linear interpolation over successful full-suite runs",
+  "retries": 0,
+  "journeyCount": 13,
+  "modes": {
+    "parallel": {
+      "workers": 7,
+      "fullyParallel": true,
+      "status": "complete",
+      "expectedRuns": 10,
+      "successfulRuns": 10,
+      "p50Ms": 30115,
+      "p95Ms": 31277,
+      "minMs": 29185,
+      "maxMs": 31394,
+      "results": [
+        {
+          "run": 1,
+          "durationMs": 31394,
+          "exitCode": 0
+        },
+        {
+          "run": 2,
+          "durationMs": 30165,
+          "exitCode": 0
+        },
+        {
+          "run": 3,
+          "durationMs": 29383,
+          "exitCode": 0
+        },
+        {
+          "run": 4,
+          "durationMs": 29583,
+          "exitCode": 0
+        },
+        {
+          "run": 5,
+          "durationMs": 30775,
+          "exitCode": 0
+        },
+        {
+          "run": 6,
+          "durationMs": 30983,
+          "exitCode": 0
+        },
+        {
+          "run": 7,
+          "durationMs": 31134,
+          "exitCode": 0
+        },
+        {
+          "run": 8,
+          "durationMs": 29789,
+          "exitCode": 0
+        },
+        {
+          "run": 9,
+          "durationMs": 30065,
+          "exitCode": 0
+        },
+        {
+          "run": 10,
+          "durationMs": 29185,
+          "exitCode": 0
+        }
+      ]
+    },
+    "serial": {
+      "workers": 1,
+      "fullyParallel": false,
+      "status": "complete",
+      "expectedRuns": 3,
+      "successfulRuns": 3,
+      "p50Ms": 67331,
+      "p95Ms": 67957,
+      "minMs": 67321,
+      "maxMs": 68027,
+      "results": [
+        {
+          "run": 1,
+          "durationMs": 67331,
+          "exitCode": 0
+        },
+        {
+          "run": 2,
+          "durationMs": 68027,
+          "exitCode": 0
+        },
+        {
+          "run": 3,
+          "durationMs": 67321,
+          "exitCode": 0
+        }
+      ]
+    }
+  }
+}

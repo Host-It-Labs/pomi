@@ -1,0 +1,74 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "pomi",
+  "version": "0.1.0",
+  "identifier": "app.pomi.community",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
+  },
+
+  "app": {
+    "windows": [
+      {
+        "title": "pomi",
+        "width": 440,
+        "height": 95,
+        "backgroundColor": "#020617",
+        "fullscreen": false,
+        "resizable": false,
+        "backgroundThrottling": "disabled",
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay"
+      }
+    ],
+    "security": {
+      "csp": null,
+      "capabilities": [
+        "default",
+        "desktop-capability",
+        "mobile-capability",
+        {
+          "identifier": "draggable-window",
+          "windows": ["*"],
+          "permissions": ["core:window:allow-start-dragging"]
+        }
+      ]
+    },
+    "withGlobalTauri": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico"
+      }
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "../public/sounds/break-complete.mp3": "../public/sounds/break-complete.mp3",
+      "../public/sounds/timer-warning.mp3": "../public/sounds/timer-warning.mp3",
+      "../public/sounds/work-complete.mp3": "../public/sounds/work-complete.mp3",
+      "../public/sounds/session-end.mp3": "../public/sounds/session-end.mp3",
+      "../public/sounds/break-complete.wav": "break-complete.wav",
+      "../public/sounds/timer-warning.wav": "timer-warning.wav",
+      "../public/sounds/work-complete.wav": "work-complete.wav",
+      "../public/sounds/session-end.wav": "session-end.wav"
+    }
+  }
+}

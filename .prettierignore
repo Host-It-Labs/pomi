@@ -1,0 +1,7 @@
+node_modules
+.pnpm-store
+packages/frontend/src-tauri/target
+packages/backend/pgdata
+packages/backend/test-results
+playwright-report
+test-results

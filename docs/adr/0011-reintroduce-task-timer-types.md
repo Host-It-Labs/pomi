@@ -1,0 +1,3 @@
+# Reintroduce One Timer Type Per Task
+
+Tasks again carry exactly one Work, Break, or Long break Timer type, defaulting legacy and unspecified data to Work. Unlike the removed model, type is always available in the full Tasks view and does not depend on separate category-visibility preferences: one off-by-default “Tasks during breaks” setting gates only desktop/mobile Timer surfaces, while Watch always shows its current type. Intention links are type-scoped, mixed lists use text badges, Pinned Tasks persist by type, and imports accept an optional type with Work fallback. This supersedes only the break-Task removal in ADR 0007.

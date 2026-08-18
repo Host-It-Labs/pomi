@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "pnpm test:inventory",
+  "countingMethod": {
+    "vitest": "vitest list --staticParse --json",
+    "conditionalVitestSuites": "maximum of static collection and source test declarations",
+    "nativeAndLegacy": "static test declaration count",
+    "sourceLines": "physical lines"
+  },
+  "vitest": {
+    "total": 468,
+    "projects": {
+      "shared-unit": {
+        "tests": 13,
+        "files": 2,
+        "staticCollectedTests": 13,
+        "declaredTests": 13
+      },
+      "backend-unit": {
+        "tests": 295,
+        "files": 44,
+        "staticCollectedTests": 295,
+        "declaredTests": 290
+      },
+      "frontend-unit": {
+        "tests": 102,
+        "files": 18,
+        "staticCollectedTests": 102,
+        "declaredTests": 102
+      },
+      "backend-integration": {
+        "tests": 55,
+        "files": 6,
+        "staticCollectedTests": 1,
+        "declaredTests": 55
+      },
+      "frontend-browser": {
+        "tests": 3,
+        "files": 2,
+        "staticCollectedTests": 3,
+        "declaredTests": 3
+      }
+    }
+  },
+  "legacyNode": {
+    "tests": 0,
+    "files": 0
+  },
+  "native": {
+    "wearTests": 33,
+    "wearFiles": 6,
+    "rustTests": 3,
+    "rustFiles": 2
+  },
+  "playwright": {
+    "retainedJourneys": 13,
+    "retainedSpecLines": 833,
+    "retainedHelperLines": 406,
+    "retainedActiveSourceLines": 1239,
+    "legacyTests": 0,
+    "legacySpecFiles": 0,
+    "legacySourceLines": 0
+  },
+  "totals": {
+    "nonE2eTests": 504,
+    "activeTests": 517
+  }
+}

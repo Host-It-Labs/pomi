@@ -1,0 +1,377 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Tag used for a non-publishing release build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pomi-release-${{ github.event.release.tag_name || inputs.release_tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  PNPM_VERSION: 9.15.5
+  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+  FRONTEND_SENTRY_RELEASE: pomi-frontend@${{ github.event.release.tag_name || inputs.release_tag }}
+  BACKEND_SENTRY_RELEASE: pomi-backend@${{ github.event.release.tag_name || inputs.release_tag }}
+  SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+  SENTRY_FRONTEND_PROJECT: ${{ vars.SENTRY_FRONTEND_PROJECT }}
+  SENTRY_BACKEND_PROJECT: ${{ vars.SENTRY_BACKEND_PROJECT }}
+
+jobs:
+  sentry-release:
+    name: Register Sentry releases
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+
+      - name: Require Sentry release configuration
+        if: ${{ github.event_name == 'release' }}
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          for variable in SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_FRONTEND_PROJECT SENTRY_BACKEND_PROJECT; do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "$variable must be configured for release correlation." >&2
+              exit 1
+            fi
+          done
+
+      - name: Create and associate commits
+        if: ${{ github.event_name == 'release' }}
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          sentry_request() {
+            local url="$1"
+            local payload="$2"
+            local response_file="$RUNNER_TEMP/sentry-response.json"
+            local status
+            status="$(curl --silent --show-error --retry 3 --output "$response_file" --write-out '%{http_code}' \
+              -X POST "$url" \
+              -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
+              -H 'Content-Type: application/json' \
+              --data "$payload")"
+            if [[ "$status" -ge 400 && "$status" != 409 ]]; then
+              cat "$response_file" >&2
+              exit 1
+            fi
+          }
+          register_release() {
+            local release="$1"
+            local project="$2"
+            local commit
+            commit="$(git rev-parse HEAD)"
+            sentry_request "https://sentry.io/api/0/organizations/${SENTRY_ORG}/releases/" "$(jq -cn \
+              --arg version "$release" \
+              --arg project "$project" \
+              --arg repository "$GITHUB_REPOSITORY" \
+              --arg commit "$commit" \
+              '{version:$version,projects:[$project],refs:[{repository:$repository,commit:$commit}]}')"
+          }
+          register_release "$FRONTEND_SENTRY_RELEASE" "$SENTRY_FRONTEND_PROJECT"
+          register_release "$BACKEND_SENTRY_RELEASE" "$SENTRY_BACKEND_PROJECT"
+
+  docker-backend:
+    name: Build backend image
+    needs: sentry-release
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: ${{ github.event_name == 'release' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./packages/backend/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name == 'release' }}
+          build-args: |
+            SENTRY_RELEASE=${{ env.BACKEND_SENTRY_RELEASE }}
+          tags: |
+            ghcr.io/neohuncho/pomi-backend:latest
+            ghcr.io/neohuncho/pomi-backend:${{ env.RELEASE_TAG }}
+
+  build-macos:
+    name: Build ARM64 macOS app
+    needs: sentry-release
+    runs-on: macos-latest
+    environment: release
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @pomi/shared build
+
+      - name: Build macOS app
+        working-directory: packages/frontend
+        env:
+          NODE_ENV: production
+          VITE_BACKEND_URL: ${{ vars.PROD_BACKEND_URL }}
+          VITE_SENTRY_RELEASE: ${{ env.FRONTEND_SENTRY_RELEASE }}
+          VITE_USE_HTTPS: 'true'
+        run: pnpm tauri build --target aarch64-apple-darwin
+
+      - name: Collect macOS release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          mkdir -p release-assets
+          dmg_files=(packages/frontend/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg)
+          archive_files=(packages/frontend/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz)
+          app_files=(packages/frontend/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app)
+          if (( ${#dmg_files[@]} == 0 || ( ${#archive_files[@]} == 0 && ${#app_files[@]} == 0 ) )); then
+            echo 'No macOS DMG and app bundle/archive were produced.' >&2
+            exit 1
+          fi
+          cp "${dmg_files[@]}" release-assets/
+          if (( ${#archive_files[@]} > 0 )); then
+            cp "${archive_files[@]}" release-assets/
+          else
+            app_bundle="${app_files[0]}"
+            tar -czf "release-assets/$(basename "$app_bundle").tar.gz" \
+              -C "$(dirname "$app_bundle")" "$(basename "$app_bundle")"
+          fi
+
+      - name: Upload macOS build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macos-aarch64
+          path: release-assets
+          if-no-files-found: error
+          retention-days: 14
+
+  build-android-wear:
+    name: Build Android and Wear OS apps
+    needs: sentry-release
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Install Rust and Android targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @pomi/shared build
+
+      - name: Configure optional Firebase client
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$GOOGLE_SERVICES_JSON_BASE64" ]]; then
+            umask 077
+            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > packages/frontend/src-tauri/gen/android/app/google-services.json
+          fi
+
+      - name: Configure Android signing
+        env:
+          ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ vars.ANDROID_KEY_ALIAS || 'pomi' }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$ANDROID_KEY_BASE64" || -z "$ANDROID_KEY_PASSWORD" ]]; then
+            echo 'ANDROID_KEY_BASE64 and ANDROID_KEY_PASSWORD must be configured.' >&2
+            exit 1
+          fi
+          umask 077
+          key_path="$RUNNER_TEMP/pomi-release.jks"
+          printf '%s' "$ANDROID_KEY_BASE64" | base64 --decode > "$key_path"
+          cat > packages/frontend/src-tauri/gen/android/keystore.properties <<EOF
+          storeFile=$key_path
+          storePassword=$ANDROID_KEY_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+
+      - name: Build Android app
+        working-directory: packages/frontend
+        env:
+          NODE_ENV: production
+          VITE_BACKEND_URL: ${{ vars.PROD_BACKEND_URL }}
+          VITE_SENTRY_RELEASE: ${{ env.FRONTEND_SENTRY_RELEASE }}
+          VITE_USE_HTTPS: 'true'
+          VITE_RENDER_SYSTEM_TRAY_ICON: 'true'
+          VITE_DEBUG_PANEL_ENABLED: 'false'
+        run: pnpm tauri android build
+
+      - name: Build Wear OS app
+        working-directory: packages/frontend/src-tauri/gen/android
+        run: ./gradlew :wear:assembleDebug --no-daemon
+
+      - name: Collect Android and Wear release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          mkdir -p release-assets
+          android_apks=(packages/frontend/src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk)
+          android_bundles=(packages/frontend/src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab)
+          wear_apks=(packages/frontend/src-tauri/gen/android/wear/build/outputs/apk/debug/*.apk)
+          if (( ${#android_apks[@]} == 0 || ${#android_bundles[@]} == 0 || ${#wear_apks[@]} == 0 )); then
+            echo 'Expected Android APK/AAB and Wear APK outputs were not produced.' >&2
+            exit 1
+          fi
+          cp "${android_apks[@]}" "${android_bundles[@]}" "${wear_apks[@]}" release-assets/
+
+      - name: Upload Android and Wear build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-android-wear
+          path: release-assets
+          if-no-files-found: error
+          retention-days: 14
+
+  finalize-sentry-release:
+    name: Finalize Sentry releases
+    if: ${{ always() && github.event_name == 'release' && needs.docker-backend.result == 'success' && needs.build-macos.result == 'success' && needs.build-android-wear.result == 'success' }}
+    needs: [docker-backend, build-macos, build-android-wear]
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Finalize releases
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          for variable in SENTRY_AUTH_TOKEN SENTRY_ORG; do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "$variable must be configured for release correlation." >&2
+              exit 1
+            fi
+          done
+          finalize_release() {
+            local release="$1"
+            local encoded_release
+            encoded_release="$(jq -rn --arg value "$release" '$value | @uri')"
+            curl --fail-with-body --silent --show-error --retry 3 \
+              -X PUT "https://sentry.io/api/0/organizations/${SENTRY_ORG}/releases/${encoded_release}/" \
+              -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
+              -H 'Content-Type: application/json' \
+              --data "$(jq -cn --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{dateReleased:$date}')"
+          }
+          finalize_release "$FRONTEND_SENTRY_RELEASE"
+          finalize_release "$BACKEND_SENTRY_RELEASE"
+
+  publish-release:
+    name: Attach release assets
+    if: ${{ github.event_name == 'release' }}
+    needs: [finalize-sentry-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify release assets
+        run: |
+          set -euo pipefail
+          test -n "$(find release-assets -type f -name '*.apk' -print -quit)"
+          test -n "$(find release-assets -type f -name '*.aab' -print -quit)"
+          test -n "$(find release-assets -type f -name '*.dmg' -print -quit)"
+          test -n "$(find release-assets -type f -name '*.app.tar.gz' -print -quit)"
+
+      - name: Attach assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: release-assets/**/*
+          fail_on_unmatched_files: true
+          token: ${{ secrets.GITHUB_TOKEN }}

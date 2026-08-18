@@ -1,0 +1,17 @@
+# Accepted Action Gateway for Confirmed Watch Actions
+
+Status: Accepted
+
+Supersedes ADR 0009, replacing optimistic Watch projections and persisted client replay with a backend-confirmed action lifecycle.
+
+User-triggered mutations use the Redis-backed per-user FIFO gateway. The gateway durably accepts each action, reports `accepted`, `running`, and terminal lifecycle states, and emits lifecycle updates to every connected client. Workers never blindly replay an action that was running when they died; they mark it as an unknown outcome so clients can reconcile authoritative domain state.
+
+Desktop, Android, iOS, and browser clients use one in-memory application queue. Only the queue head submits; the next action waits for terminal lifecycle plus confirmed domain refresh. The fixed bottom-right loader appears after one second, shows ordered details and an active-plus-queued count, and clears unsent actions through the atomic cancellation endpoint. Accepted or running actions remain visible until completion.
+
+Wear uses the application-scoped `WatchActionCoordinator`. It sends one action at a time, long-polls the gateway, fetches `/watch/status`, publishes confirmed status, and then processes the next action. Unsent actions are not persisted or replayed after process restart. Its 20dp loader occupies the 38dp top-center slot between Tasks and Assistant, with a small count badge and no dismissal/details UI.
+
+Typed Assistant Task capture and Voice Assistant may perform non-mutating model work before entering the application queue. The client supplies one preparation UUID, and the backend caches the extracted result by user and UUID for at most 24 hours. Voice recordings and generated spoken-reply audio are never persisted; audio preparation stores only an input digest, while its transcript and extracted command are temporary commit material. This narrowly supersedes ADR 0005's normal transcript-persistence rule for durable in-flight preparation, while retaining its prohibition on stored recordings and generated audio.
+
+The preparation UUID becomes the accepted action ID for the deterministic commit. A Voice commit reloads current preferences, Intentions, local date, and Timer state before resolving and applying any Task or Timer mutation. It writes an immutable non-audio receipt so a worker restart can recognize an already-finished commit instead of replaying it. Speech synthesis happens after commit, outside the FIFO, and is safe to retry because it performs no domain mutation. This lets unrelated actions proceed while transcription, model inference, or speech synthesis waits on a provider without bypassing the FIFO for mutable state resolution or domain mutation.
+
+All accepted-action keys for one user share the `{userId}` hash tag, including lifecycle records, cancellation tombstones, execution payloads, the FIFO queue, and its worker lock. Multi-key Lua operations therefore stay within one Redis Cluster slot. This layout is deployed as one coordinated release, without old-backend compatibility: pause submissions, let the old fleet drain every queue and release its locks, stop it, run `pnpm --filter @pomi/backend migrate:user-action-keys` as a dry run and then repeat it with `-- --apply`, and only then start the new fleet. The migration refuses live queues/locks, aborts on target collisions, and uses `RENAMENX` so Redis preserves each record's TTL and idempotency history. Redis Cluster client connectivity is a separate infrastructure step.

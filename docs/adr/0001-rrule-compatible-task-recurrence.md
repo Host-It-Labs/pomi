@@ -1,0 +1,3 @@
+# Use RRULE-Compatible Recurrence for Tasks
+
+Pomi tasks support full calendar-style recurrence rather than only fixed presets or a custom narrow rule model. We use an RRULE-compatible model so recurring tasks can express familiar calendar patterns, end conditions, and skipped dates while the UI remains responsible for presenting those rules through understandable controls. Recurring tasks still keep only one active occurrence at a time; future occurrences are created after the current occurrence is completed or skipped, not pre-generated on every scheduled date. Next due dates use a configurable anchor mode with two choices: next future planned date by default, or from-completion scheduling for rhythms that should drift with actual completion.

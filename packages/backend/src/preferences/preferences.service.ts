@@ -1,0 +1,195 @@
+import {
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  forwardRef,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DEFAULT_APP_LANGUAGE, AppLanguage } from '@pomi/shared';
+import { TimerService } from 'src/timer/timer.service';
+import { Subject } from 'rxjs';
+import { Repository } from 'typeorm';
+import { UpdatePreferencesDto } from './dto/update-preferences.dto';
+import { Preferences } from './preferences.entity';
+
+const DEFAULT_PREFERENCES = {
+  language: DEFAULT_APP_LANGUAGE,
+  workTimerDuration: 25 * 60 * 1000,
+  breakTimerDuration: 5 * 60 * 1000,
+  autoStartBreak: false,
+  notifications: true,
+  notifyOnWorkComplete: true,
+  notifyOnBreakComplete: true,
+  notifyBeforeWorkComplete: true,
+  notifyBeforeTime: 5 * 60 * 1000,
+  soundNotifications: true,
+  pushNotifications: true,
+  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+  globalShortcut: false,
+  keyboardShortcuts: true,
+  intentionExtension: false,
+  intentionRequireSelection: false,
+  intentionShowDailyCount: false,
+  intentionBreakIntentions: false,
+  intentionMultiSelect: false,
+  intentionShowBreakIntentionsInLongBreak: false,
+  intentionCustomDurations: false,
+  intentionSubIntentions: false,
+  intentionHabits: false,
+  workTimerLogsExtension: true,
+  sessionsExtension: false,
+  sessionPomodorosCount: 3,
+  sessionHasLongBreak: true,
+  sessionLongBreakDuration: 15 * 60 * 1000,
+  sessionLongBreakAutoStart: false,
+  sessionShowLongBreakButton: false,
+  sessionShowEta: false,
+  sessionStackTimers: false,
+  sessionAutoDetectLongBreak: false,
+  keepScreenAwake: false,
+  undoAlerts: false,
+  tasksExtension: false,
+  tasksShowSetupPrompts: true,
+  tasksShowInMinimizedTimer: false,
+  tasksAutoSwitchToIntentionMode: true,
+  tasksDuringBreaks: false,
+  taskDefaultDueDateMode: 'tomorrow',
+  taskDefaultDueDateDays: 1,
+  taskDefaultSortMode: 'default',
+  hiddenHelpTips: [],
+  taskReminderPriorities: ['high', 'urgent'],
+  taskBeforeDueReminderMinutes: 0,
+  taskUrgentReminderRepeatEnabled: true,
+  taskUrgentReminderRepeatIntervalMinutes: 30,
+  advancedSkip: false,
+  timerExtension: false,
+  timerExtrasSeen: false,
+  sessionsExtrasSeen: false,
+  intentionsExtrasSeen: false,
+  assistantExtension: false,
+  assistantTaskTranscriptsEnabled: false,
+  assistantTaskTranscriptMinWords: 15,
+  destinationDescriptionsEnabled: false,
+  listsExtension: false,
+  vacationExtension: false,
+  vacationCoverageConfigured: false,
+  tasksShowVacationCovered: false,
+  longBreakToBreakEnabled: false,
+} satisfies Partial<Preferences>;
+
+@Injectable()
+export class PreferencesService {
+  readonly onPreferencesUpdate = new Subject<{
+    userId: string;
+    preferences: Preferences;
+  }>();
+
+  constructor(
+    @InjectRepository(Preferences)
+    private preferencesRepository: Repository<Preferences>,
+    @Inject(forwardRef(() => TimerService))
+    private timerService?: TimerService
+  ) {}
+
+  async getPreferences(
+    userId: string,
+    initialLanguage?: AppLanguage
+  ): Promise<Preferences> {
+    let preferences = await this.preferencesRepository.findOne({
+      where: { userId },
+    });
+
+    if (!preferences) {
+      const defaults = this.preferencesRepository.create({
+        ...DEFAULT_PREFERENCES,
+        userId,
+        ...(initialLanguage ? { language: initialLanguage } : {}),
+      });
+      await this.preferencesRepository
+        .createQueryBuilder()
+        .insert()
+        .into(Preferences)
+        .values(defaults)
+        .orIgnore()
+        .execute();
+      preferences = await this.preferencesRepository.findOne({
+        where: { userId },
+      });
+      if (!preferences) {
+        throw new InternalServerErrorException(
+          'Failed to initialize preferences'
+        );
+      }
+    }
+
+    if (
+      (preferences.language === null || preferences.language === undefined) &&
+      initialLanguage !== undefined
+    ) {
+      preferences.language = initialLanguage;
+      preferences = await this.preferencesRepository.save(preferences);
+    }
+
+    return this.applyDefaultPreferences(preferences);
+  }
+
+  async updatePreferences(
+    userId: string,
+    updates: UpdatePreferencesDto
+  ): Promise<Preferences> {
+    const preferences = await this.getPreferences(userId);
+    const nextUpdates = { ...updates };
+    const nextTimerExtension =
+      nextUpdates.timerExtension ?? preferences.timerExtension;
+
+    if (nextTimerExtension) {
+      nextUpdates.autoStartBreak = false;
+    }
+
+    const wasSessionsDisabled = !preferences.sessionsExtension;
+    const sessionCountChanged =
+      nextUpdates.sessionPomodorosCount !== undefined &&
+      nextUpdates.sessionPomodorosCount !== preferences.sessionPomodorosCount;
+
+    Object.assign(preferences, nextUpdates);
+
+    const savedPreferences = this.applyDefaultPreferences(
+      await this.preferencesRepository.save(preferences)
+    );
+    this.onPreferencesUpdate.next({ userId, preferences: savedPreferences });
+
+    // If sessions extension was just enabled, apply it to current timer
+    if (
+      wasSessionsDisabled &&
+      nextUpdates.sessionsExtension &&
+      this.timerService
+    ) {
+      await this.timerService.applySessionToCurrentTimer(userId);
+    }
+
+    // If session pomodoro count changed, update the current session
+    if (
+      sessionCountChanged &&
+      preferences.sessionsExtension &&
+      this.timerService
+    ) {
+      await this.timerService.updateSessionTotal(userId);
+    }
+
+    return savedPreferences;
+  }
+
+  private applyDefaultPreferences(preferences: Preferences): Preferences {
+    for (const [key, value] of Object.entries(DEFAULT_PREFERENCES)) {
+      const preferenceKey = key as keyof typeof DEFAULT_PREFERENCES;
+      if (
+        preferences[preferenceKey] === null ||
+        preferences[preferenceKey] === undefined
+      ) {
+        preferences[preferenceKey] = value as never;
+      }
+    }
+
+    return preferences;
+  }
+}

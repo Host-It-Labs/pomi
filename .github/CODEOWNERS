@@ -1,0 +1,7 @@
+# License, branding, security, and release controls require owner review.
+/LICENSE @NeoHuncho
+/TRADEMARKS.md @NeoHuncho
+/SECURITY.md @NeoHuncho
+/.github/ @NeoHuncho
+/packages/frontend/src-tauri/ @NeoHuncho
+/packages/backend/docker-compose.yml @NeoHuncho

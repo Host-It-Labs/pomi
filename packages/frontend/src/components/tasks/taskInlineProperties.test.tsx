@@ -1,0 +1,262 @@
+import type { Intention, Task } from '@pomi/shared';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { TaskInlineProperties } from './TaskInlineProperties';
+
+beforeAll(() => {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    }
+  );
+});
+
+afterEach(cleanup);
+
+function task(overrides: Partial<Task>): Task {
+  return {
+    id: 'task-release',
+    userId: 'user-1',
+    title: 'Ship release notes',
+    description: null,
+    sourceTranscript: null,
+    creationSource: 'manual',
+    importSource: null,
+    importSourceTaskId: null,
+    dueDate: '2026-08-03',
+    dueTime: '09:30',
+    manualOrder: null,
+    manualOrderOverride: false,
+    priority: 'normal',
+    status: 'active',
+    timerType: 'work',
+    pinnedAt: null,
+    intentionSlug: null,
+    subIntentionSlug: null,
+    recurrenceRule: null,
+    recurrenceInterval: null,
+    recurrenceAnchorMode: 'planned',
+    followUpTaskId: null,
+    followUpDelayDays: null,
+    followUpSourceTaskId: null,
+    createdAt: '2026-07-26T08:00:00.000Z',
+    updatedAt: '2026-07-26T08:00:00.000Z',
+    ...overrides,
+    itemKind: 'task',
+    vacationEligible: overrides.vacationEligible ?? false,
+  };
+}
+
+const intentions: Intention[] = [
+  {
+    id: 'parent',
+    userId: 'user-1',
+    title: 'Release',
+    slug: 'release',
+    emoji: '🚀',
+    type: 'work',
+    isArchived: false,
+    parentIntentionId: null,
+    hasCustomDuration: false,
+    keepScreenAwake: false,
+    isHabit: false,
+    isFavorite: false,
+    allowsTasks: true,
+    usageCount: 0,
+    createdAt: '2026-07-26T08:00:00.000Z',
+    updatedAt: '2026-07-26T08:00:00.000Z',
+  },
+  {
+    id: 'child',
+    userId: 'user-1',
+    title: 'Documentation',
+    slug: 'documentation',
+    emoji: '📝',
+    type: 'work',
+    isArchived: false,
+    parentIntentionId: 'parent',
+    hasCustomDuration: false,
+    keepScreenAwake: false,
+    isHabit: false,
+    isFavorite: false,
+    allowsTasks: true,
+    usageCount: 0,
+    createdAt: '2026-07-26T08:00:00.000Z',
+    updatedAt: '2026-07-26T08:00:00.000Z',
+  },
+];
+
+function renderProperties(
+  currentTask = task({}),
+  onUpdate = vi.fn().mockResolvedValue(true)
+) {
+  render(
+    <TaskInlineProperties
+      task={currentTask}
+      intentions={intentions}
+      onUpdate={onUpdate}
+      onOpenEditor={vi.fn()}
+      showIntention
+      compact={false}
+      isOverdue={false}
+    />
+  );
+  return onUpdate;
+}
+
+describe('inline Task properties', () => {
+  it('makes linked intention selection an explicit confirmed Task update', async () => {
+    const user = userEvent.setup();
+    const onUpdate = renderProperties();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Ship release notes has no linked intention. Set intention',
+      })
+    );
+    await user.click(screen.getByRole('option', { name: /Release$/ }));
+    await user.click(screen.getByRole('button', { name: /documentation/i }));
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+
+    expect(onUpdate).toHaveBeenCalledWith({
+      id: 'task-release',
+      intentionSlug: 'release',
+      subIntentionSlug: 'documentation',
+    });
+  });
+
+  it('clears a non-recurring due date and time but protects recurrence scheduling', async () => {
+    const user = userEvent.setup();
+    const onUpdate = renderProperties();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Change due date for Ship release notes',
+      })
+    );
+    await user.click(screen.getByRole('button', { name: 'Remove due date' }));
+
+    expect(onUpdate).toHaveBeenCalledWith({
+      id: 'task-release',
+      dueDate: null,
+      dueTime: null,
+    });
+
+    renderProperties(
+      task({ recurrenceRule: 'FREQ=WEEKLY', recurrenceInterval: null })
+    );
+    await user.click(
+      screen.getAllByRole('button', {
+        name: 'Change due date for Ship release notes',
+      })[1]
+    );
+    expect(
+      screen.getByRole('button', { name: 'Remove due date' })
+    ).toBeDisabled();
+  });
+
+  it('saves a changed due date when the popover is dismissed outside', async () => {
+    const user = userEvent.setup();
+    const onUpdate = renderProperties();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Change due date for Ship release notes',
+      })
+    );
+    const input = screen.getByLabelText('Due date');
+    await user.clear(input);
+    await user.type(input, '2026-08-12');
+
+    expect(screen.queryByRole('button', { name: 'Apply' })).toBeNull();
+    await user.click(document.body);
+
+    await waitFor(() =>
+      expect(onUpdate).toHaveBeenCalledWith({
+        id: 'task-release',
+        dueDate: '2026-08-12',
+      })
+    );
+  });
+
+  it('closes the native calendar after selection while keeping the popover open', async () => {
+    const user = userEvent.setup();
+    renderProperties();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Change due date for Ship release notes',
+      })
+    );
+    const input = screen.getByLabelText('Due date');
+    input.focus();
+    fireEvent.change(input, { target: { value: '2026-08-12' } });
+
+    expect(input).not.toHaveFocus();
+    expect(screen.getByTestId('task-due-date-popover')).toBeVisible();
+  });
+
+  it('keeps the due-date draft when Cancel closes the popover', async () => {
+    const user = userEvent.setup();
+    const onUpdate = renderProperties();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Change due date for Ship release notes',
+      })
+    );
+    const input = screen.getByLabelText('Due date');
+    await user.clear(input);
+    await user.type(input, '2026-08-12');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it('keeps the due-date draft when Escape closes the popover', async () => {
+    const user = userEvent.setup();
+    const onUpdate = renderProperties();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Change due date for Ship release notes',
+      })
+    );
+    const input = screen.getByLabelText('Due date');
+    await user.clear(input);
+    await user.type(input, '2026-08-12');
+    await user.keyboard('{Escape}');
+
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it('clears a due date when an empty draft is dismissed outside', async () => {
+    const user = userEvent.setup();
+    const onUpdate = renderProperties();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Change due date for Ship release notes',
+      })
+    );
+    await user.clear(screen.getByLabelText('Due date'));
+    await user.click(document.body);
+
+    await waitFor(() =>
+      expect(onUpdate).toHaveBeenCalledWith({
+        id: 'task-release',
+        dueDate: null,
+        dueTime: null,
+      })
+    );
+  });
+});
