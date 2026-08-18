@@ -82,7 +82,7 @@
     "@playwright/test": "^1.58.1",
     "@swc/core": "1.15.46",
     "@tailwindcss/vite": "^4.0.12",
-    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
     "@types/supertest": "^6.0.3",
