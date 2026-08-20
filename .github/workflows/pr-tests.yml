@@ -120,7 +120,7 @@ jobs:
 
       - name: Run Wear tests and coverage
         working-directory: packages/frontend/src-tauri/gen/android
-        run: ./gradlew --settings-file wear.settings.gradle :wear:testDebugUnitTest :wear:koverVerifyDebug :wear:koverXmlReportDebug
+        run: ./gradlew --settings-file wear.settings.gradle -Drobolectric.dependency.repo.url=https://repo.maven.apache.org/maven2 :wear:testDebugUnitTest :wear:koverVerifyDebug :wear:koverXmlReportDebug
 
       - name: Upload Wear diagnostics
         if: failure()
