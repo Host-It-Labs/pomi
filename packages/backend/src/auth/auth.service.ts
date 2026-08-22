@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 import { PreferencesService } from '../preferences/preferences.service';
 import { SystemService } from '../system/system.service';
 import { UsersService } from '../users/users.service';
+import { AuthAttemptStore } from './auth-attempt.store';
 
 @Injectable()
 export class AuthService {
@@ -17,7 +18,8 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private preferencesService: PreferencesService,
-    private systemService: SystemService
+    private systemService: SystemService,
+    private authAttemptStore: AuthAttemptStore
   ) {}
 
   async signUp(username: string, password: string, language?: AppLanguage) {
@@ -75,12 +77,12 @@ export class AuthService {
 
     const user = await this.usersService.findUserByUsername(username);
     if (!user) {
-      throw new UnauthorizedException('Cannot find user');
+      throw new UnauthorizedException('Invalid username or password');
     }
 
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) {
-      throw new UnauthorizedException('Invalid password');
+      throw new UnauthorizedException('Invalid username or password');
     }
 
     const preferences = await this.preferencesService.getPreferences(
@@ -105,6 +107,7 @@ export class AuthService {
   async authenticateUser(
     username: string,
     password: string,
+    origin: string,
     language?: AppLanguage
   ) {
     if (!username || !password) {
@@ -113,10 +116,13 @@ export class AuthService {
 
     username = username.toLowerCase().trim();
 
+    await this.authAttemptStore.assertAuthenticationAllowed(origin, username);
+
     const existingUser = await this.usersService.findUserByUsername(username);
 
     const requestedLanguage = this.normalizeLanguage(language);
     if (!existingUser) {
+      await this.authAttemptStore.assertRegistrationAllowed(origin);
       return await this.signUp(username, password, requestedLanguage);
     }
     return await this.login(username, password, requestedLanguage);
