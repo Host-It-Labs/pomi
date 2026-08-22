@@ -195,6 +195,16 @@ test('Task-to-List conversion snapshots and clears every Task-only field', async
     recurrenceSequenceIndex: 3,
     recurrenceAnchorMode: 'completion',
     followUpTaskId: 'follow-up-task',
+    followUpDefinition: {
+      title: 'Send launch summary',
+      description: null,
+      dueTime: '09:00',
+      priority: 'normal',
+      timerType: 'work',
+      intentionSlug: null,
+      subIntentionSlug: null,
+      vacationEligible: true,
+    },
     followUpDelayDays: 2,
     followUpSourceTaskId: null,
     lastReminderKey: 'old-key',
@@ -249,12 +259,23 @@ test('Task-to-List conversion snapshots and clears every Task-only field', async
     recurrenceInterval: 1,
     recurrenceAnchorMode: 'completion',
     followUpTaskId: 'follow-up-task',
+    followUpDefinition: {
+      title: 'Send launch summary',
+      description: null,
+      dueTime: '09:00',
+      priority: 'normal',
+      timerType: 'work',
+      intentionSlug: null,
+      subIntentionSlug: null,
+      vacationEligible: true,
+    },
     followUpDelayDays: 2,
     followUpSourceTaskId: null,
     lastReminderKey: 'old-key',
     recurrenceSequenceIndex: 3,
     manualOrder: 4,
     manualOrderOverride: true,
+    itemKind: 'task',
   });
 });
 
@@ -320,6 +341,93 @@ test('Parent conversion aborts before its transaction for directly linked Tasks'
     BadRequestException
   );
   assert.equal(transactionCount, 0);
+});
+
+test('Intention conversion carries contextual follow-ups into the created List', async () => {
+  const intention = {
+    id: 'intention-1',
+    userId: 'user-1',
+    slug: 'focus',
+    title: 'Focus',
+    emoji: '🎯',
+    description: null,
+    vacationDefault: false,
+    isFavorite: false,
+    type: 'work',
+    isArchived: false,
+  };
+  const tasks = [
+    {
+      id: 'parent-task',
+      userId: 'user-1',
+      title: 'Prepare launch',
+      intentionSlug: intention.slug,
+      subIntentionSlug: null,
+      itemKind: 'task',
+      followUpSourceTaskId: null,
+    },
+    {
+      id: 'generated-follow-up',
+      userId: 'user-1',
+      title: 'Send recap',
+      intentionSlug: intention.slug,
+      subIntentionSlug: null,
+      itemKind: 'followUp',
+      followUpSourceTaskId: 'parent-task',
+    },
+  ];
+  const savedTasks: typeof tasks = [];
+  const service = new ListsService(
+    {} as never,
+    {
+      find: async ({ where }) => {
+        assert.deepEqual(where.itemKind.value, ['task', 'followUp']);
+        return tasks;
+      },
+    } as never,
+    {
+      findOne: async () => intention,
+      find: async () => [],
+    } as never,
+    {
+      transaction: async callback =>
+        callback({
+          getRepository: target => {
+            if (target.name === 'ListEntity') {
+              return {
+                find: async () => [],
+                create: value => ({ id: 'list-1', ...value }),
+                save: async value => value,
+              };
+            }
+            if (target.name === 'TaskEntity') {
+              return {
+                save: async values => {
+                  savedTasks.push(...values);
+                  return values;
+                },
+              };
+            }
+            return { save: async value => value };
+          },
+        }),
+    } as never,
+    { getCurrentTimer: async () => null } as never,
+    { emitTasksUpdate: () => undefined } as never
+  );
+
+  await service.convertIntention('user-1', intention.slug);
+
+  assert.deepEqual(
+    savedTasks.map(task => task.id),
+    ['parent-task', 'generated-follow-up']
+  );
+  assert.ok(savedTasks.every(task => task.itemKind === 'listItem'));
+  assert.deepEqual(
+    savedTasks.map(task => task.taskRestoreState.itemKind),
+    ['task', 'followUp']
+  );
+  assert.equal(intention.isArchived, true);
 });
 
 test('converting a source List restores its current identity', async () => {
@@ -404,6 +512,17 @@ test('restoring a List from a converted Parent detaches the Sub-intention and it
       subIntentionSlug: intention.slug,
     },
   };
+  const followUpItem = {
+    ...task,
+    id: 'follow-up-1',
+    title: 'Review follow-up',
+    taskRestoreState: {
+      intentionSlug: parent.slug,
+      subIntentionSlug: intention.slug,
+      itemKind: 'followUp',
+      followUpSourceTaskId: task.id,
+    },
+  };
   const list = {
     id: 'list-1',
     userId: 'user-1',
@@ -427,7 +546,7 @@ test('restoring a List from a converted Parent detaches the Sub-intention and it
       save: async value => value,
     } as never,
     {
-      find: async () => [task],
+      find: async () => [task, followUpItem],
       save: async value => {
         savedTasks.push(value);
         return value;
@@ -444,10 +563,12 @@ test('restoring a List from a converted Parent detaches the Sub-intention and it
   assert.equal(intention.isArchived, false);
   assert.equal(intention.parentIntentionId, null);
   assert.equal(intention.parentIntention, null);
-  assert.equal(savedTasks.length, 1);
+  assert.equal(savedTasks.length, 2);
   assert.equal(task.itemKind, 'task');
   assert.equal(task.listId, null);
   assert.equal(task.taskRestoreState, null);
   assert.equal(task.intentionSlug, intention.slug);
   assert.equal(task.subIntentionSlug, null);
+  assert.equal(followUpItem.itemKind, 'followUp');
+  assert.equal(followUpItem.followUpSourceTaskId, task.id);
 });

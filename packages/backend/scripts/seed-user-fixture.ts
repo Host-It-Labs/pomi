@@ -10,6 +10,7 @@ import {
 } from '@pomi/shared';
 import * as bcrypt from 'bcrypt';
 import { createHash } from 'crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { addDays, format, startOfDay, subDays } from 'date-fns';
 import dataSource from '../data-source';
 import { AssistantDebugSettingEntity } from '../src/assistant/assistant-debug.entity';
@@ -60,7 +61,7 @@ type SeedTask = {
   recurrenceRule: string | null;
   recurrenceInterval?: number | null;
   recurrenceAnchorMode: TaskRecurrenceAnchorMode;
-  followUpTemplateTitle?: string;
+  followUpTitle?: string;
   followUpDelayDays?: number | null;
   vacationEligible?: boolean;
   eventOffsetDays?: number;
@@ -363,7 +364,7 @@ const baseSeedTasks: SeedTask[] = [
     subIntentionTitle: 'Deep Work',
     recurrenceRule: 'FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,WE,FR',
     recurrenceAnchorMode: 'planned',
-    followUpTemplateTitle: 'Send the project follow-up — This week',
+    followUpTitle: 'Send the project follow-up',
     followUpDelayDays: 2,
   },
   {
@@ -430,11 +431,6 @@ const SEED_TASK_CATALOG: Array<{
     title: 'Call Dad about the weekend',
     intentionTitle: 'Social',
     subIntentionTitle: 'Family',
-  },
-  {
-    title: 'Send the project follow-up',
-    intentionTitle: 'Social',
-    subIntentionTitle: 'Follow Up',
   },
   { title: 'Schedule the dentist appointment', intentionTitle: 'Calls' },
   { title: 'Return the library books', intentionTitle: 'Errands' },
@@ -902,10 +898,20 @@ async function findFixtureHealthIssues(
       recurrenceRule: expected.recurrenceRule,
       recurrenceInterval: expected.recurrenceInterval ?? null,
       recurrenceAnchorMode: expected.recurrenceAnchorMode,
-      followUpTaskId: expected.followUpTemplateTitle
-        ? (tasksByTitle.get(expected.followUpTemplateTitle)?.id ?? null)
+      followUpTaskId: null,
+      followUpDefinition: expected.followUpTitle
+        ? {
+            title: expected.followUpTitle,
+            description: null,
+            dueTime: null,
+            priority: TASK_PRIORITIES.NORMAL,
+            timerType: expected.timerType ?? TIMER_TYPES.WORK,
+            intentionSlug: assignment?.intentionSlug ?? null,
+            subIntentionSlug: assignment?.subIntentionSlug ?? null,
+            vacationEligible: expected.vacationEligible ?? false,
+          }
         : null,
-      followUpDelayDays: expected.followUpTemplateTitle
+      followUpDelayDays: expected.followUpTitle
         ? (expected.followUpDelayDays ?? 0)
         : null,
       followUpSourceTaskId: null,
@@ -915,7 +921,10 @@ async function findFixtureHealthIssues(
       !task ||
       Object.entries(expectedFields).some(
         ([key, value]) =>
-          (task as unknown as Record<string, unknown>)[key] !== value
+          !isDeepStrictEqual(
+            (task as unknown as Record<string, unknown>)[key],
+            value
+          )
       )
     ) {
       issues.push(`canonical task ${expected.title} is missing or changed`);
@@ -1277,31 +1286,26 @@ export async function seedUserFixture({
         recurrenceInterval: task.recurrenceInterval ?? null,
         recurrenceAnchorMode: task.recurrenceAnchorMode,
         followUpTaskId: null,
-        followUpDelayDays: null,
+        followUpDefinition: task.followUpTitle
+          ? {
+              title: task.followUpTitle,
+              description: null,
+              dueTime: null,
+              priority: TASK_PRIORITIES.NORMAL,
+              timerType: task.timerType ?? TIMER_TYPES.WORK,
+              intentionSlug: assignment.intentionSlug,
+              subIntentionSlug: assignment.subIntentionSlug,
+              vacationEligible: task.vacationEligible ?? false,
+            }
+          : null,
+        followUpDelayDays: task.followUpTitle
+          ? (task.followUpDelayDays ?? 0)
+          : null,
         followUpSourceTaskId: null,
         vacationEligible: task.vacationEligible ?? false,
       });
     });
     const savedTasks = await tasksRepository.save(tasksToSave);
-    const savedTasksByTitle = new Map(
-      savedTasks.map(task => [task.title, task])
-    );
-    const followUpSources = userSeedTasks.flatMap(seedTask => {
-      if (!seedTask.followUpTemplateTitle) return [];
-      const source = savedTasksByTitle.get(seedTask.title);
-      const template = savedTasksByTitle.get(seedTask.followUpTemplateTitle);
-      if (!source || !template) {
-        throw new Error(
-          `Task ${seedTask.title} references missing follow-up template ${seedTask.followUpTemplateTitle}`
-        );
-      }
-      source.followUpTaskId = template.id;
-      source.followUpDelayDays = seedTask.followUpDelayDays ?? 0;
-      return [source];
-    });
-    if (followUpSources.length > 0) {
-      await tasksRepository.save(followUpSources);
-    }
     const seedTaskByTitle = new Map(
       userSeedTasks.map(task => [task.title, task])
     );

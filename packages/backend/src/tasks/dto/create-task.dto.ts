@@ -19,6 +19,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
@@ -28,6 +29,7 @@ import {
   TASK_SLUG_MAX_LENGTH,
   TASK_TITLE_MAX_LENGTH,
 } from '../task-input-limits';
+import { TaskFollowUpDefinitionDto } from './task-follow-up-definition.dto';
 
 export class CreateTaskDto {
   @IsString()
@@ -88,6 +90,11 @@ export class CreateTaskDto {
   @IsOptional()
   @IsUUID()
   followUpTaskId?: string | null;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TaskFollowUpDefinitionDto)
+  followUpDefinition?: TaskFollowUpDefinitionDto | null;
 
   @IsOptional()
   @Type(() => Number)

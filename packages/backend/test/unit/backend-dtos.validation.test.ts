@@ -439,37 +439,51 @@ describe('assistant DTO validation', () => {
 });
 
 describe('Task follow-up DTO validation', () => {
-  it('accepts a UUID template and nonnegative integer delay', async () => {
+  const definition = {
+    title: 'Send the follow-up',
+    description: null,
+    dueTime: '09:00',
+    priority: TASK_PRIORITIES.NORMAL,
+    timerType: TIMER_TYPES.WORK,
+    intentionSlug: null,
+    subIntentionSlug: null,
+    vacationEligible: false,
+  };
+
+  it('accepts an embedded definition and nonnegative integer delay', async () => {
     const create = await expectValid(CreateTaskDto, {
       title: 'Source Task',
-      followUpTaskId: UUID,
+      followUpDefinition: definition,
       followUpDelayDays: '3',
     });
     const update = await expectValid(UpdateTaskDto, {
-      followUpTaskId: UUID,
+      followUpDefinition: definition,
       followUpDelayDays: '0',
     });
 
     expect(create).toMatchObject({
-      followUpTaskId: UUID,
+      followUpDefinition: definition,
       followUpDelayDays: 3,
     });
     expect(update).toMatchObject({
-      followUpTaskId: UUID,
+      followUpDefinition: definition,
       followUpDelayDays: 0,
     });
     await expectValid(CreateTaskDto, {
       title: 'Source Task',
-      followUpTaskId: UUID,
+      followUpDefinition: definition,
       followUpDelayDays: TASK_FOLLOW_UP_DELAY_MAX_DAYS,
     });
   });
 
-  it('rejects malformed templates and negative delays', async () => {
+  it('rejects malformed definitions and negative delays', async () => {
     await expectInvalid(
       CreateTaskDto,
-      { title: 'Source Task', followUpTaskId: 'not-a-uuid' },
-      'followUpTaskId'
+      {
+        title: 'Source Task',
+        followUpDefinition: { ...definition, title: '' },
+      },
+      'followUpDefinition'
     );
     await expectInvalid(
       UpdateTaskDto,

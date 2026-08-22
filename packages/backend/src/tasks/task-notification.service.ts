@@ -66,7 +66,9 @@ export class TaskNotificationService implements OnModuleInit {
     return this.tasksRepository
       .createQueryBuilder('task')
       .where('task.status = :status', { status: TASK_STATUSES.ACTIVE })
-      .andWhere('task.itemKind = :itemKind', { itemKind: 'task' })
+      .andWhere('task.itemKind IN (:...itemKinds)', {
+        itemKinds: ['task', 'followUp'],
+      })
       .andWhere('task.dueDate IS NOT NULL')
       .getMany();
   }

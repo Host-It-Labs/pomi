@@ -1,6 +1,7 @@
 import {
   Task,
   TaskPriority,
+  TaskFollowUpDefinition,
   TaskRecurrenceAnchorMode,
   TaskStatus,
   TimerTypes,
@@ -33,6 +34,7 @@ type TaskCreateInput = {
   recurrenceInterval?: number | null;
   recurrenceAnchorMode?: TaskRecurrenceAnchorMode;
   followUpTaskId?: string | null;
+  followUpDefinition?: TaskFollowUpDefinition | null;
   followUpDelayDays?: number | null;
   vacationEligible?: boolean;
 };
@@ -57,6 +59,7 @@ type TaskUpdateInput = {
   expectedDueDate?: string | null;
   expectedDueTime?: string | null;
   followUpTaskId?: string | null;
+  followUpDefinition?: TaskFollowUpDefinition | null;
   followUpDelayDays?: number | null;
   vacationEligible?: boolean;
 };
@@ -512,6 +515,7 @@ function getTaskUpdatePayload(task: Task): Omit<TaskUpdateInput, 'id'> {
     recurrenceInterval: task.recurrenceInterval,
     recurrenceAnchorMode: task.recurrenceAnchorMode,
     followUpTaskId: task.followUpTaskId,
+    followUpDefinition: task.followUpDefinition,
     followUpDelayDays: task.followUpDelayDays,
     vacationEligible: task.vacationEligible,
   };

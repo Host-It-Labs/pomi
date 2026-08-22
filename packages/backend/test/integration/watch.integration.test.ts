@@ -291,6 +291,39 @@ describe.runIf(hasInfrastructure)('Watch HTTP integration', () => {
     expect(result.totalVisibleTasks).toBe(1);
   });
 
+  it('carries contextual follow-up parent labels to Watch', async () => {
+    const auth = await createSession('follow_up_parent');
+    await updatePreferences(auth, { tasksExtension: true });
+    const parent = await createTask(auth, 'Prepare Watch launch', {
+      followUpDefinition: {
+        title: 'Send Watch launch recap',
+        description: null,
+        dueTime: null,
+        priority: 'normal',
+        timerType: 'work',
+        intentionSlug: null,
+        subIntentionSlug: null,
+        vacationEligible: false,
+      },
+      followUpDelayDays: 0,
+    });
+
+    const completed = await submitAction(auth, randomUUID(), {
+      kind: 'tasks',
+      operation: 'complete',
+      taskId: parent.id,
+    });
+    expect(completed.status).toBe('succeeded');
+
+    const result = await status(auth, '?taskMode=general');
+    expect(result.tasks).toEqual([
+      expect.objectContaining({
+        title: 'Send Watch launch recap',
+        followUpParent: { id: parent.id, title: parent.title },
+      }),
+    ]);
+  });
+
   it('keeps timer-linked Tasks ahead of manual General anchors', async () => {
     const auth = await createSession('task_groups');
     await updatePreferences(auth, { tasksExtension: true });

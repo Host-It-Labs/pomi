@@ -43,6 +43,7 @@ import { MobileSwipeActionRow } from './tasks/MobileSwipeActionRow';
 import { TaskArchiveConfirmationModal } from './tasks/TaskArchiveConfirmationModal';
 import { OverflowTaskTitle } from './tasks/OverflowTaskTitle';
 import { TaskInlineProperties } from './tasks/TaskInlineProperties';
+import { TaskFollowUpContext } from './tasks/TaskFollowUpContext';
 import { Button } from './ui/Button';
 import { CompactIconButton } from './ui/CompactIconButton';
 import { IntentionEmojiPair } from './ui/IntentionEmojiPair';
@@ -90,6 +91,16 @@ function isTypingInField(event: globalThis.KeyboardEvent) {
   return (
     tagName === 'input' || tagName === 'textarea' || target.isContentEditable
   );
+}
+
+function canToggleTaskPin(task: Task) {
+  return !task.followUpSourceTaskId && !task.followUpParent;
+}
+
+export function getPinShortcutTask(tasks: Task[], code: string) {
+  if (!/^Digit[1-9]$/.test(code)) return null;
+  const task = tasks[Number(code.slice(-1)) - 1];
+  return task && canToggleTaskPin(task) ? task : null;
 }
 
 export function MinimizedTaskView({
@@ -667,7 +678,7 @@ export function MinimizedTaskView({
         event.code.startsWith('Digit') &&
         event.code !== 'Digit0'
       ) {
-        const task = visibleTasks[Number(event.code.replace('Digit', '')) - 1];
+        const task = getPinShortcutTask(visibleTasks, event.code);
         if (!task) {
           return;
         }
@@ -968,6 +979,12 @@ export function MinimizedTaskView({
                     compact={!mobileExpandedLayout}
                   />
                   <div className="min-w-0">
+                    {task.followUpParent && (
+                      <TaskFollowUpContext
+                        parentTitle={task.followUpParent.title}
+                        compact
+                      />
+                    )}
                     <div className="flex min-w-0 items-center gap-1">
                       {isPinned && (
                         <FaThumbtack
@@ -1007,48 +1024,50 @@ export function MinimizedTaskView({
                     />
                   </div>
                   <div className="flex items-center justify-end gap-1 opacity-80 transition-opacity group-hover/minimized-task:opacity-100 group-focus-within/minimized-task:opacity-100">
-                    <button
-                      type="button"
-                      aria-label={`${isPinned ? 'Unpin' : 'Pin'} ${task.title}`}
-                      title={isPinned ? 'Unpin' : 'Pin'}
-                      onClick={() =>
-                        void updateTaskWithDeferredOrder({
-                          id: task.id,
-                          pinned: !isPinned,
-                        })
-                      }
-                      className={clsx(
-                        taskActionButtonClassName,
-                        isPinned &&
-                          '!border-indigo-300/80 !bg-indigo-500 !text-white shadow-sm shadow-indigo-500/30'
-                      )}
-                      disabled={isPinning}
-                      aria-pressed={isPinned}
-                    >
-                      <FaThumbtack
-                        size={taskActionIconSize}
-                        className="shrink-0"
-                      />
-                      {(intentionEmojis.parentEmoji ||
-                        intentionEmojis.subEmoji) && (
-                        <span
-                          data-testid="task-pin-intention-badge"
-                          className="pointer-events-none absolute -right-0.5 -top-1 origin-top-right scale-75 drop-shadow"
-                        >
-                          <IntentionEmojiPair
-                            parentEmoji={intentionEmojis.parentEmoji}
-                            subEmoji={intentionEmojis.subEmoji}
-                            size="xs"
-                          />
-                        </span>
-                      )}
-                      {visibleTasks.indexOf(task) < 9 && (
-                        <KeyboardShortcut
-                          text={`⇧${visibleTasks.indexOf(task) + 1}`}
-                          showModIcon
+                    {canToggleTaskPin(task) && (
+                      <button
+                        type="button"
+                        aria-label={`${isPinned ? 'Unpin' : 'Pin'} ${task.title}`}
+                        title={isPinned ? 'Unpin' : 'Pin'}
+                        onClick={() =>
+                          void updateTaskWithDeferredOrder({
+                            id: task.id,
+                            pinned: !isPinned,
+                          })
+                        }
+                        className={clsx(
+                          taskActionButtonClassName,
+                          isPinned &&
+                            '!border-indigo-300/80 !bg-indigo-500 !text-white shadow-sm shadow-indigo-500/30'
+                        )}
+                        disabled={isPinning}
+                        aria-pressed={isPinned}
+                      >
+                        <FaThumbtack
+                          size={taskActionIconSize}
+                          className="shrink-0"
                         />
-                      )}
-                    </button>
+                        {(intentionEmojis.parentEmoji ||
+                          intentionEmojis.subEmoji) && (
+                          <span
+                            data-testid="task-pin-intention-badge"
+                            className="pointer-events-none absolute -right-0.5 -top-1 origin-top-right scale-75 drop-shadow"
+                          >
+                            <IntentionEmojiPair
+                              parentEmoji={intentionEmojis.parentEmoji}
+                              subEmoji={intentionEmojis.subEmoji}
+                              size="xs"
+                            />
+                          </span>
+                        )}
+                        {visibleTasks.indexOf(task) < 9 && (
+                          <KeyboardShortcut
+                            text={`⇧${visibleTasks.indexOf(task) + 1}`}
+                            showModIcon
+                          />
+                        )}
+                      </button>
+                    )}
                     <button
                       type="button"
                       aria-label={`Edit ${task.title}`}
@@ -1102,7 +1121,6 @@ export function MinimizedTaskView({
         <TaskFormModal
           isOpen={isCreateOpen || editingTask !== undefined}
           task={editingTask ?? null}
-          activeTasks={tasks}
           intentions={intentions}
           lists={lists}
           preferences={preferences}

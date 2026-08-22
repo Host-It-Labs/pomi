@@ -395,21 +395,75 @@ export class UserDataTransferService {
     userId: string,
     ids: UserDataImportIdMaps
   ) {
+    const rowsById = new Map(
+      rows.flatMap(row => {
+        const id = this.readRowId(row.id);
+        return id ? [[id, row] as const] : [];
+      })
+    );
+    const legacyTemplateIds = new Set<string>();
+    rows.forEach(row => {
+      const directTemplateId = this.readRowId(row.followUpTaskId);
+      if (directTemplateId) legacyTemplateIds.add(directTemplateId);
+      if (this.isTransferRecord(row.taskRestoreState)) {
+        const restoredTemplateId = this.readRowId(
+          row.taskRestoreState.followUpTaskId
+        );
+        if (restoredTemplateId) legacyTemplateIds.add(restoredTemplateId);
+      }
+    });
+
     return rows.map(row => {
       const next = this.remapRowWithFreshId(row, userId, ids.tasks);
       next.listId = this.remapOptionalId(row.listId, ids.lists);
-      next.followUpTaskId = this.remapOptionalId(row.followUpTaskId, ids.tasks);
+      const legacyTemplateId = this.readRowId(row.followUpTaskId);
+      next.followUpTaskId = legacyTemplateId
+        ? null
+        : this.remapOptionalId(row.followUpTaskId, ids.tasks);
+      if (legacyTemplateId && !this.isTransferRecord(row.followUpDefinition)) {
+        next.followUpDefinition = this.createLegacyFollowUpDefinition(
+          legacyTemplateId,
+          rowsById
+        );
+      }
       next.followUpSourceTaskId = this.remapOptionalId(
         row.followUpSourceTaskId,
         ids.tasks
       );
+      const sourceId = this.readRowId(row.id);
+      if (
+        sourceId &&
+        legacyTemplateIds.has(sourceId) &&
+        (row.itemKind === undefined || row.itemKind === 'task')
+      ) {
+        next.itemKind = 'followUpTemplate';
+      } else if (
+        this.readRowId(row.followUpSourceTaskId) &&
+        (row.itemKind === undefined || row.itemKind === 'task')
+      ) {
+        next.itemKind = 'followUp';
+      }
       if (this.isTransferRecord(next.taskRestoreState)) {
+        const legacyRestoreTemplateId = this.readRowId(
+          next.taskRestoreState.followUpTaskId
+        );
         next.taskRestoreState = {
           ...next.taskRestoreState,
-          followUpTaskId: this.remapOptionalId(
-            next.taskRestoreState.followUpTaskId,
-            ids.tasks
-          ),
+          followUpTaskId: legacyRestoreTemplateId
+            ? null
+            : this.remapOptionalId(
+                next.taskRestoreState.followUpTaskId,
+                ids.tasks
+              ),
+          ...(legacyRestoreTemplateId &&
+          !this.isTransferRecord(next.taskRestoreState.followUpDefinition)
+            ? {
+                followUpDefinition: this.createLegacyFollowUpDefinition(
+                  legacyRestoreTemplateId,
+                  rowsById
+                ),
+              }
+            : {}),
           followUpSourceTaskId: this.remapOptionalId(
             next.taskRestoreState.followUpSourceTaskId,
             ids.tasks
@@ -418,6 +472,28 @@ export class UserDataTransferService {
       }
       return next;
     });
+  }
+
+  private createLegacyFollowUpDefinition(
+    templateId: string,
+    rowsById: Map<string, UserDataTransferRow>
+  ): UserDataTransferRow {
+    const template = rowsById.get(templateId);
+    if (!template || typeof template.title !== 'string') {
+      throw new BadRequestException(
+        'Legacy follow-up template is missing from user data'
+      );
+    }
+    return {
+      title: template.title,
+      description: template.description ?? null,
+      dueTime: template.dueTime ?? null,
+      priority: template.priority,
+      timerType: template.timerType,
+      intentionSlug: template.intentionSlug ?? null,
+      subIntentionSlug: template.subIntentionSlug ?? null,
+      vacationEligible: template.vacationEligible === true,
+    };
   }
 
   private orderIntentionRowsForImport(rows: UserDataTransferRow[]) {

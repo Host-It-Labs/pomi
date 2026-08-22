@@ -778,6 +778,7 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           recurrenceInterval: action.recurrenceInterval,
           recurrenceAnchorMode: action.recurrenceAnchorMode,
           followUpTaskId: action.followUpTaskId,
+          followUpDefinition: action.followUpDefinition,
           followUpDelayDays: action.followUpDelayDays,
           vacationEligible: action.vacationEligible,
           creationSource: action.creationSource ?? 'manual',

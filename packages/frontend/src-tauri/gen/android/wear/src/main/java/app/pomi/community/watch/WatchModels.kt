@@ -93,6 +93,7 @@ data class WatchTask(
     val subIntentionSlug: String?,
     val subIntentionTitle: String?,
     val subIntentionEmoji: String?,
+    val followUpParentTitle: String?,
     val isFocused: Boolean,
     val isLinkedToTimer: Boolean,
     val isOverdue: Boolean
@@ -112,6 +113,10 @@ data class WatchTask(
         return priority.replaceFirstChar {
             if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
         }
+    }
+
+    fun followUpContextLabel(): String? {
+        return followUpParentTitle?.takeIf { it.isNotBlank() }?.let { "↳ $it" }
     }
 
     fun localizedPriorityLabel(context: Context): String {
@@ -281,6 +286,7 @@ private fun JSONObject.toWatchTask(): WatchTask {
         subIntentionSlug = optNullableString("subIntentionSlug"),
         subIntentionTitle = optNullableString("subIntentionTitle"),
         subIntentionEmoji = optNullableString("subIntentionEmoji"),
+        followUpParentTitle = optJSONObject("followUpParent")?.optNullableString("title"),
         isFocused = optBoolean("isFocused"),
         isLinkedToTimer = optBoolean("isLinkedToTimer"),
         isOverdue = optBoolean("isOverdue")

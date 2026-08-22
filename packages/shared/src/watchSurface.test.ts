@@ -111,6 +111,7 @@ describe('buildWatchFaceSurfaceModel', () => {
             intentionEmoji: null,
             subIntentionTitle: null,
             subIntentionEmoji: null,
+            followUpParent: null,
             isFocused: false,
             isLinkedToTimer: false,
             isOverdue: false,

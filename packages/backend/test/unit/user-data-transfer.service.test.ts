@@ -59,7 +59,36 @@ describe('UserDataTransferService', () => {
           },
         ],
         statistics: [{ id: 'source-statistic', userId: 'source-user' }],
-        tasks: [{ id: 'source-task', userId: 'source-user' }],
+        tasks: [
+          {
+            id: 'source-task',
+            userId: 'source-user',
+            title: 'Legacy parent',
+            itemKind: 'task',
+            followUpTaskId: 'source-template',
+            followUpDelayDays: 2,
+          },
+          {
+            id: 'source-template',
+            userId: 'source-user',
+            title: 'Legacy follow-up',
+            description: 'Imported context',
+            dueTime: '09:00',
+            priority: 'high',
+            timerType: 'work',
+            intentionSlug: 'parent',
+            subIntentionSlug: 'child',
+            vacationEligible: true,
+            itemKind: 'task',
+          },
+          {
+            id: 'source-generated',
+            userId: 'source-user',
+            title: 'Active generated follow-up',
+            itemKind: 'task',
+            followUpSourceTaskId: 'source-task',
+          },
+        ],
         taskEvents: [
           {
             id: 'source-task-event',
@@ -120,7 +149,8 @@ describe('UserDataTransferService', () => {
 
     const preferences = inserted.get('Preferences')?.[0];
     const [parent, child] = inserted.get('Intention') ?? [];
-    const task = inserted.get('TaskEntity')?.[0];
+    const [task, template, generatedFollowUp] =
+      inserted.get('TaskEntity') ?? [];
     const taskEvent = inserted.get('TaskEventEntity')?.[0];
     const taskImportRun = inserted.get('TaskImportRunEntity')?.[0];
     expect(preferences).toMatchObject({
@@ -132,6 +162,25 @@ describe('UserDataTransferService', () => {
     expect(child.id).not.toBe('source-child');
     expect(child.parentIntentionId).toBe(parent.id);
     expect(task.id).not.toBe('source-task');
+    expect(task).toMatchObject({
+      followUpTaskId: null,
+      followUpDelayDays: 2,
+      followUpDefinition: {
+        title: 'Legacy follow-up',
+        description: 'Imported context',
+        dueTime: '09:00',
+        priority: 'high',
+        timerType: 'work',
+        intentionSlug: 'parent',
+        subIntentionSlug: 'child',
+        vacationEligible: true,
+      },
+    });
+    expect(template).toMatchObject({ itemKind: 'followUpTemplate' });
+    expect(generatedFollowUp).toMatchObject({
+      itemKind: 'followUp',
+      followUpSourceTaskId: task.id,
+    });
     expect(taskEvent).toMatchObject({ taskId: task.id, userId: targetUserId });
     expect(taskImportRun).toMatchObject({
       userId: targetUserId,

@@ -59,6 +59,9 @@ function createService(options: ServiceOptions) {
             update: async (criteria: unknown, update: unknown) => {
               taskUpdates.push({ criteria, update });
             },
+            query: async (statement: string, parameters: unknown[]) => {
+              cascadeQueries.push({ statement, parameters });
+            },
           }),
           query: async (statement: string, parameters: unknown[]) => {
             cascadeQueries.push({ statement, parameters });
@@ -73,6 +76,9 @@ function createService(options: ServiceOptions) {
     {
       update: async (criteria: unknown, update: unknown) => {
         taskUpdates.push({ criteria, update });
+      },
+      query: async (statement: string, parameters: unknown[]) => {
+        cascadeQueries.push({ statement, parameters });
       },
     } as never,
     {
@@ -183,7 +189,7 @@ describe('IntentionsService', () => {
   });
 
   it('unlinks only Tasks with the same type when archiving', async () => {
-    const { service, taskUpdates } = createService({
+    const { service, taskUpdates, cascadeQueries } = createService({
       intention: {
         userId: 'user-1',
         slug: 'shared',
@@ -201,6 +207,45 @@ describe('IntentionsService', () => {
         },
         update: { intentionSlug: null, subIntentionSlug: null },
       },
+    ]);
+    expect(cascadeQueries).toEqual([
+      expect.objectContaining({
+        statement: expect.stringContaining('"followUpDefinition"'),
+        parameters: ['user-1', TIMER_TYPES.BREAK, 'shared'],
+      }),
+    ]);
+  });
+
+  it('unlinks embedded follow-up children when archiving a Sub-intention', async () => {
+    const { service, taskUpdates, cascadeQueries } = createService({
+      intention: {
+        userId: 'user-1',
+        slug: 'review',
+        type: TIMER_TYPES.WORK,
+        isArchived: false,
+        parentIntentionId: 'parent-1',
+        parentIntention: { id: 'parent-1', slug: 'focus' },
+      },
+    });
+
+    await service.archiveIntention('user-1', 'review', TIMER_TYPES.WORK);
+
+    expect(taskUpdates).toEqual([
+      {
+        criteria: {
+          userId: 'user-1',
+          timerType: TIMER_TYPES.WORK,
+          subIntentionSlug: 'review',
+          itemKind: expect.anything(),
+        },
+        update: { subIntentionSlug: null },
+      },
+    ]);
+    expect(cascadeQueries).toEqual([
+      expect.objectContaining({
+        statement: expect.stringContaining("'{subIntentionSlug}'"),
+        parameters: ['user-1', TIMER_TYPES.WORK, 'review'],
+      }),
     ]);
   });
 
@@ -307,7 +352,7 @@ describe('IntentionsService', () => {
           userId: 'user-1',
           timerType: TIMER_TYPES.WORK,
           intentionSlug: 'focus',
-          itemKind: 'task',
+          itemKind: expect.anything(),
         },
         update: { intentionSlug: null, subIntentionSlug: null },
       },
@@ -406,7 +451,7 @@ describe('IntentionsService', () => {
           userId: 'user-1',
           timerType: TIMER_TYPES.WORK,
           subIntentionSlug: 'review',
-          itemKind: 'task',
+          itemKind: expect.anything(),
         },
         update: { intentionSlug: null, subIntentionSlug: null },
       },
@@ -458,7 +503,7 @@ describe('IntentionsService', () => {
           userId: 'user-1',
           timerType: TIMER_TYPES.WORK,
           subIntentionSlug: 'review',
-          itemKind: 'task',
+          itemKind: expect.anything(),
         },
         update: { intentionSlug: null, subIntentionSlug: null },
       },
