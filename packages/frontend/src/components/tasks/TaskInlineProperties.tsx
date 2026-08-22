@@ -252,6 +252,14 @@ function TaskDueDateControl({
             >
               {t('common.cancel')}
             </Button>
+            <Button
+              size="xs"
+              onClick={() => void saveOnDismiss()}
+              isLoading={saving}
+              disabled={draftDate === (task.dueDate ?? '')}
+            >
+              {t('common.apply')}
+            </Button>
           </div>
         </div>
       </div>

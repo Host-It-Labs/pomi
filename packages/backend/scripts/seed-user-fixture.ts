@@ -273,6 +273,8 @@ const baseSeedTasks: SeedTask[] = [
   },
   {
     title: 'Plan next feature slice',
+    description:
+      'Representative dated Task for property filtering and multi-Task selection.',
     dueOffsetDays: 1,
     dueTime: '10:30',
     priority: TASK_PRIORITIES.NORMAL,

@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect } from 'react';
 import { useI18n } from '../../i18n';
+import type { ToastAction } from './ToastContext';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -9,6 +10,7 @@ export interface ToastProps {
   message: string;
   type: ToastType;
   duration?: number;
+  action?: ToastAction;
   onClose: () => void;
 }
 
@@ -17,6 +19,7 @@ export function Toast({
   message,
   type,
   duration = 3000,
+  action,
   onClose,
 }: ToastProps) {
   const { t } = useI18n();
@@ -123,10 +126,22 @@ export function Toast({
       exit={{ opacity: 0, y: 20 }}
       className={`flex items-center px-3 py-2 rounded-lg shadow-lg border text-sm max-w-md ${getToastStyles()}`}
     >
-      <div className="flex items-center">
+      <div className="flex min-w-0 items-center">
         {getIcon()}
         <span>{message}</span>
       </div>
+      {action ? (
+        <button
+          type="button"
+          onClick={() => {
+            action.onClick();
+            onClose();
+          }}
+          className="ml-3 shrink-0 rounded border border-current/30 px-2 py-1 text-xs font-semibold hover:bg-white/10"
+        >
+          {action.label}
+        </button>
+      ) : null}
       <button
         onClick={() => onClose()}
         className="ml-4 opacity-70 hover:opacity-100 transition-opacity"
@@ -167,6 +182,7 @@ export function ToastContainer({ toast, onClose }: ToastContainerProps) {
             message={toast.message}
             type={toast.type}
             duration={toast.duration}
+            action={toast.action}
             onClose={onClose}
           />
         )}

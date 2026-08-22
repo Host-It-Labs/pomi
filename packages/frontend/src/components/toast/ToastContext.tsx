@@ -14,26 +14,43 @@ interface Toast {
   message: string;
   type: ToastType;
   duration?: number;
+  action?: ToastAction;
+}
+
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
 }
 
 interface ToastContextType {
-  showToast: (message: string, type: ToastType, duration?: number) => void;
+  showToast: (
+    message: string,
+    type: ToastType,
+    duration?: number,
+    action?: ToastAction
+  ) => void;
   hideToast: () => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
 let globalShowToast:
-  | ((message: string, type: ToastType, duration?: number) => void)
+  | ((
+      message: string,
+      type: ToastType,
+      duration?: number,
+      action?: ToastAction
+    ) => void)
   | null = null;
 
 export function showToastFromStore(
   message: string,
   type: ToastType,
-  duration?: number
+  duration?: number,
+  action?: ToastAction
 ) {
   if (globalShowToast) {
-    globalShowToast(message, type, duration);
+    globalShowToast(message, type, duration, action);
   }
 }
 
@@ -41,12 +58,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<Toast | null>(null);
 
   const showToast = useCallback(
-    (message: string, type: ToastType, duration = 2000) => {
+    (
+      message: string,
+      type: ToastType,
+      duration?: number,
+      action?: ToastAction
+    ) => {
       const newToast = {
         id: uuidv4(),
         message,
         type,
-        duration,
+        duration: duration ?? 2000,
+        action,
       };
       setToast(newToast);
     },
