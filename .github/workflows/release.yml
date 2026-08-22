@@ -192,7 +192,7 @@ jobs:
           fi
 
       - name: Upload macOS build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-macos-aarch64
           path: release-assets
@@ -314,7 +314,7 @@ jobs:
           cp "${android_apks[@]}" "${android_bundles[@]}" "${wear_apks[@]}" release-assets/
 
       - name: Upload Android and Wear build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-android-wear
           path: release-assets

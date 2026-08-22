@@ -92,7 +92,7 @@ jobs:
 
       - name: Upload TypeScript coverage and diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: typescript-coverage-and-diagnostics
           if-no-files-found: ignore
@@ -124,7 +124,7 @@ jobs:
 
       - name: Upload Wear diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wear-test-diagnostics
           if-no-files-found: ignore
