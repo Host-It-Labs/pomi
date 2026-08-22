@@ -154,7 +154,7 @@ export function MobileSimulator({
 
           <iframe
             key={`${preset.id}-${reloadKey}`}
-            title={`${preset.label} simulator`}
+            title={t('debug.simulatorFor', { label: preset.label })}
             src={simulatorUrl}
             data-content-height={contentHeight}
             data-safe-zone-bottom={preset.bottomSafeZone}

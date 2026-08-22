@@ -266,7 +266,11 @@ export function ConnectionStatus() {
               {connectionStatus.reconnectAttempts > 0 &&
                 statusTone === 'warning' && (
                   <span className="ml-1 text-xs opacity-80">
-                    (attempt {connectionStatus.reconnectAttempts})
+                    (
+                    {t('connection.attempt', {
+                      count: connectionStatus.reconnectAttempts,
+                    })}
+                    )
                   </span>
                 )}
             </span>
@@ -293,7 +297,7 @@ export function ConnectionStatus() {
               onClick={() => retry()}
               className="mt-2 block w-full rounded bg-black/20 px-2 py-1 text-xs font-medium hover:bg-black/30 focus:outline-none focus:ring-2 focus:ring-white/80"
             >
-              Retry connection
+              {t('connection.retry')}
             </button>
           )}
         </div>

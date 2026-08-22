@@ -1025,7 +1025,9 @@ export function Tasks() {
 
         <section
           aria-label={
-            selectedList ? `Add to ${selectedList.title}` : 'Capture a Task'
+            selectedList
+              ? t('task.addToList', { title: selectedList.title })
+              : t('task.capture')
           }
           className="mt-4 rounded-xl border border-indigo-500/25 bg-linear-to-br from-indigo-950/40 via-slate-900/65 to-slate-950/75 p-2.5 shadow-sm shadow-indigo-950/30"
         >
@@ -1044,7 +1046,9 @@ export function Tasks() {
                 autoFocus
                 value={newListItemTitle}
                 onChange={event => setNewListItemTitle(event.target.value)}
-                placeholder={`Add to ${selectedList.title}`}
+                placeholder={t('task.addToList', {
+                  title: selectedList.title,
+                })}
                 className="h-10 min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-white outline-none focus:border-indigo-500"
               />
               <Button
@@ -1231,7 +1235,7 @@ export function Tasks() {
                 }}
                 className="w-full rounded-xl border border-dashed border-slate-700/60 bg-slate-900/25 px-5 py-10 text-sm text-slate-400 transition hover:border-indigo-500/60 hover:bg-indigo-950/15 hover:text-slate-200"
               >
-                Add task
+                {t('task.add')}
               </button>
             )}
 
@@ -1240,7 +1244,7 @@ export function Tasks() {
             mixedTaskItems.length === 0 &&
             hasActiveFilters && (
               <div className="rounded-lg border border-slate-800/60 bg-slate-900/35 px-5 py-8 text-center text-sm text-slate-400">
-                {hasActiveFilters ? 'No matching tasks' : 'No tasks'}
+                {hasActiveFilters ? t('task.noMatching') : t('task.noTasks')}
               </div>
             )}
 
@@ -1755,7 +1759,10 @@ function TaskIntentionFilterDropdown({
           return (
             <button
               type="button"
-              aria-label={`${actionLabel} ${list.title}`}
+              aria-label={t('task.actionFor', {
+                action: actionLabel,
+                title: list.title,
+              })}
               title={actionLabel}
               onClick={event => {
                 event.stopPropagation();
@@ -1913,8 +1920,8 @@ function TaskArchiveModal({
                   {task.title}
                 </div>
                 <div className="mt-0.5 flex flex-wrap gap-1.5 text-[11px] capitalize text-slate-500">
-                  <span>{task.status}</span>
-                  <span>{task.priority}</span>
+                  <span>{t(`common.${task.status}`)}</span>
+                  <span>{t(`common.${task.priority}`)}</span>
                   <TaskTimerTypeBadge timerType={task.timerType} />
                 </div>
               </div>
@@ -1927,7 +1934,7 @@ function TaskArchiveModal({
                 className="h-7 gap-1.5 px-2 text-[11px]"
               >
                 <FaUndo size={10} />
-                Restore
+                {t('common.restore')}
               </Button>
             </div>
           ))
@@ -1960,6 +1967,7 @@ function SelectedListItems({
   onRestore: (item: ListItem) => Promise<void>;
   onReset: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="space-y-4" data-testid="selected-list-items">
       <div className="space-y-2.5">
@@ -1976,7 +1984,7 @@ function SelectedListItems({
         ))}
         {activeItems.length === 0 && (
           <div className="rounded-xl border border-dashed border-slate-700/70 px-5 py-8 text-center text-sm text-slate-500">
-            No active items in {list.title}.
+            {t('task.noActiveItemsInList', { title: list.title })}
           </div>
         )}
       </div>
@@ -1985,10 +1993,10 @@ function SelectedListItems({
         <section className="border-t border-slate-800/70 pt-3">
           <div className="mb-2 flex items-center justify-between gap-3">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-emerald-300">
-              Completed ({completedItems.length})
+              {t('task.completedCount', { count: completedItems.length })}
             </h3>
             <Button size="xs" variant="secondary" onClick={onReset}>
-              <FaUndo size={9} /> Reset List
+              <FaUndo size={9} /> {t('task.resetListAction')}
             </Button>
           </div>
           <div className="space-y-2">
@@ -2010,7 +2018,7 @@ function SelectedListItems({
       {archivedItems.length > 0 && (
         <section className="border-t border-slate-800/70 pt-3">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-amber-300">
-            Archived ({archivedItems.length})
+            {t('task.archivedCount', { count: archivedItems.length })}
           </h3>
           <div className="space-y-2">
             {archivedItems.map(item => (
@@ -2084,12 +2092,12 @@ function ListItemTaskRow({
           <span className="truncate text-indigo-200/75">
             {list.emoji ?? '📋'} {list.title}
           </span>
-          <span className="capitalize">{item.priority}</span>
+          <span>{t(`common.${item.priority}`)}</span>
           {item.dueDate && <time data-swipe-start>{item.dueDate}</time>}
         </div>
       </div>
       <IconButton
-        label={`Edit ${item.title}`}
+        label={t('task.editFor', { title: item.title })}
         title={t('common.edit')}
         size="sm"
         variant="secondary"
@@ -2153,7 +2161,7 @@ function ListItemEditModal({
         item?.status === TASK_STATUSES.ACTIVE ? (
           <button
             type="button"
-            aria-label={`Archive ${item.title}`}
+            aria-label={t('task.archiveFor', { title: item.title })}
             title={t('common.archive')}
             onClick={() => onArchive(item)}
             disabled={saving}
@@ -2688,7 +2696,7 @@ function TaskRow({
             )}
             <button
               type="button"
-              aria-label={`Drag ${task.title}`}
+              aria-label={t('task.dragFor', { title: task.title })}
               onPointerDown={onPointerDown}
               onMouseDown={onMouseDown}
               className={clsx(
@@ -2759,7 +2767,7 @@ function TaskRow({
             <FaThumbtack />
           </IconButton>
           <IconButton
-            label={`Edit ${task.title}`}
+            label={t('task.editFor', { title: task.title })}
             title={t('common.edit')}
             size="sm"
             variant="secondary"

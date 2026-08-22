@@ -414,6 +414,7 @@ function Group({
   headerAction: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const { t } = useI18n();
   const isIndeterminate = indeterminate === true;
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-950/50">
@@ -423,7 +424,7 @@ function Group({
             if (input) input.indeterminate = isIndeterminate;
           }}
           type="checkbox"
-          aria-label={`Include ${label}`}
+          aria-label={t('vacation.includeFor', { label })}
           checked={checked}
           onChange={event => onChecked(event.target.checked)}
           className="h-4 w-4 accent-indigo-500"
@@ -434,7 +435,7 @@ function Group({
         {headerAction}
         <button
           type="button"
-          aria-label={`Expand ${label}`}
+          aria-label={t('vacation.expandFor', { label })}
           onClick={onOpen}
           className="p-2 text-slate-500"
         >

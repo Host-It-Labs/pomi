@@ -171,6 +171,7 @@ function SessionProgressRing({
   setSessionPosition,
   timer,
 }: SessionProgressRingProps) {
+  const { t } = useI18n();
   const activePosition = clamp(Math.trunc(sessionPosition), 1, sessionTotal);
   const baseDuration = Math.max(
     1,
@@ -388,7 +389,10 @@ function SessionProgressRing({
               <path
                 aria-current={isActive ? 'true' : undefined}
                 aria-disabled={isClickable ? undefined : 'true'}
-                aria-label={`Go to Pomi ${position} of ${sessionTotal}`}
+                aria-label={t('session.goToPosition', {
+                  position,
+                  total: sessionTotal,
+                })}
                 className={clsx(
                   'outline-none focus-visible:ring-2 focus-visible:ring-slate-200/70',
                   isClickable && 'cursor-pointer'

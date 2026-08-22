@@ -7,6 +7,7 @@ import { TIMER_TYPES } from '@pomi/shared/src/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { apiClient } from '../utils/apiClient';
+import { translateCurrent } from '../i18n';
 import { createSelectors } from './createSelectors';
 
 interface IntentionOption {
@@ -138,7 +139,7 @@ const useStatisticsStoreBase = create<StatisticsState>()(
 
             const errorBody = response.body as { message?: string } | null;
             const errorMessage =
-              errorBody?.message || 'Failed to fetch statistics';
+              errorBody?.message || translateCurrent('statistics.loadFailed');
             set({
               error: errorMessage,
               isLoading: false,
@@ -192,7 +193,9 @@ const useStatisticsStoreBase = create<StatisticsState>()(
           console.error('Failed to fetch statistics:', err);
           set({
             error:
-              err instanceof Error ? err.message : 'Failed to fetch statistics',
+              err instanceof Error
+                ? err.message
+                : translateCurrent('statistics.loadFailed'),
             isLoading: false,
             activeSummaryRequestKey: null,
           });

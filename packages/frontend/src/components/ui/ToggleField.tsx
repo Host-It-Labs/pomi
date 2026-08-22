@@ -1,6 +1,7 @@
 import type { KeyboardEvent, ReactNode } from 'react';
 import { FaInfoCircle } from 'react-icons/fa';
 import { ToggleSwitch } from './ToggleSwitch';
+import { useI18n } from '../../i18n';
 
 interface ToggleFieldProps {
   id: string;
@@ -25,6 +26,7 @@ export function ToggleField({
   onDisabledClick,
   icon,
 }: ToggleFieldProps) {
+  const { t } = useI18n();
   const canClickDisabled = disabled && onDisabledClick;
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!canClickDisabled) {
@@ -56,7 +58,7 @@ export function ToggleField({
           description ? (
             <button
               type="button"
-              aria-label={`About ${label}`}
+              aria-label={t('common.aboutFor', { label })}
               title={description}
               onClick={event => event.stopPropagation()}
               className="shrink-0 text-slate-600 transition hover:text-slate-300 focus:text-slate-300"

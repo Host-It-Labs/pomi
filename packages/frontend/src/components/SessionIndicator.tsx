@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import { useState } from 'react';
+import { useI18n } from '../i18n';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { useTimerStore } from '../stores/timerStore';
 import { isDesktop, isMac } from '../utils/osUtils';
@@ -20,6 +21,7 @@ export function SessionIndicator({
   isExpanded = true,
   stackedSessions,
 }: SessionIndicatorProps) {
+  const { t } = useI18n();
   const setSessionPosition = useTimerStore.use.setSessionPosition();
   const preferences = usePreferencesStore.use.preferences();
   const [hoveredDot, setHoveredDot] = useState<number | null>(null);
@@ -87,8 +89,12 @@ export function SessionIndicator({
               )}
               title={
                 isActive && isStacked
-                  ? `Stacked Pomi (${stackedSessions}x) - ${position} of ${totalPomodoros}`
-                  : `Pomi ${position} of ${totalPomodoros}`
+                  ? t('session.stackedPosition', {
+                      count: stackedSessions,
+                      position,
+                      total: totalPomodoros,
+                    })
+                  : t('session.position', { position, total: totalPomodoros })
               }
             />
             {isActive && isStacked && isExpanded && (

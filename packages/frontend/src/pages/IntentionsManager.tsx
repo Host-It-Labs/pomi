@@ -442,8 +442,11 @@ export function IntentionsManager() {
     const childCount = getSubIntentionsForParent(intention).length;
     showToastFromStore(
       childCount > 0
-        ? `${childCount} Lists created from ${intention.title}.`
-        : `${intention.title} is now a List.`,
+        ? t('lists.convertedFromIntention', {
+            count: childCount,
+            title: intention.title,
+          })
+        : t('lists.intentionConverted', { title: intention.title }),
       'success'
     );
   };
@@ -452,8 +455,8 @@ export function IntentionsManager() {
     await submitUserMutation({
       kind: 'intentions',
       label: intention.isFavorite
-        ? 'Remove favorite Intention'
-        : 'Favorite Intention',
+        ? t('intention.removeFavoriteAction')
+        : t('intention.favoriteAction'),
       payload: {
         operation: 'update',
         slug: intention.slug,
@@ -477,7 +480,9 @@ export function IntentionsManager() {
   const toggleFavoriteList = async (list: List) => {
     await submitUserMutation({
       kind: 'lists',
-      label: list.isFavorite ? 'Remove favorite List' : 'Favorite List',
+      label: list.isFavorite
+        ? t('lists.removeFavoriteAction')
+        : t('lists.favoriteAction'),
       payload: {
         operation: 'update',
         listId: list.id,
@@ -643,7 +648,7 @@ export function IntentionsManager() {
     if (!title) return;
     await submitUserMutation({
       kind: 'lists',
-      label: editingList ? 'Update List' : 'Create List',
+      label: editingList ? t('lists.update') : t('lists.create'),
       payload: editingList
         ? {
             operation: 'update',
@@ -668,7 +673,7 @@ export function IntentionsManager() {
   const archiveList = async (list: List) => {
     await submitUserMutation({
       kind: 'lists',
-      label: list.isArchived ? 'Restore List' : 'Archive List',
+      label: list.isArchived ? t('lists.restore') : t('lists.archive'),
       payload: {
         operation: 'update',
         listId: list.id,
@@ -1614,7 +1619,7 @@ export function IntentionsManager() {
                     type="button"
                     onClick={() => openListForm(list)}
                     className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70"
-                    aria-label={`Edit ${list.title}`}
+                    aria-label={t('task.editFor', { title: list.title })}
                   >
                     <span className="text-xl">{list.emoji ?? '📋'}</span>
                     <span className="min-w-0 flex-1 truncate text-sm font-medium text-white">
@@ -1701,7 +1706,9 @@ export function IntentionsManager() {
                       type="button"
                       onClick={() => startEditing(intention)}
                       className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left outline-none transition hover:text-white focus-visible:ring-2 focus-visible:ring-indigo-400/70"
-                      aria-label={`Edit ${intention.title}`}
+                      aria-label={t('task.editFor', {
+                        title: intention.title,
+                      })}
                     >
                       <span className="text-xl shrink-0">
                         {intention.emoji}
@@ -1734,7 +1741,9 @@ export function IntentionsManager() {
                           type="button"
                           onClick={() => startEditing(subIntention)}
                           className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70"
-                          aria-label={`Edit ${subIntention.title}`}
+                          aria-label={t('task.editFor', {
+                            title: subIntention.title,
+                          })}
                         >
                           <span className="text-lg shrink-0">
                             {subIntention.emoji}

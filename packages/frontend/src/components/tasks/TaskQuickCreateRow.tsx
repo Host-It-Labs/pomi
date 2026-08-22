@@ -254,7 +254,7 @@ export function TaskQuickCreateRow({
       !navigator.mediaDevices?.getUserMedia ||
       typeof MediaRecorder === 'undefined'
     ) {
-      setError('Microphone unavailable.');
+      setError(t('assistant.microphoneUnavailable'));
       return;
     }
 
@@ -338,9 +338,9 @@ export function TaskQuickCreateRow({
         return;
       }
       console.error('Failed to start Task dictation:', recordError);
-      setError('Microphone blocked.');
+      setError(t('assistant.microphoneBlocked'));
     }
-  }, [stopTaskSpeechStream, transcribeSpeech]);
+  }, [stopTaskSpeechStream, t, transcribeSpeech]);
 
   useEffect(() => {
     if (!isRecording) {

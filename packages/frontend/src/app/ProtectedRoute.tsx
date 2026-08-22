@@ -2,6 +2,7 @@ import { ReactNode, useEffect } from 'react';
 import { AndroidPermissionGate } from './AndroidPermissionGate';
 import { Button } from '../components/ui/Button';
 import { APP_COLORS } from '../config/colors';
+import { useI18n } from '../i18n';
 import { Login } from '../pages/Login';
 import { useAuthStore } from '../stores/authStore';
 import { usePreferencesStore } from '../stores/preferencesStore';
@@ -12,6 +13,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
+  const { t } = useI18n();
   const isAuthenticated = useAuthStore.use.isAuthenticated();
   const isLoading = useAuthStore.use.isLoading();
   const setExpanded = useUiStore.use.setExpanded();
@@ -69,7 +71,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
             className="shrink-0"
             onClick={() => void loadPreferences()}
           >
-            Retry
+            {t('common.retry')}
           </Button>
         </div>
       ) : null}
