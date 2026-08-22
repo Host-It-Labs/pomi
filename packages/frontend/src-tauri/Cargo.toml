@@ -1,6 +1,6 @@
 [package]
 name = "pomi"
-version = "0.1.0"
+version = "0.0.1"
 description = "Pomi desktop and mobile client"
 authors = ["William Guinaudie"]
 license-file = "../../../LICENSE"

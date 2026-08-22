@@ -11,6 +11,7 @@ import { PomiLogger } from '../logging/pomi-logger';
 import { Subscription } from 'rxjs';
 import { PreferencesService } from '../preferences/preferences.service';
 import { StatisticsService } from '../statistics/statistics.service';
+import { UsersService } from '../users/users.service';
 import { TimerNotificationService } from './timer-notification.service';
 import { TimerStore, timerVersion } from './timer-store';
 
@@ -33,7 +34,8 @@ export class TimerIdleService implements OnModuleInit, OnModuleDestroy {
     private preferencesService: PreferencesService,
     private statisticsService: StatisticsService,
     private timerStore: TimerStore,
-    private timerNotificationService: TimerNotificationService
+    private timerNotificationService: TimerNotificationService,
+    private usersService: UsersService
   ) {}
 
   onModuleInit(): void {
@@ -149,6 +151,10 @@ export class TimerIdleService implements OnModuleInit, OnModuleDestroy {
   private async persistIdleDetectionSchedule(userId: string): Promise<void> {
     this.cancelLegacyIdleDetectionCheck(userId);
     await this.timerStore.prepareIdleDetectionScheduleChange();
+    if (!(await this.usersService.userExists(userId))) {
+      await this.timerStore.cancelIdleDetectionSchedule(userId);
+      return;
+    }
     const preferences = await this.preferencesService.getPreferences(userId);
 
     if (
@@ -195,6 +201,7 @@ export class TimerIdleService implements OnModuleInit, OnModuleDestroy {
     createWorkTimer: (userId: string) => Promise<Timer>
   ): Promise<void> {
     if ((await this.timerStore.getIdleDetectionMode()) === 'durable') return;
+    if (!(await this.usersService.userExists(userId))) return;
     const preferences = await this.preferencesService.getPreferences(userId);
     if (
       !preferences.sessionAutoDetectLongBreak ||

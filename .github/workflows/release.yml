@@ -42,9 +42,10 @@ jobs:
         if: ${{ github.event_name == 'release' }}
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
         run: |
           set -euo pipefail
-          for variable in SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_FRONTEND_PROJECT SENTRY_BACKEND_PROJECT; do
+          for variable in SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_FRONTEND_PROJECT SENTRY_BACKEND_PROJECT VITE_SENTRY_DSN; do
             if [[ -z "${!variable:-}" ]]; then
               echo "$variable must be configured for release correlation." >&2
               exit 1
@@ -89,7 +90,7 @@ jobs:
 
   docker-backend:
     name: Build backend image
-    needs: sentry-release
+    needs: [sentry-release, build-macos, build-android-wear]
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -251,6 +252,10 @@ jobs:
           GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
         run: |
           set -euo pipefail
+          if [[ "${{ github.event_name }}" == "release" && -z "$GOOGLE_SERVICES_JSON_BASE64" ]]; then
+            echo 'GOOGLE_SERVICES_JSON_BASE64 must be configured for a published release.' >&2
+            exit 1
+          fi
           if [[ -n "$GOOGLE_SERVICES_JSON_BASE64" ]]; then
             umask 077
             printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > packages/frontend/src-tauri/gen/android/app/google-services.json

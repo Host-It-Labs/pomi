@@ -77,6 +77,7 @@ export REDIS_URL="redis://localhost:${POMI_REDIS_PORT}"
 
 pnpm --filter @pomi/shared build
 
+docker compose -f "$COMPOSE_FILE" -p "$POMI_COMPOSE_PROJECT" stop backend >/dev/null 2>&1 || true
 if ! "$ROOT_DIR/scripts/run-dev-migrations.sh"; then
   docker compose -f "$COMPOSE_FILE" -p "$POMI_COMPOSE_PROJECT" logs db --tail 40 || true
   exit 1
@@ -86,7 +87,7 @@ POMI_COPYME_USERNAME="$POMI_COPYME_USERNAME" \
   POMI_COPYME_PASSWORD="$POMI_COPYME_PASSWORD" \
   pnpm --filter @pomi/backend ensure:copyme
 
-docker compose -f "$COMPOSE_FILE" -p "$POMI_COMPOSE_PROJECT" restart backend >/dev/null
+docker compose -f "$COMPOSE_FILE" -p "$POMI_COMPOSE_PROJECT" start backend >/dev/null
 
 for attempt in $(seq 1 60); do
   if curl --silent --fail --max-time 5 "$POMI_BACKEND_BASE_URL/health" >/dev/null 2>&1; then

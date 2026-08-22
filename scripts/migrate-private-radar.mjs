@@ -7,6 +7,13 @@ import {
 import { loadLocalEnvironment } from './local-env.mjs';
 
 export const MIGRATION_MARKER = 'pomi-radar-migration:v1';
+const SECRET_PATTERNS = [
+  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
+  /\b(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]{20,}/,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\bAIza[0-9A-Za-z_-]{35}\b/,
+  /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}/,
+];
 const LIFECYCLE_LABELS = new Set([
   'radar:proposed',
   'radar:needs-agent',
@@ -33,9 +40,19 @@ export function migratedIssueBody(issue, sourceRepository) {
     issue.body || '',
     '',
     '---',
+    `Originally opened by @${issue.user?.login || 'unknown'}.`,
     `Migrated by Pomi Radar from private issue [${sourceRepository}#${issue.number}](${sourceUrl}).`,
     migrationMarker(sourceRepository, issue.number),
   ].join('\n');
+}
+
+export function assertSafeMigrationText(value, context) {
+  const text = String(value || '');
+  if (SECRET_PATTERNS.some(pattern => pattern.test(text))) {
+    throw new Error(
+      `${context} contains credential-like material; migration stopped.`
+    );
+  }
 }
 
 export function migratedCommentBody(comment, sourceRepository, sourceIssue) {
@@ -80,6 +97,7 @@ function sourceSnapshot(issue, comments) {
     title: issue.title,
     body: issue.body,
     state: issue.state,
+    stateReason: issue.state_reason,
     labels: issue.labels.map(label => label.name || label),
     comments: comments.map(comment => ({
       id: comment.id,
@@ -88,6 +106,17 @@ function sourceSnapshot(issue, comments) {
       author: comment.user?.login,
     })),
   });
+}
+
+function validateIssueSafety(issue, comments) {
+  assertSafeMigrationText(issue.title, `Source issue #${issue.number} title`);
+  assertSafeMigrationText(issue.body, `Source issue #${issue.number} body`);
+  for (const comment of comments) {
+    assertSafeMigrationText(
+      comment.body,
+      `Source issue #${issue.number} comment ${comment.id}`
+    );
+  }
 }
 
 async function api(pathname, token, options = {}) {
@@ -150,6 +179,7 @@ async function migrateIssue({
     sourceToken
   );
   const comments = await listAllComments(sourceRepository, number, sourceToken);
+  validateIssueSafety(issue, comments);
   const labels = translatedLabels(issue.labels, [
     { body: issue.body },
     ...comments,
@@ -165,6 +195,8 @@ async function migrateIssue({
     source: `${sourceRepository}#${number}`,
     existing: existing?.html_url || null,
     title: issue.title,
+    state: issue.state,
+    stateReason: issue.state_reason,
     labels,
     body,
     comments: comments.map(comment =>
@@ -198,8 +230,24 @@ async function migrateIssue({
       `Pilot issue author ${destinationIssue.user?.login || 'unknown'} did not match ${botLogin}`
     );
   }
+  const reconciledIssue = await api(
+    `/repos/${destinationRepository}/issues/${destinationIssue.number}`,
+    destinationToken,
+    {
+      method: 'PATCH',
+      body: {
+        title: issue.title,
+        body,
+        labels,
+        ...(issue.state === 'open' ? { state: 'open' } : {}),
+      },
+    }
+  );
+  if (reconciledIssue.user?.login !== botLogin) {
+    throw new Error(`Migrated issue was not authored by ${botLogin}`);
+  }
   const destinationLabels = new Set(
-    destinationIssue.labels.map(label => label.name || label)
+    reconciledIssue.labels.map(label => label.name || label)
   );
   const missingLabels = labels.filter(label => !destinationLabels.has(label));
   if (missingLabels.length > 0) {
@@ -208,7 +256,7 @@ async function migrateIssue({
     );
   }
   if (
-    !destinationIssue.body?.includes(migrationMarker(sourceRepository, number))
+    !reconciledIssue.body?.includes(migrationMarker(sourceRepository, number))
   ) {
     throw new Error('Migrated issue is missing its stable source marker.');
   }
@@ -254,6 +302,29 @@ async function migrateIssue({
   );
   if (wrongAuthor) {
     throw new Error(`Migrated comment was not authored by ${botLogin}`);
+  }
+  if (issue.state === 'closed') {
+    await api(
+      `/repos/${destinationRepository}/issues/${destinationIssue.number}`,
+      destinationToken,
+      {
+        method: 'PATCH',
+        body: {
+          state: 'closed',
+          state_reason:
+            issue.state_reason === 'not_planned' ? 'not_planned' : 'completed',
+        },
+      }
+    );
+  }
+  const verifiedIssue = await api(
+    `/repos/${destinationRepository}/issues/${destinationIssue.number}`,
+    destinationToken
+  );
+  if (verifiedIssue.state !== issue.state) {
+    throw new Error(
+      `Migrated issue state did not match source issue #${number}.`
+    );
   }
   const [sourceIssueAfter, sourceCommentsAfter] = await Promise.all([
     api(`/repos/${sourceRepository}/issues/${number}`, sourceToken),
@@ -301,9 +372,18 @@ async function run() {
   const authentication = await getGitHubAppAuthentication();
   const numbers = issueNumber
     ? [issueNumber]
-    : (await listAllIssues(sourceRepository, sourceToken, 'open')).map(
+    : (await listAllIssues(sourceRepository, sourceToken, 'all')).map(
         issue => issue.number
       );
+  if (bulk) {
+    for (const number of numbers) {
+      const [issue, comments] = await Promise.all([
+        api(`/repos/${sourceRepository}/issues/${number}`, sourceToken),
+        listAllComments(sourceRepository, number, sourceToken),
+      ]);
+      validateIssueSafety(issue, comments);
+    }
+  }
   const results = [];
   for (const number of numbers) {
     results.push(

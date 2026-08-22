@@ -4,7 +4,7 @@ set -uo pipefail
 mode="${1:-}"
 case "$mode" in
   all)
-    commands=("release:docker" "release:apps")
+    commands=("release:android" "release:macos")
     ;;
   apps)
     commands=("release:android" "release:macos")
@@ -29,4 +29,10 @@ for index in "${!pids[@]}"; do
   fi
 done
 
-exit "$status"
+if [[ "$status" -ne 0 ]]; then
+  exit "$status"
+fi
+
+if [[ "$mode" == "all" ]]; then
+  pnpm run release:docker
+fi

@@ -78,7 +78,8 @@ describe('TimerIdleService rollout behavior', () => {
         }),
         getIdleDetectionMode: vi.fn(async () => 'durable'),
       } as never,
-      {} as never
+      {} as never,
+      { userExists: vi.fn(async () => true) } as never
     );
     Object.assign(service, { logger: { error: vi.fn(), warn: vi.fn() } });
 
@@ -89,6 +90,29 @@ describe('TimerIdleService rollout behavior', () => {
 
     await vi.waitFor(() => expect(writes).toEqual(['schedule', 'cancel']));
     expect(getPreferences).toHaveBeenCalledTimes(2);
+  });
+
+  it('cleans stale idle schedules without creating preferences for a deleted user', async () => {
+    const getPreferences = vi.fn();
+    const cancelIdleDetectionSchedule = vi.fn(async () => true);
+    const service = new TimerIdleService(
+      { onPreferencesUpdate: new Subject(), getPreferences } as never,
+      {} as never,
+      {
+        prepareIdleDetectionScheduleChange: vi.fn(async () => undefined),
+        cancelIdleDetectionSchedule,
+      } as never,
+      {} as never,
+      { userExists: vi.fn(async () => false) } as never
+    );
+    Object.assign(service, { logger: { error: vi.fn(), warn: vi.fn() } });
+
+    service.scheduleIdleDetectionCheck('deleted-user');
+
+    await vi.waitFor(() =>
+      expect(cancelIdleDetectionSchedule).toHaveBeenCalledWith('deleted-user')
+    );
+    expect(getPreferences).not.toHaveBeenCalled();
   });
 
   function createHarness(mode: 'legacy' | 'durable') {
@@ -139,7 +163,8 @@ describe('TimerIdleService rollout behavior', () => {
       } as never,
       {
         emitLongBreakDetected: emitLongBreak,
-      } as never
+      } as never,
+      { userExists: vi.fn(async () => true) } as never
     );
     Object.assign(service, { logger: { error: vi.fn(), warn: vi.fn() } });
     return {

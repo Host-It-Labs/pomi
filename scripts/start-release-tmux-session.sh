@@ -29,23 +29,13 @@ fi
 tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
 
 tmux new-session -d -s "$SESSION_NAME" -n 'release' -c "$ROOT_DIR"
-docker_pane="$(tmux display-message -p -t "$SESSION_NAME":release '#{pane_id}')"
-android_pane="$(tmux split-window -h -P -F '#{pane_id}' -t "$docker_pane" -c "$ROOT_DIR")"
-macos_pane="$(tmux split-window -h -P -F '#{pane_id}' -t "$android_pane" -c "$ROOT_DIR")"
+release_pane="$(tmux display-message -p -t "$SESSION_NAME":release '#{pane_id}')"
 
 tmux set-option -t "$SESSION_NAME" mouse on >/dev/null
 tmux set-option -t "$SESSION_NAME" pane-border-status top >/dev/null
-tmux select-layout -t "$SESSION_NAME":release even-horizontal >/dev/null
-
-tmux select-pane -t "$docker_pane" -T 'release:docker'
-tmux select-pane -t "$android_pane" -T 'release:android'
-tmux select-pane -t "$macos_pane" -T 'release:macos'
-
-tmux send-keys -t "$docker_pane" "pnpm run release:docker" C-m
-tmux send-keys -t "$android_pane" "pnpm run release:android" C-m
-tmux send-keys -t "$macos_pane" "pnpm run release:macos" C-m
-
-tmux select-pane -t "$docker_pane"
+tmux select-pane -t "$release_pane" -T 'release:all'
+tmux send-keys -t "$release_pane" "pnpm run release:all:parallel" C-m
+tmux select-pane -t "$release_pane"
 tmux select-window -t "$SESSION_NAME":release
 
 if [[ "$attach" == "true" ]]; then

@@ -20,15 +20,20 @@ if [[ -n "${POMI_PROJECT_DIR:-}" ]]; then
 else
   PROJECT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"
 fi
+
+cd "$PROJECT_DIR"
+
+# shellcheck disable=SC1091
+. "$PROJECT_DIR/scripts/local-env.sh"
+pomi_load_local_environment
+
 SESSION_NAME="${POMI_TMUX_SESSION:-pomi-dev}"
 COMPOSE_PROJECT="${POMI_COMPOSE_PROJECT:-pomi}"
-BACKEND_COMMAND="${POMI_TMUX_BACKEND_COMMAND:-pnpm run docker:dev}"
+BACKEND_COMMAND="${POMI_TMUX_BACKEND_COMMAND:-until docker compose -f packages/backend/docker-compose.dev.yml -p $COMPOSE_PROJECT ps --status running -q backend | grep -q .; do sleep 1; done; pnpm run docker:dev:logs -- backend}"
 FRONTEND_COMMAND="${POMI_TMUX_FRONTEND_COMMAND:-./scripts/start-project-frontend.sh}"
 NATIVE_COMMAND="${POMI_TMUX_NATIVE_COMMAND:-}"
 SHELL_COMMAND="${POMI_TMUX_SHELL_COMMAND:-}"
 TMUX_COMMAND_SHELL="${SHELL:-/bin/zsh}"
-
-cd "$PROJECT_DIR"
 
 # shellcheck disable=SC1091
 . "$PROJECT_DIR/scripts/node-env.sh"
@@ -36,12 +41,25 @@ pomi_use_node_version "$PROJECT_DIR"
 pnpm --filter @pomi/shared build
 
 if [[ "${POMI_TMUX_SKIP_COMPOSE_STOP:-false}" != "true" ]]; then
-  docker compose -f packages/backend/docker-compose.dev.yml -p "$COMPOSE_PROJECT" stop >/dev/null 2>&1 || true
+  docker compose -f packages/backend/docker-compose.dev.yml -p "$COMPOSE_PROJECT" stop backend >/dev/null 2>&1 || true
+  pnpm run docker:dev:detached -- db redis
+
+  dev_ports_file="${POMI_DEV_PORTS_FILE:-${XDG_STATE_HOME:-$HOME/.local/state}/pomi/dev-ports.env}"
+  # shellcheck disable=SC1091
+  . "$PROJECT_DIR/scripts/dev-ports.sh"
+  pomi_export_numeric_env_file_value "$dev_ports_file" POMI_BACKEND_PORT
+  pomi_export_numeric_env_file_value "$dev_ports_file" POMI_DB_PORT
+  pomi_export_numeric_env_file_value "$dev_ports_file" POMI_REDIS_PORT
 fi
 
 tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
 
 tmux new-session -d -s "$SESSION_NAME" -n 'dev' -c "$PROJECT_DIR"
+for port_variable in POMI_BACKEND_PORT POMI_DB_PORT POMI_REDIS_PORT; do
+  if [[ -n "${!port_variable:-}" ]]; then
+    tmux set-environment -t "$SESSION_NAME" "$port_variable" "${!port_variable}"
+  fi
+done
 backend_pane="$(tmux display-message -p -t "$SESSION_NAME":dev '#{pane_id}')"
 frontend_pane="$(tmux split-window -h -P -F '#{pane_id}' -t "$backend_pane" -c "$PROJECT_DIR")"
 if [[ -n "$NATIVE_COMMAND" ]]; then
