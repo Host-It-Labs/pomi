@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { loadLocalEnvironment, repositoryRoot } from './local-env.mjs';
 
 const API_BASE = 'https://api.github.com';
-const PUBLIC_REPOSITORY = 'NeoHuncho/pomi';
+const PUBLIC_REPOSITORY = 'Host-It-Labs/pomi';
 const PRIVATE_KEY_PATH = path.join(
   repositoryRoot,
   'config/secrets/pomi-radar.private-key.pem'
@@ -109,11 +109,25 @@ export async function getGitHubAppAuthentication({
       fetchImpl,
     }),
   ]);
+  const botLogin = `${app.slug}[bot]`;
+  const botUser = await githubRequest(
+    `/users/${encodeURIComponent(botLogin)}`,
+    {
+      token: installationToken.token,
+      fetchImpl,
+    }
+  );
+  if (botUser.login !== botLogin || !Number.isSafeInteger(botUser.id)) {
+    throw new Error(
+      'GitHub App token did not resolve to the expected bot user.'
+    );
+  }
   return {
     token: installationToken.token,
     expiresAt: installationToken.expires_at,
     app,
-    botLogin: `${app.slug}[bot]`,
+    botLogin,
+    botUserId: botUser.id,
   };
 }
 
@@ -157,7 +171,7 @@ async function runCli() {
       `GitHub App command must be one of: ${[...ALLOWED_COMMANDS].join(', ')}.`
     );
   }
-  const botEmail = `${authentication.app.id}+${authentication.app.slug}[bot]@users.noreply.github.com`;
+  const botEmail = `${authentication.botUserId}+${authentication.botLogin}@users.noreply.github.com`;
   // This local CLI intentionally forwards explicit arguments to a small executable allowlist.
   const child = spawn(command, args, {
     stdio: 'inherit',

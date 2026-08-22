@@ -13,8 +13,7 @@ pomi_require_linked_worktree "$ROOT_DIR"
 worktree_id="$(pomi_worktree_id "$ROOT_DIR")"
 legacy_worktree_id="$(pomi_legacy_worktree_id "$ROOT_DIR")"
 branch_worktree_id="$(pomi_branch_worktree_id "$ROOT_DIR")"
-custom_compose_project="${POMI_COMPOSE_PROJECT:-}"
-POMI_COMPOSE_PROJECT="${POMI_COMPOSE_PROJECT:-pomi-wt-${worktree_id}}"
+POMI_COMPOSE_PROJECT="pomi-wt-${worktree_id}"
 POMI_TMUX_SESSION="${POMI_TMUX_SESSION:-pomi-wt-${worktree_id}}"
 POMI_DEV_PORTS_FILE="${POMI_DEV_PORTS_FILE:-$ROOT_DIR/.pomi/dev-ports.env}"
 docker_cleanup_failed=false
@@ -31,7 +30,7 @@ if [[ "$confirmation" != "y" ]]; then
 fi
 
 tmux kill-session -t "$POMI_TMUX_SESSION" >/dev/null 2>&1 || true
-if [[ -n "$branch_worktree_id" && "$branch_worktree_id" != "$worktree_id" && -z "$custom_compose_project" ]]; then
+if [[ -n "$branch_worktree_id" && "$branch_worktree_id" != "$worktree_id" ]]; then
   tmux kill-session -t "pomi-wt-${branch_worktree_id}" >/dev/null 2>&1 || true
 fi
 
@@ -45,7 +44,7 @@ if command -v docker >/dev/null 2>&1; then
     --remove-orphans; then
     docker_cleanup_failed=true
   fi
-  if [[ "$legacy_worktree_id" != "$worktree_id" && -z "$custom_compose_project" ]]; then
+  if [[ "$legacy_worktree_id" != "$worktree_id" ]]; then
     docker compose \
       -f "$COMPOSE_FILE" \
       -p "pomi-wt-${legacy_worktree_id}" \
@@ -54,7 +53,7 @@ if command -v docker >/dev/null 2>&1; then
       --rmi local \
       --remove-orphans || true
   fi
-  if [[ -n "$branch_worktree_id" && "$branch_worktree_id" != "$worktree_id" && -z "$custom_compose_project" ]]; then
+  if [[ -n "$branch_worktree_id" && "$branch_worktree_id" != "$worktree_id" ]]; then
     docker compose \
       -f "$COMPOSE_FILE" \
       -p "pomi-wt-${branch_worktree_id}" \

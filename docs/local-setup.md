@@ -33,7 +33,7 @@ Settings → Client Keys (DSN)**.
 
 Local Docker builds do not need registry credentials. To push the backend image
 to GHCR, set `GHCR_USERNAME` and `GHCR_TOKEN` (with `write:packages`) and run
-`pnpm release:docker`. CI publishes to `ghcr.io/neohuncho/pomi-backend` with its
+`pnpm release:docker`. CI publishes to `ghcr.io/host-it-labs/pomi-backend` with its
 GitHub token; Docker Hub is not used.
 
 Production Compose deliberately remains separate: use a private deployment

@@ -1178,13 +1178,75 @@ export async function reconcileDuplicate(input) {
   return { canonicalIssueNumber, duplicateIssueNumber, eventId: eventBase };
 }
 
+export function validateConsolidationManifest(event, issues) {
+  const pull = event.pull_request;
+  const expectedBot =
+    process.env.POMI_GITHUB_APP_BOT_LOGIN || 'pomi-radar[bot]';
+  if (pull?.user?.login !== expectedBot) {
+    throw new Error(
+      'Radar consolidation PR must be authored by the Radar bot.'
+    );
+  }
+  if (
+    pull.base?.ref !== 'main' ||
+    pull.base?.repo?.full_name !== repo() ||
+    pull.head?.repo?.full_name !== repo()
+  ) {
+    throw new Error(
+      'Radar consolidation PR must stay within the canonical repository.'
+    );
+  }
+  const manifest = readMarker(pull.body, CONTRACT.consolidationMarker);
+  const issueNumbers = [...new Set(array(manifest?.issues).map(Number))];
+  if (
+    !manifest ||
+    !issueNumbers.length ||
+    issueNumbers.length > 100 ||
+    issueNumbers.some(number => !Number.isSafeInteger(number) || number <= 0)
+  ) {
+    throw new Error(
+      'Radar consolidation manifest contains invalid issue numbers.'
+    );
+  }
+  for (const issue of issues) {
+    const metadata = radarIssueMetadata(issue);
+    const lifecycle = metadata.labels.filter(label =>
+      CONTRACT.lifecycle.includes(label)
+    );
+    if (
+      issue.pull_request ||
+      metadata.state !== 'open' ||
+      !metadata.hasRadarMarker ||
+      !isManagedRadarIssue(metadata) ||
+      metadata.labels.includes('duplicate') ||
+      lifecycle.length !== 1 ||
+      lifecycle[0] !== 'radar:in-review'
+    ) {
+      throw new Error(
+        `Issue #${metadata.number} is not an eligible in-review Radar issue.`
+      );
+    }
+  }
+  return { issueNumbers };
+}
+
 export async function consolidationMerged(event) {
   const pull = event.pull_request;
   if (!pull?.merged) return { skipped: 'pull-request-not-merged' };
-  const manifest = readMarker(pull.body, CONTRACT.consolidationMarker);
-  if (!manifest) return { skipped: 'not-a-radar-consolidation' };
+  const untrustedManifest = readMarker(pull.body, CONTRACT.consolidationMarker);
+  if (!untrustedManifest) return { skipped: 'not-a-radar-consolidation' };
+  const requestedNumbers = [
+    ...new Set(array(untrustedManifest.issues).map(Number)),
+  ];
+  const issues = await Promise.all(
+    requestedNumbers.map(issueNumber => github(`/issues/${issueNumber}`, {}))
+  );
+  const { issueNumbers } = validateConsolidationManifest(event, issues);
   const mergeSha = pull.merge_commit_sha;
-  for (const issueNumber of [...new Set(array(manifest.issues).map(Number))]) {
+  if (!/^[0-9a-f]{40}$/.test(String(mergeSha))) {
+    throw new Error('Radar consolidation merge commit is invalid.');
+  }
+  for (const issueNumber of issueNumbers) {
     await addCommentOnce(
       issueNumber,
       `Included in consolidation PR #${pull.number} at merge commit \`${mergeSha}\`. Ready for the next production release.`,
@@ -1201,7 +1263,7 @@ export async function consolidationMerged(event) {
       undefined
     );
   }
-  return { updated: manifest.issues ?? [], mergeSha };
+  return { updated: issueNumbers, mergeSha };
 }
 
 async function commitIncluded(mergeSha, releaseSha) {

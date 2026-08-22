@@ -235,7 +235,7 @@ main() {
       if ! save_watch_address "$watch_address"; then
         return 0
       fi
-      echo "[pomi] saved POMI_WATCH_ADB_ADDRESS=$watch_address to $FRONTEND_ENV_FILE."
+      echo "[pomi] saved POMI_WATCH_ADB_ADDRESS=$watch_address to $LOCAL_ENV_FILE."
     fi
   fi
 

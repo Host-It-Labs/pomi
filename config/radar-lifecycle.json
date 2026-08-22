@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "repository": "NeoHuncho/pomi",
+  "repository": "Host-It-Labs/pomi",
   "marker": "pomi-radar:v1",
   "deduplicationMarker": "pomi-radar-dedup:v1",
   "consolidationMarker": "pomi-radar-consolidation:v1",

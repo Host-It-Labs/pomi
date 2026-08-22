@@ -25,7 +25,7 @@ describe('public release workflow', () => {
       'utf8'
     );
 
-    expect(workflow).toContain('ghcr.io/neohuncho/pomi-backend');
+    expect(workflow).toContain('ghcr.io/host-it-labs/pomi-backend');
     expect(workflow).toContain('packages: write');
     expect(workflow).toContain('secrets.GITHUB_TOKEN');
     expect(workflow).toContain(

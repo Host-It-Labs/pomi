@@ -29,7 +29,7 @@ const configuredUrl = (value: unknown) => {
   }
 };
 
-const githubUrl = 'https://github.com/NeoHuncho/pomi';
+const githubUrl = 'https://github.com/Host-It-Labs/pomi';
 const releasesUrl = `${githubUrl}/releases/latest`;
 const selfHostingUrl = `${githubUrl}/blob/main/docs/self-hosting.md`;
 const privacyUrl =
@@ -563,7 +563,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <div class="docker-terminal" aria-label="Example Docker self-hosting command">
           <div class="terminal-bar"><span><i></i><i></i><i></i></span><b>pomi / self-host</b></div>
           <div class="terminal-body">
-            <p><span>$</span> git clone github.com/NeoHuncho/pomi.git</p>
+            <p><span>$</span> git clone github.com/Host-It-Labs/pomi.git</p>
             <p><span>$</span> cp packages/backend/.env.production.example pomi.env</p>
             <p class="terminal-command"><span>$</span> docker compose --env-file pomi.env \\<br />&nbsp;&nbsp;-f packages/backend/docker-compose.yml up -d --build</p>
             <div class="terminal-health"><i></i><span>backend</span><b>healthy</b><small>127.0.0.1:3000</small></div>

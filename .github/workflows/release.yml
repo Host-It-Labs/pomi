@@ -122,8 +122,8 @@ jobs:
           build-args: |
             SENTRY_RELEASE=${{ env.BACKEND_SENTRY_RELEASE }}
           tags: |
-            ghcr.io/neohuncho/pomi-backend:latest
-            ghcr.io/neohuncho/pomi-backend:${{ env.RELEASE_TAG }}
+            ghcr.io/host-it-labs/pomi-backend:latest
+            ghcr.io/host-it-labs/pomi-backend:${{ env.RELEASE_TAG }}
 
   build-macos:
     name: Build ARM64 macOS app

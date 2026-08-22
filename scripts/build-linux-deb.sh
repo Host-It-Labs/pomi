@@ -47,7 +47,7 @@ cargo install tauri-cli --version \"$TAURI_VERSION\" --locked
 
 cd packages/frontend/src-tauri
 cd ..
-VITE_SENTRY_RELEASE='$FRONTEND_SENTRY_RELEASE' VITE_RENDER_SYSTEM_TRAY_ICON=true pnpm tauri build --bundles deb
+VITE_DEBUG_PANEL_ENABLED=false VITE_SENTRY_RELEASE='$FRONTEND_SENTRY_RELEASE' VITE_RENDER_SYSTEM_TRAY_ICON=true pnpm tauri build --bundles deb
 "
 }
 

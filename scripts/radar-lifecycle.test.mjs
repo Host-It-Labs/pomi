@@ -24,7 +24,35 @@ import {
   selectUntriagedFeedbackIssues,
   selectCanonical,
   validateAutomationAuthentication,
+  validateConsolidationManifest,
 } from './radar-lifecycle.mjs';
+
+function consolidationEvent(overrides = {}) {
+  return {
+    pull_request: {
+      user: { login: 'pomi-radar[bot]' },
+      base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+      head: {
+        ref: 'radar/consolidation-test',
+        repo: { full_name: 'Host-It-Labs/pomi' },
+      },
+      body: '<!-- pomi-radar-consolidation:v1 {"issues":[33]} -->',
+      ...overrides,
+    },
+  };
+}
+
+function inReviewRadarIssue(overrides = {}) {
+  return {
+    number: 33,
+    title: 'Test Radar issue',
+    state: 'open',
+    created_at: '2026-08-22T00:00:00Z',
+    labels: [{ name: 'radar:bug' }, { name: 'radar:in-review' }],
+    body: '<!-- pomi-radar:v1 {"source":"feedback"} -->',
+    ...overrides,
+  };
+}
 
 test('preflight authentication fails closed without the App wrapper', async () => {
   await assert.rejects(
@@ -53,6 +81,31 @@ test('preflight verifies bot attribution and Git identity', async () => {
     botLogin: 'pomi-radar[bot]',
     gitIdentityVerified: true,
   });
+});
+
+test('consolidation manifests require bot authorship and eligible Radar issues', () => {
+  assert.deepEqual(
+    validateConsolidationManifest(consolidationEvent(), [inReviewRadarIssue()])
+      .issueNumbers,
+    [33]
+  );
+  assert.throws(
+    () =>
+      validateConsolidationManifest(
+        consolidationEvent({ user: { login: 'contributor' } }),
+        [inReviewRadarIssue()]
+      ),
+    /must be authored by the Radar bot/
+  );
+  assert.throws(
+    () =>
+      validateConsolidationManifest(consolidationEvent(), [
+        inReviewRadarIssue({
+          labels: [{ name: 'radar:bug' }, { name: 'radar:rejected' }],
+        }),
+      ]),
+    /not an eligible in-review Radar issue/
+  );
 });
 
 test('missing Sentry groups are already absent during release closure', async () => {

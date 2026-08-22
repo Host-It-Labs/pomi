@@ -28,7 +28,7 @@
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NeoHuncho/pomi.git",
+    "url": "git+https://github.com/Host-It-Labs/pomi.git",
     "directory": "packages/backend"
   },
   "dependencies": {

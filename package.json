@@ -6,11 +6,11 @@
   "license": "PolyForm-Noncommercial-1.0.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NeoHuncho/pomi.git"
+    "url": "git+https://github.com/Host-It-Labs/pomi.git"
   },
-  "homepage": "https://github.com/NeoHuncho/pomi#readme",
+  "homepage": "https://github.com/Host-It-Labs/pomi#readme",
   "bugs": {
-    "url": "https://github.com/NeoHuncho/pomi/issues"
+    "url": "https://github.com/Host-It-Labs/pomi/issues"
   },
   "private": true,
   "type": "module",
@@ -46,7 +46,7 @@
     "audit:public-source": "node ./scripts/audit-public-source.mjs",
     "snapshot:public-source": "node ./scripts/create-public-snapshot.mjs",
     "test:public-snapshot": "node ./scripts/test-public-snapshot.mjs",
-    "test:operations": "node --test scripts/local-env.test.mjs scripts/github-app-auth.test.mjs scripts/migrate-private-radar.test.mjs && ./scripts/run-pomi-sentry.test.sh",
+    "test:operations": "node --test scripts/local-env.test.mjs scripts/github-app-auth.test.mjs scripts/migrate-private-radar.test.mjs scripts/run-parallel-releases.test.mjs && ./scripts/run-pomi-sentry.test.sh",
     "test:radar-lifecycle": "node --test scripts/radar-lifecycle.test.mjs",
     "test:coverage:ratchet": "pnpm test:build && vitest run --coverage && node ./scripts/verify-coverage.mjs --mode=ratchet",
     "test:business": "pnpm test:build && vitest run --coverage && node ./scripts/verify-coverage.mjs --mode=business && node ./scripts/verify-business-logic-ownership.mjs",
@@ -75,8 +75,8 @@
     "build:linux:arm64": "./scripts/build-linux-arm64-deb.sh",
     "build:windows": "node ./scripts/run-with-local-env.mjs -- sh -c 'cd packages/frontend && NODE_ENV=production VITE_DEBUG_PANEL_ENABLED=false pnpm tauri build --target x86_64-pc-windows-msvc --runner cargo-xwin'",
     "release:all": "./scripts/start-release-tmux-session.sh --attach",
-    "release:all:parallel": "pnpm run release:docker & pnpm run release:apps & wait",
-    "release:apps": "pnpm run release:android & pnpm run release:macos & wait",
+    "release:all:parallel": "./scripts/run-parallel-releases.sh all",
+    "release:apps": "./scripts/run-parallel-releases.sh apps",
     "release:macos": "pnpm run build:macos",
     "release:android": "pnpm run build:android && ./scripts/deploy-watch.sh",
     "release:wear": "./scripts/deploy-watch.sh",

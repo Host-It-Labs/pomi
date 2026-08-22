@@ -7,7 +7,7 @@ import { marker, normalizeText, readMarker } from './radar-lifecycle.mjs';
 
 const APPLY = process.argv.includes('--apply');
 const inputFlag = process.argv.indexOf('--input');
-const PUBLIC_REPOSITORY = 'NeoHuncho/pomi';
+const PUBLIC_REPOSITORY = 'Host-It-Labs/pomi';
 const configuredRepository = process.env.POMI_RADAR_GITHUB_REPOSITORY;
 if (configuredRepository && configuredRepository !== PUBLIC_REPOSITORY) {
   throw new Error(`Radar writes are restricted to ${PUBLIC_REPOSITORY}.`);

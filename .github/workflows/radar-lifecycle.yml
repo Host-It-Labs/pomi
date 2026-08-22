@@ -31,4 +31,5 @@ jobs:
       - name: Mark included issues ready for release
         env:
           GITHUB_TOKEN: ${{ steps.radar-token.outputs.token }}
+          POMI_GITHUB_APP_BOT_LOGIN: pomi-radar[bot]
         run: node scripts/radar-lifecycle.mjs consolidation-merged < "$GITHUB_EVENT_PATH"

@@ -291,7 +291,7 @@ async function run() {
   const sourceRepository =
     process.env.POMI_RADAR_SOURCE_GITHUB_REPOSITORY || 'NeoHuncho/pomi-private';
   const destinationRepository =
-    process.env.POMI_RADAR_GITHUB_REPOSITORY || 'NeoHuncho/pomi';
+    process.env.POMI_RADAR_GITHUB_REPOSITORY || 'Host-It-Labs/pomi';
   const sourceToken = process.env.POMI_RADAR_SOURCE_GITHUB_TOKEN?.trim();
   if (!sourceToken) {
     throw new Error(

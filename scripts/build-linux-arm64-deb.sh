@@ -43,7 +43,7 @@ pnpm install --frozen-lockfile --force
 cargo install tauri-cli --version \"$TAURI_VERSION\" --locked
 
 cd packages/frontend
-VITE_SENTRY_RELEASE='$FRONTEND_SENTRY_RELEASE' VITE_RENDER_SYSTEM_TRAY_ICON=true pnpm tauri build --bundles deb
+VITE_DEBUG_PANEL_ENABLED=false VITE_SENTRY_RELEASE='$FRONTEND_SENTRY_RELEASE' VITE_RENDER_SYSTEM_TRAY_ICON=true pnpm tauri build --bundles deb
 "
 
 ARM64_DEB="packages/frontend/src-tauri/target/release/bundle/deb/pomi_0.1.0_arm64.deb"
