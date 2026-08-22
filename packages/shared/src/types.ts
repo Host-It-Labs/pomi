@@ -7,6 +7,7 @@ export type TaskRecurrenceAnchorMode = 'planned' | 'completion';
 export type TaskCreationSource = 'manual' | 'assistant' | 'voice';
 export type TaskDefaultDueDateMode = 'off' | 'tomorrow' | 'week' | 'custom';
 export type TaskSortMode = 'default' | 'created-desc' | 'created-asc';
+export type TaskPageViewMode = 'list' | 'calendar';
 export type AssistantDebugLogKind = 'taskCapture' | 'voiceCommand';
 export type AssistantDebugLogSource = 'typed' | 'dictation' | 'assistantVoice';
 export type AssistantDebugLogStatus =
@@ -219,6 +220,7 @@ export interface Preferences {
   taskDefaultDueDateMode: TaskDefaultDueDateMode;
   taskDefaultDueDateDays: number;
   taskDefaultSortMode: TaskSortMode;
+  taskDefaultViewMode?: TaskPageViewMode;
   hiddenHelpTips: string[];
   taskReminderPriorities: TaskPriority[];
   taskBeforeDueReminderMinutes: number;

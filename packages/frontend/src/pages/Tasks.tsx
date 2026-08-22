@@ -3,6 +3,7 @@ import {
   List,
   ListItem,
   Task,
+  type TaskPageViewMode,
   type TaskSortMode,
   TaskStatus,
   TimerTypes,
@@ -27,6 +28,7 @@ import {
 } from 'react';
 import {
   FaArchive,
+  FaCalendarAlt,
   FaCheck,
   FaEdit,
   FaFileImport,
@@ -60,6 +62,7 @@ import { TaskImportModal } from '../components/tasks/TaskImportModal';
 import { TaskQuickCreateRow } from '../components/tasks/TaskQuickCreateRow';
 import { OverflowTaskTitle } from '../components/tasks/OverflowTaskTitle';
 import { TaskInlineProperties } from '../components/tasks/TaskInlineProperties';
+import { TaskCalendarNavigator } from '../components/tasks/TaskCalendarNavigator';
 import { TaskArchiveConfirmationModal } from '../components/tasks/TaskArchiveConfirmationModal';
 import { CompletionButton } from '../components/tasks/CompletionButton';
 import { MobileSwipeActionRow } from '../components/tasks/MobileSwipeActionRow';
@@ -103,8 +106,14 @@ import {
 } from '../utils/mixedTaskItems';
 import { useI18n } from '../i18n';
 import { useDefaultTaskSort } from './taskDefaultSort';
+import { useDefaultTaskView } from './taskDefaultView';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
 import { isTaskInTimerTypeSearchScope } from '../utils/taskSearchScope';
+import {
+  filterCalendarEntries,
+  getTodayDateKey,
+  type TaskCalendarScale,
+} from '../utils/taskCalendar';
 
 type TaskIntentionFilterValue = string | null;
 type TaskDropPlacement = 'before' | 'after';
@@ -189,6 +198,14 @@ export function Tasks() {
   const [restoringTaskId, setRestoringTaskId] = useState<string | null>(null);
   const [descriptionTask, setDescriptionTask] = useState<Task | null>(null);
   const [taskSortMode, setTaskSortMode] = useState<TaskSortMode>('default');
+  const [taskPageViewMode, setTaskPageViewMode] =
+    useState<TaskPageViewMode>('list');
+  const [taskCalendarScale, setTaskCalendarScale] =
+    useState<TaskCalendarScale>('month');
+  const [taskCalendarAnchor, setTaskCalendarAnchor] = useState(getTodayDateKey);
+  const [taskCalendarDate, setTaskCalendarDate] = useState<string | null>(
+    getTodayDateKey
+  );
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [pinnedTaskDestinationId, setPinnedTaskDestinationId] = useState<
     string | null
@@ -214,6 +231,13 @@ export function Tasks() {
     configuredMode: preferences?.taskDefaultSortMode,
     preferencesLoaded: preferences !== null,
     onApply: setTaskSortMode,
+  });
+
+  useDefaultTaskView({
+    userId: user?.id,
+    configuredMode: preferences?.taskDefaultViewMode,
+    preferencesLoaded: preferences !== null,
+    onApply: setTaskPageViewMode,
   });
 
   const loadImportStatus = useCallback(async () => {
@@ -834,6 +858,13 @@ export function Tasks() {
       mixTaskAndListItems(visibleTasks, eligibleMixedListItems, taskSortMode),
     [eligibleMixedListItems, taskSortMode, visibleTasks]
   );
+  const displayedTaskItems = useMemo(
+    () =>
+      taskPageViewMode === 'calendar' && selectedList === null
+        ? filterCalendarEntries(mixedTaskItems, taskCalendarDate)
+        : mixedTaskItems,
+    [mixedTaskItems, selectedList, taskCalendarDate, taskPageViewMode]
+  );
   const orderedIntentionFamilyTasks = useMemo(() => {
     if (!selectedFilterOption) return [];
     const parentSlug =
@@ -860,7 +891,7 @@ export function Tasks() {
     destination.scrollIntoView({ behavior: 'auto', block: 'center' });
     destination.focus({ preventScroll: true });
     setPinnedTaskDestinationId(null);
-  }, [pinnedTaskDestinationId, visibleTasks]);
+  }, [displayedTaskItems, pinnedTaskDestinationId]);
   const hasActiveFilters =
     taskSearchQuery.trim().length > 0 ||
     selectedFilterOption !== null ||
@@ -870,22 +901,24 @@ export function Tasks() {
     ? taskSearchQuery.trim()
       ? `${activeListItems.length} of ${visibleActiveSelectedListItemCount}`
       : `${activeListItems.length}`
-    : hasActiveFilters
-      ? `${mixedTaskItems.length} of ${
-          taskView.tasks.length +
-          (selectedFilterOption === null &&
-          preferences?.listsExtension === true &&
-          (isTaskSearchActive ||
-            timerTypeFilter === 'all' ||
-            timerTypeFilter === TIMER_TYPES.WORK)
-            ? listItems.filter(
-                item =>
-                  item.status === TASK_STATUSES.ACTIVE &&
-                  (!hideVacationCovered || !item.vacationEligible)
-              ).length
-            : 0)
-        }`
-      : `${mixedTaskItems.length}`;
+    : taskPageViewMode === 'calendar'
+      ? `${displayedTaskItems.length} of ${mixedTaskItems.length}`
+      : hasActiveFilters
+        ? `${mixedTaskItems.length} of ${
+            taskView.tasks.length +
+            (selectedFilterOption === null &&
+            preferences?.listsExtension === true &&
+            (isTaskSearchActive ||
+              timerTypeFilter === 'all' ||
+              timerTypeFilter === TIMER_TYPES.WORK)
+              ? listItems.filter(
+                  item =>
+                    item.status === TASK_STATUSES.ACTIVE &&
+                    (!hideVacationCovered || !item.vacationEligible)
+                ).length
+              : 0)
+          }`
+        : `${mixedTaskItems.length}`;
   const showImportAction = hasImportedTasks === false;
   const hideTasksTitle =
     showImportAction &&
@@ -1022,6 +1055,51 @@ export function Tasks() {
             </div>
           </div>
         </header>
+
+        {!selectedList && (
+          <div className="mt-4 grid grid-cols-2 gap-1 rounded-lg border border-slate-800/70 bg-slate-900/35 p-1">
+            <button
+              type="button"
+              aria-pressed={taskPageViewMode === 'list'}
+              onClick={() => setTaskPageViewMode('list')}
+              className={clsx(
+                'flex h-8 items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-colors',
+                taskPageViewMode === 'list'
+                  ? 'bg-indigo-500/25 text-indigo-100'
+                  : 'text-slate-500 hover:bg-slate-800/80 hover:text-slate-200'
+              )}
+            >
+              <FaListUl size={10} />
+              {t('common.list')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={taskPageViewMode === 'calendar'}
+              onClick={() => setTaskPageViewMode('calendar')}
+              className={clsx(
+                'flex h-8 items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-colors',
+                taskPageViewMode === 'calendar'
+                  ? 'bg-indigo-500/25 text-indigo-100'
+                  : 'text-slate-500 hover:bg-slate-800/80 hover:text-slate-200'
+              )}
+            >
+              <FaCalendarAlt size={10} />
+              {t('common.calendar')}
+            </button>
+          </div>
+        )}
+
+        {taskPageViewMode === 'calendar' && !selectedList && (
+          <TaskCalendarNavigator
+            entries={mixedTaskItems}
+            scale={taskCalendarScale}
+            anchorDate={taskCalendarAnchor}
+            selectedDate={taskCalendarDate}
+            onScaleChange={setTaskCalendarScale}
+            onAnchorDateChange={setTaskCalendarAnchor}
+            onSelectedDateChange={setTaskCalendarDate}
+          />
+        )}
 
         <section
           aria-label={
@@ -1244,30 +1322,39 @@ export function Tasks() {
               </div>
             )}
 
-          {!selectedList && !isLoading && mixedTaskItems.length > 0 && (
-            <MixedTaskList
-              entries={mixedTaskItems}
-              completingTaskIds={completingTaskIds}
-              completingListItemIds={completingListItemIds}
-              orderedUndatedTaskIds={orderedIntentionFamilyTasks.map(
-                task => task.id
-              )}
-              canReorder={
-                selectedFilterOption !== null &&
-                taskSortMode === 'default' &&
-                normalizeSearchText(taskSearchQuery).length === 0
-              }
-              intentions={intentions}
-              onEdit={setEditingTask}
-              onEditListItem={setEditingListItem}
-              onCompleteListItem={completeListItem}
-              onArchiveListItem={setArchivingListItem}
-              onOpenDescription={setDescriptionTask}
-              onUpdate={updateTaskWithPositionFeedback}
-              onReorder={reorderVisibleTasks}
-              showTypeBadge={timerTypeFilter === 'all' || isTaskSearchActive}
-            />
-          )}
+          {!selectedList &&
+            !isLoading &&
+            mixedTaskItems.length > 0 &&
+            (taskPageViewMode === 'calendar' &&
+            displayedTaskItems.length === 0 ? (
+              <div className="rounded-lg border border-slate-800/60 bg-slate-900/35 px-5 py-8 text-center text-sm text-slate-400">
+                {t('task.noTasksForDate')}
+              </div>
+            ) : (
+              <MixedTaskList
+                entries={displayedTaskItems}
+                completingTaskIds={completingTaskIds}
+                completingListItemIds={completingListItemIds}
+                orderedUndatedTaskIds={orderedIntentionFamilyTasks.map(
+                  task => task.id
+                )}
+                canReorder={
+                  taskPageViewMode === 'list' &&
+                  selectedFilterOption !== null &&
+                  taskSortMode === 'default' &&
+                  normalizeSearchText(taskSearchQuery).length === 0
+                }
+                intentions={intentions}
+                onEdit={setEditingTask}
+                onEditListItem={setEditingListItem}
+                onCompleteListItem={completeListItem}
+                onArchiveListItem={setArchivingListItem}
+                onOpenDescription={setDescriptionTask}
+                onUpdate={updateTaskWithPositionFeedback}
+                onReorder={reorderVisibleTasks}
+                showTypeBadge={timerTypeFilter === 'all' || isTaskSearchActive}
+              />
+            ))}
         </div>
 
         <TaskFormModal

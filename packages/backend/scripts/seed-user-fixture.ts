@@ -147,6 +147,7 @@ function buildFixturePreferences(userId: string) {
     taskDefaultDueDateMode: 'tomorrow' as const,
     taskDefaultDueDateDays: 1,
     taskDefaultSortMode: 'default' as const,
+    taskDefaultViewMode: 'calendar' as const,
     hiddenHelpTips: [],
     taskReminderPriorities: [TASK_PRIORITIES.HIGH, TASK_PRIORITIES.URGENT],
     taskBeforeDueReminderMinutes: 0,

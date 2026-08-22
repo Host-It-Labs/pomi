@@ -190,6 +190,11 @@ export const TASK_SORT_MODES = {
   CREATED_ASC: 'created-asc',
 } as const;
 
+export const TASK_PAGE_VIEW_MODES = {
+  LIST: 'list',
+  CALENDAR: 'calendar',
+} as const;
+
 export const TASK_IMPORT_SOURCES = {
   VIKUNJA: 'vikunja',
 } as const;

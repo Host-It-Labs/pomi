@@ -70,6 +70,28 @@ describe('language catalog and detection', () => {
     }
   });
 
+  it('translates every calendar label in each supported locale', () => {
+    const calendarKeys = [
+      'common.calendar',
+      'common.month',
+      'common.year',
+      'common.undated',
+      'common.items',
+      'task.calendar',
+    ] as const;
+    const englishCatalog = sourceTranslationCatalogs.en;
+
+    for (const language of SUPPORTED_LANGUAGES.filter(
+      item => item.code !== 'en'
+    )) {
+      const catalog = sourceTranslationCatalogs[language.code];
+      for (const key of calendarKeys) {
+        expect(catalog[key]).not.toBe(englishCatalog[key]);
+      }
+    }
+    expect(sourceTranslationCatalogs.fr['common.item']).toBe('élément');
+  });
+
   it('translates shared descriptions without dropping interpolation tokens', () => {
     const descriptionKeys = [
       'statistics.noLogsYet',
