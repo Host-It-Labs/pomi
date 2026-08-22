@@ -2,12 +2,18 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# shellcheck disable=SC1091
+. "$ROOT_DIR/scripts/local-env.sh"
+pomi_load_local_environment
+
 TAURI_VERSION="^2"
 FRONTEND_SENTRY_RELEASE="${VITE_SENTRY_RELEASE:-pomi-frontend@${RELEASE_TAG:-$(node -p "require('./packages/frontend/package.json').version")}}"
 
 cd "$ROOT_DIR"
 
 docker run --rm --platform linux/arm64 \
+  --env VITE_SENTRY_DSN \
   -v "$ROOT_DIR:/workspace" \
   -w /workspace \
   node:20-bookworm bash -lc "

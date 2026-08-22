@@ -12,7 +12,7 @@ const trackedFiles = execFileSync('git', ['ls-files', '-z'], {
   .filter(Boolean);
 
 const forbiddenPaths = [
-  /^\.codex\//,
+  /^\.codex\/(?!config\.toml$|environments\/pomi(?:-worktree)?\.toml$|hooks\/start-pomi-tmux\.sh$|rules\/default\.rules$)/,
   /^\.vscode\/sessions\.json$/,
   /^notes\.txt$/,
   /vikunja-export\.zip$/,
@@ -83,6 +83,7 @@ const textExtensions = new Set([
   '.pro',
   '.properties',
   '.rs',
+  '.rules',
   '.sh',
   '.storyboard',
   '.swift',

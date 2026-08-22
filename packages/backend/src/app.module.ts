@@ -21,11 +21,13 @@ import { VacationModule } from './vacation/vacation.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { DescriptionsModule } from './descriptions/descriptions.module';
 import { validateEnvironment } from './config/environment';
+import { resolveBackendLocalEnvironmentFile } from './config/local-environment';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: resolveBackendLocalEnvironmentFile(),
       validate: validateEnvironment,
     }),
     DatabaseModule,

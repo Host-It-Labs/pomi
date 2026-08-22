@@ -1,0 +1,100 @@
+# The user granted standing approval for Pomi publication to its configured origin.
+# These rules are project-local and only load for trusted Pomi checkouts that contain
+# this file. Prefix matching cannot inspect arbitrary later flags, so destructive
+# push forms are explicitly prompted when their flags appear in the command prefix.
+prefix_rule(
+    pattern = ["git", "push", "origin"],
+    decision = "allow",
+    justification = "Standing user approval for ordinary Pomi pushes to origin.",
+)
+prefix_rule(
+    pattern = ["git", "push", "-u", "origin"],
+    decision = "allow",
+    justification = "Standing user approval for ordinary Pomi pushes to origin.",
+)
+prefix_rule(
+    pattern = ["git", "push", "--set-upstream", "origin"],
+    decision = "allow",
+    justification = "Standing user approval for ordinary Pomi pushes to origin.",
+)
+
+prefix_rule(
+    pattern = ["git", "push", "--force"],
+    decision = "prompt",
+    justification = "Force-pushes require a separate explicit approval.",
+)
+prefix_rule(
+    pattern = ["git", "push", "--force-with-lease"],
+    decision = "prompt",
+    justification = "Force-pushes require a separate explicit approval.",
+)
+prefix_rule(
+    pattern = ["git", "push", "-f"],
+    decision = "prompt",
+    justification = "Force-pushes require a separate explicit approval.",
+)
+prefix_rule(
+    pattern = ["git", "push", "origin", "--force"],
+    decision = "prompt",
+    justification = "Force-pushes require a separate explicit approval.",
+)
+prefix_rule(
+    pattern = ["git", "push", "origin", "--force-with-lease"],
+    decision = "prompt",
+    justification = "Force-pushes require a separate explicit approval.",
+)
+prefix_rule(
+    pattern = ["git", "push", "origin", "-f"],
+    decision = "prompt",
+    justification = "Force-pushes require a separate explicit approval.",
+)
+prefix_rule(
+    pattern = ["git", "push", "-u", "origin", "--force"],
+    decision = "prompt",
+    justification = "Force-pushes require a separate explicit approval.",
+)
+prefix_rule(
+    pattern = ["git", "push", "--set-upstream", "origin", "--force"],
+    decision = "prompt",
+    justification = "Force-pushes require a separate explicit approval.",
+)
+prefix_rule(
+    pattern = ["git", "push", "origin", "--delete"],
+    decision = "prompt",
+    justification = "Remote branch deletion requires a separate explicit approval.",
+)
+prefix_rule(
+    pattern = ["git", "push", "--delete", "origin"],
+    decision = "prompt",
+    justification = "Remote branch deletion requires a separate explicit approval.",
+)
+prefix_rule(
+    pattern = ["git", "push", "origin", "--mirror"],
+    decision = "prompt",
+    justification = "Mirror pushes require a separate explicit approval.",
+)
+prefix_rule(
+    pattern = ["git", "push", "origin", "--all"],
+    decision = "prompt",
+    justification = "All-branch pushes require a separate explicit approval.",
+)
+prefix_rule(
+    pattern = ["git", "push", "origin", "--prune"],
+    decision = "prompt",
+    justification = "Pruning remote branches requires a separate explicit approval.",
+)
+prefix_rule(
+    pattern = ["git", "push", "--mirror"],
+    decision = "prompt",
+    justification = "Mirror pushes require a separate explicit approval.",
+)
+prefix_rule(
+    pattern = ["git", "push", "--all"],
+    decision = "prompt",
+    justification = "All-branch pushes require a separate explicit approval.",
+)
+prefix_rule(
+    pattern = ["git", "push", "--prune"],
+    decision = "prompt",
+    justification = "Pruning remote branches requires a separate explicit approval.",
+)

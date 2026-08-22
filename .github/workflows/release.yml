@@ -163,6 +163,7 @@ jobs:
         env:
           NODE_ENV: production
           VITE_BACKEND_URL: ${{ vars.PROD_BACKEND_URL }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
           VITE_SENTRY_RELEASE: ${{ env.FRONTEND_SENTRY_RELEASE }}
           VITE_USE_HTTPS: 'true'
         run: pnpm tauri build --target aarch64-apple-darwin
@@ -281,6 +282,7 @@ jobs:
         env:
           NODE_ENV: production
           VITE_BACKEND_URL: ${{ vars.PROD_BACKEND_URL }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
           VITE_SENTRY_RELEASE: ${{ env.FRONTEND_SENTRY_RELEASE }}
           VITE_USE_HTTPS: 'true'
           VITE_RENDER_SYSTEM_TRAY_ICON: 'true'
@@ -375,3 +377,36 @@ jobs:
           files: release-assets/**/*
           fail_on_unmatched_files: true
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  release-radar-issues:
+    name: Release Radar issues
+    if: ${{ github.event_name == 'release' && !github.event.release.prerelease }}
+    needs: [publish-release]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - name: Check out released source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Mint Pomi Radar bot token
+        id: radar-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.POMI_RADAR_APP_ID }}
+          private-key: ${{ secrets.POMI_RADAR_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: pomi
+
+      - name: Close included canonical issues and resolve Sentry groups
+        env:
+          GITHUB_TOKEN: ${{ steps.radar-token.outputs.token }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/radar-lifecycle.mjs release

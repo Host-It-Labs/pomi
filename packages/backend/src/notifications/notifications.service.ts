@@ -2,6 +2,8 @@ import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as apn from 'apn';
 import * as admin from 'firebase-admin';
+import { existsSync, readFileSync } from 'node:fs';
+import * as path from 'node:path';
 
 import {
   ACCENT_HEX_COLORS,
@@ -41,18 +43,34 @@ export class NotificationService {
 
   private initializeFCM() {
     try {
-      const serviceAccountJson = this.configService.get<string>(
+      let serviceAccountJson = this.configService.get<string>(
         'FIREBASE_SERVICE_ACCOUNT_JSON'
       );
+
+      if (!serviceAccountJson) {
+        const configuredPath = this.configService.get<string>(
+          'FIREBASE_SERVICE_ACCOUNT_PATH'
+        );
+        const candidates = configuredPath
+          ? [
+              path.resolve(process.cwd(), configuredPath),
+              path.resolve(process.cwd(), '../..', configuredPath),
+            ]
+          : [];
+        const serviceAccountPath = candidates.find(candidate =>
+          existsSync(candidate)
+        );
+        if (serviceAccountPath) {
+          serviceAccountJson = readFileSync(serviceAccountPath, 'utf8');
+        }
+      }
 
       if (serviceAccountJson) {
         const serviceAccount = JSON.parse(serviceAccountJson);
         this.fcmApp = admin.initializeApp({
           credential: admin.credential.cert(serviceAccount),
         });
-        this.logger.log(
-          'Firebase Cloud Messaging initialized successfully (from JSON)'
-        );
+        this.logger.log('Firebase Cloud Messaging initialized successfully');
       } else {
         this.logger.warn(
           'FIREBASE_SERVICE_ACCOUNT_PATH or FIREBASE_SERVICE_ACCOUNT_JSON not configured. FCM notifications will not be available.'

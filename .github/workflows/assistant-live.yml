@@ -1,0 +1,24 @@
+name: Assistant live capture suite
+
+on:
+  workflow_dispatch:
+
+jobs:
+  assistant-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run test:assistant:live
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          RUN_ASSISTANT_LIVE_TESTS: '1'
+          NODE_PATH: packages/backend/dist

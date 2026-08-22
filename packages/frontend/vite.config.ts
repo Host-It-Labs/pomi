@@ -5,7 +5,8 @@ import { DEFAULT_PORTS, parsePortNumber } from '../../scripts/dev-ports.mjs';
 import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd());
+  const envDir = path.resolve(__dirname, '../..');
+  const env = mode === 'test' ? {} : loadEnv(mode, envDir);
   const host = process.env.TAURI_DEV_HOST || env.VITE_HOST;
   const frontendPort = parsePortNumber(
     process.env.POMI_FRONTEND_PORT || env.VITE_PORT,
@@ -20,6 +21,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), tailwindcss()],
     clearScreen: false,
+    envDir: mode === 'test' ? false : envDir,
     envPrefix: 'VITE_',
     build: {
       rollupOptions: {

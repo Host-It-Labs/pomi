@@ -4,12 +4,15 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="$ROOT_DIR/packages/backend/docker-compose.dev.yml"
 COMPOSE_PROJECT="${POMI_COMPOSE_PROJECT:-pomi}"
-CURRENT_WORK_CONFIG="$ROOT_DIR/config/current-work.env"
 DEFAULT_DEV_PORTS_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/pomi/dev-ports.env"
 DEV_PORTS_FILE="${POMI_DEV_PORTS_FILE:-$DEFAULT_DEV_PORTS_FILE}"
 INITIAL_DEV_PORTS_FILE_MTIME=""
 
 cd "$ROOT_DIR"
+
+# shellcheck disable=SC1091
+. "$ROOT_DIR/scripts/local-env.sh"
+pomi_load_local_environment
 
 # shellcheck disable=SC1091
 . "$ROOT_DIR/scripts/dev-ports.sh"
@@ -34,13 +37,6 @@ dev_ports_file_changed() {
 
   [[ -n "$current_mtime" && "$current_mtime" != "$INITIAL_DEV_PORTS_FILE_MTIME" ]]
 }
-
-if [[ -f "$CURRENT_WORK_CONFIG" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "$CURRENT_WORK_CONFIG"
-  set +a
-fi
 
 POMI_BACKEND_PORT_EXPLICIT="${POMI_BACKEND_PORT+x}"
 POMI_DB_PORT_EXPLICIT="${POMI_DB_PORT+x}"

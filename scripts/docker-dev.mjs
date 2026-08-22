@@ -5,6 +5,9 @@ import {
   resolveDockerPorts,
   writeDevPorts,
 } from './dev-ports.mjs';
+import { loadLocalEnvironment } from './local-env.mjs';
+
+loadLocalEnvironment();
 
 const composeArgsByMode = {
   up: ['up', '--force-recreate'],

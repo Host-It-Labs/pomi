@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "repository": "NeoHuncho/pomi",
+  "marker": "pomi-radar:v1",
+  "deduplicationMarker": "pomi-radar-dedup:v1",
+  "consolidationMarker": "pomi-radar-consolidation:v1",
+  "sources": [
+    "radar:feature",
+    "radar:bug",
+    "radar:sentry",
+    "radar:security",
+    "radar:performance"
+  ],
+  "lifecycle": [
+    "radar:proposed",
+    "radar:needs-agent",
+    "radar:needs-user",
+    "radar:accepted",
+    "radar:in-progress",
+    "radar:in-review",
+    "radar:ready-for-release",
+    "radar:blocked",
+    "radar:released",
+    "radar:rejected"
+  ],
+  "active": [
+    "radar:proposed",
+    "radar:needs-agent",
+    "radar:needs-user",
+    "radar:accepted",
+    "radar:in-progress",
+    "radar:in-review",
+    "radar:ready-for-release",
+    "radar:blocked"
+  ],
+  "terminal": ["radar:released", "radar:rejected"],
+  "presentation": {
+    "actionRequiredLifecycle": [
+      "radar:proposed",
+      "radar:needs-agent",
+      "radar:needs-user",
+      "radar:accepted",
+      "radar:in-progress",
+      "radar:in-review",
+      "radar:blocked"
+    ],
+    "requiredFields": [
+      "displayTitle",
+      "summary",
+      "whyNow",
+      "currentState",
+      "details",
+      "evidence",
+      "tradeoffs",
+      "validation",
+      "acceptanceCriteria"
+    ],
+    "titleWordRange": [4, 10],
+    "titleMaxCharacters": 72,
+    "fieldWordLimits": {
+      "summary": 20,
+      "whyNow": 24,
+      "currentState": 24,
+      "details": 24,
+      "evidence": 30,
+      "tradeoffs": 24,
+      "validation": 24,
+      "acceptanceCriteria": 18
+    }
+  },
+  "proposalAvailability": {
+    "targetVisibleCount": 3,
+    "visibleLifecycle": ["radar:proposed", "radar:needs-user", "radar:blocked"]
+  },
+  "dailyFeatureAvailability": {
+    "targetVisibleCount": 1,
+    "visibleLifecycle": ["radar:proposed", "radar:needs-user", "radar:blocked"]
+  },
+  "clarification": {
+    "maximumProactiveRounds": 2
+  }
+}

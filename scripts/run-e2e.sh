@@ -2,6 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# shellcheck disable=SC1091
+. "$ROOT_DIR/scripts/local-env.sh"
+pomi_load_local_environment
+
 COMPOSE_FILE="$ROOT_DIR/packages/backend/docker-compose.dev.yml"
 COMPOSE_PROJECT="${POMI_COMPOSE_PROJECT:-pomi}"
 DEFAULT_DEV_PORTS_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/pomi/dev-ports.env"

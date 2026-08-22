@@ -35,6 +35,11 @@ function nestDecoratorPlugin(): Plugin {
 }
 
 export default defineConfig({
+  envDir: false,
+  define: {
+    'import.meta.env.VITE_BACKEND_URL': JSON.stringify('localhost:3000'),
+    'import.meta.env.VITE_USE_HTTPS': JSON.stringify('false'),
+  },
   plugins: [nestDecoratorPlugin()],
   optimizeDeps: {
     include: ['react', 'react-dom/client', 'react/jsx-dev-runtime'],
@@ -47,6 +52,10 @@ export default defineConfig({
     },
   },
   test: {
+    env: {
+      VITE_BACKEND_URL: 'localhost:3000',
+      VITE_USE_HTTPS: 'false',
+    },
     clearMocks: true,
     restoreMocks: true,
     passWithNoTests: false,

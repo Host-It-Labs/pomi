@@ -2,7 +2,6 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import * as Sentry from '@sentry/nestjs';
-import * as dotenv from 'dotenv';
 import Redis from 'ioredis';
 import { AppModule } from './app.module';
 import { configureHttpApp } from './configure-app';
@@ -11,8 +10,9 @@ import { sanitizeSentryEvent } from './logging/sanitize-log';
 import { RedisIoAdapter } from './realtime/redis-io.adapter';
 import { REDIS_CLIENT } from './redis/redis.constants';
 import { getConfiguredBackendSentryRelease } from './sentry-release';
+import { loadBackendLocalEnvironment } from './config/local-environment';
 
-dotenv.config();
+loadBackendLocalEnvironment();
 
 async function bootstrap() {
   const sentryDsn = process.env.NEST_SENTRY_DSN?.trim();

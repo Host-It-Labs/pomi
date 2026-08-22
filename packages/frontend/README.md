@@ -6,9 +6,9 @@ Android, and iOS. Public builds use the neutral identifier
 part of this repository.
 
 ```bash
-cp .env.example .env
-pnpm dev
-pnpm build
+cp ../../.env.example ../../.env.local
+pnpm --dir ../.. dev:frontend
+pnpm --dir ../.. --filter @pomi/frontend build
 ```
 
 From the repository root, native verification builds are available through

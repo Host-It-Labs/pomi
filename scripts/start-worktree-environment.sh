@@ -27,13 +27,12 @@ COMPOSE_FILE="$ROOT_DIR/packages/backend/docker-compose.dev.yml"
 
 cd "$ROOT_DIR"
 
-if [[ -f "$ROOT_DIR/config/current-work.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  . "$ROOT_DIR/config/current-work.env"
-  set +a
-fi
-export POMI_CURRENT_WORK_SLUG="${POMI_CURRENT_WORK_SLUG:-test-context-slug}"
+# shellcheck disable=SC1091
+. "$ROOT_DIR/scripts/local-env.sh"
+pomi_load_local_environment
+
+branch_slug="$(git branch --show-current | tr -cs '[:alnum:]._-' '-' | sed 's/^-//; s/-$//')"
+export POMI_CURRENT_WORK_SLUG="${POMI_CURRENT_WORK_SLUG:-${branch_slug:-test-context-slug}}"
 POMI_COPYME_USERNAME="${POMI_COPYME_USERNAME:-copyme}"
 POMI_COPYME_PASSWORD="${POMI_COPYME_PASSWORD:-$POMI_COPYME_USERNAME}"
 
@@ -53,11 +52,6 @@ mkdir -p "$(dirname "$POMI_DEV_PORTS_FILE")"
 "$ROOT_DIR/scripts/setup-development-environment.sh" --require-worktree
 main_worktree="$(pomi_main_worktree)"
 pomi_seed_worktree_cargo_cache "$ROOT_DIR" "$main_worktree"
-
-if [[ ! -f "$ROOT_DIR/packages/backend/.env" ]]; then
-  cp "$ROOT_DIR/packages/backend/.env.example" "$ROOT_DIR/packages/backend/.env"
-  echo "[pomi] copied packages/backend/.env.example to packages/backend/.env"
-fi
 
 docker compose -f "$COMPOSE_FILE" -p "$POMI_COMPOSE_PROJECT" down --remove-orphans >/dev/null 2>&1 || true
 if [[ "$legacy_worktree_id" != "$worktree_id" && -z "$custom_compose_project" ]]; then

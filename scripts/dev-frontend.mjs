@@ -13,6 +13,9 @@ import {
   resolveFrontendPorts,
   writeDevPorts,
 } from './dev-ports.mjs';
+import { loadLocalEnvironment } from './local-env.mjs';
+
+loadLocalEnvironment();
 
 const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const tauriCommands = {
