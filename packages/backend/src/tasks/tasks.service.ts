@@ -656,27 +656,12 @@ export class TasksService {
       return {};
     }
 
-    const intentionsByType = await Promise.all(
-      TIMER_TYPE_VALUES.filter(type => wantedByType.has(type)).map(
-        async type => ({
-          type,
-          intentions: await this.intentionsService.getAllIntentions(
-            userId,
-            type,
-            undefined
-          ),
-        })
-      )
-    );
-    return Object.fromEntries(
-      intentionsByType.flatMap(({ type, intentions }) =>
-        intentions
-          .filter(intention => wantedByType.get(type)?.has(intention.slug))
-          .map(intention => [
-            `${type}:${intention.slug}`,
-            `${intention.emoji} ${intention.title}`,
-          ])
-      )
+    return this.intentionsService.getIntentionLabelsByTypeAndSlug(
+      userId,
+      TIMER_TYPE_VALUES.filter(type => wantedByType.has(type)).map(type => ({
+        type,
+        slugs: Array.from(wantedByType.get(type) ?? []),
+      }))
     );
   }
 

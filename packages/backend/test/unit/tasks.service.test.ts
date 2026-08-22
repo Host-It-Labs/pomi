@@ -90,6 +90,7 @@ function createService(
   const taskEventBuilders = [];
   const emittedTaskUsers = [];
   const importRuns = [];
+  const rankingLabelLookups = [];
   let preferenceReads = 0;
 
   const service = new TasksService(
@@ -208,6 +209,25 @@ function createService(
                   (type === undefined || intention.type === type)
               )
               .map(intention => [intention.slug, intention])
+          )
+        );
+      },
+      getIntentionLabelsByTypeAndSlug(userId, lookups) {
+        rankingLabelLookups.push({ userId, lookups });
+        return Promise.resolve(
+          Object.fromEntries(
+            intentions
+              .filter(intention =>
+                lookups.some(
+                  lookup =>
+                    intention.type === lookup.type &&
+                    lookup.slugs.includes(intention.slug)
+                )
+              )
+              .map(intention => [
+                `${intention.type}:${intention.slug}`,
+                `${intention.emoji} ${intention.title}`,
+              ])
           )
         );
       },
@@ -332,6 +352,7 @@ function createService(
     taskEventBuilders,
     emittedTaskUsers,
     importRuns,
+    rankingLabelLookups,
     getPreferenceReads: () => preferenceReads,
   };
 }
@@ -1355,7 +1376,7 @@ test('linked Tasks require a child when their parent has active sub-intentions',
 });
 
 test('task ranking labels remain type-aware when slugs collide', async () => {
-  const { service, intentions } = createService(null);
+  const { service, intentions, rankingLabelLookups } = createService(null);
   intentions.push(
     {
       id: 'work-intention-1',
@@ -1394,6 +1415,15 @@ test('task ranking labels remain type-aware when slugs collide', async () => {
 
   assert.equal(labels['work:focus'], '🎯 Work Focus');
   assert.equal(labels['break:focus'], '☕ Break Focus');
+  assert.deepEqual(rankingLabelLookups, [
+    {
+      userId: 'user-1',
+      lookups: [
+        { type: 'work', slugs: ['focus'] },
+        { type: 'break', slugs: ['focus'] },
+      ],
+    },
+  ]);
 });
 
 test('task statistics period counts use one bounded aggregate query', async () => {
@@ -1508,4 +1538,50 @@ test('task ranking distinguishes a none slug from an unlinked Task', async () =>
       .flatMap(builder => builder.params)
       .some(params => params.noIntention === '[no-intention]')
   );
+});
+
+test('task ranking labels archived intentions and preserves missing history', async () => {
+  const { service, intentions, rankingLabelLookups } = createService(null, [
+    {
+      slug: 'work:archived-focus',
+      timerType: 'work',
+      intentionSlug: 'archived-focus',
+      count: '2',
+    },
+    {
+      slug: 'break:deleted-focus',
+      timerType: 'break',
+      intentionSlug: 'deleted-focus',
+      count: '1',
+    },
+  ]);
+  intentions.push({
+    id: 'archived-work-intention',
+    userId: 'user-1',
+    title: 'Archived Focus',
+    emoji: '📦',
+    slug: 'archived-focus',
+    type: 'work',
+    isArchived: true,
+  });
+
+  const ranking = await service.getTaskRanking(
+    'user-1',
+    'all',
+    'week',
+    '2026-07-10',
+    'UTC'
+  );
+
+  assert.equal(ranking[0].label, '📦 Archived Focus');
+  assert.equal(ranking[1].label, 'break:deleted-focus');
+  assert.deepEqual(rankingLabelLookups, [
+    {
+      userId: 'user-1',
+      lookups: [
+        { type: 'work', slugs: ['archived-focus'] },
+        { type: 'break', slugs: ['deleted-focus'] },
+      ],
+    },
+  ]);
 });

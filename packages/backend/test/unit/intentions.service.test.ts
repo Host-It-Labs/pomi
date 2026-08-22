@@ -163,6 +163,62 @@ describe('IntentionsService', () => {
     ]);
   });
 
+  it('loads only targeted Intention label fields without usage work', async () => {
+    const { service, getMonthlyUsageCalls, intentionFindOptions } =
+      createService({
+        intentions: [
+          {
+            type: TIMER_TYPES.WORK,
+            slug: 'focus',
+            emoji: '🎯',
+            title: 'Focus',
+          },
+          {
+            type: TIMER_TYPES.BREAK,
+            slug: 'focus',
+            emoji: '☕',
+            title: 'Break Focus',
+          },
+        ],
+      });
+
+    await expect(
+      service.getIntentionLabelsByTypeAndSlug('user-1', [
+        { type: TIMER_TYPES.WORK, slugs: ['focus', 'focus'] },
+        { type: TIMER_TYPES.BREAK, slugs: ['focus'] },
+      ])
+    ).resolves.toEqual({
+      'work:focus': '🎯 Focus',
+      'break:focus': '☕ Break Focus',
+    });
+    expect(getMonthlyUsageCalls()).toBe(0);
+    expect(intentionFindOptions).toHaveLength(1);
+    const findOptions = intentionFindOptions[0] as {
+      select: Record<string, boolean>;
+      where: Array<{
+        userId: string;
+        type: string;
+        slug: { value: string[] };
+      }>;
+    };
+    expect(findOptions.select).toEqual({
+      type: true,
+      slug: true,
+      emoji: true,
+      title: true,
+    });
+    expect(
+      findOptions.where.map(({ userId, type, slug }) => ({
+        userId,
+        type,
+        slugs: slug.value,
+      }))
+    ).toEqual([
+      { userId: 'user-1', type: TIMER_TYPES.WORK, slugs: ['focus'] },
+      { userId: 'user-1', type: TIMER_TYPES.BREAK, slugs: ['focus'] },
+    ]);
+  });
+
   it('generates non-empty slugs for symbol-only titles', () => {
     expect(generateIntentionSlug('++')).toBe('plus-plus');
     expect(generateIntentionSlug('Focused Work')).toBe('focused-work');

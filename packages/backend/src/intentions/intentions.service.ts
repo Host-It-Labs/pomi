@@ -768,6 +768,38 @@ export class IntentionsService {
     );
   }
 
+  async getIntentionLabelsByTypeAndSlug(
+    userId: string,
+    lookups: Array<{ type: IntentionType; slugs: string[] }>
+  ): Promise<Record<string, string>> {
+    const where = lookups
+      .map(({ type, slugs }) => ({
+        userId,
+        type,
+        slugs: Array.from(new Set(slugs)),
+      }))
+      .filter(lookup => lookup.slugs.length > 0)
+      .map(({ slugs, ...lookup }) => ({ ...lookup, slug: In(slugs) }));
+    if (where.length === 0) return {};
+
+    const intentions = await this.intentionsRepository.find({
+      select: {
+        type: true,
+        slug: true,
+        emoji: true,
+        title: true,
+      },
+      where,
+    });
+
+    return Object.fromEntries(
+      intentions.map(intention => [
+        `${intention.type}:${intention.slug}`,
+        `${intention.emoji} ${intention.title}`,
+      ])
+    );
+  }
+
   async validateSubIntentionSelection(
     userId: string,
     selectedIntentions: string[],
