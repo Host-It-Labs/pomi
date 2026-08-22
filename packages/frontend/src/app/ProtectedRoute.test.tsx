@@ -12,6 +12,23 @@ const state = vi.hoisted(() => ({
   loadPreferences: vi.fn(async () => undefined),
   setExpanded: vi.fn(),
   setActiveTab: vi.fn(),
+  systemInfo: {
+    hostingMode: 'self-hosted',
+    selfHosted: true,
+    paymentsRequired: false,
+    authProviders: { google: false, apple: false },
+  } as {
+    hostingMode: 'hosted' | 'self-hosted';
+    selfHosted: boolean;
+    paymentsRequired: boolean;
+    authProviders: { google: boolean; apple: boolean };
+  },
+  loadSystemInfo: vi.fn(async () => undefined),
+  entitlement: null as { active: boolean } | null,
+  entitlementError: null as string | null,
+  loadingEntitlement: false,
+  loadEntitlement: vi.fn(async () => null),
+  resetBilling: vi.fn(),
 }));
 
 vi.mock('./AndroidPermissionGate', () => ({
@@ -19,7 +36,10 @@ vi.mock('./AndroidPermissionGate', () => ({
     <>{children}</>
   ),
 }));
-vi.mock('../pages/Login', () => ({ Login: () => <div>Login</div> }));
+vi.mock('../pages/access/AccessCoordinator', () => ({
+  AccessCoordinator: () => <div>Welcome to Pomi</div>,
+}));
+vi.mock('../pages/Paywall', () => ({ Paywall: () => <div>Pomi paywall</div> }));
 vi.mock('../stores/authStore', () => ({
   useAuthStore: {
     use: {
@@ -46,16 +66,47 @@ vi.mock('../stores/uiStore', () => ({
     },
   },
 }));
+vi.mock('../stores/systemStore', () => ({
+  useSystemStore: {
+    use: {
+      systemInfo: () => state.systemInfo,
+      loadSystemInfo: () => state.loadSystemInfo,
+    },
+  },
+}));
+vi.mock('../stores/billingStore', () => ({
+  useBillingStore: {
+    use: {
+      entitlement: () => state.entitlement,
+      isLoading: () => state.loadingEntitlement,
+      error: () => state.entitlementError,
+      loadEntitlement: () => state.loadEntitlement,
+      reset: () => state.resetBilling,
+    },
+  },
+}));
 
 beforeEach(() => {
   state.authenticated = true;
   state.loading = false;
+  state.systemInfo = {
+    hostingMode: 'self-hosted',
+    selfHosted: true,
+    paymentsRequired: false,
+    authProviders: { google: false, apple: false },
+  };
+  state.entitlement = null;
+  state.entitlementError = null;
+  state.loadingEntitlement = false;
   state.preferences = null;
   state.loadingPreferences = true;
   state.loadError = null;
   state.loadPreferences.mockClear();
   state.setExpanded.mockClear();
   state.setActiveTab.mockClear();
+  state.loadSystemInfo.mockClear();
+  state.loadEntitlement.mockClear();
+  state.resetBilling.mockClear();
 });
 
 describe('ProtectedRoute startup shell', () => {
@@ -84,5 +135,44 @@ describe('ProtectedRoute startup shell', () => {
     expect(screen.getByText('Timer shell')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(state.loadPreferences).toHaveBeenCalledOnce();
+  });
+
+  it('shows the paywall after hosted sign-in until entitlement is active', async () => {
+    state.systemInfo = {
+      hostingMode: 'hosted',
+      selfHosted: false,
+      paymentsRequired: true,
+      authProviders: { google: true, apple: true },
+    };
+    state.entitlement = { active: false };
+
+    render(
+      <ProtectedRoute>
+        <div>Timer shell</div>
+      </ProtectedRoute>
+    );
+
+    expect(await screen.findByText('Pomi paywall')).toBeVisible();
+    expect(screen.queryByText('Timer shell')).not.toBeInTheDocument();
+  });
+
+  it('stops automatic entitlement retries and exposes a controlled retry', () => {
+    state.systemInfo = {
+      hostingMode: 'hosted',
+      selfHosted: false,
+      paymentsRequired: true,
+      authProviders: { google: true, apple: true },
+    };
+    state.entitlementError = 'Unable to load subscription status';
+
+    render(
+      <ProtectedRoute>
+        <div>Timer shell</div>
+      </ProtectedRoute>
+    );
+
+    expect(state.loadEntitlement).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(state.loadEntitlement).toHaveBeenCalledOnce();
   });
 });

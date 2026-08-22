@@ -100,11 +100,43 @@ export interface User {
   username: string;
   createdAt: string;
   isAdmin?: boolean;
+  email?: string | null;
 }
 
 export interface SystemInfo {
   hostingMode: 'hosted' | 'self-hosted';
   selfHosted: boolean;
+  paymentsRequired: boolean;
+  authProviders: {
+    google: boolean;
+    apple: boolean;
+  };
+}
+
+export type SocialAuthProvider = 'google' | 'apple';
+export type SubscriptionPlatform = 'ios' | 'android';
+export type SubscriptionPlan = 'monthly' | 'yearly';
+export type SubscriptionState =
+  | 'active'
+  | 'expired'
+  | 'pending'
+  | 'revoked'
+  | 'none';
+
+export interface SubscriptionEntitlement {
+  required: boolean;
+  active: boolean;
+  state: SubscriptionState;
+  plan: SubscriptionPlan | null;
+  productId: string | null;
+  platform: SubscriptionPlatform | null;
+  expiresAt: string | null;
+  autoRenews: boolean | null;
+}
+
+export interface BillingCheckout {
+  checkoutId: string;
+  checkoutToken: string;
 }
 
 export type UserDataTransferRow = Record<string, unknown>;

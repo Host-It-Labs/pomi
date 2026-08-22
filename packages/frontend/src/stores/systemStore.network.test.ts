@@ -6,7 +6,12 @@ import { createSystemStore } from './systemStore';
 
 const server = setupServer(
   http.get('http://localhost:3000/system', () =>
-    HttpResponse.json({ hostingMode: 'self-hosted', selfHosted: true })
+    HttpResponse.json({
+      hostingMode: 'self-hosted',
+      selfHosted: true,
+      paymentsRequired: false,
+      authProviders: { google: false, apple: false },
+    })
   )
 );
 
@@ -23,6 +28,8 @@ describe('system store network boundary', () => {
     expect(store.getState().systemInfo).toEqual({
       hostingMode: 'self-hosted',
       selfHosted: true,
+      paymentsRequired: false,
+      authProviders: { google: false, apple: false },
     });
   });
 
@@ -38,5 +45,26 @@ describe('system store network boundary', () => {
     await store.getState().loadSystemInfo();
 
     expect(store.getState().systemInfo?.selfHosted).toBe(true);
+  });
+
+  it('defaults legacy self-hosted responses to no payments or social auth', async () => {
+    server.use(
+      http.get('http://localhost:3000/system', () =>
+        HttpResponse.json({
+          hostingMode: 'self-hosted',
+          selfHosted: true,
+        })
+      )
+    );
+    const store = createSystemStore(apiClient);
+
+    await store.getState().loadSystemInfo();
+
+    expect(store.getState().systemInfo).toEqual({
+      hostingMode: 'self-hosted',
+      selfHosted: true,
+      paymentsRequired: false,
+      authProviders: { google: false, apple: false },
+    });
   });
 });

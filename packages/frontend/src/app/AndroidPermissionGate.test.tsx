@@ -166,6 +166,9 @@ describe('Android permission setup', () => {
     await waitFor(() => {
       expect(foreground.reconcile).toHaveBeenCalledWith('android-token', true);
     });
+    expect(
+      notification.registerForPushNotificationsIfMobile
+    ).toHaveBeenCalledWith('android-user', 'android');
     expect(screen.queryByText('Background timer sync')).not.toBeInTheDocument();
     expect(document.querySelector('#android-background-timer-sync')).toBeNull();
   });

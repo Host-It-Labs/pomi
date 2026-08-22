@@ -12,6 +12,7 @@
     "shell:allow-execute",
     "http:default",
     "notifications:default",
+    "google-auth:default",
     "os:default",
     "core:window:default",
     "core:window:allow-set-focus",

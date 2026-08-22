@@ -20,6 +20,7 @@ import { Preferences } from '../src/preferences/preferences.entity';
 import { Statistic } from '../src/statistics/statistics.entity';
 import { TaskEntity, TaskEventEntity } from '../src/tasks/tasks.entity';
 import { UserEntity } from '../src/users/users.entity';
+import { PushDeviceEntity } from '../src/users/push-device.entity';
 
 const WORK_DURATION_MS = 25 * 60 * 1000;
 const BREAK_DURATION_MS = 5 * 60 * 1000;
@@ -70,6 +71,7 @@ type SeedTask = {
 type SeedUserFixtureOptions = {
   username: string;
   password: string;
+  email?: string;
   successLabel: string;
   isAdmin?: boolean;
   fixtureMarker?: {
@@ -1035,6 +1037,7 @@ export async function ensureSeedUserFixture(
 export async function seedUserFixture({
   username,
   password,
+  email,
   successLabel,
   isAdmin = false,
   fixtureMarker,
@@ -1047,6 +1050,8 @@ export async function seedUserFixture({
 
   try {
     const userRepository = queryRunner.manager.getRepository(UserEntity);
+    const pushDeviceRepository =
+      queryRunner.manager.getRepository(PushDeviceEntity);
     const preferencesRepository =
       queryRunner.manager.getRepository(Preferences);
     const intentionsRepository = queryRunner.manager.getRepository(Intention);
@@ -1077,11 +1082,24 @@ export async function seedUserFixture({
       userRepository.create({
         username,
         password: hashedPassword,
+        email: email ?? null,
         isAdmin,
         fcmToken: `${username}-fcm-token`,
         apnToken: `${username}-apn-token`,
       })
     );
+    await pushDeviceRepository.save([
+      pushDeviceRepository.create({
+        userId: savedUser.id,
+        platform: 'android',
+        token: `${username}-fcm-token`,
+      }),
+      pushDeviceRepository.create({
+        userId: savedUser.id,
+        platform: 'ios',
+        token: `${username}-apn-token`,
+      }),
+    ]);
 
     await preferencesRepository.save(
       preferencesRepository.create(

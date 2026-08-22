@@ -5,7 +5,10 @@ import {
 } from '@pomi/shared';
 import * as admin from 'firebase-admin';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { NotificationService } from '../../src/notifications/notifications.service';
+import {
+  NotificationService,
+  resolveApnProduction,
+} from '../../src/notifications/notifications.service';
 import { TimerCountdownService } from '../../src/timer/timer-countdown.service';
 
 type Payload = {
@@ -21,7 +24,13 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function createNotificationService() {
+function preferencesService(pushNotifications = true) {
+  return {
+    getPreferences: async () => ({ language: 'en', pushNotifications }),
+  } as never;
+}
+
+function createNotificationService(pushNotifications = true) {
   const fcmPayloads: Payload[] = [];
   vi.spyOn(admin, 'messaging').mockReturnValue({
     send: async (payload: Payload) => {
@@ -33,8 +42,11 @@ function createNotificationService() {
     { get: (_key: string, fallback: unknown) => fallback } as never,
     {
       findUserById: async () => ({ fcmToken: 'fcm-token', apnToken: null }),
+      getPushTokens: async (_userId: string, platform: string) =>
+        platform === 'android' ? ['fcm-token'] : [],
       clearPushToken: async () => undefined,
-    } as never
+    } as never,
+    preferencesService(pushNotifications)
   );
   Object.assign(service, { fcmApp: {}, apnProvider: null });
   return { service, fcmPayloads };
@@ -51,6 +63,27 @@ function createTimer(overrides: Record<string, unknown>) {
 }
 
 describe('Android timer notifications', () => {
+  it('parses documented APNs environment strings without treating false as production', () => {
+    expect(resolveApnProduction('false')).toBe(false);
+    expect(resolveApnProduction(' FALSE ')).toBe(false);
+    expect(resolveApnProduction(false)).toBe(false);
+    expect(resolveApnProduction(undefined)).toBe(false);
+    expect(resolveApnProduction('true')).toBe(true);
+    expect(resolveApnProduction(true)).toBe(true);
+  });
+
+  it('does not deliver through a stale token when push is disabled', async () => {
+    const { service, fcmPayloads } = createNotificationService(false);
+
+    await service.sendTimerWarningNotification(
+      createTimer({}) as never,
+      'user-1',
+      5
+    );
+
+    expect(fcmPayloads).toEqual([]);
+  });
+
   it('always sends high-priority FCM payloads', async () => {
     const { service, fcmPayloads } = createNotificationService();
     await service.sendTimerWarningNotification(
@@ -166,8 +199,11 @@ describe('Android timer notifications', () => {
       { get: (_key: string, fallback: unknown) => fallback } as never,
       {
         findUserById: async () => ({ fcmToken: null, apnToken: 'apn-token' }),
+        getPushTokens: async (_userId: string, platform: string) =>
+          platform === 'ios' ? ['apn-token'] : [],
         clearPushToken: async () => undefined,
-      } as never
+      } as never,
+      preferencesService()
     );
     Object.assign(service, { fcmApp: {}, apnProvider: null });
 
@@ -182,14 +218,55 @@ describe('Android timer notifications', () => {
     ).rejects.toThrow('Notification provider unavailable: APNs');
   });
 
+  it('sends actionable APNs alerts with immediate delivery metadata', async () => {
+    const send = vi.fn(async () => ({ failed: [] }));
+    const service = new NotificationService(
+      {
+        get: (key: string, fallback: unknown) =>
+          key === 'APN_BUNDLE_ID' ? 'com.example.pomi' : fallback,
+      } as never,
+      {
+        findUserById: async () => ({ id: 'user-1' }),
+        getPushTokens: async (_userId: string, platform: string) =>
+          platform === 'ios' ? ['apn-token'] : [],
+        clearPushToken: async () => undefined,
+      } as never,
+      preferencesService()
+    );
+    Object.assign(service, {
+      fcmApp: null,
+      apnProvider: { send },
+    });
+
+    await service.sendTimerCompletedNotification(
+      createTimer({ type: TIMER_TYPES.BREAK }) as never,
+      'user-1',
+      4,
+      false
+    );
+
+    const notification = send.mock.calls[0][0] as {
+      topic?: string;
+      priority?: number;
+      aps: { category?: string };
+    };
+    expect(send.mock.calls[0][1]).toBe('apn-token');
+    expect(notification.topic).toBe('com.example.pomi');
+    expect(notification.priority).toBe(10);
+    expect(notification.aps.category).toBe('POMI_TIMER');
+  });
+
   it('retries APNs payload failures without clearing a valid token', async () => {
     const clearPushToken = vi.fn(async () => undefined);
     const service = new NotificationService(
       { get: (_key: string, fallback: unknown) => fallback } as never,
       {
         findUserById: async () => ({ fcmToken: null, apnToken: 'apn-token' }),
+        getPushTokens: async (_userId: string, platform: string) =>
+          platform === 'ios' ? ['apn-token'] : [],
         clearPushToken,
-      } as never
+      } as never,
+      preferencesService()
     );
     Object.assign(service, {
       fcmApp: null,
@@ -218,8 +295,11 @@ describe('Android timer notifications', () => {
       { get: (_key: string, fallback: unknown) => fallback } as never,
       {
         findUserById: async () => ({ fcmToken: null, apnToken: 'apn-token' }),
+        getPushTokens: async (_userId: string, platform: string) =>
+          platform === 'ios' ? ['apn-token'] : [],
         clearPushToken,
-      } as never
+      } as never,
+      preferencesService()
     );
     Object.assign(service, {
       fcmApp: null,
@@ -239,7 +319,7 @@ describe('Android timer notifications', () => {
         'timer-completed:timer-1'
       )
     ).resolves.toBeUndefined();
-    expect(clearPushToken).toHaveBeenCalledWith('user-1', 'ios');
+    expect(clearPushToken).toHaveBeenCalledWith('user-1', 'ios', 'apn-token');
   });
 
   it('does not warn for extension timers', async () => {

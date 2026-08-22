@@ -16,6 +16,8 @@
     "core:window:allow-show",
     "core:window:allow-close",
     "android-battery-optimization:default",
+    "google-auth:default",
+    "iap:default",
     {
       "identifier": "http:default",
       "allow": [

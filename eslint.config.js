@@ -122,6 +122,13 @@ export default [
     },
   },
   {
-    ignores: ['node_modules', '**/target/**'],
+    ignores: [
+      'node_modules',
+      '**/target/**',
+      'packages/backend/dist/**',
+      'packages/frontend/dist/**',
+      'packages/landing/dist/**',
+      'packages/shared/dist/**',
+    ],
   },
 ];

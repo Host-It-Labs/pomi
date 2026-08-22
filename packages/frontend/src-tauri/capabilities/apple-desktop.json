@@ -1,0 +1,6 @@
+{
+  "identifier": "apple-desktop-capability",
+  "platforms": ["macOS"],
+  "windows": ["main"],
+  "permissions": ["siwa:allow-get-apple-id-credential", "iap:default"]
+}

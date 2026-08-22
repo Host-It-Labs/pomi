@@ -2,7 +2,8 @@ name: pomi
 options:
   bundleIdPrefix: app.pomi.community
   deploymentTarget:
-    iOS: 14.0
+    iOS: 15.0
+    watchOS: 10.0
 fileGroups: [../../src]
 configs:
   debug: debug
@@ -23,6 +24,15 @@ targetTemplates:
         RUST_LOG: info
     settings:
       groups: [app]
+schemes:
+  PomiWatchApp:
+    build:
+      targets:
+        PomiWatchApp: all
+    run:
+      config: debug
+    archive:
+      config: release
 targets:
   pomi_iOS:
     type: application
@@ -53,9 +63,21 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         CFBundleShortVersionString: 0.0.1
         CFBundleVersion: '1'
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - $(GOOGLE_REVERSED_CLIENT_ID)
+        LSApplicationQueriesSchemes:
+          - googlechrome
+          - safari
         NSMicrophoneUsageDescription: Pomi uses the microphone when you record Assistant voice commands.
     entitlements:
       path: pomi_iOS/pomi_iOS.entitlements
+      properties:
+        aps-environment: $(APS_ENVIRONMENT)
+        com.apple.developer.applesignin:
+          - Default
+        com.apple.security.application-groups:
+          - group.app.pomi.community
     scheme:
       environmentVariables:
         RUST_BACKTRACE: full
@@ -69,6 +91,11 @@ targets:
         LIBRARY_SEARCH_PATHS[arch=arm64]: $(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)
         ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: true
         EXCLUDED_ARCHS[sdk=iphoneos*]: x86_64
+      configs:
+        debug:
+          APS_ENVIRONMENT: development
+        release:
+          APS_ENVIRONMENT: production
       groups: [app]
     dependencies:
       - framework: libapp.a
@@ -80,6 +107,8 @@ targets:
       - sdk: Security.framework
       - sdk: UIKit.framework
       - sdk: WebKit.framework
+      - sdk: WatchConnectivity.framework
+      - target: PomiWatchApp
     preBuildScripts:
       - script: pnpm tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" --header-search-paths "${HEADER_SEARCH_PATHS:?}" --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}
         name: Build Rust Code
@@ -87,3 +116,69 @@ targets:
         outputFiles:
           - $(SRCROOT)/Externals/x86_64/${CONFIGURATION}/libapp.a
           - $(SRCROOT)/Externals/arm64/${CONFIGURATION}/libapp.a
+    postBuildScripts:
+      - script: |
+          set -euo pipefail
+          client_id="${VITE_GOOGLE_AUTH_CLIENT_ID:-}"
+          if [[ "$client_id" == *.apps.googleusercontent.com ]]; then
+            client_prefix="${client_id%.apps.googleusercontent.com}"
+            reversed_client_id="com.googleusercontent.apps.${client_prefix}"
+            built_plist="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
+            if [[ -f "$built_plist" ]]; then
+              /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 ${reversed_client_id}" "$built_plist"
+            fi
+          fi
+        name: Configure Google callback
+        basedOnDependencyAnalysis: false
+  PomiWatchApp:
+    type: application
+    platform: watchOS
+    deploymentTarget: '10.0'
+    sources:
+      - path: PomiWatch
+    info:
+      path: PomiWatch/Info.plist
+      properties:
+        CFBundleDisplayName: Pomi
+        CFBundleShortVersionString: 0.1.0
+        CFBundleVersion: '1'
+        WKCompanionAppBundleIdentifier: app.pomi.community
+    entitlements:
+      path: PomiWatch/PomiWatch.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.app.pomi.community
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.pomi.community.watchkitapp
+        PRODUCT_NAME: Pomi Watch
+        SUPPORTED_PLATFORMS: watchos watchsimulator
+        SWIFT_VERSION: 5.9
+    dependencies:
+      - target: PomiWatchWidget
+        embed: true
+  PomiWatchWidget:
+    type: app-extension
+    platform: watchOS
+    deploymentTarget: '10.0'
+    sources:
+      - path: PomiWatchWidget
+    info:
+      path: PomiWatchWidget/Info.plist
+      properties:
+        CFBundleDisplayName: Pomi
+        CFBundleShortVersionString: 0.1.0
+        CFBundleVersion: '1'
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: PomiWatchWidget/PomiWatchWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.app.pomi.community
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.pomi.community.watchkitapp.widget
+        PRODUCT_NAME: Pomi Widget
+        SUPPORTED_PLATFORMS: watchos watchsimulator
+        SWIFT_VERSION: 5.9

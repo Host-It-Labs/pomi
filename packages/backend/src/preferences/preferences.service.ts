@@ -9,6 +9,7 @@ import { DEFAULT_APP_LANGUAGE, AppLanguage } from '@pomi/shared';
 import { TimerService } from 'src/timer/timer.service';
 import { Subject } from 'rxjs';
 import { Repository } from 'typeorm';
+import { UsersService } from '../users/users.service';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { Preferences } from './preferences.entity';
 
@@ -88,7 +89,8 @@ export class PreferencesService {
     @InjectRepository(Preferences)
     private preferencesRepository: Repository<Preferences>,
     @Inject(forwardRef(() => TimerService))
-    private timerService?: TimerService
+    private timerService: TimerService,
+    private usersService: UsersService
   ) {}
 
   async getPreferences(
@@ -156,6 +158,9 @@ export class PreferencesService {
     const savedPreferences = this.applyDefaultPreferences(
       await this.preferencesRepository.save(preferences)
     );
+    if (nextUpdates.pushNotifications === false) {
+      await this.usersService.clearAllPushTokens(userId);
+    }
     this.onPreferencesUpdate.next({ userId, preferences: savedPreferences });
 
     // If sessions extension was just enabled, apply it to current timer

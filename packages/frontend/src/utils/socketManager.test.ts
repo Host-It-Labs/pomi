@@ -42,6 +42,10 @@ const actionQueue = vi.hoisted(() => ({
   retry: vi.fn(),
   enqueue: vi.fn(),
 }));
+const billing = vi.hoisted(() => ({
+  reset: vi.fn(),
+  loadEntitlement: vi.fn(async () => null),
+}));
 
 const auth = vi.hoisted(() => ({
   token: 'test-token' as string | null,
@@ -75,6 +79,9 @@ vi.mock('../stores/authStore', () => ({
       return vi.fn();
     },
   },
+}));
+vi.mock('../stores/billingStore', () => ({
+  useBillingStoreBase: { getState: () => billing },
 }));
 vi.mock('../stores/debugStore', () => ({ getDebugLag: () => debug.lag }));
 vi.mock('./backendUrl', () => ({
@@ -110,6 +117,8 @@ beforeEach(() => {
   actionQueue.isNetworkBlocked = false;
   actionQueue.retry.mockReset();
   actionQueue.enqueue.mockReset();
+  billing.reset.mockReset();
+  billing.loadEntitlement.mockReset();
   auth.token = 'test-token';
   auth.expireSession.mockReset();
   auth.subscriber = undefined;
@@ -157,6 +166,17 @@ describe('socket manager reconnect contracts', () => {
 
     auth.expireSession.mockReset();
     socketHarness.handlers.get('connect_error')?.(new Error('network down'));
+    expect(auth.expireSession).not.toHaveBeenCalled();
+  });
+
+  it('refreshes billing without expiring identity for entitlement events', async () => {
+    const { getOrCreateSocket } = await import('./socketManager');
+
+    getOrCreateSocket();
+    socketHarness.handlers.get(SOCKET_EVENTS.ENTITLEMENT_REQUIRED)?.();
+
+    expect(billing.reset).toHaveBeenCalledOnce();
+    expect(billing.loadEntitlement).toHaveBeenCalledOnce();
     expect(auth.expireSession).not.toHaveBeenCalled();
   });
 

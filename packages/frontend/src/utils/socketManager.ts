@@ -7,6 +7,7 @@ import {
 import { Socket, io } from 'socket.io-client';
 import { showToastFromStore } from '../components/toast/ToastContext';
 import { useAuthStore } from '../stores/authStore';
+import { useBillingStoreBase } from '../stores/billingStore';
 import { getDebugLag } from '../stores/debugStore';
 import { getBackendSocketOrigin } from './backendUrl';
 import { isMobile } from './osUtils';
@@ -219,6 +220,12 @@ const setupSocketListeners = (sock: Socket) => {
 
   sock.on(SOCKET_EVENTS.SESSION_EXPIRED, () => {
     useAuthStore.getState().expireSession();
+  });
+
+  sock.on(SOCKET_EVENTS.ENTITLEMENT_REQUIRED, () => {
+    const billing = useBillingStoreBase.getState();
+    billing.reset();
+    void useBillingStoreBase.getState().loadEntitlement();
   });
 
   sock.on('disconnect', () => {

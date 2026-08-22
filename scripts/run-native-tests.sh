@@ -6,6 +6,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$ROOT_DIR/scripts/local-env.sh"
 pomi_load_local_environment
 
+node --test "${ROOT_DIR}/scripts/watch-native-contract.test.mjs"
+
 cd "${ROOT_DIR}/packages/frontend/src-tauri"
 cargo fmt --check
 cargo check

@@ -1,0 +1,3 @@
+[default]
+description = "Allow the Pomi app to synchronize its signed-in session with Apple Watch"
+permissions = ["allow-update-session", "allow-clear-session"]

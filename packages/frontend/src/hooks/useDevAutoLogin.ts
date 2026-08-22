@@ -13,6 +13,11 @@ const isMobileSimulatorFrame = () =>
   new URLSearchParams(window.location.search).get('__pomi_mobile_simulator') ===
     '1';
 
+export const isOnboardingPreview = () =>
+  typeof window !== 'undefined' &&
+  import.meta.env.DEV &&
+  new URLSearchParams(window.location.search).get('__pomi_onboarding') === '1';
+
 export function useDevAutoLogin() {
   const isAuthenticated = useAuthStore.use.isAuthenticated();
   const token = useAuthStore.use.token();
@@ -23,7 +28,8 @@ export function useDevAutoLogin() {
   const setHasLoggedIn = useUiStore.use.setHasLoggedIn();
   const attemptedForUserRef = useRef<string | null>(null);
   const successfulTokenRef = useRef<string | null>(null);
-  const shouldSkipDevAutoLogin = isMobileSimulatorFrame();
+  const shouldSkipDevAutoLogin =
+    isMobileSimulatorFrame() || isOnboardingPreview();
   const username = shouldSkipDevAutoLogin
     ? ''
     : environmentVariables.DEV_AUTO_LOGIN_USERNAME.trim();

@@ -207,6 +207,7 @@ export const HELP_TIP_IDS = {
 export const SOCKET_EVENTS = {
   SERVER_READY: 'serverReady',
   SESSION_EXPIRED: 'sessionExpired',
+  ENTITLEMENT_REQUIRED: 'entitlementRequired',
   CREATE_OR_RESUME_TIMER: 'createOrResumeTimer',
   REMOVE_FOCUSED_TASK: 'removeFocusedTask',
   PAUSE_TIMER: 'pauseTimer',

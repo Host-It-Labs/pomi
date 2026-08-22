@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "apple-capability",
+  "platforms": ["iOS"],
+  "windows": ["main"],
+  "permissions": ["siwa:allow-get-apple-id-credential", "watch-sync:default"]
+}

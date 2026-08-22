@@ -25,6 +25,18 @@ interface NotificationSendOptions {
   requireDelivery?: boolean;
 }
 
+interface NotificationContent {
+  title: string;
+  message: string;
+}
+
+type NotificationContentResolver = (language: string) => NotificationContent;
+
+export function resolveApnProduction(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  return typeof value === 'string' && value.trim().toLowerCase() === 'true';
+}
+
 @Injectable()
 export class NotificationService {
   private readonly logger = new PomiLogger(NotificationService.name);
@@ -86,9 +98,8 @@ export class NotificationService {
       const apnKeyPath = this.configService.get<string>('APN_KEY_PATH');
       const apnKeyId = this.configService.get<string>('APN_KEY_ID');
       const apnTeamId = this.configService.get<string>('APN_TEAM_ID');
-      const apnProduction = this.configService.get<boolean>(
-        'APN_PRODUCTION',
-        false
+      const apnProduction = resolveApnProduction(
+        this.configService.get('APN_PRODUCTION')
       );
 
       if (apnKeyPath && apnKeyId && apnTeamId) {
@@ -158,30 +169,6 @@ export class NotificationService {
     idempotencyKey: string | undefined,
     requireDelivery: boolean
   ): Promise<void> {
-    const language = await this.getUserLanguage(userId);
-    const title =
-      timer.type === TIMER_TYPES.WORK
-        ? translateNotification(language, 'workComplete')
-        : timer.type === TIMER_TYPES.LONG_BREAK
-          ? translateNotification(language, 'longBreakComplete')
-          : translateNotification(language, 'breakComplete');
-
-    let message: string;
-    if (timer.type === TIMER_TYPES.WORK) {
-      if (timer.sessionPosition && timer.sessionTotal) {
-        message = translateNotification(
-          language,
-          'workTimersDone',
-          timer.sessionPosition,
-          timer.sessionTotal
-        );
-      } else {
-        message = translateNotification(language, 'breakTime');
-      }
-    } else {
-      message = translateNotification(language, 'readyToWork');
-    }
-
     const tags =
       timer.type === TIMER_TYPES.WORK
         ? isLastWorkTimerInSession
@@ -190,12 +177,41 @@ export class NotificationService {
         : timer.type === TIMER_TYPES.LONG_BREAK
           ? ['coffee', TIMER_TYPES.LONG_BREAK]
           : ['coffee', TIMER_TYPES.BREAK];
-    await this.sendNotification(title, message, userId, {
-      priority,
-      tags,
-      idempotencyKey,
-      requireDelivery,
-    });
+    await this.sendNotification(
+      language => {
+        const title =
+          timer.type === TIMER_TYPES.WORK
+            ? translateNotification(language, 'workComplete')
+            : timer.type === TIMER_TYPES.LONG_BREAK
+              ? translateNotification(language, 'longBreakComplete')
+              : translateNotification(language, 'breakComplete');
+
+        let message: string;
+        if (timer.type === TIMER_TYPES.WORK) {
+          if (timer.sessionPosition && timer.sessionTotal) {
+            message = translateNotification(
+              language,
+              'workTimersDone',
+              timer.sessionPosition,
+              timer.sessionTotal
+            );
+          } else {
+            message = translateNotification(language, 'breakTime');
+          }
+        } else {
+          message = translateNotification(language, 'readyToWork');
+        }
+
+        return { title, message };
+      },
+      userId,
+      {
+        priority,
+        tags,
+        idempotencyKey,
+        requireDelivery,
+      }
+    );
   }
 
   async sendTimerWarningNotification(
@@ -203,38 +219,45 @@ export class NotificationService {
     userId: string,
     minutesLeft: number
   ): Promise<void> {
-    const language = await this.getUserLanguage(userId);
-    const title = translateNotification(language, 'minutesLeft', minutesLeft);
-    const message = translateNotification(language, 'timerEnding', minutesLeft);
-
-    await this.sendNotification(title, message, userId, {
-      priority: TIMER_NOTIFICATION_PRIORITIES.warning,
-      tags: ['stopwatch', TIMER_TYPES.WORK],
-    });
+    await this.sendNotification(
+      language => ({
+        title: translateNotification(language, 'minutesLeft', minutesLeft),
+        message: translateNotification(language, 'timerEnding', minutesLeft),
+      }),
+      userId,
+      {
+        priority: TIMER_NOTIFICATION_PRIORITIES.warning,
+        tags: ['stopwatch', TIMER_TYPES.WORK],
+      }
+    );
   }
 
   async sendLongBreakDetectedNotification(
     _timer: Timer,
     userId: string
   ): Promise<void> {
-    const language = await this.getUserLanguage(userId);
-    const title = translateNotification(language, 'longBreakDetected');
-    const message = translateNotification(language, 'longBreakDetectedBody');
-
-    await this.sendNotification(title, message, userId, {
-      priority: TIMER_NOTIFICATION_PRIORITIES.break,
-      tags: ['hourglass_flowing_sand', 'longBreakDetected'],
-    });
+    await this.sendNotification(
+      language => ({
+        title: translateNotification(language, 'longBreakDetected'),
+        message: translateNotification(language, 'longBreakDetectedBody'),
+      }),
+      userId,
+      {
+        priority: TIMER_NOTIFICATION_PRIORITIES.break,
+        tags: ['hourglass_flowing_sand', 'longBreakDetected'],
+      }
+    );
   }
 
   async sendDurableLongBreakDetectedNotification(
     userId: string,
     idempotencyKey: string
   ): Promise<void> {
-    const language = await this.getUserLanguage(userId);
     await this.sendNotification(
-      translateNotification(language, 'longBreakDetected'),
-      translateNotification(language, 'longBreakDetectedBody'),
+      language => ({
+        title: translateNotification(language, 'longBreakDetected'),
+        message: translateNotification(language, 'longBreakDetectedBody'),
+      }),
       userId,
       {
         priority: TIMER_NOTIFICATION_PRIORITIES.break,
@@ -249,14 +272,17 @@ export class NotificationService {
     timer: Timer,
     userId: string
   ): Promise<void> {
-    const language = await this.getUserLanguage(userId);
-    const title = translateNotification(language, 'pausedTimerReminder');
-    const message = translateNotification(language, 'pausedTimerReminderBody');
-
-    await this.sendNotification(title, message, userId, {
-      priority: TIMER_NOTIFICATION_PRIORITIES.warning,
-      tags: ['stopwatch', 'workPaused'],
-    });
+    await this.sendNotification(
+      language => ({
+        title: translateNotification(language, 'pausedTimerReminder'),
+        message: translateNotification(language, 'pausedTimerReminderBody'),
+      }),
+      userId,
+      {
+        priority: TIMER_NOTIFICATION_PRIORITIES.warning,
+        tags: ['stopwatch', 'workPaused'],
+      }
+    );
   }
 
   async sendTaskNotification(
@@ -266,26 +292,38 @@ export class NotificationService {
     priority: number,
     tags: string[]
   ): Promise<void> {
-    await this.sendNotification(title, message, userId, {
+    await this.sendNotification({ title, message }, userId, {
       priority,
       tags,
     });
   }
 
-  private async getUserLanguage(userId: string): Promise<string> {
-    try {
-      return (await this.preferencesService.getPreferences(userId)).language;
-    } catch {
-      return 'en';
-    }
-  }
-
   private async sendNotification(
-    title: string,
-    message: string,
+    content: NotificationContent | NotificationContentResolver,
     userId: string,
     options: NotificationSendOptions
   ): Promise<void> {
+    let language: string;
+    try {
+      const preferences = await this.preferencesService.getPreferences(userId);
+      if (!preferences.pushNotifications) {
+        this.logger.debug(
+          'Push notification skipped: disabled in user preferences'
+        );
+        return;
+      }
+      language = preferences.language;
+    } catch (error) {
+      this.logger.error(
+        'Failed to read push notification preference',
+        error instanceof Error ? error.name : undefined
+      );
+      if (options.requireDelivery) throw error;
+      return;
+    }
+
+    const { title, message } =
+      typeof content === 'function' ? content(language) : content;
     const arePushNotificationsEnabled = this.arePushNotificationsEnabled();
 
     if (arePushNotificationsEnabled || options.requireDelivery) {
@@ -310,10 +348,15 @@ export class NotificationService {
         return;
       }
 
+      const [fcmTokens, apnTokens] = await Promise.all([
+        this.usersService.getPushTokens(userId, 'android'),
+        this.usersService.getPushTokens(userId, 'ios'),
+      ]);
+
       if (options.requireDelivery) {
         const unavailableProviders = [
-          user.fcmToken && !this.fcmApp ? 'FCM' : null,
-          user.apnToken && !this.apnProvider ? 'APNs' : null,
+          fcmTokens.length > 0 && !this.fcmApp ? 'FCM' : null,
+          apnTokens.length > 0 && !this.apnProvider ? 'APNs' : null,
         ].filter((provider): provider is string => provider !== null);
         if (unavailableProviders.length > 0) {
           throw new Error(
@@ -322,27 +365,23 @@ export class NotificationService {
         }
       }
 
-      if (user.fcmToken && this.fcmApp) {
-        await this.sendFCMNotification(
-          user.fcmToken,
-          title,
-          message,
-          options,
-          userId
+      if (this.fcmApp) {
+        await Promise.all(
+          fcmTokens.map(token =>
+            this.sendFCMNotification(token, title, message, options, userId)
+          )
         );
       }
 
-      if (user.apnToken && this.apnProvider) {
-        await this.sendAPNNotification(
-          user.apnToken,
-          title,
-          message,
-          options,
-          userId
+      if (this.apnProvider) {
+        await Promise.all(
+          apnTokens.map(token =>
+            this.sendAPNNotification(token, title, message, options, userId)
+          )
         );
       }
 
-      if (!user.fcmToken && !user.apnToken) {
+      if (fcmTokens.length === 0 && apnTokens.length === 0) {
         this.logger.debug('Push notification skipped: no device token');
       }
     } catch (error) {
@@ -404,7 +443,7 @@ export class NotificationService {
           'Invalid FCM token detected; clearing the device token'
         );
         if (userId) {
-          await this.usersService.clearPushToken(userId, 'android');
+          await this.usersService.clearPushToken(userId, 'android', token);
         }
       } else {
         this.logger.error(
@@ -436,15 +475,18 @@ export class NotificationService {
           this.configService.get<string>('APN_BUNDLE_ID') ||
           'app.pomi.community',
         sound,
-        priority: options.priority === 5 ? 10 : 5,
+        priority: 10,
+        expiry: Math.floor(Date.now() / 1000) + 60 * 60,
         badge,
         threadId: 'pomi-timer',
+        category: 'POMI_TIMER',
         ...(options.idempotencyKey && {
           collapseId: options.idempotencyKey,
         }),
         payload: {
           notificationType: options.tags?.[1] || 'general',
           timestamp: Date.now(),
+          deepLink: 'pomi://timer',
           ...(options.idempotencyKey && {
             notificationId: options.idempotencyKey,
           }),
@@ -465,7 +507,7 @@ export class NotificationService {
             'Invalid APNs token detected; clearing the device token'
           );
           if (userId) {
-            await this.usersService.clearPushToken(userId, 'ios');
+            await this.usersService.clearPushToken(userId, 'ios', token);
           }
         } else {
           throw new Error(

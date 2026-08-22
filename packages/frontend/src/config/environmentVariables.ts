@@ -72,6 +72,15 @@ export const environmentVariables = {
       ? import.meta.env.VITE_DEBUG_PANEL_ENABLED === 'true'
       : !isProductionBuild,
   BACKEND_URL: getBackendUrl(),
+  GOOGLE_AUTH_CLIENT_ID: import.meta.env.VITE_GOOGLE_AUTH_CLIENT_ID || '',
+  GOOGLE_AUTH_CLIENT_SECRET:
+    import.meta.env.VITE_GOOGLE_AUTH_CLIENT_SECRET || '',
+  SUBSCRIPTION_MONTHLY_PRODUCT_ID:
+    import.meta.env.VITE_SUBSCRIPTION_MONTHLY_PRODUCT_ID ||
+    'app.pomi.community.pro.monthly',
+  SUBSCRIPTION_YEARLY_PRODUCT_ID:
+    import.meta.env.VITE_SUBSCRIPTION_YEARLY_PRODUCT_ID ||
+    'app.pomi.community.pro.yearly',
   DEV_AUTO_LOGIN_USERNAME: isProductionBuild
     ? ''
     : import.meta.env.VITE_DEV_AUTO_LOGIN_USERNAME || '',

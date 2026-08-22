@@ -4,16 +4,22 @@ import { useEffect } from 'react';
 
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useAuthStore } from '../stores/authStore';
+import { useBillingStore } from '../stores/billingStore';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { useSystemStore } from '../stores/systemStore';
 import { useTimerStore } from '../stores/timerStore';
 import { useUiStore } from '../stores/uiStore';
 
-import { isDesktop, isLinux, isMobile, isTauri } from '../utils/osUtils';
+import { isDesktop, isIos, isLinux, isMobile, isTauri } from '../utils/osUtils';
+import { notificationService } from '../utils/notificationUtils';
 import {
   reconcileAndroidForegroundSync,
   stopAndroidForegroundSync,
 } from '../utils/androidForegroundSync';
+import {
+  clearAppleWatchSession,
+  syncAppleWatchSession,
+} from '../utils/appleWatchSync';
 
 type UseAppOptions = {
   pauseBootstrap?: boolean;
@@ -27,6 +33,8 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
   const setActiveTab = useUiStore.use.setActiveTab();
   const isAuthenticated = useAuthStore.use.isAuthenticated();
   const token = useAuthStore.use.token();
+  const user = useAuthStore.use.user();
+  const entitlement = useBillingStore.use.entitlement();
   const preferences = usePreferencesStore.use.preferences();
   const isLoadingPreferences = usePreferencesStore.use.isLoading();
   const preferencesLoadError = usePreferencesStore.use.loadError();
@@ -34,6 +42,9 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
   const connectionStatus = useTimerStore.use.connectionStatus();
   const systemInfo = useSystemStore.use.systemInfo();
   const loadSystemInfo = useSystemStore.use.loadSystemInfo();
+  const hasAppAccess = Boolean(
+    systemInfo && (!systemInfo.paymentsRequired || entitlement?.active)
+  );
 
   useKeyboardShortcuts();
 
@@ -64,7 +75,7 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
       return;
     }
 
-    if (isAuthenticated) {
+    if (isAuthenticated && hasAppAccess) {
       initializeSocket();
 
       // never collapse on linux; desktop windows start minimized for first login on other platforms
@@ -75,6 +86,7 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
     }
   }, [
     isAuthenticated,
+    hasAppAccess,
     hasLoggedIn,
     pauseBootstrap,
     setExpanded,
@@ -115,10 +127,10 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
       return;
     }
 
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !hasAppAccess) {
       void stopAndroidForegroundSync({
         clearOptIn: false,
-        clearAuth: true,
+        clearAuth: !isAuthenticated,
       });
       return;
     }
@@ -127,7 +139,51 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
       token,
       preferences?.pushNotifications === true
     );
-  }, [isAuthenticated, pauseBootstrap, preferences, token]);
+  }, [hasAppAccess, isAuthenticated, pauseBootstrap, preferences, token]);
+
+  useEffect(() => {
+    if (
+      pauseBootstrap ||
+      !hasAppAccess ||
+      !isMobile ||
+      !isAuthenticated ||
+      !user?.id ||
+      preferences?.pushNotifications === undefined
+    ) {
+      return;
+    }
+
+    if (preferences.pushNotifications) {
+      if (isIos) {
+        void notificationService.registerForPushNotificationsIfMobile(
+          user.id,
+          'ios'
+        );
+      }
+      return;
+    }
+
+    void notificationService.unregisterFromPushNotificationsIfMobile();
+  }, [
+    isAuthenticated,
+    hasAppAccess,
+    pauseBootstrap,
+    preferences?.pushNotifications,
+    user?.id,
+  ]);
+
+  useEffect(() => {
+    if (pauseBootstrap) return;
+    if (isAuthenticated && hasAppAccess && user && token) {
+      void syncAppleWatchSession(user, token).catch(error => {
+        console.error('Failed to sync the Apple Watch session:', error);
+      });
+      return;
+    }
+    void clearAppleWatchSession().catch(error => {
+      console.error('Failed to clear the Apple Watch session:', error);
+    });
+  }, [hasAppAccess, isAuthenticated, pauseBootstrap, token, user]);
 
   // Ensure the timer state resyncs when app returns to foreground or resumes (mobile)
   useEffect(() => {

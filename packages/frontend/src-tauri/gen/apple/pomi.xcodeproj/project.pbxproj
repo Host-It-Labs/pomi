@@ -8,38 +8,104 @@
 
 /* Begin PBXBuildFile section */
 		00CB848565129318A16FA3E9 /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 34EC40778DA88C58D8E931D4 /* libapp.a */; };
+		0584806DDD3842995CC2E7E0 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DABCCBA1EF93CD23C1AAA1C /* ContentView.swift */; };
 		125808C29D8DD1867921483D /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = A18CB1144B2052719A64D842 /* main.mm */; };
 		1513404CBCE441D169E27FE7 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6AE84BC04F1BF72818AB7978 /* MetalKit.framework */; };
 		219C0FAA16F03A33FFED5CC8 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3272EC4FB41016BFB87D5F95 /* Security.framework */; };
+		24DC6CD86DFCFB489337DA3C /* PomiWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1596CCB1EEEF5FE1663E7045 /* PomiWatchApp.swift */; };
 		2624E2CEFEB67345B4AB3FBA /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 876CD6369CC6E4BD7F378FF1 /* Metal.framework */; };
+		4E3E981D25EEA05C8B29E988 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B334D350CD3F0DDA30497640 /* Assets.xcassets */; };
 		519EB8D65BE72BF7EC54EF92 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 59A20CE9045E437E207A2423 /* UIKit.framework */; };
+		63006C223E77E1EF97B92147 /* PomiWatchWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3928E078120BB4044337774B /* PomiWatchWidget.swift */; };
 		67B65435107C08EE73DF8458 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A9B8476C01DD3161F356BE62 /* QuartzCore.framework */; };
+		789E7C1C1EF7EB13543E43E2 /* PomiWatchWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6278D4FF8AE8ED7DC9A2DA73 /* PomiWatchWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		96A4461D984BE9A74753829E /* PomiWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = CD5425ECB61D9AB27E8B946A /* PomiWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A6A836B3402DF26726E271F5 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DEA45ADB0E51E0FB0DF64670 /* CoreGraphics.framework */; };
 		B0E43737C4861387F8885269 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = A5505A38C1B1A6F92D18262B /* assets */; };
 		B502CE54BA10A09F5E5643F5 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 19512CF8B45A8C2BD81FA248 /* LaunchScreen.storyboard */; };
+		BAB0D66F5A77D5420C4D0415 /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8F90183FA7F18ED03F9FEB9D /* WatchConnectivity.framework */; };
+		C37DB925413B6D6EF1315B4B /* WatchSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A106255BC23ADC897739060E /* WatchSessionStore.swift */; };
+		C609B8780A0AE7AA8985CE48 /* libapp.a in Resources */ = {isa = PBXBuildFile; fileRef = 0401479990BB42A2280BFF72 /* libapp.a */; };
 		C9849DBF0729134569F32974 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 820C81E175A60309BA45CC29 /* Assets.xcassets */; };
 		CF06BDD7D8C0A3CDBFD942D8 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4B15DF8B00CFA8520FB4874D /* WebKit.framework */; };
+		CF413177B5FA9B2B363B8EFC /* WatchAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE1C6CD3C929139FCDA75B0A /* WatchAPI.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8395A98E0B52BE3D42D2E8B4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 04B22093E32C0332F61B447C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D7757FD66470050AD524451B;
+			remoteInfo = PomiWatchApp;
+		};
+		E52D7FB2E7F8CABA86042338 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 04B22093E32C0332F61B447C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CDD5C0D83E5979D2078AD7E5;
+			remoteInfo = PomiWatchWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		5F6A42EBB858C4990967E0F4 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				789E7C1C1EF7EB13543E43E2 /* PomiWatchWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8B9248878735257826A450BD /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				96A4461D984BE9A74753829E /* PomiWatchApp.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		000C10B636FEF532BFB66E9C /* lib.rs */ = {isa = PBXFileReference; path = lib.rs; sourceTree = "<group>"; };
 		00D281B453CF3329FEA9AC45 /* main.rs */ = {isa = PBXFileReference; path = main.rs; sourceTree = "<group>"; };
+		0401479990BB42A2280BFF72 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		1407EF055FBEC3BF6BF06C7D /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
+		1596CCB1EEEF5FE1663E7045 /* PomiWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomiWatchApp.swift; sourceTree = "<group>"; };
 		19512CF8B45A8C2BD81FA248 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		24F5A04594EDE78BD9CB0C6F /* pomi_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = pomi_iOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3272EC4FB41016BFB87D5F95 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		34EC40778DA88C58D8E931D4 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
+		3928E078120BB4044337774B /* PomiWatchWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomiWatchWidget.swift; sourceTree = "<group>"; };
+		3B04DF0472D3405BB52269ED /* PomiWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PomiWatch.entitlements; sourceTree = "<group>"; };
 		4B15DF8B00CFA8520FB4874D /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
 		59A20CE9045E437E207A2423 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
+		5DABCCBA1EF93CD23C1AAA1C /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		6278D4FF8AE8ED7DC9A2DA73 /* PomiWatchWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PomiWatchWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		6AE84BC04F1BF72818AB7978 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
 		820C81E175A60309BA45CC29 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		876CD6369CC6E4BD7F378FF1 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		8F71B634C0BF57B835515F98 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		8F90183FA7F18ED03F9FEB9D /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
+		A106255BC23ADC897739060E /* WatchSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSessionStore.swift; sourceTree = "<group>"; };
 		A18CB1144B2052719A64D842 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
 		A3DCBD8EE5F40D3B634D945A /* pomi_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = pomi_iOS.entitlements; sourceTree = "<group>"; };
+		A4B34A79C94FC2AE28CB7F1F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		A5505A38C1B1A6F92D18262B /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
 		A9B8476C01DD3161F356BE62 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		B334D350CD3F0DDA30497640 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		BB07C437DECE7429F65315D2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		CD5425ECB61D9AB27E8B946A /* PomiWatchApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PomiWatchApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CE1C6CD3C929139FCDA75B0A /* WatchAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAPI.swift; sourceTree = "<group>"; };
 		DEA45ADB0E51E0FB0DF64670 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
+		EC48B51F357A4581EA744AA6 /* PomiWatchWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PomiWatchWidget.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -55,6 +121,7 @@
 				219C0FAA16F03A33FFED5CC8 /* Security.framework in Frameworks */,
 				519EB8D65BE72BF7EC54EF92 /* UIKit.framework in Frameworks */,
 				CF06BDD7D8C0A3CDBFD942D8 /* WebKit.framework in Frameworks */,
+				BAB0D66F5A77D5420C4D0415 /* WatchConnectivity.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,6 +145,8 @@
 				19512CF8B45A8C2BD81FA248 /* LaunchScreen.storyboard */,
 				43154CB3C14AB639E2E51342 /* Externals */,
 				E5EA754A2D0EA254BAFB912A /* pomi_iOS */,
+				2E909DB047A7FB21CCEE1EBD /* PomiWatch */,
+				6526BA52F82A5517A757A5A0 /* PomiWatchWidget */,
 				3CA2F47ACE2AD9E80BC64F78 /* Sources */,
 				AA87D3068A9A268C9989D626 /* src */,
 				4F4A6552A5650CBB497EB343 /* Frameworks */,
@@ -93,6 +162,20 @@
 			path = bindings;
 			sourceTree = "<group>";
 		};
+		2E909DB047A7FB21CCEE1EBD /* PomiWatch */ = {
+			isa = PBXGroup;
+			children = (
+				B334D350CD3F0DDA30497640 /* Assets.xcassets */,
+				5DABCCBA1EF93CD23C1AAA1C /* ContentView.swift */,
+				A4B34A79C94FC2AE28CB7F1F /* Info.plist */,
+				3B04DF0472D3405BB52269ED /* PomiWatch.entitlements */,
+				1596CCB1EEEF5FE1663E7045 /* PomiWatchApp.swift */,
+				CE1C6CD3C929139FCDA75B0A /* WatchAPI.swift */,
+				A106255BC23ADC897739060E /* WatchSessionStore.swift */,
+			);
+			path = PomiWatch;
+			sourceTree = "<group>";
+		};
 		3CA2F47ACE2AD9E80BC64F78 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
@@ -104,6 +187,7 @@
 		43154CB3C14AB639E2E51342 /* Externals */ = {
 			isa = PBXGroup;
 			children = (
+				F6F4A37D1045D887B63AF006 /* arm64 */,
 			);
 			path = Externals;
 			sourceTree = "<group>";
@@ -118,15 +202,36 @@
 				A9B8476C01DD3161F356BE62 /* QuartzCore.framework */,
 				3272EC4FB41016BFB87D5F95 /* Security.framework */,
 				59A20CE9045E437E207A2423 /* UIKit.framework */,
+				8F90183FA7F18ED03F9FEB9D /* WatchConnectivity.framework */,
 				4B15DF8B00CFA8520FB4874D /* WebKit.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		6526BA52F82A5517A757A5A0 /* PomiWatchWidget */ = {
+			isa = PBXGroup;
+			children = (
+				BB07C437DECE7429F65315D2 /* Info.plist */,
+				EC48B51F357A4581EA744AA6 /* PomiWatchWidget.entitlements */,
+				3928E078120BB4044337774B /* PomiWatchWidget.swift */,
+			);
+			path = PomiWatchWidget;
+			sourceTree = "<group>";
+		};
+		6AA6A54BA000306DA15A35AF /* debug */ = {
+			isa = PBXGroup;
+			children = (
+				0401479990BB42A2280BFF72 /* libapp.a */,
+			);
+			path = debug;
 			sourceTree = "<group>";
 		};
 		880DF982993BF7CC0316AADC /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				24F5A04594EDE78BD9CB0C6F /* pomi_iOS.app */,
+				CD5425ECB61D9AB27E8B946A /* PomiWatchApp.app */,
+				6278D4FF8AE8ED7DC9A2DA73 /* PomiWatchWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -150,6 +255,21 @@
 			path = pomi_iOS;
 			sourceTree = "<group>";
 		};
+		F6F4A37D1045D887B63AF006 /* arm64 */ = {
+			isa = PBXGroup;
+			children = (
+				6AA6A54BA000306DA15A35AF /* debug */,
+			);
+			path = arm64;
+			sourceTree = "<group>";
+		};
+		"TEMP_98032069-88B1-4261-8236-91D241F423EC" /* x86_64 */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = x86_64;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -161,16 +281,56 @@
 				8F3D49FFD0867D104722C1A9 /* Sources */,
 				AB2F5DD10BCA68B8BDEB1612 /* Resources */,
 				46703433228468C97C6962AF /* Frameworks */,
+				8B9248878735257826A450BD /* Embed Watch Content */,
+				ED72AD83D285041B722147BA /* Configure Google callback */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				FECBF78A4F6C6511B154A7A9 /* PBXTargetDependency */,
 			);
 			name = pomi_iOS;
 			packageProductDependencies = (
 			);
 			productName = pomi_iOS;
 			productReference = 24F5A04594EDE78BD9CB0C6F /* pomi_iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		CDD5C0D83E5979D2078AD7E5 /* PomiWatchWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A039E1FE1EEC6CA360781ADD /* Build configuration list for PBXNativeTarget "PomiWatchWidget" */;
+			buildPhases = (
+				9394A5899CFC904FD8F484CA /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PomiWatchWidget;
+			packageProductDependencies = (
+			);
+			productName = PomiWatchWidget;
+			productReference = 6278D4FF8AE8ED7DC9A2DA73 /* PomiWatchWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		D7757FD66470050AD524451B /* PomiWatchApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B01ED301CCCFA442DF49FAA2 /* Build configuration list for PBXNativeTarget "PomiWatchApp" */;
+			buildPhases = (
+				B3E78E4BE8D32C67A0B4F885 /* Sources */,
+				48CE45FC850709F7ADF57257 /* Resources */,
+				5F6A42EBB858C4990967E0F4 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0A18962C5D03B8258B66D5C4 /* PBXTargetDependency */,
+			);
+			name = PomiWatchApp;
+			packageProductDependencies = (
+			);
+			productName = PomiWatchApp;
+			productReference = CD5425ECB61D9AB27E8B946A /* PomiWatchApp.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -196,12 +356,22 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				D7757FD66470050AD524451B /* PomiWatchApp */,
+				CDD5C0D83E5979D2078AD7E5 /* PomiWatchWidget */,
 				1AE994F5F64BF36575CE962F /* pomi_iOS */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		48CE45FC850709F7ADF57257 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4E3E981D25EEA05C8B29E988 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AB2F5DD10BCA68B8BDEB1612 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -209,6 +379,7 @@
 				C9849DBF0729134569F32974 /* Assets.xcassets in Resources */,
 				B502CE54BA10A09F5E5643F5 /* LaunchScreen.storyboard in Resources */,
 				B0E43737C4861387F8885269 /* assets in Resources */,
+				C609B8780A0AE7AA8985CE48 /* libapp.a in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -236,6 +407,25 @@
 			shellPath = /bin/sh;
 			shellScript = "pnpm tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}";
 		};
+		ED72AD83D285041B722147BA /* Configure Google callback */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Configure Google callback";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nclient_id=\"${VITE_GOOGLE_AUTH_CLIENT_ID:-}\"\nif [[ \"$client_id\" == *.apps.googleusercontent.com ]]; then\n  client_prefix=\"${client_id%.apps.googleusercontent.com}\"\n  reversed_client_id=\"com.googleusercontent.apps.${client_prefix}\"\n  built_plist=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\n  if [[ -f \"$built_plist\" ]]; then\n    /usr/libexec/PlistBuddy -c \"Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 ${reversed_client_id}\" \"$built_plist\"\n  fi\nfi\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -247,7 +437,39 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		9394A5899CFC904FD8F484CA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				63006C223E77E1EF97B92147 /* PomiWatchWidget.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B3E78E4BE8D32C67A0B4F885 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0584806DDD3842995CC2E7E0 /* ContentView.swift in Sources */,
+				24DC6CD86DFCFB489337DA3C /* PomiWatchApp.swift in Sources */,
+				CF413177B5FA9B2B363B8EFC /* WatchAPI.swift in Sources */,
+				C37DB925413B6D6EF1315B4B /* WatchSessionStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0A18962C5D03B8258B66D5C4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CDD5C0D83E5979D2078AD7E5 /* PomiWatchWidget */;
+			targetProxy = E52D7FB2E7F8CABA86042338 /* PBXContainerItemProxy */;
+		};
+		FECBF78A4F6C6511B154A7A9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D7757FD66470050AD524451B /* PomiWatchApp */;
+			targetProxy = 8395A98E0B52BE3D42D2E8B4 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		090C937AB209862445AEE79A /* debug */ = {
@@ -301,15 +523,15 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = debug;
 		};
@@ -317,6 +539,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				APS_ENVIRONMENT = production;
 				ARCHS = (
 					arm64,
 				);
@@ -337,7 +560,7 @@
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				PRODUCT_BUNDLE_IDENTIFIER = app.pomi.community;
-				PRODUCT_NAME = "pomi";
+				PRODUCT_NAME = pomi;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;
@@ -348,6 +571,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				APS_ENVIRONMENT = development;
 				ARCHS = (
 					arm64,
 				);
@@ -368,12 +592,29 @@
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				PRODUCT_BUNDLE_IDENTIFIER = app.pomi.community;
-				PRODUCT_NAME = "pomi";
+				PRODUCT_NAME = pomi;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;
 			};
 			name = debug;
+		};
+		2D8CF445C8FBE06B211B359D /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = PomiWatch/PomiWatch.entitlements;
+				INFOPLIST_FILE = PomiWatch/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = app.pomi.community.watchkitapp;
+				PRODUCT_NAME = "Pomi Watch";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = release;
 		};
 		8E84623F291894E711D0B1BD /* release */ = {
 			isa = XCBuildConfiguration;
@@ -420,16 +661,75 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = release;
+		};
+		99485CB07CA8F0CE9C802BEF /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PomiWatchWidget/PomiWatchWidget.entitlements;
+				INFOPLIST_FILE = PomiWatchWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.pomi.community.watchkitapp.widget;
+				PRODUCT_NAME = "Pomi Widget";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = debug;
+		};
+		B85CFA30B49A1ABAC75EC30F /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PomiWatchWidget/PomiWatchWidget.entitlements;
+				INFOPLIST_FILE = PomiWatchWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.pomi.community.watchkitapp.widget;
+				PRODUCT_NAME = "Pomi Widget";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = release;
+		};
+		F074B7135741DBFE7E88BD62 /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = PomiWatch/PomiWatch.entitlements;
+				INFOPLIST_FILE = PomiWatch/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = app.pomi.community.watchkitapp;
+				PRODUCT_NAME = "Pomi Watch";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = debug;
 		};
 /* End XCBuildConfiguration section */
 
@@ -448,6 +748,24 @@
 			buildConfigurations = (
 				255F2AF4F7D4A214AE4F1FE7 /* debug */,
 				0D47C31DB051B5F503815F01 /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
+		A039E1FE1EEC6CA360781ADD /* Build configuration list for PBXNativeTarget "PomiWatchWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				99485CB07CA8F0CE9C802BEF /* debug */,
+				B85CFA30B49A1ABAC75EC30F /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
+		B01ED301CCCFA442DF49FAA2 /* Build configuration list for PBXNativeTarget "PomiWatchApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F074B7135741DBFE7E88BD62 /* debug */,
+				2D8CF445C8FBE06B211B359D /* release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = debug;

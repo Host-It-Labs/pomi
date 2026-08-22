@@ -82,17 +82,27 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
     assert.match(await ensureCopyme(), /Copyme user fixture is healthy/);
 
     const marker = await client.query(
-      `SELECT m."fixtureName", m."seedVersion", m."credentialFingerprint", u.id, u."isAdmin"
+      `SELECT m."fixtureName", m."seedVersion", m."credentialFingerprint", u.id, u.email, u."isAdmin"
        FROM development_fixture_markers m
        INNER JOIN users u ON u.id = m."userId"
        WHERE m."fixtureName" = $1`,
       [fixtureName]
     );
     assert.equal(marker.rows.length, 1);
-    assert.equal(marker.rows[0].seedVersion, 5);
+    assert.equal(marker.rows[0].seedVersion, 7);
     assert.equal(marker.rows[0].isAdmin, true);
+    assert.equal(marker.rows[0].email, `${username}@fixture.pomi.local`);
     assert.match(marker.rows[0].credentialFingerprint, /^[a-f0-9]{64}$/);
     const firstUserId = marker.rows[0].id;
+
+    const pushDevices = await client.query(
+      `SELECT platform, token FROM push_devices WHERE "userId" = $1 ORDER BY platform`,
+      [firstUserId]
+    );
+    assert.deepEqual(pushDevices.rows, [
+      { platform: 'android', token: `${username}-fcm-token` },
+      { platform: 'ios', token: `${username}-apn-token` },
+    ]);
 
     const preferences = await client.query(
       `SELECT p.*
