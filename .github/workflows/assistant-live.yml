@@ -3,6 +3,9 @@ name: Assistant live capture suite
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   assistant-live:
     runs-on: ubuntu-latest

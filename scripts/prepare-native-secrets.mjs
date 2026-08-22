@@ -8,11 +8,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
-import {
-  loadLocalEnvironment,
-  repositoryRoot,
-  resolveRepositoryPath,
-} from './local-env.mjs';
+import { loadLocalEnvironment, repositoryRoot } from './local-env.mjs';
 
 loadLocalEnvironment();
 
@@ -22,9 +18,26 @@ const androidRoot = path.join(
 );
 const googleServicesTarget = path.join(androidRoot, 'app/google-services.json');
 const keystorePropertiesTarget = path.join(androidRoot, 'keystore.properties');
+const secretPaths = {
+  'config/secrets/google-services.json': path.join(
+    repositoryRoot,
+    'config/secrets/google-services.json'
+  ),
+  'config/secrets/pomi-release.jks': path.join(
+    repositoryRoot,
+    'config/secrets/pomi-release.jks'
+  ),
+};
 
-function copyOptionalSecret(sourceValue, target, label, validate) {
-  const source = resolveRepositoryPath(sourceValue);
+function configuredSecretPath(value, expected, label) {
+  if (!value) return undefined;
+  if (value !== expected) {
+    throw new Error(`${label} must use ${expected}.`);
+  }
+  return secretPaths[expected];
+}
+
+function copyOptionalSecret(source, target, label, validate) {
   if (!source || !existsSync(source)) {
     process.stdout.write(
       `[pomi] ${label} is not configured; integration remains disabled.\n`
@@ -40,7 +53,11 @@ function copyOptionalSecret(sourceValue, target, label, validate) {
 }
 
 copyOptionalSecret(
-  process.env.POMI_GOOGLE_SERVICES_JSON_PATH,
+  configuredSecretPath(
+    process.env.POMI_GOOGLE_SERVICES_JSON_PATH,
+    'config/secrets/google-services.json',
+    'Android Firebase configuration'
+  ),
   googleServicesTarget,
   'Android Firebase configuration',
   source => {
@@ -61,7 +78,11 @@ copyOptionalSecret(
   }
 );
 
-const keystore = resolveRepositoryPath(process.env.POMI_ANDROID_KEYSTORE_PATH);
+const keystore = configuredSecretPath(
+  process.env.POMI_ANDROID_KEYSTORE_PATH,
+  'config/secrets/pomi-release.jks',
+  'Android keystore'
+);
 const password = process.env.ANDROID_KEY_PASSWORD?.trim();
 const alias = process.env.ANDROID_KEY_ALIAS?.trim() || 'pomi';
 if (keystore && existsSync(keystore) && password) {

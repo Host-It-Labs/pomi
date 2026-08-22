@@ -464,7 +464,34 @@ export function planClarification({
 }
 
 function repo() {
-  return process.env.POMI_RADAR_GITHUB_REPOSITORY || CONTRACT.repository;
+  const configured = process.env.POMI_RADAR_GITHUB_REPOSITORY;
+  if (configured && configured !== CONTRACT.repository) {
+    throw new Error(`Radar writes are restricted to ${CONTRACT.repository}.`);
+  }
+  return CONTRACT.repository;
+}
+
+function githubUrl(path) {
+  const [pathname, query = ''] = path.split('?', 2);
+  const url = new URL('https://api.github.com');
+  url.pathname = `/repos/${repo()}${pathname}`;
+  url.search = query;
+  return url;
+}
+
+function sentrySegment(value, label) {
+  const segment = String(value ?? '');
+  if (!/^[A-Za-z0-9_.-]+$/.test(segment)) {
+    throw new Error(`Invalid Sentry ${label}.`);
+  }
+  return segment;
+}
+
+function sentryUrl(pathname, query) {
+  const url = new URL('https://sentry.io');
+  url.pathname = pathname;
+  if (query) url.search = query;
+  return url;
 }
 
 function githubToken() {
@@ -478,20 +505,17 @@ async function github(path, init) {
       'GITHUB_TOKEN from the Pomi Radar GitHub App is required. Run through scripts/github-app-auth.mjs.'
     );
   }
-  const response = await fetch(
-    `https://api.github.com/repos/${repo()}${path}`,
-    {
-      ...init,
-      headers: {
-        accept: 'application/vnd.github+json',
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
-        'user-agent': 'pomi-radar-lifecycle',
-        'x-github-api-version': '2022-11-28',
-        ...init.headers,
-      },
-    }
-  );
+  const response = await fetch(githubUrl(path), {
+    ...init,
+    headers: {
+      accept: 'application/vnd.github+json',
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+      'user-agent': 'pomi-radar-lifecycle',
+      'x-github-api-version': '2022-11-28',
+      ...init.headers,
+    },
+  });
   if (!response.ok)
     throw new Error(
       `GitHub ${init.method ?? 'GET'} ${path} failed: ${response.status}`
@@ -522,11 +546,9 @@ async function sentryIssues() {
   ];
   const missing = required.filter(key => !process.env[key]);
   if (missing.length) return { issues: [], missing };
-  const base = (process.env.SENTRY_BASE_URL || 'https://sentry.io').replace(
-    /\/$/,
-    ''
-  );
+  const org = sentrySegment(process.env.SENTRY_ORG, 'organization');
   async function projectIssues(project) {
+    const safeProject = sentrySegment(project, 'project');
     const values = [];
     let cursor = null;
     do {
@@ -538,7 +560,7 @@ async function sentryIssues() {
         ...(cursor ? { cursor } : {}),
       });
       const response = await fetch(
-        `${base}/api/0/projects/${process.env.SENTRY_ORG}/${project}/issues/?${query}`,
+        sentryUrl(`/api/0/projects/${org}/${safeProject}/issues/`, query),
         {
           headers: { authorization: `Bearer ${process.env.SENTRY_AUTH_TOKEN}` },
         }
@@ -1193,7 +1215,8 @@ export async function resolveSentryGroup(groupId) {
     throw new Error(
       'SENTRY_AUTH_TOKEN is required to resolve mapped Sentry groups.'
     );
-  const response = await fetch(`https://sentry.io/api/0/issues/${groupId}/`, {
+  const safeGroupId = sentrySegment(groupId, 'group ID');
+  const response = await fetch(sentryUrl(`/api/0/issues/${safeGroupId}/`), {
     method: 'PUT',
     headers: {
       authorization: `Bearer ${token}`,
@@ -1280,7 +1303,7 @@ export async function validateAutomationAuthentication({
 }
 
 async function main() {
-  const [command, inputFile] = process.argv.slice(2);
+  const [command] = process.argv.slice(2);
   if (!command) return;
   if (command === 'preflight') {
     await validateAutomationAuthentication();
@@ -1303,30 +1326,28 @@ async function main() {
     return;
   }
   if (command === 'enrich') {
-    const input = JSON.parse(await readFile(inputFile, 'utf8'));
+    const input = JSON.parse(await readFile(0, 'utf8'));
     process.stdout.write(
       `${JSON.stringify(await enrichIssue(input), null, 2)}\n`
     );
     return;
   }
   if (command === 'acknowledge') {
-    const input = JSON.parse(await readFile(inputFile, 'utf8'));
+    const input = JSON.parse(await readFile(0, 'utf8'));
     process.stdout.write(
       `${JSON.stringify(await acknowledgeAgentPass(input), null, 2)}\n`
     );
     return;
   }
   if (command === 'deduplicate') {
-    const input = JSON.parse(await readFile(inputFile, 'utf8'));
+    const input = JSON.parse(await readFile(0, 'utf8'));
     process.stdout.write(
       `${JSON.stringify(await reconcileDuplicate(input), null, 2)}\n`
     );
     return;
   }
   if (command === 'consolidation-merged') {
-    const event = JSON.parse(
-      await readFile(inputFile || process.env.GITHUB_EVENT_PATH, 'utf8')
-    );
+    const event = JSON.parse(await readFile(0, 'utf8'));
     process.stdout.write(
       `${JSON.stringify(await consolidationMerged(event), null, 2)}\n`
     );

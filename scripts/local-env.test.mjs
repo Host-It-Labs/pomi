@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import {
-  loadLocalEnvironment,
+  mergeEnvironment,
   parseEnvironmentFile,
   repositoryRoot,
   resolveRepositoryPath,
@@ -24,11 +23,11 @@ INVALID LINE
 });
 
 test('existing process values take precedence over local values', () => {
-  const directory = mkdtempSync(path.join(os.tmpdir(), 'pomi-local-env-'));
-  const file = path.join(directory, '.env.local');
-  writeFileSync(file, 'NODE_ENV=production\nLOCAL_ONLY=loaded\n');
   const environment = { NODE_ENV: 'test' };
-  const loaded = loadLocalEnvironment({ environment, file });
+  const loaded = mergeEnvironment(environment, {
+    NODE_ENV: 'production',
+    LOCAL_ONLY: 'loaded',
+  });
   assert.equal(loaded.NODE_ENV, 'test');
   assert.equal(loaded.LOCAL_ONLY, 'loaded');
 });

@@ -4,13 +4,23 @@ import { readFileSync } from 'node:fs';
 import { createSign } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  loadLocalEnvironment,
-  repositoryRoot,
-  resolveRepositoryPath,
-} from './local-env.mjs';
+import { loadLocalEnvironment, repositoryRoot } from './local-env.mjs';
 
 const API_BASE = 'https://api.github.com';
+const PUBLIC_REPOSITORY = 'NeoHuncho/pomi';
+const PRIVATE_KEY_PATH = path.join(
+  repositoryRoot,
+  'config/secrets/pomi-radar.private-key.pem'
+);
+const ALLOWED_COMMANDS = new Set(['gh', 'git', 'node', 'pnpm']);
+
+function githubUrl(pathname) {
+  const [pathPart, query = ''] = pathname.split('?', 2);
+  const url = new URL(API_BASE);
+  url.pathname = pathPart;
+  url.search = query;
+  return url;
+}
 
 function encode(value) {
   return Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -35,7 +45,7 @@ export async function githubRequest(
   pathname,
   { method = 'GET', token, body, fetchImpl = fetch } = {}
 ) {
-  const response = await fetchImpl(`${API_BASE}${pathname}`, {
+  const response = await fetchImpl(githubUrl(pathname), {
     method,
     headers: {
       Accept: 'application/vnd.github+json',
@@ -60,19 +70,28 @@ export function readGitHubAppConfiguration(environment = process.env) {
   const appId = environment.POMI_RADAR_GITHUB_APP_ID?.trim();
   const installationId =
     environment.POMI_RADAR_GITHUB_APP_INSTALLATION_ID?.trim();
-  const privateKeyPath = resolveRepositoryPath(
-    environment.POMI_RADAR_GITHUB_APP_PRIVATE_KEY_PATH
-  );
-  if (!appId || !installationId || !privateKeyPath) {
+  const configuredPrivateKeyPath =
+    environment.POMI_RADAR_GITHUB_APP_PRIVATE_KEY_PATH?.trim();
+  if (!appId || !installationId || !configuredPrivateKeyPath) {
     throw new Error(
       'GitHub App configuration is incomplete in .env.local (App ID, installation ID, and private-key path are required).'
+    );
+  }
+  if (!/^\d+$/.test(appId) || !/^\d+$/.test(installationId)) {
+    throw new Error('GitHub App and installation IDs must be numeric.');
+  }
+  if (
+    configuredPrivateKeyPath !== 'config/secrets/pomi-radar.private-key.pem'
+  ) {
+    throw new Error(
+      'The GitHub App private key must use config/secrets/pomi-radar.private-key.pem.'
     );
   }
   return {
     appId,
     installationId,
-    privateKeyPath,
-    privateKey: readFileSync(privateKeyPath, 'utf8'),
+    privateKeyPath: PRIVATE_KEY_PATH,
+    privateKey: readFileSync(PRIVATE_KEY_PATH, 'utf8'),
   };
 }
 
@@ -103,9 +122,13 @@ async function runCli() {
   const mode = process.argv[2];
   const authentication = await getGitHubAppAuthentication();
   if (mode === 'check') {
-    const repository =
-      process.env.POMI_RADAR_GITHUB_REPOSITORY || 'NeoHuncho/pomi';
-    const repo = await githubRequest(`/repos/${repository}`, {
+    const repository = process.env.POMI_RADAR_GITHUB_REPOSITORY;
+    if (repository && repository !== PUBLIC_REPOSITORY) {
+      throw new Error(
+        `GitHub App writes are restricted to ${PUBLIC_REPOSITORY}.`
+      );
+    }
+    const repo = await githubRequest(`/repos/${PUBLIC_REPOSITORY}`, {
       token: authentication.token,
     });
     process.stdout.write(
@@ -129,7 +152,13 @@ async function runCli() {
   }
   const command = process.argv[4];
   const args = process.argv.slice(5);
+  if (!ALLOWED_COMMANDS.has(command)) {
+    throw new Error(
+      `GitHub App command must be one of: ${[...ALLOWED_COMMANDS].join(', ')}.`
+    );
+  }
   const botEmail = `${authentication.app.id}+${authentication.app.slug}[bot]@users.noreply.github.com`;
+  // This local CLI intentionally forwards explicit arguments to a small executable allowlist.
   const child = spawn(command, args, {
     stdio: 'inherit',
     cwd: repositoryRoot,

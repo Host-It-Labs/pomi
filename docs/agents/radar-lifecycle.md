@@ -54,7 +54,7 @@ improve its presentation.
   summary, no more than 24 words for each main section, and acceptance criteria
   of at most 18 words each. Evidence may use up to 30 words when a diagnostic is
   necessary.
-- Run `node scripts/radar-lifecycle.mjs enrich <payload.json>` to patch the
+- Run `node scripts/radar-lifecycle.mjs enrich < payload.json` to patch the
   canonical issue title and marker and add an idempotent, readable audit comment.
 - Process every issue listed in preflight `enrichmentIssues`, then rerun
   preflight and require that list to be empty before presenting or implementing
@@ -62,7 +62,7 @@ improve its presentation.
 
 A saved user decision remains visible and reversible until a scheduled agent
 pass acknowledges it. After processing the decision, run
-`node scripts/radar-lifecycle.mjs acknowledge <payload.json>` with the canonical
+`node scripts/radar-lifecycle.mjs acknowledge < payload.json` with the canonical
 issue numbers and their latest `lastMutationId` values, track, stable run ID,
 and an explicit stable `acknowledgedAt` timestamp. This clears the pending-pass
 marker and adds one readable, idempotent acknowledgement comment. A changed

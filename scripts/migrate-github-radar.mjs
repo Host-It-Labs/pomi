@@ -7,7 +7,11 @@ import { marker, normalizeText, readMarker } from './radar-lifecycle.mjs';
 
 const APPLY = process.argv.includes('--apply');
 const inputFlag = process.argv.indexOf('--input');
-const REPOSITORY = process.env.POMI_RADAR_GITHUB_REPOSITORY || 'NeoHuncho/pomi';
+const PUBLIC_REPOSITORY = 'NeoHuncho/pomi';
+const configuredRepository = process.env.POMI_RADAR_GITHUB_REPOSITORY;
+if (configuredRepository && configuredRepository !== PUBLIC_REPOSITORY) {
+  throw new Error(`Radar writes are restricted to ${PUBLIC_REPOSITORY}.`);
+}
 const RADAR_MARKER = 'pomi-radar:v1';
 const EVENT_MARKER = 'pomi-radar-event:v1';
 const LABELS = {
@@ -61,20 +65,40 @@ const legacy = inputText.trim()
   : { requests: { active: [], history: [] }, tracks: {} };
 const actions = [];
 
+function githubUrl(path) {
+  const [pathname, query = ''] = path.split('?', 2);
+  const url = new URL('https://api.github.com');
+  url.pathname = `/repos/${PUBLIC_REPOSITORY}${pathname}`;
+  url.search = query;
+  return url;
+}
+
+function sentrySegment(value, label) {
+  const segment = String(value ?? '');
+  if (!/^[A-Za-z0-9_.-]+$/.test(segment)) {
+    throw new Error(`Invalid Sentry ${label}.`);
+  }
+  return segment;
+}
+
+function sentryUrl(pathname, query) {
+  const url = new URL('https://sentry.io');
+  url.pathname = pathname;
+  if (query) url.search = query;
+  return url;
+}
+
 async function github(path, init) {
-  const response = await fetch(
-    `https://api.github.com/repos/${REPOSITORY}${path}`,
-    {
-      ...init,
-      headers: {
-        accept: 'application/vnd.github+json',
-        authorization: `Bearer ${githubToken}`,
-        'content-type': 'application/json',
-        'x-github-api-version': '2022-11-28',
-        ...init.headers,
-      },
-    }
-  );
+  const response = await fetch(githubUrl(path), {
+    ...init,
+    headers: {
+      accept: 'application/vnd.github+json',
+      authorization: `Bearer ${githubToken}`,
+      'content-type': 'application/json',
+      'x-github-api-version': '2022-11-28',
+      ...init.headers,
+    },
+  });
   if (!response.ok)
     throw new Error(
       `GitHub ${init.method ?? 'GET'} ${path} failed: ${response.status}`
@@ -415,13 +439,12 @@ async function noteSentry(groupId, issueUrl) {
     });
     return;
   }
-  const base = (process.env.SENTRY_BASE_URL || 'https://sentry.io').replace(
-    /\/$/,
-    ''
-  );
-  const org = process.env.SENTRY_ORG;
+  const org = sentrySegment(process.env.SENTRY_ORG, 'organization');
+  const safeGroupId = sentrySegment(groupId, 'group ID');
   const markerText = `[pomi-radar:v1 group=${groupId}]`;
-  const endpoint = `${base}/api/0/organizations/${org}/issues/${groupId}/comments/`;
+  const endpoint = sentryUrl(
+    `/api/0/organizations/${org}/issues/${safeGroupId}/comments/`
+  );
   const response = await fetch(endpoint, {
     headers: { authorization: `Bearer ${process.env.SENTRY_AUTH_TOKEN}` },
   });
@@ -471,10 +494,8 @@ function sentryLinkCursor(link) {
 async function listSentryProject(project) {
   if (!process.env.SENTRY_AUTH_TOKEN || !process.env.SENTRY_ORG || !project)
     return [];
-  const base = (process.env.SENTRY_BASE_URL || 'https://sentry.io').replace(
-    /\/$/,
-    ''
-  );
+  const org = sentrySegment(process.env.SENTRY_ORG, 'organization');
+  const safeProject = sentrySegment(project, 'project');
   const values = [];
   let cursor = null;
   do {
@@ -486,7 +507,7 @@ async function listSentryProject(project) {
       ...(cursor ? { cursor } : {}),
     });
     const response = await fetch(
-      `${base}/api/0/projects/${process.env.SENTRY_ORG}/${project}/issues/?${query}`,
+      sentryUrl(`/api/0/projects/${org}/${safeProject}/issues/`, query),
       {
         headers: { authorization: `Bearer ${process.env.SENTRY_AUTH_TOKEN}` },
       }

@@ -31,4 +31,4 @@ jobs:
       - name: Mark included issues ready for release
         env:
           GITHUB_TOKEN: ${{ steps.radar-token.outputs.token }}
-        run: node scripts/radar-lifecycle.mjs consolidation-merged "$GITHUB_EVENT_PATH"
+        run: node scripts/radar-lifecycle.mjs consolidation-merged < "$GITHUB_EVENT_PATH"

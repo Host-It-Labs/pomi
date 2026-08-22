@@ -40,22 +40,22 @@ export function parseEnvironmentFile(contents) {
   return values;
 }
 
-export function readLocalEnvironment(
-  file = process.env.POMI_LOCAL_ENV_FILE || defaultLocalEnvironmentFile
-) {
-  if (!existsSync(file)) return {};
-  return parseEnvironmentFile(readFileSync(file, 'utf8'));
+export function readLocalEnvironment() {
+  if (!existsSync(defaultLocalEnvironmentFile)) return {};
+  return parseEnvironmentFile(
+    readFileSync(defaultLocalEnvironmentFile, 'utf8')
+  );
 }
 
-export function loadLocalEnvironment({
-  environment = process.env,
-  file = environment.POMI_LOCAL_ENV_FILE || defaultLocalEnvironmentFile,
-} = {}) {
-  const values = readLocalEnvironment(file);
+export function mergeEnvironment(environment, values) {
   for (const [key, value] of Object.entries(values)) {
     if (environment[key] === undefined) environment[key] = value;
   }
   return environment;
+}
+
+export function loadLocalEnvironment({ environment = process.env } = {}) {
+  return mergeEnvironment(environment, readLocalEnvironment());
 }
 
 export function resolveRepositoryPath(value) {
