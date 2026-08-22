@@ -322,6 +322,96 @@ test('Parent conversion aborts before its transaction for directly linked Tasks'
   assert.equal(transactionCount, 0);
 });
 
+test('Parent conversion turns active Sub-intentions into Lists atomically', async () => {
+  const parent = {
+    id: 'parent-1',
+    userId: 'user-1',
+    slug: 'focus',
+    type: 'work',
+    title: 'Focus',
+    isArchived: false,
+  };
+  const children = [
+    {
+      id: 'child-1',
+      userId: 'user-1',
+      parentIntentionId: parent.id,
+      slug: 'review',
+      title: 'Review',
+      emoji: 'R',
+      description: null,
+      vacationDefault: false,
+      isFavorite: false,
+      isArchived: false,
+    },
+    {
+      id: 'child-2',
+      userId: 'user-1',
+      parentIntentionId: parent.id,
+      slug: 'planning',
+      title: 'Planning',
+      emoji: 'P',
+      description: null,
+      vacationDefault: false,
+      isFavorite: false,
+      isArchived: false,
+    },
+  ];
+  const tasks = children.map((child, index) => ({
+    id: `task-${index + 1}`,
+    userId: 'user-1',
+    intentionSlug: parent.slug,
+    subIntentionSlug: child.slug,
+    itemKind: 'task',
+    listId: null,
+    taskRestoreState: null,
+  }));
+  let listSequence = 0;
+  const listsRepository = {
+    find: async () => [],
+    create: value => value,
+    save: async value => ({ id: `list-${++listSequence}`, ...value }),
+  };
+  const taskRepository = { save: async values => values };
+  const intentionRepository = { save: async value => value };
+  const service = new ListsService(
+    {} as never,
+    { find: async () => tasks } as never,
+    {
+      findOne: async () => parent,
+      find: async () => children,
+    } as never,
+    {
+      transaction: async callback =>
+        callback({
+          getRepository: target => {
+            if (target.name === 'ListEntity') return listsRepository;
+            if (target.name === 'TaskEntity') return taskRepository;
+            return intentionRepository;
+          },
+        }),
+    } as never,
+    { getCurrentTimer: async () => null } as never,
+    { emitTasksUpdate: () => undefined } as never
+  );
+
+  const converted = await service.convertIntention('user-1', parent.slug);
+
+  assert.equal(converted.length, 2);
+  assert.equal(parent.isArchived, true);
+  assert.equal(
+    children.every(child => child.isArchived),
+    true
+  );
+  assert.deepEqual(
+    tasks.map(task => ({ itemKind: task.itemKind, listId: task.listId })),
+    [
+      { itemKind: 'listItem', listId: 'list-1' },
+      { itemKind: 'listItem', listId: 'list-2' },
+    ]
+  );
+});
+
 test('converting a source List restores its current identity', async () => {
   const list = {
     id: 'list-1',

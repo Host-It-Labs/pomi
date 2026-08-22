@@ -8,6 +8,7 @@ import { Socket, io } from 'socket.io-client';
 import { showToastFromStore } from '../components/toast/ToastContext';
 import { useAuthStore } from '../stores/authStore';
 import { getDebugLag } from '../stores/debugStore';
+import { registerBackendConnectionRecovery } from './backendConnectionRecovery';
 import { getBackendSocketOrigin } from './backendUrl';
 import { isMobile } from './osUtils';
 import {
@@ -348,6 +349,10 @@ export const forceReconnect = (skipIfConnected = false): Socket | null => {
 
   return getOrCreateSocket();
 };
+
+registerBackendConnectionRecovery(() => {
+  forceReconnect(false);
+});
 
 /**
  * Resolve after the timer socket has published a fresh authoritative state.

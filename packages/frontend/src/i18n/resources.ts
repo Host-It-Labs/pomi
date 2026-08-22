@@ -629,6 +629,8 @@ const english: TranslationCatalog = {
     '{{title}} and its linked Tasks will move to a List.',
   'intention.convertWithChildren':
     'Each active Sub-intention will become its own List, and {{title}} will leave active Intentions. Linked Tasks will move with their Sub-intention.',
+  'intention.convertDirectTasksWarning':
+    'First move Tasks linked directly to this Intention into a Sub-intention.',
   'intention.customDuration': 'Custom duration',
   'intention.delete': 'Delete Intention',
   'intention.deleteDescription':
