@@ -54,7 +54,9 @@ test('1. creates an account, reloads authenticated, logs out, and logs in again'
   );
   await page.getByRole('button', { name: 'Log Out' }).click();
   expect((await logoutResponse).ok()).toBeTruthy();
-  await expect(page.locator('#username')).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Log in', exact: true })
+  ).toBeVisible();
 
   await helpers.login(username, E2E_PASSWORD);
   await expect(page.locator('button[aria-label="Settings"]')).toBeVisible();
