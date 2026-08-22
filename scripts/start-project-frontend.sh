@@ -2,9 +2,12 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck disable=SC1091
+. "$ROOT_DIR/scripts/local-env.sh"
+pomi_load_local_environment
+
 COMPOSE_FILE="$ROOT_DIR/packages/backend/docker-compose.dev.yml"
 COMPOSE_PROJECT="${POMI_COMPOSE_PROJECT:-pomi}"
-CURRENT_WORK_CONFIG="$ROOT_DIR/config/current-work.env"
 DEFAULT_DEV_PORTS_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/pomi/dev-ports.env"
 DEV_PORTS_FILE="${POMI_DEV_PORTS_FILE:-$DEFAULT_DEV_PORTS_FILE}"
 INITIAL_DEV_PORTS_FILE_MTIME=""
@@ -34,13 +37,6 @@ dev_ports_file_changed() {
 
   [[ -n "$current_mtime" && "$current_mtime" != "$INITIAL_DEV_PORTS_FILE_MTIME" ]]
 }
-
-if [[ -f "$CURRENT_WORK_CONFIG" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "$CURRENT_WORK_CONFIG"
-  set +a
-fi
 
 POMI_BACKEND_PORT_EXPLICIT="${POMI_BACKEND_PORT+x}"
 POMI_DB_PORT_EXPLICIT="${POMI_DB_PORT+x}"
@@ -113,11 +109,14 @@ echo "[pomi] backend ports: backend=$POMI_BACKEND_PORT db=$POMI_DB_PORT redis=$P
 copyme_username="${VITE_DEV_AUTO_LOGIN_USERNAME:-${POMI_COPYME_USERNAME:-copyme}}"
 copyme_password="${VITE_DEV_AUTO_LOGIN_PASSWORD:-${POMI_COPYME_PASSWORD:-$copyme_username}}"
 
+docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" stop backend >/dev/null 2>&1 || true
 "$ROOT_DIR/scripts/run-dev-migrations.sh"
 
 POMI_COPYME_USERNAME="$copyme_username" \
   POMI_COPYME_PASSWORD="$copyme_password" \
   pnpm --filter @pomi/backend ensure:copyme
+
+docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" up -d --build backend >/dev/null
 
 for attempt in $(seq 1 60); do
   if curl --silent --fail --max-time 5 "$POMI_BACKEND_BASE_URL/health" >/dev/null 2>&1; then

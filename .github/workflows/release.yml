@@ -42,9 +42,10 @@ jobs:
         if: ${{ github.event_name == 'release' }}
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
         run: |
           set -euo pipefail
-          for variable in SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_FRONTEND_PROJECT SENTRY_BACKEND_PROJECT; do
+          for variable in SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_FRONTEND_PROJECT SENTRY_BACKEND_PROJECT VITE_SENTRY_DSN; do
             if [[ -z "${!variable:-}" ]]; then
               echo "$variable must be configured for release correlation." >&2
               exit 1
@@ -89,7 +90,7 @@ jobs:
 
   docker-backend:
     name: Build backend image
-    needs: sentry-release
+    needs: [sentry-release, build-macos, build-android-wear]
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -122,8 +123,8 @@ jobs:
           build-args: |
             SENTRY_RELEASE=${{ env.BACKEND_SENTRY_RELEASE }}
           tags: |
-            ghcr.io/neohuncho/pomi-backend:latest
-            ghcr.io/neohuncho/pomi-backend:${{ env.RELEASE_TAG }}
+            ghcr.io/host-it-labs/pomi-backend:latest
+            ghcr.io/host-it-labs/pomi-backend:${{ env.RELEASE_TAG }}
 
   build-macos:
     name: Build ARM64 macOS app
@@ -163,6 +164,7 @@ jobs:
         env:
           NODE_ENV: production
           VITE_BACKEND_URL: ${{ vars.PROD_BACKEND_URL }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
           VITE_SENTRY_RELEASE: ${{ env.FRONTEND_SENTRY_RELEASE }}
           VITE_USE_HTTPS: 'true'
         run: pnpm tauri build --target aarch64-apple-darwin
@@ -250,6 +252,10 @@ jobs:
           GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
         run: |
           set -euo pipefail
+          if [[ "${{ github.event_name }}" == "release" && -z "$GOOGLE_SERVICES_JSON_BASE64" ]]; then
+            echo 'GOOGLE_SERVICES_JSON_BASE64 must be configured for a published release.' >&2
+            exit 1
+          fi
           if [[ -n "$GOOGLE_SERVICES_JSON_BASE64" ]]; then
             umask 077
             printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > packages/frontend/src-tauri/gen/android/app/google-services.json
@@ -281,6 +287,7 @@ jobs:
         env:
           NODE_ENV: production
           VITE_BACKEND_URL: ${{ vars.PROD_BACKEND_URL }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
           VITE_SENTRY_RELEASE: ${{ env.FRONTEND_SENTRY_RELEASE }}
           VITE_USE_HTTPS: 'true'
           VITE_RENDER_SYSTEM_TRAY_ICON: 'true'
@@ -375,3 +382,36 @@ jobs:
           files: release-assets/**/*
           fail_on_unmatched_files: true
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  release-radar-issues:
+    name: Release Radar issues
+    if: ${{ github.event_name == 'release' && !github.event.release.prerelease }}
+    needs: [publish-release]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - name: Check out released source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Mint Pomi Radar bot token
+        id: radar-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.POMI_RADAR_APP_ID }}
+          private-key: ${{ secrets.POMI_RADAR_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: pomi
+
+      - name: Close included canonical issues and resolve Sentry groups
+        env:
+          GITHUB_TOKEN: ${{ steps.radar-token.outputs.token }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/radar-lifecycle.mjs release

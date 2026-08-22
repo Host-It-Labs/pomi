@@ -1,0 +1,11 @@
+[features]
+codex_hooks = true
+
+[[hooks.SessionStart]]
+matcher = "^startup$"
+
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = '/bin/bash "$(git rev-parse --show-toplevel)/.codex/hooks/start-pomi-tmux.sh"'
+timeout = 120
+statusMessage = "Starting Pomi tmux"

@@ -52,7 +52,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Prepare backend env file
-        run: cp packages/backend/.env.example packages/backend/.env
+        run: cp .env.example .env.local
 
       - name: Build workspace
         run: pnpm -r run build

@@ -1,9 +1,9 @@
-import * as dotenv from 'dotenv';
 import { join } from 'path';
 import { DataSource } from 'typeorm';
 import { resolveDatabaseUrl } from './src/config/environment';
+import { loadBackendLocalEnvironment } from './src/config/local-environment';
 
-dotenv.config();
+loadBackendLocalEnvironment();
 
 export default new DataSource({
   type: 'postgres',

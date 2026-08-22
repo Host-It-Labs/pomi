@@ -21,5 +21,15 @@ playwright/.cache/
 .pnpm-store/
 .pomi/
 .superpowers/
-config/current-work.env
+.env.local
+config/secrets/
+config/*.private-key.pem
+config/*.service-account.json
+config/*.keystore
+config/*.jks
+**/*.pem
+**/*.jks
+**/keystore.properties
+**/google-services.json
+**/*service-account*.json
 config/pomi-automation.env

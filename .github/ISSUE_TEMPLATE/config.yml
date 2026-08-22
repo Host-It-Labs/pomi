@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security report
-    url: https://github.com/NeoHuncho/pomi/security/advisories/new
+    url: https://github.com/Host-It-Labs/pomi/security/advisories/new
     about: Report vulnerabilities privately.
   - name: Commercial permission
-    url: https://github.com/NeoHuncho
+    url: https://github.com/Host-It-Labs
     about: Request a private channel for store distribution or paid hosting.

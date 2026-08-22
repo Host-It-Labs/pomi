@@ -13,16 +13,22 @@ services:
     depends_on:
       - db
       - redis
-    env_file:
-      - ./.env
     environment:
       - DATABASE_URL=postgres://user:password@db:5432/pomodoro
       - REDIS_URL=redis://redis:6379
       - NODE_ENV=development
       - NEST_PORT=3000
+      - APP_NAME=${APP_NAME:-pomi}
+      - JWT_SECRET=${JWT_SECRET:-pomi-development-only-secret-never-use-in-production}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - NEST_SENTRY_DSN=${NEST_SENTRY_DSN:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1/}
+      - OPENROUTER_HTTP_REFERER=${OPENROUTER_HTTP_REFERER:-}
       - GITHUB_FEEDBACK_TOKEN=${GITHUB_FEEDBACK_TOKEN:-}
       - GITHUB_FEEDBACK_REPOSITORY=${GITHUB_FEEDBACK_REPOSITORY:-}
       - GITHUB_FEEDBACK_LABEL=${GITHUB_FEEDBACK_LABEL:-ignore}
+      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/${POMI_FIREBASE_SERVICE_ACCOUNT_PATH:-config/secrets/firebase-service-account.json}
 
   db:
     image: postgres:17-alpine

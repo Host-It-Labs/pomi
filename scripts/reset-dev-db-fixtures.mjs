@@ -1,9 +1,11 @@
 import { spawn } from 'node:child_process';
-import fs from 'node:fs';
-import { copyFile, rm } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readDevPorts } from './dev-ports.mjs';
+import { loadLocalEnvironment } from './local-env.mjs';
+
+loadLocalEnvironment();
 
 const rootDir = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const composeFile =
@@ -13,11 +15,6 @@ const composeProject = process.env.POMI_COMPOSE_PROJECT || 'pomi';
 const pgdataDir =
   process.env.POMI_DEV_DB_DATA_DIR ||
   path.join(rootDir, 'packages/backend/pgdata');
-const backendEnvFile = path.join(rootDir, 'packages/backend/.env');
-const backendEnvExampleFile = path.join(
-  rootDir,
-  'packages/backend/.env.example'
-);
 const args = process.argv.slice(2);
 const unsupportedArgs = args.filter(argument => argument !== '--copyme-only');
 
@@ -92,13 +89,6 @@ async function main() {
 
   process.stdout.write(`[pomi] removing dev database data at ${pgdataDir}\n`);
   await rm(pgdataDir, { recursive: true, force: true });
-
-  if (!fs.existsSync(backendEnvFile)) {
-    await copyFile(backendEnvExampleFile, backendEnvFile);
-    process.stdout.write(
-      '[pomi] copied packages/backend/.env.example to packages/backend/.env\n'
-    );
-  }
 
   process.stdout.write('[pomi] starting dev stack\n');
   await run('pnpm', ['run', 'docker:dev:detached'], { env: composeEnv });

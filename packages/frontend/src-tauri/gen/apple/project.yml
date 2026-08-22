@@ -51,8 +51,8 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        CFBundleShortVersionString: 0.1.0
-        CFBundleVersion: '0.1.0'
+        CFBundleShortVersionString: 0.0.1
+        CFBundleVersion: '1'
         NSMicrophoneUsageDescription: Pomi uses the microphone when you record Assistant voice commands.
     entitlements:
       path: pomi_iOS/pomi_iOS.entitlements

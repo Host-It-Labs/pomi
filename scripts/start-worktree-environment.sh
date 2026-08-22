@@ -27,13 +27,12 @@ COMPOSE_FILE="$ROOT_DIR/packages/backend/docker-compose.dev.yml"
 
 cd "$ROOT_DIR"
 
-if [[ -f "$ROOT_DIR/config/current-work.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  . "$ROOT_DIR/config/current-work.env"
-  set +a
-fi
-export POMI_CURRENT_WORK_SLUG="${POMI_CURRENT_WORK_SLUG:-test-context-slug}"
+# shellcheck disable=SC1091
+. "$ROOT_DIR/scripts/local-env.sh"
+pomi_load_local_environment
+
+branch_slug="$(git branch --show-current | tr -cs '[:alnum:]._-' '-' | sed 's/^-//; s/-$//')"
+export POMI_CURRENT_WORK_SLUG="${POMI_CURRENT_WORK_SLUG:-${branch_slug:-test-context-slug}}"
 POMI_COPYME_USERNAME="${POMI_COPYME_USERNAME:-copyme}"
 POMI_COPYME_PASSWORD="${POMI_COPYME_PASSWORD:-$POMI_COPYME_USERNAME}"
 
@@ -43,8 +42,7 @@ pomi_require_linked_worktree "$ROOT_DIR"
 worktree_id="$(pomi_worktree_id "$ROOT_DIR")"
 legacy_worktree_id="$(pomi_legacy_worktree_id "$ROOT_DIR")"
 branch_worktree_id="$(pomi_branch_worktree_id "$ROOT_DIR")"
-custom_compose_project="${POMI_COMPOSE_PROJECT:-}"
-export POMI_COMPOSE_PROJECT="${POMI_COMPOSE_PROJECT:-pomi-wt-${worktree_id}}"
+export POMI_COMPOSE_PROJECT="pomi-wt-${worktree_id}"
 export POMI_DEV_PORTS_FILE="${POMI_DEV_PORTS_FILE:-$ROOT_DIR/.pomi/dev-ports.env}"
 export POMI_TMUX_SESSION="${POMI_TMUX_SESSION:-pomi-wt-${worktree_id}}"
 
@@ -54,16 +52,11 @@ mkdir -p "$(dirname "$POMI_DEV_PORTS_FILE")"
 main_worktree="$(pomi_main_worktree)"
 pomi_seed_worktree_cargo_cache "$ROOT_DIR" "$main_worktree"
 
-if [[ ! -f "$ROOT_DIR/packages/backend/.env" ]]; then
-  cp "$ROOT_DIR/packages/backend/.env.example" "$ROOT_DIR/packages/backend/.env"
-  echo "[pomi] copied packages/backend/.env.example to packages/backend/.env"
-fi
-
 docker compose -f "$COMPOSE_FILE" -p "$POMI_COMPOSE_PROJECT" down --remove-orphans >/dev/null 2>&1 || true
-if [[ "$legacy_worktree_id" != "$worktree_id" && -z "$custom_compose_project" ]]; then
+if [[ "$legacy_worktree_id" != "$worktree_id" ]]; then
   docker compose -f "$COMPOSE_FILE" -p "pomi-wt-${legacy_worktree_id}" down --remove-orphans >/dev/null 2>&1 || true
 fi
-if [[ -n "$branch_worktree_id" && "$branch_worktree_id" != "$worktree_id" && -z "$custom_compose_project" ]]; then
+if [[ -n "$branch_worktree_id" && "$branch_worktree_id" != "$worktree_id" ]]; then
   docker compose -f "$COMPOSE_FILE" -p "pomi-wt-${branch_worktree_id}" down --remove-orphans >/dev/null 2>&1 || true
 fi
 
@@ -84,6 +77,7 @@ export REDIS_URL="redis://localhost:${POMI_REDIS_PORT}"
 
 pnpm --filter @pomi/shared build
 
+docker compose -f "$COMPOSE_FILE" -p "$POMI_COMPOSE_PROJECT" stop backend >/dev/null 2>&1 || true
 if ! "$ROOT_DIR/scripts/run-dev-migrations.sh"; then
   docker compose -f "$COMPOSE_FILE" -p "$POMI_COMPOSE_PROJECT" logs db --tail 40 || true
   exit 1
@@ -93,7 +87,7 @@ POMI_COPYME_USERNAME="$POMI_COPYME_USERNAME" \
   POMI_COPYME_PASSWORD="$POMI_COPYME_PASSWORD" \
   pnpm --filter @pomi/backend ensure:copyme
 
-docker compose -f "$COMPOSE_FILE" -p "$POMI_COMPOSE_PROJECT" restart backend >/dev/null
+docker compose -f "$COMPOSE_FILE" -p "$POMI_COMPOSE_PROJECT" start backend >/dev/null
 
 for attempt in $(seq 1 60); do
   if curl --silent --fail --max-time 5 "$POMI_BACKEND_BASE_URL/health" >/dev/null 2>&1; then

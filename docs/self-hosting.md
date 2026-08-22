@@ -30,7 +30,9 @@ directory. Redis is not the durable user-data backup.
 
 ## Frontend
 
-Copy `packages/frontend/.env.production.example`, set the backend URL, and run:
+Copy the root `.env.example` to the ignored root `.env.local`, set
+`VITE_BACKEND_URL`, `VITE_USE_HTTPS`, and any optional frontend integration
+variables, then run:
 
 ```bash
 pnpm --filter @pomi/frontend build

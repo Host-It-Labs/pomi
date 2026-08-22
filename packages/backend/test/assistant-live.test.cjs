@@ -3,7 +3,7 @@ const test = require('node:test');
 const path = require('node:path');
 const { config } = require('dotenv');
 
-config({ path: path.join(process.cwd(), 'packages', 'backend', '.env') });
+config({ path: path.join(process.cwd(), '.env.local'), override: false });
 
 const {
   AssistantInputInterpreter,
@@ -33,7 +33,7 @@ const intentions = [
 function requireApiKey() {
   if (!process.env.OPENROUTER_API_KEY?.trim()) {
     throw new Error(
-      'OPENROUTER_API_KEY is required. Put it in packages/backend/.env or the environment.'
+      'OPENROUTER_API_KEY is required. Put it in the root .env.local or the environment.'
     );
   }
 }

@@ -1,0 +1,35 @@
+name: Radar lifecycle
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  consolidation-merged:
+    if: ${{ github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trusted lifecycle tooling
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Mint Pomi Radar bot token
+        id: radar-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.POMI_RADAR_APP_ID }}
+          private-key: ${{ secrets.POMI_RADAR_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: pomi
+
+      - name: Mark included issues ready for release
+        env:
+          GITHUB_TOKEN: ${{ steps.radar-token.outputs.token }}
+          POMI_GITHUB_APP_BOT_LOGIN: pomi-radar[bot]
+        run: node scripts/radar-lifecycle.mjs consolidation-merged < "$GITHUB_EVENT_PATH"

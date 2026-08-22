@@ -1,0 +1,14 @@
+# These rules are project-local and only load for trusted Pomi checkouts. A push
+# rule cannot safely distinguish ordinary trailing refspecs from destructive flags,
+# so every push requires review even though ordinary Pomi publication is authorized.
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "Review the complete push command because destructive flags may follow a refspec.",
+    match = [
+        "git push origin main",
+        "git push origin feature --force-with-lease",
+        "git push -u origin feature",
+    ],
+    not_match = ["git fetch origin"],
+)
