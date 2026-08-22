@@ -1331,6 +1331,7 @@ export async function validateAutomationAuthentication({
 } = {}) {
   const expectedLogin = environment.POMI_GITHUB_APP_BOT_LOGIN?.trim();
   const token = environment.GITHUB_TOKEN?.trim();
+  const permissionsJson = environment.POMI_GITHUB_APP_PERMISSIONS?.trim();
   const authorName = environment.GIT_AUTHOR_NAME?.trim();
   const authorEmail = environment.GIT_AUTHOR_EMAIL?.trim();
   const committerName = environment.GIT_COMMITTER_NAME?.trim();
@@ -1338,6 +1339,7 @@ export async function validateAutomationAuthentication({
   if (
     !expectedLogin ||
     !token ||
+    !permissionsJson ||
     !authorName ||
     !authorEmail ||
     !committerName ||
@@ -1347,21 +1349,47 @@ export async function validateAutomationAuthentication({
       'Radar preflight requires GitHub App authentication and bot Git identity from scripts/github-app-auth.mjs.'
     );
   }
-  const response = await fetchImpl('https://api.github.com/user', {
-    headers: {
-      accept: 'application/vnd.github+json',
-      authorization: `Bearer ${token}`,
-      'user-agent': 'pomi-radar-preflight',
-      'x-github-api-version': '2022-11-28',
-    },
-  });
-  const user = await response.json();
-  if (!response.ok || user.login !== expectedLogin) {
+  let permissions;
+  try {
+    permissions = JSON.parse(permissionsJson);
+  } catch {
+    throw new Error(
+      'Radar preflight requires verified GitHub App repository and permission metadata.'
+    );
+  }
+  const requiredPermissions = ['contents', 'issues', 'pull_requests'];
+  if (
+    requiredPermissions.some(
+      permission => permissions?.[permission] !== 'write'
+    )
+  ) {
+    throw new Error(
+      'Radar preflight requires the GitHub App installation to have repository, contents, issues, and pull-request write access.'
+    );
+  }
+  const response = await fetchImpl(
+    'https://api.github.com/installation/repositories?per_page=100',
+    {
+      headers: {
+        accept: 'application/vnd.github+json',
+        authorization: `Bearer ${token}`,
+        'user-agent': 'pomi-radar-preflight',
+        'x-github-api-version': '2022-11-28',
+      },
+    }
+  );
+  const installation = await response.json();
+  if (
+    !response.ok ||
+    !installation.repositories?.some(
+      repository => repository.full_name === repo()
+    )
+  ) {
     throw new Error(
       `Radar preflight expected ${expectedLogin}, but App authentication could not be verified.`
     );
   }
-  return { botLogin: user.login, gitIdentityVerified: true };
+  return { botLogin: expectedLogin, gitIdentityVerified: true };
 }
 
 async function main() {

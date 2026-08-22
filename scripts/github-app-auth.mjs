@@ -125,6 +125,7 @@ export async function getGitHubAppAuthentication({
   return {
     token: installationToken.token,
     expiresAt: installationToken.expires_at,
+    permissions: installationToken.permissions,
     app,
     botLogin,
     botUserId: botUser.id,
@@ -182,6 +183,9 @@ async function runCli() {
       GITHUB_TOKEN: authentication.token,
       POMI_GITHUB_APP_TOKEN: authentication.token,
       POMI_GITHUB_APP_BOT_LOGIN: authentication.botLogin,
+      POMI_GITHUB_APP_PERMISSIONS: JSON.stringify(
+        authentication.permissions ?? {}
+      ),
       GIT_ASKPASS: path.join(repositoryRoot, 'scripts/github-app-askpass.sh'),
       GIT_TERMINAL_PROMPT: '0',
       GIT_AUTHOR_NAME: `${authentication.app.name} Bot`,

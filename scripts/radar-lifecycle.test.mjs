@@ -66,16 +66,23 @@ test('preflight verifies bot attribution and Git identity', async () => {
     environment: {
       GITHUB_TOKEN: 'app-token',
       POMI_GITHUB_APP_BOT_LOGIN: 'pomi-radar[bot]',
+      POMI_GITHUB_APP_PERMISSIONS:
+        '{"contents":"write","issues":"write","pull_requests":"write"}',
       GIT_AUTHOR_NAME: 'Pomi Radar Bot',
       GIT_AUTHOR_EMAIL: '123+pomi-radar[bot]@users.noreply.github.com',
       GIT_COMMITTER_NAME: 'Pomi Radar Bot',
       GIT_COMMITTER_EMAIL: '123+pomi-radar[bot]@users.noreply.github.com',
     },
     fetchImpl: async () =>
-      new globalThis.Response(JSON.stringify({ login: 'pomi-radar[bot]' }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
+      new globalThis.Response(
+        JSON.stringify({
+          repositories: [{ full_name: 'Host-It-Labs/pomi' }],
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }
+      ),
   });
   assert.deepEqual(result, {
     botLogin: 'pomi-radar[bot]',
