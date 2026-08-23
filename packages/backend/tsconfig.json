@@ -8,6 +8,7 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "target": "ES2021",
+    "types": ["node"],
     "strict": false,
     "strictNullChecks": true,
     "sourceMap": true,

@@ -4,6 +4,14 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@anatine/zod-openapi>ts-deepmerge': 8.0.0
+  gaxios>uuid: 11.1.1
+  teeny-request>uuid: 11.1.1
+
+patchedDependencies:
+  '@anatine/zod-openapi@1.14.2': 0e2bf327a9ac97434dc30c8835b3bb2add15c565a9ff6fc4c9afd815113e5701
+
 importers:
   .:
     devDependencies:
@@ -7624,10 +7632,10 @@ packages:
     peerDependencies:
       typescript: '>=4.8.4'
 
-  ts-deepmerge@6.2.1:
+  ts-deepmerge@8.0.0:
     resolution:
       {
-        integrity: sha512-8CYSLazCyj0DJDpPIxOFzJG46r93uh6EynYjuey+bxcLltBeqZL7DMfaE5ZPzZNFlav7wx+2TDa/mBl8gkTYzw==,
+        integrity: sha512-133O+10nJmVI8w5xeVZPEv5PIrv7iaUae07wv1aH8XJH95Ur6YIhWAPhPyP1YPlbPS9fCVcNIZTu7m8urRVF0A==,
       }
     engines: { node: '>=14.13.1' }
 
@@ -7890,19 +7898,18 @@ packages:
         integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==,
       }
 
+  uuid@11.1.1:
+    resolution:
+      {
+        integrity: sha512-vIYxrBCC/N/K+Js3qSN88go7kIfNPssr/hHCesKCQNAjmgvYS2oqr69kIufEG+O4+PfezOH4EbIeHCfFov8ZgQ==,
+      }
+    hasBin: true
+
   uuid@14.0.2:
     resolution:
       {
         integrity: sha512-xZe/16rV4aa+HGSOCiY2YeLT1OybRLrrkL/Rqaq7p7GMVXjFh+6wN4oMYgjFmnSnhY8t6Xpdl2l9qmnHYuMHwQ==,
       }
-    hasBin: true
-
-  uuid@9.0.1:
-    resolution:
-      {
-        integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==,
-      }
-    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   v8-compile-cache-lib@3.0.1:
@@ -8373,10 +8380,10 @@ packages:
 snapshots:
   '@adobe/css-tools@4.5.0': {}
 
-  '@anatine/zod-openapi@1.14.2(openapi3-ts@2.0.2)(zod@3.25.76)':
+  '@anatine/zod-openapi@1.14.2(patch_hash=0e2bf327a9ac97434dc30c8835b3bb2add15c565a9ff6fc4c9afd815113e5701)(openapi3-ts@2.0.2)(zod@3.25.76)':
     dependencies:
       openapi3-ts: 2.0.2
-      ts-deepmerge: 6.2.1
+      ts-deepmerge: 8.0.0
       zod: 3.25.76
 
   '@angular-devkit/core@19.2.24(chokidar@4.0.3)':
@@ -9726,7 +9733,7 @@ snapshots:
 
   '@ts-rest/open-api@3.52.1(@ts-rest/core@3.52.1(@types/node@26.2.0)(zod@3.25.76))(zod@3.25.76)':
     dependencies:
-      '@anatine/zod-openapi': 1.14.2(openapi3-ts@2.0.2)(zod@3.25.76)
+      '@anatine/zod-openapi': 1.14.2(patch_hash=0e2bf327a9ac97434dc30c8835b3bb2add15c565a9ff6fc4c9afd815113e5701)(openapi3-ts@2.0.2)(zod@3.25.76)
       '@ts-rest/core': 3.52.1(@types/node@26.2.0)(zod@3.25.76)
       openapi3-ts: 2.0.2
       zod: 3.25.76
@@ -11280,7 +11287,7 @@ snapshots:
       https-proxy-agent: 7.0.6(supports-color@8.1.1)
       is-stream: 2.0.1
       node-fetch: 2.7.0
-      uuid: 9.0.1
+      uuid: 11.1.1
     transitivePeerDependencies:
       - encoding
       - supports-color
@@ -13085,7 +13092,7 @@ snapshots:
       https-proxy-agent: 5.0.1(supports-color@8.1.1)
       node-fetch: 2.7.0
       stream-events: 1.0.5
-      uuid: 9.0.1
+      uuid: 11.1.1
     transitivePeerDependencies:
       - encoding
       - supports-color
@@ -13152,7 +13159,7 @@ snapshots:
     dependencies:
       typescript: 6.0.3
 
-  ts-deepmerge@6.2.1: {}
+  ts-deepmerge@8.0.0: {}
 
   ts-node@10.9.2(@swc/core@1.16.1)(@types/node@26.2.0)(typescript@6.0.3):
     dependencies:
@@ -13306,10 +13313,10 @@ snapshots:
 
   util-deprecate@1.0.2: {}
 
-  uuid@14.0.2: {}
-
-  uuid@9.0.1:
+  uuid@11.1.1:
     optional: true
+
+  uuid@14.0.2: {}
 
   v8-compile-cache-lib@3.0.1: {}
 

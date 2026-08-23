@@ -1,5 +1,9 @@
 packages:
   - 'packages/*'
+overrides:
+  '@anatine/zod-openapi>ts-deepmerge': 8.0.0
+  'gaxios>uuid': 11.1.1
+  'teeny-request>uuid': 11.1.1
 allowBuilds:
   '@firebase/util': true
   '@nestjs/core': true
@@ -8,3 +12,5 @@ allowBuilds:
   esbuild: true
   msw: true
   protobufjs: true
+patchedDependencies:
+  '@anatine/zod-openapi@1.14.2': patches/@anatine__zod-openapi@1.14.2.patch
