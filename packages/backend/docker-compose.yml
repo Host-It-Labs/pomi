@@ -1,7 +1,7 @@
 services:
   backend:
     # Override POMI_BACKEND_IMAGE to use a published image instead of the local
-    # tag, for example ghcr.io/host-it-labs/pomi-backend:latest.
+    # tag. When using a published image, pull it and omit `--build` from `up`.
     image: ${POMI_BACKEND_IMAGE:-pomi-backend:local}
     build:
       context: ../..
@@ -9,6 +9,14 @@ services:
     # Bind to loopback by default. An HTTPS reverse proxy should expose the API.
     ports:
       - '${POMI_BIND_ADDRESS:-127.0.0.1}:${POMI_BACKEND_PORT:-3000}:3000'
+    volumes:
+      # To enable APNs, set APN_KEY_FILE to the host path of the downloaded .p8
+      # file and APN_KEY_PATH to /run/secrets/pomi-apns-key.p8. /dev/null keeps
+      # this optional integration disabled when no host key file is configured.
+      - type: bind
+        source: ${APN_KEY_FILE:-/dev/null}
+        target: /run/secrets/pomi-apns-key.p8
+        read_only: true
     depends_on:
       db:
         condition: service_healthy
