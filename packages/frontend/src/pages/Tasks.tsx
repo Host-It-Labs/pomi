@@ -124,6 +124,7 @@ import {
 import { useI18n } from '../i18n';
 import { useDefaultTaskSort } from './taskDefaultSort';
 import { useDefaultTaskView } from './taskDefaultView';
+import { useUpdatedTaskReveal } from './taskUpdatedReveal';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
 import { isTaskInTimerTypeSearchScope } from '../utils/taskSearchScope';
 import { TASKS_PAGE_CONTAINER_CLASS } from '../constants/taskLayout';
@@ -799,14 +800,18 @@ export function Tasks() {
       }),
     [hideVacationCovered, orderingClock, tasks]
   );
-  const revealUpdatedTask = useCallback((taskId: string) => {
+  const resetUpdatedTaskFilters = useCallback(() => {
     setTaskSearchQuery('');
     setSelectedIntentionFilter(null);
     setSelectedListId(null);
     setTimerTypeFilter('all');
     setPropertyFilters(EMPTY_TASK_PROPERTY_FILTERS);
-    setUpdatedTaskDestinationId(taskId);
   }, []);
+  const revealUpdatedTask = useUpdatedTaskReveal({
+    resetFilters: resetUpdatedTaskFilters,
+    setPageViewMode: setTaskPageViewMode,
+    setDestinationTaskId: setUpdatedTaskDestinationId,
+  });
   const updateTaskWithPositionFeedback = useCallback(
     async (updates: Parameters<typeof updateTask>[0]) => {
       const currentTask = tasks.find(task => task.id === updates.id);

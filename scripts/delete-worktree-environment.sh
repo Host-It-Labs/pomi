@@ -73,6 +73,7 @@ rm -rf \
   "$ROOT_DIR/packages/frontend/node_modules" \
   "$ROOT_DIR/packages/shared/node_modules" \
   "$ROOT_DIR/packages/backend/pgdata" \
+  "$ROOT_DIR/packages/backend/pgdata18" \
   "$ROOT_DIR/packages/frontend/src-tauri/target"
 
 if [[ -f "$POMI_DEV_PORTS_FILE" ]]; then

@@ -26,7 +26,7 @@ const composeFile = resolveExistingFileInside({
   label: 'Development Docker Compose file',
 });
 const composeProject = process.env.POMI_COMPOSE_PROJECT || 'pomi';
-const defaultPgdataDir = path.join(backendRoot, 'pgdata');
+const defaultPgdataDir = path.join(backendRoot, 'pgdata18');
 const pgdataDir = resolveManagedDirectory({
   allowedRoot: backendRoot,
   candidate: process.env.POMI_DEV_DB_DATA_DIR || defaultPgdataDir,
