@@ -8,6 +8,8 @@ import { loadLocalEnvironment, repositoryRoot } from './local-env.mjs';
 
 const API_BASE = 'https://api.github.com';
 const PUBLIC_REPOSITORY = 'Host-It-Labs/pomi';
+export const EXPECTED_GITHUB_APP_ID = '4675891';
+export const EXPECTED_GITHUB_APP_BOT_LOGIN = 'pomi-radar[bot]';
 const PRIVATE_KEY_PATH = path.join(
   repositoryRoot,
   'config/secrets/pomi-radar.private-key.pem'
@@ -80,6 +82,9 @@ export function readGitHubAppConfiguration(environment = process.env) {
   if (!/^\d+$/.test(appId) || !/^\d+$/.test(installationId)) {
     throw new Error('GitHub App and installation IDs must be numeric.');
   }
+  if (appId !== EXPECTED_GITHUB_APP_ID) {
+    throw new Error('GitHub App configuration does not identify Pomi Radar.');
+  }
   if (
     configuredPrivateKeyPath !== 'config/secrets/pomi-radar.private-key.pem'
   ) {
@@ -110,6 +115,12 @@ export async function getGitHubAppAuthentication({
     }),
   ]);
   const botLogin = `${app.slug}[bot]`;
+  if (
+    String(app.id) !== EXPECTED_GITHUB_APP_ID ||
+    botLogin !== EXPECTED_GITHUB_APP_BOT_LOGIN
+  ) {
+    throw new Error('GitHub App authentication did not resolve to Pomi Radar.');
+  }
   const botUser = await githubRequest(
     `/users/${encodeURIComponent(botLogin)}`,
     {
@@ -125,6 +136,7 @@ export async function getGitHubAppAuthentication({
   return {
     token: installationToken.token,
     expiresAt: installationToken.expires_at,
+    permissions: installationToken.permissions,
     app,
     botLogin,
     botUserId: botUser.id,
@@ -181,7 +193,11 @@ async function runCli() {
       GH_TOKEN: authentication.token,
       GITHUB_TOKEN: authentication.token,
       POMI_GITHUB_APP_TOKEN: authentication.token,
+      POMI_GITHUB_APP_ID: String(authentication.app.id),
       POMI_GITHUB_APP_BOT_LOGIN: authentication.botLogin,
+      POMI_GITHUB_APP_PERMISSIONS: JSON.stringify(
+        authentication.permissions ?? {}
+      ),
       GIT_ASKPASS: path.join(repositoryRoot, 'scripts/github-app-askpass.sh'),
       GIT_TERMINAL_PROMPT: '0',
       GIT_AUTHOR_NAME: `${authentication.app.name} Bot`,
