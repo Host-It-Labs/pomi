@@ -50,7 +50,7 @@ The acceptance gate is executable behavior ownership, not a blanket percentage. 
 
 This keeps the useful role the former E2Es played: the tests are readable, executable statements of the main business rules. Larger services do not need artificial line coverage when their rules are better demonstrated through focused service, HTTP, component, native, and retained journey specifications. The manifest is the mechanically checked acceptance gate for main business behavior; the historical matrix also records duplicate and narrow presentation assertions intentionally retired without claiming one-for-one replacement coverage.
 
-`pnpm test:coverage` is an alias for `pnpm test:business`. It produces a full-source V8 report across Node, jsdom, backend integration, and Chromium. `config/coverage-baseline.json` records the full-source baseline from the required Node 24 CI runtime. `pnpm test:coverage:ratchet` prevents covered counts or percentages from falling. Raise the baseline when replacement coverage lands; never lower it or hide a difficult product source through an exclusion.
+`pnpm test:coverage` is an alias for `pnpm test:business`. It produces a full-source V8 report across Node, jsdom, backend integration, and Chromium. `config/coverage-baseline.json` records the full-source baseline from the required Node 26 CI runtime. `pnpm test:coverage:ratchet` prevents covered counts or percentages from falling. Raise the baseline when replacement coverage lands; never lower it or hide a difficult product source through an exclusion.
 
 Coverage exclusions are limited to declarations, generated/build output, migrations, and framework bootstrap/module wiring. Entities, product services, controllers, stores, utilities, and components remain measurable.
 

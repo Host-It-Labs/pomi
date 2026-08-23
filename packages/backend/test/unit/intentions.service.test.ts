@@ -131,7 +131,7 @@ describe('IntentionsService', () => {
     expect(intentionFindOptions).toEqual([
       {
         where: { userId: 'user-1', isArchived: false },
-        relations: ['parentIntention'],
+        relations: { parentIntention: true },
         order: { title: 'ASC' },
       },
     ]);

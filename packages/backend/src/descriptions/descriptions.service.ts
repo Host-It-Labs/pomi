@@ -32,7 +32,7 @@ export class DescriptionsService {
     const [intentions, lists, tasks] = await Promise.all([
       this.intentions.find({
         where: { userId, isArchived: false },
-        relations: ['parentIntention'],
+        relations: { parentIntention: true },
         order: { title: 'ASC' },
       }),
       this.lists.find({

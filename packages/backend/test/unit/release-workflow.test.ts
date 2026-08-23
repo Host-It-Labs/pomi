@@ -69,7 +69,7 @@ describe('public release workflow', () => {
     ]);
 
     for (const script of [amd64Script, arm64Script]) {
-      expect(script).toContain('node:24-bookworm');
+      expect(script).toContain('node:26-bookworm');
       expect(script).toContain(
         '--mount type=volume,destination=/workspace/node_modules'
       );

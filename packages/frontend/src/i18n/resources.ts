@@ -88,7 +88,6 @@ const english: TranslationCatalog = {
   'common.week': 'week',
   'common.month': 'month',
   'common.year': 'year',
-  'common.today': 'Today',
   'common.list': 'List',
   'common.calendar': 'Calendar',
   'common.item': 'item',
@@ -151,7 +150,6 @@ const english: TranslationCatalog = {
   'task.propertyFilters': 'Task property filters',
   'task.timerTypes': 'Task Timer types',
   'task.hasDueDate': 'Has due date',
-  'task.noDueDate': 'No due date',
   'task.oneTime': 'One-time',
   'task.pinned': 'Pinned',
   'task.unpinned': 'Unpinned',
@@ -173,7 +171,6 @@ const english: TranslationCatalog = {
   'task.bulkPartialFailure':
     '{{failed}} of {{total}} Tasks were unchanged. They remain selected for retry.',
   'task.bulkUpdated': '{{count}} Tasks updated',
-  'task.noIntention': 'No Intention',
   'task.updated': 'Task updated',
   'task.viewUpdated': 'View',
   'task.archivedTasks': 'Archived Tasks',

@@ -18,8 +18,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  NODE_VERSION: '24'
-  PNPM_VERSION: 9.15.5
+  NODE_VERSION: '26'
+  PNPM_VERSION: 11.23.0
   RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
   FRONTEND_SENTRY_RELEASE: pomi-frontend@${{ github.event.release.tag_name || inputs.release_tag }}
   BACKEND_SENTRY_RELEASE: pomi-backend@${{ github.event.release.tag_name || inputs.release_tag }}

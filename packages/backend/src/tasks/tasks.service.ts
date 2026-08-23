@@ -1299,7 +1299,7 @@ export class TasksService {
           importSourceTaskId: In(uniqueSourceIds),
           itemKind: 'task',
         },
-        select: ['importSourceTaskId'],
+        select: { importSourceTaskId: true },
       })
       .then(
         records =>

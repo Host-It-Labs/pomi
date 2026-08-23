@@ -3,10 +3,14 @@ import {
   TIMER_STATUSES,
   TIMER_TYPES,
 } from '@pomi/shared';
-import * as admin from 'firebase-admin';
+import { getMessaging } from 'firebase-admin/messaging';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NotificationService } from '../../src/notifications/notifications.service';
 import { TimerCountdownService } from '../../src/timer/timer-countdown.service';
+
+vi.mock('firebase-admin/messaging', () => ({
+  getMessaging: vi.fn(),
+}));
 
 type Payload = {
   android: {
@@ -23,7 +27,7 @@ afterEach(() => {
 
 function createNotificationService() {
   const fcmPayloads: Payload[] = [];
-  vi.spyOn(admin, 'messaging').mockReturnValue({
+  vi.mocked(getMessaging).mockReturnValue({
     send: async (payload: Payload) => {
       fcmPayloads.push(payload);
       return 'message-id';
@@ -136,7 +140,7 @@ describe('Android timer notifications', () => {
 
   it('retries durable delivery while legacy delivery remains best effort', async () => {
     const { service } = createNotificationService();
-    vi.mocked(admin.messaging).mockReturnValue({
+    vi.mocked(getMessaging).mockReturnValue({
       send: vi.fn(async () => {
         throw new Error('provider down');
       }),
@@ -194,9 +198,11 @@ describe('Android timer notifications', () => {
     Object.assign(service, {
       fcmApp: null,
       apnProvider: {
-        send: vi.fn(async () => ({
-          failed: [{ status: 400, response: { reason: 'PayloadTooLarge' } }],
-        })),
+        send: vi.fn(async () => {
+          throw Object.assign(new Error('APNs delivery failed'), {
+            reason: 'PayloadTooLarge',
+          });
+        }),
       },
     });
 
@@ -224,9 +230,11 @@ describe('Android timer notifications', () => {
     Object.assign(service, {
       fcmApp: null,
       apnProvider: {
-        send: vi.fn(async () => ({
-          failed: [{ status: 400, response: { reason: 'BadDeviceToken' } }],
-        })),
+        send: vi.fn(async () => {
+          throw Object.assign(new Error('APNs delivery failed'), {
+            reason: 'BadDeviceToken',
+          });
+        }),
       },
     });
 

@@ -161,6 +161,9 @@ export function TaskCalendarNavigator({
           {Array.from({ length: 12 }, (_, month) => {
             const monthDate = new Date(anchor.getFullYear(), month, 1, 12);
             const monthKey = formatLocalDateKey(monthDate);
+            const monthLabel = new Intl.DateTimeFormat(locale, {
+              month: 'short',
+            }).format(monthDate);
             const count = countCalendarEntriesInRange(
               entries,
               getCalendarRange('month', monthKey)
@@ -169,6 +172,7 @@ export function TaskCalendarNavigator({
               <button
                 key={monthKey}
                 type="button"
+                aria-label={`${monthLabel} ${count} ${count === 1 ? t('common.item') : t('common.items')}`}
                 onClick={() => {
                   onAnchorDateChange(monthKey);
                   onSelectedDateChange(monthKey);
@@ -177,9 +181,7 @@ export function TaskCalendarNavigator({
                 className="rounded-md border border-slate-800/70 bg-slate-950/35 px-2 py-2 text-left transition hover:border-indigo-500/50 hover:bg-indigo-950/20"
               >
                 <span className="block text-[11px] font-medium text-slate-300">
-                  {new Intl.DateTimeFormat(locale, {
-                    month: 'short',
-                  }).format(monthDate)}
+                  {monthLabel}
                 </span>
                 <span className="text-[9px] text-slate-600">
                   {count} {count === 1 ? t('common.item') : t('common.items')}

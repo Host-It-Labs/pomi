@@ -25,7 +25,7 @@ build_for_platform() {
     --mount type=volume,destination=/workspace/packages/landing/node_modules \
     --mount type=volume,destination=/workspace/packages/shared/node_modules \
     -w /workspace \
-    node:24-bookworm bash -lc "
+    node:26-bookworm bash -lc "
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
@@ -47,7 +47,9 @@ apt-get install -y \
 curl https://sh.rustup.rs -sSf | sh -s -- -y
 export PATH=\"\$HOME/.cargo/bin:\$PATH\"
 
-npm i -g pnpm@9
+npm install --global corepack@0.35.0
+corepack enable pnpm
+corepack install --global pnpm@11.23.0
 pnpm install --frozen-lockfile --force
 cd packages/frontend
 CARGO_TARGET_DIR='$target_dir' VITE_DEBUG_PANEL_ENABLED=false VITE_SENTRY_RELEASE='$FRONTEND_SENTRY_RELEASE' VITE_RENDER_SYSTEM_TRAY_ICON=true pnpm tauri build --bundles deb

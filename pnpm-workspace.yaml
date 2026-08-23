@@ -3,6 +3,8 @@ packages:
 allowBuilds:
   '@firebase/util': true
   '@nestjs/core': true
+  '@swc/core': true
   bcrypt: true
   esbuild: true
+  msw: true
   protobufjs: true

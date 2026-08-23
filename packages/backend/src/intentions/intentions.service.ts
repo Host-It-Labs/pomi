@@ -84,7 +84,7 @@ export class IntentionsService {
 
     const intentions = await this.intentionsRepository.find({
       where: whereClause,
-      relations: ['parentIntention'],
+      relations: { parentIntention: true },
     });
 
     return intentions
@@ -100,7 +100,7 @@ export class IntentionsService {
   async getActiveIntentionsForAssistant(userId: string): Promise<Intention[]> {
     const intentions = await this.intentionsRepository.find({
       where: { userId, isArchived: false },
-      relations: ['parentIntention'],
+      relations: { parentIntention: true },
       order: { title: 'ASC' },
     });
     return intentions.filter(intention =>
@@ -224,7 +224,7 @@ export class IntentionsService {
   ): Promise<Intention> {
     const intention = await this.intentionsRepository.findOne({
       where: { userId, slug, type },
-      relations: ['parentIntention'],
+      relations: { parentIntention: true },
     });
 
     if (!intention) {
@@ -346,7 +346,7 @@ export class IntentionsService {
   ): Promise<Intention> {
     const intention = await this.intentionsRepository.findOne({
       where: { userId, slug, type },
-      relations: ['parentIntention'],
+      relations: { parentIntention: true },
     });
     if (!intention) {
       throw new NotFoundException('Intention not found');
@@ -389,7 +389,7 @@ export class IntentionsService {
   ): Promise<Intention> {
     const intention = await this.intentionsRepository.findOne({
       where: { userId, slug, type },
-      relations: ['parentIntention'],
+      relations: { parentIntention: true },
     });
 
     if (!intention) {
@@ -555,7 +555,7 @@ export class IntentionsService {
     const baseSlug = generateIntentionSlug(title);
     const existing = await this.intentionsRepository.find({
       where: { userId, type },
-      select: ['id', 'slug'],
+      select: { id: true, slug: true },
     });
     const reserved = new Set(
       existing
@@ -816,7 +816,7 @@ export class IntentionsService {
 
     const intentions = await this.intentionsRepository.find({
       where: whereClause,
-      relations: ['parentIntention'],
+      relations: { parentIntention: true },
     });
 
     return intentions.reduce(

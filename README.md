@@ -7,10 +7,14 @@ and a Wear OS companion.
 
 ## Local development
 
-Requirements: Node.js 24, pnpm 9.15.5, and Docker with Compose.
+Requirements: Node.js 26, pnpm 11.23.0, and Docker with Compose. Node 26 no
+longer bundles Corepack, so install the current Corepack release once before
+activating pnpm:
 
 ```bash
-corepack enable
+npm install --global corepack@0.35.0
+corepack enable pnpm
+corepack install --global pnpm@11.23.0
 pnpm install --frozen-lockfile
 cp .env.example .env.local
 pnpm docker:dev:detached

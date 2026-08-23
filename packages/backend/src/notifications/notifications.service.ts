@@ -1,7 +1,8 @@
 import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as apn from 'apn';
-import * as admin from 'firebase-admin';
+import { ApnsClient, Host, Notification, Priority } from 'apns2';
+import { cert, initializeApp, type App } from 'firebase-admin/app';
+import * as firebaseMessaging from 'firebase-admin/messaging';
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
@@ -28,8 +29,8 @@ interface NotificationSendOptions {
 @Injectable()
 export class NotificationService {
   private readonly logger = new PomiLogger(NotificationService.name);
-  private fcmApp: admin.app.App | null = null;
-  private apnProvider: apn.Provider | null = null;
+  private fcmApp: App | null = null;
+  private apnProvider: ApnsClient | null = null;
 
   constructor(
     private configService: ConfigService,
@@ -67,8 +68,8 @@ export class NotificationService {
 
       if (serviceAccountJson) {
         const serviceAccount = JSON.parse(serviceAccountJson);
-        this.fcmApp = admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
+        this.fcmApp = initializeApp({
+          credential: cert(serviceAccount),
         });
         this.logger.log('Firebase Cloud Messaging initialized successfully');
       } else {
@@ -92,13 +93,14 @@ export class NotificationService {
       );
 
       if (apnKeyPath && apnKeyId && apnTeamId) {
-        this.apnProvider = new apn.Provider({
-          token: {
-            key: apnKeyPath,
-            keyId: apnKeyId,
-            teamId: apnTeamId,
-          },
-          production: apnProduction,
+        this.apnProvider = new ApnsClient({
+          team: apnTeamId,
+          keyId: apnKeyId,
+          signingKey: readFileSync(apnKeyPath),
+          defaultTopic:
+            this.configService.get<string>('APN_BUNDLE_ID') ||
+            'app.pomi.community',
+          host: apnProduction ? Host.production : Host.development,
         });
         this.logger.log(
           'Apple Push Notification service initialized successfully'
@@ -366,7 +368,7 @@ export class NotificationService {
       const channelId = this.getChannelIdForNotification(options.tags);
       const iconColor = this.getIconColorForNotification(options.tags);
 
-      const payload: admin.messaging.Message = {
+      const payload: firebaseMessaging.Message = {
         token,
         notification: {
           title,
@@ -391,7 +393,7 @@ export class NotificationService {
         },
       };
 
-      await admin.messaging(this.fcmApp!).send(payload);
+      await firebaseMessaging.getMessaging(this.fcmApp!).send(payload);
       this.logger.info('FCM notification sent');
     } catch (error) {
       const errorCode = error.code || error.errorInfo?.code;
@@ -427,7 +429,7 @@ export class NotificationService {
       const sound = this.getSoundForNotification(options.tags, 'apn');
       const badge = this.getBadgeForNotification(options.tags);
 
-      const notification = new apn.Notification({
+      const notification = new Notification(token, {
         alert: {
           title,
           body: message,
@@ -436,13 +438,14 @@ export class NotificationService {
           this.configService.get<string>('APN_BUNDLE_ID') ||
           'app.pomi.community',
         sound,
-        priority: options.priority === 5 ? 10 : 5,
+        priority:
+          options.priority === 5 ? Priority.immediate : Priority.throttled,
         badge,
         threadId: 'pomi-timer',
         ...(options.idempotencyKey && {
           collapseId: options.idempotencyKey,
         }),
-        payload: {
+        data: {
           notificationType: options.tags?.[1] || 'general',
           timestamp: Date.now(),
           ...(options.idempotencyKey && {
@@ -451,31 +454,26 @@ export class NotificationService {
         },
       });
 
-      const result = await this.apnProvider!.send(notification, token);
-
-      if (result.failed.length > 0) {
-        const failure = result.failed[0];
-        const shouldClearToken =
-          failure.response?.reason === 'BadDeviceToken' ||
-          failure.response?.reason === 'Unregistered' ||
-          failure.response?.reason === 'DeviceTokenNotForTopic';
-
-        if (shouldClearToken) {
-          this.logger.warn(
-            'Invalid APNs token detected; clearing the device token'
-          );
-          if (userId) {
-            await this.usersService.clearPushToken(userId, 'ios');
-          }
-        } else {
-          throw new Error(
-            `APNs delivery failed: ${JSON.stringify(result.failed)}`
-          );
-        }
-      } else {
-        this.logger.info('APNs notification sent');
-      }
+      await this.apnProvider!.send(notification);
+      this.logger.info('APNs notification sent');
     } catch (error) {
+      const apnsReason =
+        typeof error === 'object' && error !== null && 'reason' in error
+          ? String(error.reason)
+          : undefined;
+      if (
+        apnsReason === 'BadDeviceToken' ||
+        apnsReason === 'Unregistered' ||
+        apnsReason === 'DeviceTokenNotForTopic'
+      ) {
+        this.logger.warn(
+          'Invalid APNs token detected; clearing the device token'
+        );
+        if (userId) {
+          await this.usersService.clearPushToken(userId, 'ios');
+        }
+        return;
+      }
       this.logger.error(
         'Failed to send APNs notification',
         error instanceof Error ? error.name : undefined
