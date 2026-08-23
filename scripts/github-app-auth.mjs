@@ -143,6 +143,35 @@ export async function getGitHubAppAuthentication({
   };
 }
 
+export function appAuthenticatedEnvironment(
+  authentication,
+  environment = process.env
+) {
+  const botEmail = `${authentication.botUserId}+${authentication.botLogin}@users.noreply.github.com`;
+  return {
+    ...environment,
+    GH_TOKEN: authentication.token,
+    GITHUB_TOKEN: authentication.token,
+    POMI_GITHUB_APP_TOKEN: authentication.token,
+    POMI_GITHUB_APP_ID: String(authentication.app.id),
+    POMI_GITHUB_APP_BOT_LOGIN: authentication.botLogin,
+    POMI_GITHUB_APP_PERMISSIONS: JSON.stringify(
+      authentication.permissions ?? {}
+    ),
+    GIT_ASKPASS: path.join(repositoryRoot, 'scripts/github-app-askpass.sh'),
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_CONFIG_COUNT: '2',
+    GIT_CONFIG_KEY_0: 'credential.helper',
+    GIT_CONFIG_VALUE_0: '',
+    GIT_CONFIG_KEY_1: 'http.https://github.com/.extraheader',
+    GIT_CONFIG_VALUE_1: '',
+    GIT_AUTHOR_NAME: `${authentication.app.name} Bot`,
+    GIT_AUTHOR_EMAIL: botEmail,
+    GIT_COMMITTER_NAME: `${authentication.app.name} Bot`,
+    GIT_COMMITTER_EMAIL: botEmail,
+  };
+}
+
 async function runCli() {
   loadLocalEnvironment();
   const mode = process.argv[2];
@@ -183,28 +212,11 @@ async function runCli() {
       `GitHub App command must be one of: ${[...ALLOWED_COMMANDS].join(', ')}.`
     );
   }
-  const botEmail = `${authentication.botUserId}+${authentication.botLogin}@users.noreply.github.com`;
   // This local CLI intentionally forwards explicit arguments to a small executable allowlist.
   const child = spawn(command, args, {
     stdio: 'inherit',
     cwd: repositoryRoot,
-    env: {
-      ...process.env,
-      GH_TOKEN: authentication.token,
-      GITHUB_TOKEN: authentication.token,
-      POMI_GITHUB_APP_TOKEN: authentication.token,
-      POMI_GITHUB_APP_ID: String(authentication.app.id),
-      POMI_GITHUB_APP_BOT_LOGIN: authentication.botLogin,
-      POMI_GITHUB_APP_PERMISSIONS: JSON.stringify(
-        authentication.permissions ?? {}
-      ),
-      GIT_ASKPASS: path.join(repositoryRoot, 'scripts/github-app-askpass.sh'),
-      GIT_TERMINAL_PROMPT: '0',
-      GIT_AUTHOR_NAME: `${authentication.app.name} Bot`,
-      GIT_AUTHOR_EMAIL: botEmail,
-      GIT_COMMITTER_NAME: `${authentication.app.name} Bot`,
-      GIT_COMMITTER_EMAIL: botEmail,
-    },
+    env: appAuthenticatedEnvironment(authentication),
   });
   child.on('error', error => {
     console.error(error);

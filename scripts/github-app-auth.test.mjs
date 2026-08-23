@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { generateKeyPairSync, verify } from 'node:crypto';
 import test from 'node:test';
 import {
+  appAuthenticatedEnvironment,
   createAppJwt,
   readGitHubAppConfiguration,
 } from './github-app-auth.mjs';
@@ -49,4 +50,29 @@ test('rejects a different GitHub App before authentication', () => {
       }),
     /does not identify Pomi Radar/
   );
+});
+
+test('isolates Git commands from stored personal GitHub credentials', () => {
+  const environment = appAuthenticatedEnvironment(
+    {
+      token: 'installation-token',
+      app: { id: 4675891, name: 'Pomi Radar' },
+      botLogin: 'pomi-radar[bot]',
+      botUserId: 123456,
+      permissions: { contents: 'write' },
+    },
+    { GH_TOKEN: 'personal-token', GITHUB_TOKEN: 'personal-token' }
+  );
+
+  assert.equal(environment.GH_TOKEN, 'installation-token');
+  assert.equal(environment.GITHUB_TOKEN, 'installation-token');
+  assert.equal(environment.GIT_CONFIG_KEY_0, 'credential.helper');
+  assert.equal(environment.GIT_CONFIG_VALUE_0, '');
+  assert.equal(
+    environment.GIT_CONFIG_KEY_1,
+    'http.https://github.com/.extraheader'
+  );
+  assert.equal(environment.GIT_CONFIG_VALUE_1, '');
+  assert.equal(environment.GIT_AUTHOR_NAME, 'Pomi Radar Bot');
+  assert.match(environment.GIT_AUTHOR_EMAIL, /pomi-radar\[bot\]/);
 });
