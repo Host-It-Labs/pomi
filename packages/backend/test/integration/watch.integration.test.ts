@@ -10,6 +10,7 @@ import { DataSource } from 'typeorm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { configureHttpApp } from '../../src/configure-app';
 import { REDIS_CLIENT } from '../../src/redis/redis.constants';
+import { clearAuthRateLimitKeys } from './auth-rate-limit-cleanup';
 
 const require = createRequire(import.meta.url);
 const { AppModule } = require('../../dist/src/app.module.js');
@@ -45,11 +46,13 @@ describe.runIf(hasInfrastructure)('Watch HTTP integration', () => {
     await app.init();
     dataSource = app.get(DataSource);
     redis = app.get(REDIS_CLIENT);
+    await clearAuthRateLimitKeys(redis);
     await cleanWatchUsers(dataSource, redis);
   });
 
   afterAll(async () => {
     if (dataSource && redis) await cleanWatchUsers(dataSource, redis);
+    if (redis) await clearAuthRateLimitKeys(redis);
     if (app) await app.close();
   });
 

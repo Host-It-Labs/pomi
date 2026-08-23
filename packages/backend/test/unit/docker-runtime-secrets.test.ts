@@ -54,4 +54,28 @@ describe('backend Docker secret boundary', () => {
     const redisService = compose.slice(compose.indexOf('\n  redis:'));
     expect(redisService).not.toMatch(/\n\s+ports:/);
   });
+
+  it('keeps production Redis private with an authenticated administration path', () => {
+    const compose = repositoryFile('packages/backend/docker-compose.yml');
+    const securityGuide = repositoryFile('docs/self-hosting-security.md');
+    const redisService = compose
+      .split('\n  redis:\n')[1]
+      .split('\nvolumes:\n')[0];
+
+    expect(redisService).not.toContain('ports:');
+    expect(securityGuide).toContain(
+      'docker compose -f packages/backend/docker-compose.yml exec redis redis-cli'
+    );
+  });
+
+  it('sets explicit production authentication capacity defaults', () => {
+    const compose = repositoryFile('packages/backend/docker-compose.yml');
+
+    expect(compose).toContain(
+      'AUTH_ATTEMPT_IDENTITY_LIMIT: ${AUTH_ATTEMPT_IDENTITY_LIMIT:-10}'
+    );
+    expect(compose).toContain(
+      'AUTH_REGISTRATION_GLOBAL_LIMIT: ${AUTH_REGISTRATION_GLOBAL_LIMIT:-200}'
+    );
+  });
 });

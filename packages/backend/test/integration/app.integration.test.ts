@@ -3,10 +3,13 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { createRequire } from 'node:module';
+import type Redis from 'ioredis';
 import request from 'supertest';
 import { DataSource, In } from 'typeorm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { configureHttpApp } from '../../src/configure-app';
+import { REDIS_CLIENT } from '../../src/redis/redis.constants';
+import { clearAuthRateLimitKeys } from './auth-rate-limit-cleanup';
 
 const require = createRequire(import.meta.url);
 const { AppModule } = require('../../dist/src/app.module.js');
@@ -17,12 +20,13 @@ const hasInfrastructure = Boolean(
 
 describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
   let app: INestApplication;
+  let redis: Redis;
   let token: string;
   const usernames = [
     'testuser_vitest_http_contract',
     'testuser_vitest_http_contract_secondary',
+    'testuser_vitest_http_rate_limit',
   ];
-
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
@@ -32,6 +36,8 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
     });
     configureHttpApp(app as NestExpressApplication);
     await app.init();
+    redis = app.get<Redis>(REDIS_CLIENT);
+    await clearAuthRateLimitKeys(redis);
     const session = await request(app.getHttpServer()).post('/sessions').send({
       username: usernames[0],
       password: 'vitest-password',
@@ -41,6 +47,7 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
 
   afterAll(async () => {
     if (app) {
+      if (redis) await clearAuthRateLimitKeys(redis);
       const dataSource = app.get(DataSource);
       const entityTarget = (tableName: string) => {
         const metadata = dataSource.entityMetadatas.find(
@@ -108,6 +115,37 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
     expect(response.status).toBe(200);
     expect(response.body.user.username).toBe(usernames[1]);
     expect(response.body.token).toEqual(expect.any(String));
+  });
+
+  it('bounds repeated credentials and returns retry guidance', async () => {
+    const username = usernames[2];
+    await request(app.getHttpServer())
+      .post('/sessions')
+      .send({ username, password: 'vitest-password' })
+      .expect(200);
+
+    for (let attempt = 0; attempt < 9; attempt += 1) {
+      const rejected = await request(app.getHttpServer())
+        .post('/sessions')
+        .send({ username, password: 'wrong-password' })
+        .expect(401);
+      expect(rejected.body.message).toBe('Invalid username or password');
+    }
+
+    const limited = await request(app.getHttpServer())
+      .post('/sessions')
+      .send({ username, password: 'wrong-password' })
+      .expect(429);
+    expect(limited.body.message).toBe(
+      'Too many authentication attempts. Try again later.'
+    );
+    expect(Number(limited.headers['retry-after'])).toBeGreaterThan(0);
+
+    await clearAuthRateLimitKeys(redis);
+    await request(app.getHttpServer())
+      .post('/sessions')
+      .send({ username, password: 'vitest-password' })
+      .expect(200);
   });
 
   it('applies DTO validation and persists preferences through real services', async () => {

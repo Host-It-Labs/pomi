@@ -1501,6 +1501,7 @@ export const apiContract = c.router({
         400: errorSchema,
         401: errorSchema,
         409: errorSchema,
+        429: errorSchema,
       },
     },
     deleteCurrent: {
