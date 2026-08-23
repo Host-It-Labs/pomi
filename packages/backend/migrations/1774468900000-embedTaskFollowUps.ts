@@ -7,6 +7,9 @@ export class EmbedTaskFollowUps1774468900000 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "tasks" ADD "followUpDefinition" jsonb`
     );
+    await queryRunner.query(
+      `ALTER TABLE "tasks" ADD "followUpTaskIdBeforeEmbedding" uuid`
+    );
     await queryRunner.query(`
       UPDATE "tasks" AS source
       SET "followUpDefinition" = jsonb_build_object(
@@ -23,6 +26,11 @@ export class EmbedTaskFollowUps1774468900000 implements MigrationInterface {
       WHERE source."followUpTaskId" = template."id"
         AND source."itemKind" = 'task'
         AND template."itemKind" = 'task'
+    `);
+    await queryRunner.query(`
+      UPDATE "tasks"
+      SET "followUpTaskIdBeforeEmbedding" = "followUpTaskId"
+      WHERE "followUpDefinition" IS NOT NULL
     `);
     await queryRunner.query(`
       UPDATE "tasks"
@@ -63,11 +71,19 @@ export class EmbedTaskFollowUps1774468900000 implements MigrationInterface {
     );
     await queryRunner.query(`
       UPDATE "tasks"
+      SET "followUpTaskId" = "followUpTaskIdBeforeEmbedding"
+      WHERE "followUpTaskIdBeforeEmbedding" IS NOT NULL
+    `);
+    await queryRunner.query(`
+      UPDATE "tasks"
       SET "itemKind" = 'task'
       WHERE "itemKind" IN ('followUp', 'followUpTemplate')
     `);
     await queryRunner.query(
       `ALTER TABLE "tasks" DROP COLUMN "followUpDefinition"`
+    );
+    await queryRunner.query(
+      `ALTER TABLE "tasks" DROP COLUMN "followUpTaskIdBeforeEmbedding"`
     );
     await queryRunner.query(
       `CREATE UNIQUE INDEX "UQ_tasks_active_follow_up_source" ON "tasks" ("followUpSourceTaskId") WHERE "followUpSourceTaskId" IS NOT NULL AND "status" = 'active' AND "itemKind" = 'task'`
