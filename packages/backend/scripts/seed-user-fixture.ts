@@ -9,7 +9,6 @@ import {
   TimerTypes,
 } from '@pomi/shared';
 import * as bcrypt from 'bcrypt';
-import { createHash } from 'crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { addDays, format, startOfDay, subDays } from 'date-fns';
 import dataSource from '../data-source';
@@ -21,6 +20,7 @@ import { Preferences } from '../src/preferences/preferences.entity';
 import { Statistic } from '../src/statistics/statistics.entity';
 import { TaskEntity, TaskEventEntity } from '../src/tasks/tasks.entity';
 import { UserEntity } from '../src/users/users.entity';
+import { fixtureCredentialFingerprint } from '../src/development-fixtures/fixture-credential';
 
 const WORK_DURATION_MS = 25 * 60 * 1000;
 const BREAK_DURATION_MS = 5 * 60 * 1000;
@@ -749,12 +749,6 @@ function buildTypeCycle(
   }
 
   return sessions;
-}
-
-function fixtureCredentialFingerprint(username: string, password: string) {
-  return createHash('sha256')
-    .update(`pomi-development-fixture\0${username}\0${password}`)
-    .digest('hex');
 }
 
 type FixtureStatsCounts = {

@@ -12,6 +12,29 @@ type FeedbackDiagnostics = {
   viewport?: string;
 };
 
+const GITHUB_API_ORIGIN = 'https://api.github.com';
+const GITHUB_OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
+const GITHUB_REPOSITORY_PATTERN =
+  /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9._-])?$/;
+
+function githubIssuesUrl(repository: string) {
+  const parts = repository.split('/');
+  if (
+    parts.length !== 2 ||
+    !GITHUB_OWNER_PATTERN.test(parts[0]) ||
+    !GITHUB_REPOSITORY_PATTERN.test(parts[1])
+  ) {
+    throw new ServiceUnavailableException('Feedback repository is invalid');
+  }
+
+  const url = new URL(GITHUB_API_ORIGIN);
+  url.pathname = ['repos', parts[0], parts[1], 'issues'].join('/');
+  if (url.origin !== GITHUB_API_ORIGIN) {
+    throw new ServiceUnavailableException('Feedback repository is invalid');
+  }
+  return url;
+}
+
 @Injectable()
 export class FeedbackService {
   async submit(text: string, diagnostics?: FeedbackDiagnostics) {
@@ -27,9 +50,7 @@ export class FeedbackService {
         'Feedback submission is not configured'
       );
     }
-    if (!/^[^/]+\/[^/]+$/.test(repository)) {
-      throw new ServiceUnavailableException('Feedback repository is invalid');
-    }
+    const issuesUrl = githubIssuesUrl(repository);
     const feedback = text.trim();
     if (!feedback) throw new BadRequestException('Feedback is required');
 
@@ -46,25 +67,24 @@ export class FeedbackService {
         : []),
     ].join('\n');
     const label = process.env.GITHUB_FEEDBACK_LABEL?.trim() || 'feedback';
-    const response = await fetch(
-      `https://api.github.com/repos/${repository}/issues`,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.github+json',
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'pomi-feedback',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        body: JSON.stringify({
-          title: this.title(feedback),
-          body,
-          ...(label ? { labels: [label] } : {}),
-        }),
-        signal: AbortSignal.timeout(15_000),
-      }
-    );
+    // codeql[js/request-forgery] -- githubIssuesUrl fixes and rechecks the API origin after validating both path segments.
+    const response = await fetch(issuesUrl, {
+      method: 'POST',
+      redirect: 'error',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'pomi-feedback',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      body: JSON.stringify({
+        title: this.title(feedback),
+        body,
+        ...(label ? { labels: [label] } : {}),
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
     if (!response.ok) {
       throw new BadGatewayException('GitHub did not accept the feedback');
     }

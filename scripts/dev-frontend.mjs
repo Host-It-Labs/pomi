@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   DEFAULT_PORTS,
   getAndroidBackendUrl,
@@ -14,10 +14,12 @@ import {
   writeDevPorts,
 } from './dev-ports.mjs';
 import { loadLocalEnvironment } from './local-env.mjs';
+import { resolveContainedPath } from './path-safety.mjs';
 
 loadLocalEnvironment();
 
 const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const tauriCommands = {
   desktop: ['tauri', 'dev'],
   ios: ['tauri', 'ios', 'dev'],
@@ -82,14 +84,24 @@ const run = async () => {
     POMI_BACKEND_BASE_URL: backendBaseUrl,
   });
 
-  const overrideConfigPath = path.join(
-    process.env.TMPDIR || os.tmpdir(),
-    `pomi-tauri-dev.${platform}.${process.pid}.json`
-  );
+  const runtimeDirectory = resolveContainedPath({
+    root: repoRoot,
+    relativePath: '.pomi/runtime',
+    label: 'Pomi development runtime directory',
+  });
+  // codeql[js/path-injection] -- The ignored runtime directory is canonicalized and contained in this repository.
+  fs.mkdirSync(runtimeDirectory, { recursive: true, mode: 0o700 });
+  const overrideConfigPath = resolveContainedPath({
+    root: runtimeDirectory,
+    relativePath: `tauri.${platform}.${process.pid}.json`,
+    label: 'Tauri development override',
+  });
   const removeOverrideConfig = () => {
+    // codeql[js/path-injection] -- The override path is canonicalized and contained in the ignored runtime directory.
     fs.rmSync(overrideConfigPath, { force: true });
   };
 
+  // codeql[js/path-injection] -- The override path is canonicalized and contained in the ignored runtime directory.
   fs.writeFileSync(
     overrideConfigPath,
     JSON.stringify({

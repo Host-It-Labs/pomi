@@ -6,7 +6,7 @@ use tauri::{
     AppHandle, Runtime,
 };
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", test))]
 use std::path::{Path, PathBuf};
 
 use crate::NotificationsBuilder;
@@ -168,17 +168,18 @@ fn macos_sound_name<R: Runtime>(app: &AppHandle<R>, sound: &str) -> String {
         return sound.to_string();
     }
 
-    let Some(source) = find_macos_sound_source(app, sound) else {
-        return sound_stem(sound);
+    let Some(names) = safe_sound_file_names(sound) else {
+        return DEFAULT_SOUND.to_string();
+    };
+    let fallback = sound_stem(sound).unwrap_or_else(|| DEFAULT_SOUND.to_string());
+    let Some(source) = find_sound_source_in_dirs(&macos_sound_search_dirs(app), &names) else {
+        return fallback;
     };
 
-    if let (Some(file_name), Some(home)) = (source.file_name(), std::env::var_os("HOME")) {
-        let destination = PathBuf::from(home).join("Library").join("Sounds");
-
-        if std::fs::create_dir_all(&destination).is_ok() {
-            let destination_file = destination.join(file_name);
-
+    if let (Some(file_name), Ok(home)) = (source.file_name(), app.path().home_dir()) {
+        if let Some(destination_file) = macos_sound_destination(&home, file_name) {
             if should_copy_macos_sound(&source, &destination_file) {
+                // codeql[rust/path-injection] -- Both paths are canonicalized beneath trusted resource and home sound directories.
                 let _ = std::fs::copy(&source, destination_file);
             }
         }
@@ -188,30 +189,92 @@ fn macos_sound_name<R: Runtime>(app: &AppHandle<R>, sound: &str) -> String {
         .file_stem()
         .and_then(|stem| stem.to_str())
         .map(ToString::to_string)
-        .unwrap_or_else(|| sound_stem(sound))
+        .unwrap_or(fallback)
 }
 
-#[cfg(target_os = "macos")]
-fn find_macos_sound_source<R: Runtime>(app: &AppHandle<R>, sound: &str) -> Option<PathBuf> {
-    let mut names = vec![sound.to_string()];
-
-    if Path::new(sound).extension().is_none() {
-        names.push(format!("{sound}.wav"));
-        names.push(format!("{sound}.caf"));
-        names.push(format!("{sound}.aiff"));
+#[cfg(any(target_os = "macos", test))]
+fn safe_sound_file_names(sound: &str) -> Option<Vec<String>> {
+    if sound.is_empty() || sound.chars().any(char::is_control) {
+        return None;
+    }
+    let path = Path::new(sound);
+    if path.components().count() != 1 || path.file_name()?.to_str()? != sound {
+        return None;
     }
 
-    for base in macos_sound_search_dirs(app) {
-        for name in &names {
-            let candidate = base.join(name);
+    if let Some(extension) = path.extension().and_then(|value| value.to_str()) {
+        if !matches!(
+            extension.to_ascii_lowercase().as_str(),
+            "wav" | "caf" | "aiff"
+        ) {
+            return None;
+        }
+        return Some(vec![sound.to_string()]);
+    }
 
-            if candidate.is_file() {
-                return Some(candidate);
+    Some(vec![
+        sound.to_string(),
+        format!("{sound}.wav"),
+        format!("{sound}.caf"),
+        format!("{sound}.aiff"),
+    ])
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn find_sound_source_in_dirs(search_dirs: &[PathBuf], names: &[String]) -> Option<PathBuf> {
+    for base in search_dirs {
+        let Ok(canonical_base) = base.canonicalize() else {
+            continue;
+        };
+        for name in names {
+            // codeql[rust/path-injection] -- names contains only validated single-component sound basenames.
+            let candidate = canonical_base.join(name);
+            // codeql[rust/path-injection] -- candidate uses a validated basename and must canonicalize beneath canonical_base.
+            let Ok(canonical_candidate) = candidate.canonicalize() else {
+                continue;
+            };
+
+            if canonical_candidate.starts_with(&canonical_base) && canonical_candidate.is_file() {
+                return Some(canonical_candidate);
             }
         }
     }
 
     None
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn macos_sound_destination(home: &Path, file_name: &std::ffi::OsStr) -> Option<PathBuf> {
+    let canonical_home = home.canonicalize().ok()?;
+    let canonical_library = canonical_child_directory(&canonical_home, "Library")?;
+    let canonical_destination = canonical_child_directory(&canonical_library, "Sounds")?;
+
+    // codeql[rust/path-injection] -- file_name comes from a canonical source contained in an application resource directory.
+    let destination_file = canonical_destination.join(file_name);
+    // codeql[rust/path-injection] -- destination_file is a validated basename beneath the canonical home sound directory.
+    if destination_file
+        .symlink_metadata()
+        .is_ok_and(|metadata| metadata.file_type().is_symlink())
+    {
+        return None;
+    }
+    Some(destination_file)
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn canonical_child_directory(parent: &Path, child: &str) -> Option<PathBuf> {
+    let candidate = parent.join(child);
+    match candidate.symlink_metadata() {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => return None,
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            std::fs::create_dir(&candidate).ok()?;
+        }
+        Err(_) => return None,
+    }
+
+    let canonical = candidate.canonicalize().ok()?;
+    canonical.starts_with(parent).then_some(canonical)
 }
 
 #[cfg(target_os = "macos")]
@@ -231,25 +294,123 @@ fn macos_sound_search_dirs<R: Runtime>(app: &AppHandle<R>) -> Vec<PathBuf> {
     dirs
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", test))]
 fn should_copy_macos_sound(source: &Path, destination: &Path) -> bool {
+    // codeql[rust/path-injection] -- source was canonicalized beneath a trusted application resource directory.
     let Ok(source_metadata) = source.metadata() else {
         return false;
     };
 
+    // codeql[rust/path-injection] -- destination is contained beneath the canonical home sound directory.
     match destination.metadata() {
         Ok(destination_metadata) => source_metadata.len() != destination_metadata.len(),
         Err(_) => true,
     }
 }
 
-#[cfg(target_os = "macos")]
-fn sound_stem(sound: &str) -> String {
+#[cfg(any(target_os = "macos", test))]
+fn sound_stem(sound: &str) -> Option<String> {
     Path::new(sound)
         .file_stem()
         .and_then(|stem| stem.to_str())
         .map(ToString::to_string)
-        .unwrap_or_else(|| sound.to_string())
+}
+
+#[cfg(test)]
+mod sound_path_tests {
+    use super::{find_sound_source_in_dirs, macos_sound_destination, safe_sound_file_names};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static NEXT_DIRECTORY: AtomicUsize = AtomicUsize::new(0);
+
+    fn temporary_directory() -> PathBuf {
+        let directory = std::env::temp_dir().join(format!(
+            "pomi-notification-path-test-{}-{}",
+            std::process::id(),
+            NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&directory).expect("create test directory");
+        directory
+    }
+
+    #[test]
+    fn accepts_only_basenames_with_supported_sound_extensions() {
+        assert_eq!(
+            safe_sound_file_names("Focus"),
+            Some(vec![
+                "Focus".to_string(),
+                "Focus.wav".to_string(),
+                "Focus.caf".to_string(),
+                "Focus.aiff".to_string(),
+            ])
+        );
+        assert_eq!(
+            safe_sound_file_names("Focus.WAV"),
+            Some(vec!["Focus.WAV".to_string()])
+        );
+        for unsafe_name in [
+            "../Focus.wav",
+            "/tmp/Focus.wav",
+            "sounds/Focus.wav",
+            "Focus.mp3",
+        ] {
+            assert_eq!(safe_sound_file_names(unsafe_name), None);
+        }
+    }
+
+    #[test]
+    fn finds_a_regular_sound_inside_its_canonical_resource_directory() {
+        let root = temporary_directory();
+        let resources = root.join("resources");
+        fs::create_dir_all(&resources).expect("create resources");
+        let sound = resources.join("Focus.wav");
+        fs::write(&sound, b"sound").expect("write sound");
+
+        assert_eq!(
+            find_sound_source_in_dirs(&[resources], &["Focus.wav".to_string()]),
+            Some(sound.canonicalize().expect("canonical sound"))
+        );
+        fs::remove_dir_all(root).expect("remove test directory");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_source_and_destination_symlink_escapes() {
+        use std::os::unix::fs::symlink;
+
+        let root = temporary_directory();
+        let resources = root.join("resources");
+        let outside = root.join("outside");
+        let home = root.join("home");
+        fs::create_dir_all(&resources).expect("create resources");
+        fs::create_dir_all(&outside).expect("create outside");
+        fs::create_dir_all(home.join("Library")).expect("create home library");
+        fs::write(outside.join("Focus.wav"), b"sound").expect("write outside sound");
+        symlink(outside.join("Focus.wav"), resources.join("Focus.wav"))
+            .expect("link outside sound");
+        symlink(&outside, home.join("Library").join("Sounds")).expect("link outside destination");
+
+        assert_eq!(
+            find_sound_source_in_dirs(&[resources], &["Focus.wav".to_string()]),
+            None
+        );
+        assert_eq!(
+            macos_sound_destination(&home, std::ffi::OsStr::new("Focus.wav")),
+            None
+        );
+
+        fs::remove_file(home.join("Library").join("Sounds")).expect("remove destination link");
+        fs::remove_dir(home.join("Library")).expect("remove home library");
+        symlink(&outside, home.join("Library")).expect("link outside library");
+        assert_eq!(
+            macos_sound_destination(&home, std::ffi::OsStr::new("Focus.wav")),
+            None
+        );
+        assert!(!outside.join("Sounds").exists());
+        fs::remove_dir_all(root).expect("remove test directory");
+    }
 }
 
 mod imp {

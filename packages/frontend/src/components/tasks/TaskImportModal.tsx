@@ -49,6 +49,7 @@ import { Modal } from '../ui/Modal';
 import { UnsavedChangesDialog } from '../ui/UnsavedChangesDialog';
 import { useTasksStore } from '../../stores/tasksStore';
 import { translateCurrent, useI18n } from '../../i18n';
+import { normalizeVikunjaDescription } from './vikunjaDescription';
 
 type ImportPreviewTask = {
   sourceId: string;
@@ -2509,93 +2510,6 @@ function mapVikunjaPriority(value: unknown): TaskPriority {
 
 function getString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
-function normalizeVikunjaDescription(description: string | null) {
-  if (!description) {
-    return null;
-  }
-
-  const trimmed = description.trim();
-  const hasHtml = /<\/?[a-z][\s\S]*>/i.test(trimmed);
-  const hasEntities = /&(?:[a-z]+|#\d+|#x[\da-f]+);/i.test(trimmed);
-
-  if (!hasHtml) {
-    return hasEntities ? decodeHtmlEntities(trimmed) : trimmed;
-  }
-
-  let markdown = trimmed
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
-    .replace(/<\/?p[^>]*>/gi, '')
-    .replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, (_, text: string) => {
-      return `\n# ${stripHtmlTags(text).trim()}\n`;
-    })
-    .replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, (_, text: string) => {
-      return `\n## ${stripHtmlTags(text).trim()}\n`;
-    })
-    .replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, (_, text: string) => {
-      return `\n### ${stripHtmlTags(text).trim()}\n`;
-    })
-    .replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, '**$1**')
-    .replace(/<b[^>]*>([\s\S]*?)<\/b>/gi, '**$1**')
-    .replace(/<em[^>]*>([\s\S]*?)<\/em>/gi, '*$1*')
-    .replace(/<i[^>]*>([\s\S]*?)<\/i>/gi, '*$1*')
-    .replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, '`$1`')
-    .replace(
-      /<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
-      (_, href: string, text: string) =>
-        `[${stripHtmlTags(text).trim()}](${href.trim()})`
-    )
-    .replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_, text: string) => {
-      return `\n- ${stripHtmlTags(text).trim()}`;
-    })
-    .replace(/<\/?(ul|ol)[^>]*>/gi, '\n');
-
-  markdown = stripHtmlTags(markdown)
-    .split('\n')
-    .map(line => line.trimEnd())
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-
-  return markdown ? decodeHtmlEntities(markdown) : null;
-}
-
-function stripHtmlTags(value: string) {
-  return value.replace(/<[^>]+>/g, '');
-}
-
-function decodeHtmlEntities(value: string) {
-  return value.replace(
-    /&(?:#(\d+)|#x([\da-f]+)|([a-z]+));/gi,
-    (
-      entity: string,
-      decimal: string | undefined,
-      hexadecimal: string | undefined,
-      named: string | undefined
-    ) => {
-      if (decimal) {
-        return String.fromCodePoint(Number(decimal));
-      }
-      if (hexadecimal) {
-        return String.fromCodePoint(parseInt(hexadecimal, 16));
-      }
-
-      const namedEntities: Record<string, string> = {
-        amp: '&',
-        apos: "'",
-        gt: '>',
-        lt: '<',
-        nbsp: ' ',
-        quot: '"',
-      };
-
-      return named ? (namedEntities[named.toLowerCase()] ?? entity) : entity;
-    }
-  );
 }
 
 function getStringOrNumber(value: unknown) {

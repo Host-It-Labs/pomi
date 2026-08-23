@@ -1,7 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  resolveContainedPath,
+  resolveSafeNewDirectory,
+} from './path-safety.mjs';
 
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const outputArgument = process.argv[2];
@@ -16,15 +20,11 @@ if (!outputArgument || !publicEmail) {
   process.exit(2);
 }
 
-const output = path.resolve(outputArgument);
-if (output === root || output.startsWith(`${root}${path.sep}`)) {
-  throw new Error(
-    'The public snapshot must be created outside the private repository'
-  );
-}
-if (existsSync(output)) {
-  throw new Error(`Output already exists: ${output}`);
-}
+const output = resolveSafeNewDirectory({
+  candidate: outputArgument,
+  forbiddenTrees: [root],
+  label: 'Public snapshot output',
+});
 if (
   !readFileSync(path.join(root, 'LICENSE'), 'utf8').includes(
     'PolyForm Noncommercial License 1.0.0'
@@ -55,24 +55,39 @@ const files = execFileSync('git', ['ls-files', '-z'], {
   .split('\0')
   .filter(Boolean);
 
+// codeql[js/path-injection] -- The explicit CLI destination is canonicalized, new, outside the repository, root, and home.
 mkdirSync(output, { recursive: false });
 for (const relativePath of files) {
-  const source = path.join(root, relativePath);
-  const destination = path.join(output, relativePath);
+  const source = resolveContainedPath({
+    root,
+    relativePath,
+    label: 'Public snapshot source',
+  });
+  const destination = resolveContainedPath({
+    root: output,
+    relativePath,
+    label: 'Public snapshot destination',
+  });
+
+  // codeql[js/path-injection] -- Git-tracked relative paths are canonicalized and required to remain inside the new snapshot.
   mkdirSync(path.dirname(destination), { recursive: true });
+  // codeql[js/path-injection] -- Source and destination are canonicalized into the repository and snapshot roots respectively.
   cpSync(source, destination, {
     preserveTimestamps: true,
   });
 }
 
+// codeql[js/path-injection] -- The working directory is the validated, newly created snapshot root.
 execFileSync('git', ['init', '--initial-branch=main'], {
   cwd: output,
   stdio: 'inherit',
 });
+// codeql[js/path-injection] -- The working directory is the validated, newly created snapshot root.
 execFileSync('git', ['add', '--force', '--all'], {
   cwd: output,
   stdio: 'inherit',
 });
+// codeql[js/path-injection] -- The working directory is the validated, newly created snapshot root.
 execFileSync(
   'git',
   [

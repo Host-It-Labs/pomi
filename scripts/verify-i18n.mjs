@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { parseAndroidStringResources } from './xml-resource-text.mjs';
 
 const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const frontendRoot = path.join(repoRoot, 'packages', 'frontend', 'src');
@@ -209,14 +210,9 @@ function readWearResources(directory) {
     filePath => path.basename(filePath) === 'strings.xml'
   );
   const resources = new Map();
-  const resourcePattern =
-    /<(?:string|plurals)\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/(?:string|plurals)>/g;
   for (const filePath of files) {
-    const values = new Map();
     const source = fs.readFileSync(filePath, 'utf8');
-    for (const match of source.matchAll(resourcePattern)) {
-      values.set(match[1], match[2].replace(/<[^>]+>/g, '').trim());
-    }
+    const values = parseAndroidStringResources(source, filePath);
     resources.set(path.basename(path.dirname(filePath)), { filePath, values });
   }
   return resources;
