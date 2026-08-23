@@ -4,6 +4,7 @@ import {
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { GitHubAppTokenService } from './github-app-token.service';
 
 type FeedbackDiagnostics = {
   appVersion?: string;
@@ -37,13 +38,9 @@ function githubIssuesUrl(repository: string) {
 
 @Injectable()
 export class FeedbackService {
+  constructor(private readonly githubAppTokenService: GitHubAppTokenService) {}
+
   async submit(text: string, diagnostics?: FeedbackDiagnostics) {
-    const token = process.env.GITHUB_FEEDBACK_TOKEN?.trim();
-    if (!token) {
-      throw new ServiceUnavailableException(
-        'Feedback submission is not configured'
-      );
-    }
     const repository = process.env.GITHUB_FEEDBACK_REPOSITORY?.trim();
     if (!repository) {
       throw new ServiceUnavailableException(
@@ -53,6 +50,7 @@ export class FeedbackService {
     const issuesUrl = githubIssuesUrl(repository);
     const feedback = text.trim();
     if (!feedback) throw new BadRequestException('Feedback is required');
+    const token = await this.githubAppTokenService.getToken();
 
     const diagnosticsLines = Object.entries(diagnostics ?? {})
       .filter((entry): entry is [string, string] => Boolean(entry[1]))
@@ -67,24 +65,31 @@ export class FeedbackService {
         : []),
     ].join('\n');
     const label = process.env.GITHUB_FEEDBACK_LABEL?.trim() || 'feedback';
-    // codeql[js/request-forgery] -- githubIssuesUrl fixes and rechecks the API origin after validating both path segments.
-    const response = await fetch(issuesUrl, {
-      method: 'POST',
-      redirect: 'error',
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'User-Agent': 'pomi-feedback',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-      body: JSON.stringify({
-        title: this.title(feedback),
-        body,
-        ...(label ? { labels: [label] } : {}),
-      }),
-      signal: AbortSignal.timeout(15_000),
-    });
+    let response: Response;
+    try {
+      // codeql[js/request-forgery] -- githubIssuesUrl fixes and rechecks the API origin after validating both path segments.
+      response = await fetch(issuesUrl, {
+        method: 'POST',
+        redirect: 'error',
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'pomi-feedback',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: JSON.stringify({
+          title: this.title(feedback),
+          body,
+          ...(label ? { labels: [label] } : {}),
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch {
+      throw new BadGatewayException(
+        'GitHub feedback submission is unavailable'
+      );
+    }
     if (!response.ok) {
       throw new BadGatewayException('GitHub did not accept the feedback');
     }

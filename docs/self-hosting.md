@@ -47,11 +47,17 @@ published to the internet.
 
 Optional integrations can stay blank. Their values come from their respective
 service consoles: Sentry project settings for `NEST_SENTRY_DSN`, OpenRouter API
-keys for `OPENROUTER_API_KEY`, a fine-grained GitHub token for feedback, Firebase
-project settings under **Service accounts** for `FIREBASE_SERVICE_ACCOUNT_JSON`,
-and the Apple Developer portal for APNs values. The environment template has a
-comment beside each group, including the `jq -c` command needed to compact the
+keys for `OPENROUTER_API_KEY`, a GitHub App installation with Issues write access
+for feedback, Firebase project settings under **Service accounts** for
+`FIREBASE_SERVICE_ACCOUNT_JSON`, and the Apple Developer portal for APNs values.
+The environment template has a comment beside each group, including the `jq -c`
+command needed to compact the
 Firebase JSON and the read-only APNs key-file mount.
+
+Set `GITHUB_FEEDBACK_APP_PRIVATE_KEY` in the private Compose environment file to
+the GitHub App PEM contents. A double-quoted value may use `\n` for line breaks.
+Compose passes the value directly to the backend container, so protect the
+environment file with restrictive filesystem permissions and never commit it.
 
 The container applies TypeORM migrations before startup. Back up PostgreSQL and
 test restores before upgrades. The public Compose stack uses PostgreSQL 18 and

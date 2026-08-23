@@ -31,6 +31,18 @@ describe('backend Docker secret boundary', () => {
     expect(compose).toContain(
       'GITHUB_FEEDBACK_REPOSITORY: ${GITHUB_FEEDBACK_REPOSITORY:-}'
     );
+    expect(compose).toContain(
+      'GITHUB_FEEDBACK_APP_PRIVATE_KEY: ${GITHUB_FEEDBACK_APP_PRIVATE_KEY:-}'
+    );
+    expect(compose).not.toContain('pomi-feedback-github-app.pem');
+    expect(compose).not.toContain('GITHUB_FEEDBACK_TOKEN');
+    const productionEnvironment = repositoryFile(
+      'packages/backend/.env.production.example'
+    );
+    expect(productionEnvironment).toContain('GITHUB_FEEDBACK_APP_PRIVATE_KEY=');
+    expect(productionEnvironment).not.toContain(
+      'GITHUB_FEEDBACK_APP_PRIVATE_KEY_FILE'
+    );
   });
 
   it('requires production secrets and does not publish data services', () => {
