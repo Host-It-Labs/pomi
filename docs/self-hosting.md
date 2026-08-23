@@ -54,6 +54,12 @@ The environment template has a comment beside each group, including the `jq -c`
 command needed to compact the
 Firebase JSON and the read-only APNs key-file mount.
 
+The backend container runs as UID/GID `1000`. Provision the feedback GitHub App
+private key as a host file owned by `1000:1000` with mode `0400`, then set
+`GITHUB_FEEDBACK_APP_PRIVATE_KEY_FILE` to its absolute host path. This keeps the
+key private while allowing the non-root backend process to read its bind mount.
+For example: `sudo install -o 1000 -g 1000 -m 0400 source.pem target.pem`.
+
 The container applies TypeORM migrations before startup. Back up PostgreSQL and
 test restores before upgrades. The public Compose stack uses a PostgreSQL 17
 volume named from the `pgdata17` key so it cannot silently attach a volume made

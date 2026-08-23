@@ -1,14 +1,17 @@
 import { generateKeyPairSync } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ServiceUnavailableException } from '@nestjs/common';
 import { GitHubAppTokenService } from '../../src/feedback/github-app-token.service';
 
 describe('GitHubAppTokenService', () => {
   const temporaryDirectories: string[] = [];
+  const originalWorkingDirectory = process.cwd();
 
   afterEach(() => {
+    process.chdir(originalWorkingDirectory);
     vi.unstubAllGlobals();
     delete process.env.GITHUB_FEEDBACK_APP_ID;
     delete process.env.GITHUB_FEEDBACK_APP_INSTALLATION_ID;
@@ -16,6 +19,40 @@ describe('GitHubAppTokenService', () => {
     for (const directory of temporaryDirectories.splice(0)) {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  it('resolves a local key path from the repository root', async () => {
+    const repository = mkdtempSync(path.join(tmpdir(), 'pomi-repository-'));
+    temporaryDirectories.push(repository);
+    const backendDirectory = path.join(repository, 'packages/backend');
+    const privateKeyPath = path.join(repository, 'config/private-key.pem');
+    mkdirSync(backendDirectory, { recursive: true });
+    mkdirSync(path.dirname(privateKeyPath), { recursive: true });
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    writeFileSync(
+      privateKeyPath,
+      privateKey.export({ type: 'pkcs8', format: 'pem' })
+    );
+    process.chdir(backendDirectory);
+    process.env.GITHUB_FEEDBACK_APP_ID = '4675891';
+    process.env.GITHUB_FEEDBACK_APP_INSTALLATION_ID = '155743206';
+    process.env.GITHUB_FEEDBACK_APP_PRIVATE_KEY_PATH = 'config/private-key.pem';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            token: 'installation-token',
+            expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+          }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+    );
+
+    await expect(new GitHubAppTokenService().getToken()).resolves.toBe(
+      'installation-token'
+    );
   });
 
   it('mints and caches an installation token for feedback issue creation', async () => {
@@ -54,5 +91,24 @@ describe('GitHubAppTokenService', () => {
       'Authorization'
     ];
     expect(authorization).toMatch(/^Bearer [^.]+\.[^.]+\.[^.]+$/);
+  });
+
+  it('rejects a malformed private key without exposing the crypto error', async () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'pomi-github-app-'));
+    temporaryDirectories.push(directory);
+    const privateKeyPath = path.join(directory, 'private-key.pem');
+    writeFileSync(privateKeyPath, 'not-a-private-key');
+    process.env.GITHUB_FEEDBACK_APP_ID = '4675891';
+    process.env.GITHUB_FEEDBACK_APP_INSTALLATION_ID = '155743206';
+    process.env.GITHUB_FEEDBACK_APP_PRIVATE_KEY_PATH = privateKeyPath;
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(new GitHubAppTokenService().getToken()).rejects.toEqual(
+      new ServiceUnavailableException(
+        'Feedback GitHub App private key is invalid'
+      )
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

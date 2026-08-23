@@ -35,6 +35,10 @@ describe('backend Docker secret boundary', () => {
       'source: ${GITHUB_FEEDBACK_APP_PRIVATE_KEY_FILE:-/dev/null}'
     );
     expect(compose).not.toContain('GITHUB_FEEDBACK_TOKEN');
+    const productionEnvironment = repositoryFile(
+      'packages/backend/.env.production.example'
+    );
+    expect(productionEnvironment).toContain('owned by 1000:1000 mode 0400');
   });
 
   it('requires production secrets and does not publish data services', () => {

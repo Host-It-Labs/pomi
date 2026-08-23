@@ -1,5 +1,6 @@
 import { createSign } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import {
   BadGatewayException,
   Injectable,
@@ -53,12 +54,30 @@ export class GitHubAppTokenService {
       );
     }
 
+    const resolvedPrivateKeyPath = path.isAbsolute(privateKeyPath)
+      ? privateKeyPath
+      : [
+          path.resolve(process.cwd(), privateKeyPath),
+          path.resolve(process.cwd(), '../..', privateKeyPath),
+        ].find(candidate => existsSync(candidate));
     let privateKey: string;
     try {
-      privateKey = readFileSync(privateKeyPath, 'utf8');
+      privateKey = readFileSync(
+        resolvedPrivateKeyPath ?? privateKeyPath,
+        'utf8'
+      );
     } catch {
       throw new ServiceUnavailableException(
         'Feedback GitHub App private key is unavailable'
+      );
+    }
+
+    let jwt: string;
+    try {
+      jwt = this.createJwt(appId, privateKey);
+    } catch {
+      throw new ServiceUnavailableException(
+        'Feedback GitHub App private key is invalid'
       );
     }
 
@@ -68,7 +87,7 @@ export class GitHubAppTokenService {
         method: 'POST',
         headers: {
           Accept: 'application/vnd.github+json',
-          Authorization: `Bearer ${this.createJwt(appId, privateKey)}`,
+          Authorization: `Bearer ${jwt}`,
           'Content-Type': 'application/json',
           'User-Agent': 'pomi-feedback',
           'X-GitHub-Api-Version': '2022-11-28',
