@@ -80,6 +80,43 @@ describe('TimerService revision conflicts', () => {
     );
   });
 
+  it('isolates a transient account restore failure and continues with later Timers', async () => {
+    const timer = currentTimer({
+      userId: 'user-2',
+      status: TIMER_STATUSES.RUNNING,
+      startTime: Date.now(),
+    });
+    const startCountdown = vi.fn(async () => undefined);
+    const warn = vi.fn();
+    const service = Object.assign(Object.create(TimerService.prototype), {
+      timerStore: {
+        getAllCurrentTimerKeys: vi.fn(async () => [
+          'user:user-1:current_timer',
+          'user:user-2:current_timer',
+        ]),
+        getCurrentTimer: vi
+          .fn()
+          .mockRejectedValueOnce(
+            Object.assign(new Error('connection reset'), { code: 'ECONNRESET' })
+          )
+          .mockResolvedValueOnce(timer),
+      },
+      timerCountdownService: { startCountdown },
+      logger: { error: vi.fn(), warn },
+    }) as TimerService;
+
+    await (
+      service as unknown as {
+        restoreActiveTimersOnStartup(): Promise<void>;
+      }
+    ).restoreActiveTimersOnStartup();
+
+    expect(startCountdown).toHaveBeenCalledWith(timer, expect.any(Function));
+    expect(warn).toHaveBeenCalledWith(
+      'Timer runtime restoration deferred for one account (Error (ECONNRESET))'
+    );
+  });
+
   it('does not change session state when a stack loses the Timer CAS', async () => {
     const timer = currentTimer({
       sessionPosition: 1,

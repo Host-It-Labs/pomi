@@ -44,6 +44,21 @@ beforeEach(() => {
 });
 
 describe('Vacation store network loading', () => {
+  it('contains persistent read failures and preserves the last confirmed status', async () => {
+    useVacationStore.setState({ status: activeState });
+    mocks.status.mockRejectedValueOnce(new TypeError('ClientError'));
+
+    await expect(
+      useVacationStore.getState().loadStatus()
+    ).resolves.toBeUndefined();
+    expect(useVacationStore.getState().status).toEqual(activeState);
+
+    mocks.status.mockResolvedValueOnce({ status: 200, body: inactiveState });
+    await useVacationStore.getState().loadStatus();
+
+    expect(useVacationStore.getState().status).toEqual(inactiveState);
+  });
+
   it('ignores a status response from a previous auth session', async () => {
     let resolvePrevious!: (value: {
       status: number;

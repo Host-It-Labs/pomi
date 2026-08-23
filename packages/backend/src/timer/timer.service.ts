@@ -18,7 +18,9 @@ import {
 } from '@pomi/shared';
 import { randomUUID } from 'crypto';
 import { IntentionsService } from 'src/intentions/intentions.service';
+import { isTransientDependencyError } from '../logging/dependency-errors';
 import { PomiLogger } from '../logging/pomi-logger';
+import { formatSafeError } from '../logging/sanitize-log';
 import { PreferencesService } from '../preferences/preferences.service';
 import {
   StatisticHistorySnapshot,
@@ -113,7 +115,13 @@ export class TimerService implements OnModuleInit {
 
   onModuleInit(): void {
     void this.restoreTimerRuntimeStateOnStartup().catch(error => {
-      this.logger.error('Failed to restore timer state on startup:', error);
+      if (isTransientDependencyError(error)) {
+        this.logger.warn(
+          `Timer startup restoration deferred (${formatSafeError(error)})`
+        );
+      } else {
+        this.logger.error('Failed to restore timer state on startup:', error);
+      }
     });
   }
 
@@ -2308,7 +2316,13 @@ export class TimerService implements OnModuleInit {
 
         await this.timerCountdownService.startCountdown(timer, onComplete);
       } catch (error) {
-        this.logger.error('Failed to restore a running timer', error);
+        if (isTransientDependencyError(error)) {
+          this.logger.warn(
+            `Timer runtime restoration deferred for one account (${formatSafeError(error)})`
+          );
+        } else {
+          this.logger.error('Failed to restore a running timer', error);
+        }
       }
     }
   }

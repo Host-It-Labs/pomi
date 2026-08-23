@@ -1,6 +1,7 @@
 import { apiContract } from '@pomi/shared/src/api/contract';
 import { initClient } from '@ts-rest/core';
 import { useAuthStore } from '../stores/authStore';
+import { requestBackendConnectionRecovery } from './backendConnectionRecovery';
 import { getBackendOrigin } from './backendUrl';
 import { startServerResponseWatch } from './serverResponseMonitor';
 
@@ -85,6 +86,51 @@ const SERVER_RESPONSE_WATCHED_ROUTES = new Set([
   'workTimerLogs.update',
 ]);
 
+const READ_RECOVERY_ROUTES = new Set([
+  'assistant.debugLogs',
+  'assistant.debugStatus',
+  'assistant.models',
+  'assistant.settings',
+  'assistant.status',
+  'intentions.list',
+  'lists.items',
+  'lists.list',
+  'notifications.provider',
+  'preferences.get',
+  'statistics.heatmap',
+  'statistics.intentionsToday',
+  'statistics.summary',
+  'statistics.topIntentions',
+  'system.get',
+  'tasks.importStatus',
+  'tasks.list',
+  'tasks.logs',
+  'tasks.statistics',
+  'users.getPushToken',
+  'vacation.status',
+  'workTimerLogs.list',
+]);
+
+const READ_RECOVERY_DELAY_MS = 250;
+
+export const isBrowserNetworkError = (error: unknown): boolean =>
+  error instanceof TypeError ||
+  (error instanceof DOMException && error.name === 'NetworkError');
+
+export const retryReadOnce = async (
+  call: (input: unknown) => Promise<unknown>,
+  request: unknown
+): Promise<unknown> => {
+  try {
+    return await call(withDynamicBaseUrl(request));
+  } catch (error) {
+    if (!isBrowserNetworkError(error)) throw error;
+    requestBackendConnectionRecovery();
+    await new Promise(resolve => setTimeout(resolve, READ_RECOVERY_DELAY_MS));
+    return call(withDynamicBaseUrl(request));
+  }
+};
+
 const wrapClientWithPath = <T extends object>(
   client: T,
   pathParts: string[]
@@ -104,7 +150,9 @@ const wrapClientWithPath = <T extends object>(
             ? startServerResponseWatch()
             : undefined;
           try {
-            const response = await call(withDynamicBaseUrl(request));
+            const response = READ_RECOVERY_ROUTES.has(routePath)
+              ? await retryReadOnce(call, request)
+              : await call(withDynamicBaseUrl(request));
             if (routePath === 'sessions.deleteCurrent') {
               return response;
             }

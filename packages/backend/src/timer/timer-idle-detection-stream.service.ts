@@ -9,7 +9,9 @@ import { TIMER_STATUSES, TIMER_TYPES, Timer } from '@pomi/shared';
 import { randomUUID } from 'crypto';
 import { hostname } from 'os';
 import { Redis } from 'ioredis';
+import { isTransientDependencyError } from '../logging/dependency-errors';
 import { PomiLogger } from '../logging/pomi-logger';
+import { formatSafeError } from '../logging/sanitize-log';
 import { REDIS_CLIENT } from '../redis/redis.constants';
 import { UsersService } from '../users/users.service';
 import { TimerCompletionEffectsService } from './timer-completion-effects.service';
@@ -107,10 +109,20 @@ export class TimerIdleDetectionStreamService
         if (error instanceof Error && error.message.includes('NOGROUP')) {
           groupReady = false;
         }
-        this.logger.error('Timer idle Stream iteration failed:', error);
+        this.reportIterationFailure(error);
         await this.wait(RETRY_MS);
       }
     }
+  }
+
+  private reportIterationFailure(error: unknown): void {
+    if (isTransientDependencyError(error)) {
+      this.logger.warn(
+        `Timer idle Stream dependency unavailable; retrying (${formatSafeError(error)})`
+      );
+      return;
+    }
+    this.logger.error('Timer idle Stream iteration failed:', error);
   }
 
   private async ensureConsumerGroup(): Promise<void> {

@@ -31,6 +31,8 @@ const useVacationStoreBase = create<VacationStore>(set => ({
         if (requestGeneration === authGeneration && response.status === 200) {
           set({ status: response.body });
         }
+      } catch {
+        return;
       } finally {
         if (requestGeneration === authGeneration) loadStatusPromise = null;
       }

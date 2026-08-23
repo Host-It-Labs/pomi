@@ -74,6 +74,35 @@ function createGateway(currentTimer: object | null = { id: 'timer-1' }) {
 }
 
 describe('TimerGateway multi-instance fanout', () => {
+  it('rejects a missing token without logging socket or account identifiers', async () => {
+    const { gateway, findUserById } = createGateway();
+    const logger = (
+      gateway as never as {
+        logger: { warn: ReturnType<typeof vi.fn> };
+      }
+    ).logger;
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const emit = vi.fn();
+    const client = {
+      id: 'sensitive-socket-id',
+      handshake: { auth: {}, headers: {} },
+      data: {},
+      disconnect: vi.fn(),
+      emit,
+    };
+
+    await gateway.handleConnection(client as never);
+
+    expect(findUserById).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      'Socket connection rejected: authentication failed'
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(client.id);
+    expect(emit).toHaveBeenCalledWith(SOCKET_EVENTS.SESSION_EXPIRED, {
+      message: 'Your session has expired. Please sign in again.',
+    });
+  });
+
   it('joins authenticated sockets to user and device rooms', async () => {
     const { gateway, legacyHasPushToken, tasksUpdate } = createGateway();
     const join = vi.fn();

@@ -44,6 +44,56 @@ import { stableFavoriteFirst } from '../utils/favoriteFirst';
 
 type TabType = 'work' | 'break' | 'longBreak' | 'lists';
 
+export function IntentionConversionModal({
+  intention,
+  childCount,
+  onClose,
+  onConvert,
+}: {
+  intention: Intention | null;
+  childCount: number;
+  onClose: () => void;
+  onConvert: (intention: Intention) => void | Promise<void>;
+}) {
+  const { t } = useI18n();
+  return (
+    <Modal
+      isOpen={intention !== null}
+      onClose={onClose}
+      title={t('intention.makeList')}
+      closeOnBackdropClick={true}
+      closeOnEscape={true}
+    >
+      {intention && (
+        <>
+          <p className="text-sm leading-6 text-slate-300">
+            {childCount > 0
+              ? t('intention.convertWithChildren', {
+                  title: intention.title,
+                })
+              : t('intention.convertSingle', {
+                  title: intention.title,
+                })}
+          </p>
+          {childCount > 0 && (
+            <p className="mt-3 text-sm leading-6 text-amber-300">
+              {t('intention.convertDirectTasksWarning')}
+            </p>
+          )}
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <Button variant="secondary" onClick={onClose}>
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={() => void onConvert(intention)}>
+              {t('intention.makeListAction')}
+            </Button>
+          </div>
+        </>
+      )}
+    </Modal>
+  );
+}
+
 export function IntentionsManager() {
   const { t } = useI18n();
   const [workIntentions, setWorkIntentions] = useState<Intention[]>([]);
@@ -1819,40 +1869,16 @@ export function IntentionsManager() {
         </div>
       </Modal>
 
-      <Modal
-        isOpen={intentionToConvert !== null}
+      <IntentionConversionModal
+        intention={intentionToConvert}
+        childCount={
+          intentionToConvert
+            ? getSubIntentionsForParent(intentionToConvert).length
+            : 0
+        }
         onClose={() => setIntentionToConvert(null)}
-        title={t('intention.makeList')}
-        closeOnBackdropClick={true}
-        closeOnEscape={true}
-      >
-        {intentionToConvert && (
-          <>
-            <p className="text-sm leading-6 text-slate-300">
-              {getSubIntentionsForParent(intentionToConvert).length > 0
-                ? t('intention.convertWithChildren', {
-                    title: intentionToConvert.title,
-                  })
-                : t('intention.convertSingle', {
-                    title: intentionToConvert.title,
-                  })}
-            </p>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <Button
-                variant="secondary"
-                onClick={() => setIntentionToConvert(null)}
-              >
-                {t('common.cancel')}
-              </Button>
-              <Button
-                onClick={() => void convertIntentionToList(intentionToConvert)}
-              >
-                {t('intention.makeListAction')}
-              </Button>
-            </div>
-          </>
-        )}
-      </Modal>
+        onConvert={convertIntentionToList}
+      />
 
       <Modal
         isOpen={isArchivedModalOpen}
