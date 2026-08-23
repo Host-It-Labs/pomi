@@ -5,6 +5,10 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import {
+  EXPECTED_GITHUB_APP_BOT_LOGIN,
+  EXPECTED_GITHUB_APP_ID,
+} from './github-app-auth.mjs';
 
 const ROOT = new URL('../', import.meta.url);
 const CONTRACT = JSON.parse(
@@ -1329,6 +1333,7 @@ export async function validateAutomationAuthentication({
   environment = process.env,
   fetchImpl = fetch,
 } = {}) {
+  const appId = environment.POMI_GITHUB_APP_ID?.trim();
   const expectedLogin = environment.POMI_GITHUB_APP_BOT_LOGIN?.trim();
   const token = environment.GITHUB_TOKEN?.trim();
   const permissionsJson = environment.POMI_GITHUB_APP_PERMISSIONS?.trim();
@@ -1337,6 +1342,7 @@ export async function validateAutomationAuthentication({
   const committerName = environment.GIT_COMMITTER_NAME?.trim();
   const committerEmail = environment.GIT_COMMITTER_EMAIL?.trim();
   if (
+    !appId ||
     !expectedLogin ||
     !token ||
     !permissionsJson ||
@@ -1348,6 +1354,12 @@ export async function validateAutomationAuthentication({
     throw new Error(
       'Radar preflight requires GitHub App authentication and bot Git identity from scripts/github-app-auth.mjs.'
     );
+  }
+  if (
+    appId !== EXPECTED_GITHUB_APP_ID ||
+    expectedLogin !== EXPECTED_GITHUB_APP_BOT_LOGIN
+  ) {
+    throw new Error('Radar preflight authentication must use Pomi Radar.');
   }
   let permissions;
   try {
@@ -1367,24 +1379,16 @@ export async function validateAutomationAuthentication({
       'Radar preflight requires the GitHub App installation to have repository, contents, issues, and pull-request write access.'
     );
   }
-  const response = await fetchImpl(
-    'https://api.github.com/installation/repositories?per_page=100',
-    {
-      headers: {
-        accept: 'application/vnd.github+json',
-        authorization: `Bearer ${token}`,
-        'user-agent': 'pomi-radar-preflight',
-        'x-github-api-version': '2022-11-28',
-      },
-    }
-  );
-  const installation = await response.json();
-  if (
-    !response.ok ||
-    !installation.repositories?.some(
-      repository => repository.full_name === repo()
-    )
-  ) {
+  const response = await fetchImpl(`https://api.github.com/repos/${repo()}`, {
+    headers: {
+      accept: 'application/vnd.github+json',
+      authorization: `Bearer ${token}`,
+      'user-agent': 'pomi-radar-preflight',
+      'x-github-api-version': '2022-11-28',
+    },
+  });
+  const repository = await response.json();
+  if (!response.ok || repository.full_name !== repo()) {
     throw new Error(
       `Radar preflight expected ${expectedLogin}, but App authentication could not be verified.`
     );

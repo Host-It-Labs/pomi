@@ -37,3 +37,16 @@ test('fails closed with a redacted missing-configuration diagnostic', () => {
     /GitHub App configuration is incomplete/
   );
 });
+
+test('rejects a different GitHub App before authentication', () => {
+  assert.throws(
+    () =>
+      readGitHubAppConfiguration({
+        POMI_RADAR_GITHUB_APP_ID: '1234',
+        POMI_RADAR_GITHUB_APP_INSTALLATION_ID: '5678',
+        POMI_RADAR_GITHUB_APP_PRIVATE_KEY_PATH:
+          'config/secrets/pomi-radar.private-key.pem',
+      }),
+    /does not identify Pomi Radar/
+  );
+});

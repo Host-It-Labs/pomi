@@ -65,6 +65,7 @@ test('preflight verifies bot attribution and Git identity', async () => {
   const result = await validateAutomationAuthentication({
     environment: {
       GITHUB_TOKEN: 'app-token',
+      POMI_GITHUB_APP_ID: '4675891',
       POMI_GITHUB_APP_BOT_LOGIN: 'pomi-radar[bot]',
       POMI_GITHUB_APP_PERMISSIONS:
         '{"contents":"write","issues":"write","pull_requests":"write"}',
@@ -73,21 +74,45 @@ test('preflight verifies bot attribution and Git identity', async () => {
       GIT_COMMITTER_NAME: 'Pomi Radar Bot',
       GIT_COMMITTER_EMAIL: '123+pomi-radar[bot]@users.noreply.github.com',
     },
-    fetchImpl: async () =>
-      new globalThis.Response(
+    fetchImpl: async url => {
+      assert.equal(url, 'https://api.github.com/repos/Host-It-Labs/pomi');
+      return new globalThis.Response(
         JSON.stringify({
-          repositories: [{ full_name: 'Host-It-Labs/pomi' }],
+          full_name: 'Host-It-Labs/pomi',
         }),
         {
           status: 200,
           headers: { 'content-type': 'application/json' },
         }
-      ),
+      );
+    },
   });
   assert.deepEqual(result, {
     botLogin: 'pomi-radar[bot]',
     gitIdentityVerified: true,
   });
+});
+
+test('preflight rejects an authenticated App other than Pomi Radar', async () => {
+  await assert.rejects(
+    validateAutomationAuthentication({
+      environment: {
+        GITHUB_TOKEN: 'app-token',
+        POMI_GITHUB_APP_ID: '1234',
+        POMI_GITHUB_APP_BOT_LOGIN: 'another-app[bot]',
+        POMI_GITHUB_APP_PERMISSIONS:
+          '{"contents":"write","issues":"write","pull_requests":"write"}',
+        GIT_AUTHOR_NAME: 'Another App Bot',
+        GIT_AUTHOR_EMAIL: '123+another-app[bot]@users.noreply.github.com',
+        GIT_COMMITTER_NAME: 'Another App Bot',
+        GIT_COMMITTER_EMAIL: '123+another-app[bot]@users.noreply.github.com',
+      },
+      fetchImpl: async () => {
+        throw new Error('must reject before requesting repository access');
+      },
+    }),
+    /must use Pomi Radar/
+  );
 });
 
 test('consolidation manifests require bot authorship and eligible Radar issues', () => {
