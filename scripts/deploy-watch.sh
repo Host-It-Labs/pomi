@@ -260,7 +260,7 @@ main() {
   fi
 
   echo "[pomi] building Wear OS debug APK..."
-  if ! (cd "$ANDROID_DIR" && ./gradlew :wear:assembleDebug); then
+  if ! (cd "$ANDROID_DIR" && ./gradlew -p wear assembleDebug); then
     warn "Wear OS APK build failed."
     return 0
   fi

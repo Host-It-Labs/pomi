@@ -115,12 +115,12 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
           cache: gradle
 
       - name: Run Wear tests and coverage
         working-directory: packages/frontend/src-tauri/gen/android
-        run: ./gradlew --settings-file wear.settings.gradle -Drobolectric.dependency.repo.url=https://repo.maven.apache.org/maven2 :wear:testDebugUnitTest :wear:koverVerifyDebug :wear:koverXmlReportDebug
+        run: ./gradlew -p wear -Drobolectric.dependency.repo.url=https://repo.maven.apache.org/maven2 testDebugUnitTest koverVerifyDebug koverXmlReportDebug
 
       - name: Upload Wear diagnostics
         if: failure()

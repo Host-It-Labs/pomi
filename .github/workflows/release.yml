@@ -225,7 +225,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
           cache: gradle
 
       - name: Install Rust and Android targets
@@ -296,7 +296,7 @@ jobs:
 
       - name: Build Wear OS app
         working-directory: packages/frontend/src-tauri/gen/android
-        run: ./gradlew :wear:assembleDebug --no-daemon
+        run: ./gradlew -p wear assembleDebug --no-daemon
 
       - name: Collect Android and Wear release assets
         shell: bash
