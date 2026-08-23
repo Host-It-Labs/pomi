@@ -885,37 +885,6 @@ export function Tasks() {
     taskView.tasks,
     timerTypeFilter,
   ]);
-  useEffect(() => {
-    if (!selectionMode) return;
-    const visibleIds = new Set(visibleTasks.map(task => task.id));
-    setSelectedTaskIds(current => {
-      const next = new Set(
-        [...current].filter(taskId => visibleIds.has(taskId))
-      );
-      return next.size === current.size ? current : next;
-    });
-  }, [selectionMode, visibleTasks]);
-
-  const selectedBulkTasks = useMemo(
-    () => visibleTasks.filter(task => selectedTaskIds.has(task.id)),
-    [selectedTaskIds, visibleTasks]
-  );
-  const selectedBulkTimerTypes = useMemo(
-    () => new Set(selectedBulkTasks.map(task => task.timerType)),
-    [selectedBulkTasks]
-  );
-  const bulkAssignmentUnavailableReason =
-    selectedBulkTimerTypes.size > 1 ? t('task.bulkSameTimerType') : null;
-  const bulkAssignmentOptions = useMemo<TaskBulkAssignmentOption[]>(() => {
-    const onlyTimerType =
-      selectedBulkTimerTypes.size === 1 ? [...selectedBulkTimerTypes][0] : null;
-    return buildTaskBulkAssignmentOptions(
-      intentions,
-      onlyTimerType,
-      t('task.noIntention')
-    );
-  }, [intentions, selectedBulkTimerTypes, t]);
-
   const applyBulkUpdates = useCallback(
     async (updates: TaskBulkUpdate[]) => {
       setIsBulkSaving(true);
@@ -994,6 +963,49 @@ export function Tasks() {
         : mixedTaskItems,
     [mixedTaskItems, selectedList, taskCalendarDate, taskPageViewMode]
   );
+  const displayedTasks = useMemo(
+    () =>
+      displayedTaskItems
+        .filter(
+          (entry): entry is Extract<MixedTaskItem, { kind: 'task' }> =>
+            entry.kind === 'task'
+        )
+        .map(entry => entry.task),
+    [displayedTaskItems]
+  );
+  useEffect(() => {
+    if (!selectionMode) return;
+    const displayedIds = new Set(displayedTasks.map(task => task.id));
+    setSelectedTaskIds(current => {
+      const next = new Set(
+        [...current].filter(taskId => displayedIds.has(taskId))
+      );
+      return next.size === current.size ? current : next;
+    });
+  }, [displayedTasks, selectionMode]);
+
+  const selectedBulkTasks = useMemo(
+    () => displayedTasks.filter(task => selectedTaskIds.has(task.id)),
+    [displayedTasks, selectedTaskIds]
+  );
+  const allDisplayedTasksSelected =
+    displayedTasks.length > 0 &&
+    displayedTasks.every(task => selectedTaskIds.has(task.id));
+  const selectedBulkTimerTypes = useMemo(
+    () => new Set(selectedBulkTasks.map(task => task.timerType)),
+    [selectedBulkTasks]
+  );
+  const bulkAssignmentUnavailableReason =
+    selectedBulkTimerTypes.size > 1 ? t('task.bulkSameTimerType') : null;
+  const bulkAssignmentOptions = useMemo<TaskBulkAssignmentOption[]>(() => {
+    const onlyTimerType =
+      selectedBulkTimerTypes.size === 1 ? [...selectedBulkTimerTypes][0] : null;
+    return buildTaskBulkAssignmentOptions(
+      intentions,
+      onlyTimerType,
+      t('task.noIntention')
+    );
+  }, [intentions, selectedBulkTimerTypes, t]);
   const orderedIntentionFamilyTasks = useMemo(() => {
     if (!selectedFilterOption) return [];
     const parentSlug =
@@ -1003,6 +1015,7 @@ export function Tasks() {
         task =>
           task.status === TASK_STATUSES.ACTIVE &&
           task.pinnedAt === null &&
+          !task.followUpParent &&
           task.timerType === selectedFilterOption.intention.type &&
           task.intentionSlug === parentSlug
       ),
@@ -1409,7 +1422,7 @@ export function Tasks() {
                 onChange={setPropertyFilters}
               />
             )}
-            {!selectedList && visibleTasks.length > 0 && (
+            {!selectedList && (selectionMode || displayedTasks.length > 0) && (
               <IconButton
                 label={
                   selectionMode
@@ -1466,23 +1479,20 @@ export function Tasks() {
         {selectionMode && !selectedList ? (
           <div className="mt-2 flex min-h-9 items-center gap-2 rounded-lg border border-indigo-500/25 bg-indigo-950/25 px-2.5 py-1.5 text-xs">
             <span className="min-w-0 flex-1 truncate text-indigo-100">
-              {t('task.selectedCount', { count: selectedTaskIds.size })}
+              {t('task.selectedCount', { count: selectedBulkTasks.length })}
             </span>
             <button
               type="button"
               onClick={() => {
-                const allSelected = visibleTasks.every(task =>
-                  selectedTaskIds.has(task.id)
-                );
                 setSelectedTaskIds(
-                  allSelected
+                  allDisplayedTasksSelected
                     ? new Set()
-                    : new Set(visibleTasks.map(task => task.id))
+                    : new Set(displayedTasks.map(task => task.id))
                 );
               }}
               className="rounded px-2 py-1 text-slate-300 hover:bg-slate-800"
             >
-              {visibleTasks.every(task => selectedTaskIds.has(task.id))
+              {allDisplayedTasksSelected
                 ? t('common.clear')
                 : t('task.selectVisible')}
             </button>
@@ -1492,7 +1502,7 @@ export function Tasks() {
                 setBulkError(null);
                 setIsBulkActionOpen(true);
               }}
-              disabled={selectedTaskIds.size === 0}
+              disabled={selectedBulkTasks.length === 0}
             >
               {t('task.bulkManage')}
             </Button>
@@ -2663,7 +2673,7 @@ function MixedTaskList({
   const tasks = entries
     .filter(
       (entry): entry is Extract<MixedTaskItem, { kind: 'task' }> =>
-        entry.kind === 'task'
+        entry.kind === 'task' && !entry.task.followUpParent
     )
     .map(entry => entry.task);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
@@ -2774,7 +2784,7 @@ function MixedTaskList({
 
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>, task: Task) => {
-      if (task.pinnedAt || event.button !== 0) {
+      if (task.pinnedAt || task.followUpParent || event.button !== 0) {
         return;
       }
 
@@ -2786,7 +2796,7 @@ function MixedTaskList({
 
   const handleMouseDown = useCallback(
     (event: ReactMouseEvent<HTMLElement>, task: Task) => {
-      if (task.pinnedAt || event.button !== 0) {
+      if (task.pinnedAt || task.followUpParent || event.button !== 0) {
         return;
       }
 
