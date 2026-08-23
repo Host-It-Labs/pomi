@@ -163,6 +163,7 @@ export class ListsService {
       recurrenceSequenceIndex: 0,
       recurrenceAnchorMode: 'planned',
       followUpTaskId: null,
+      followUpDefinition: null,
       followUpDelayDays: null,
       followUpSourceTaskId: null,
       itemKind: 'listItem',
@@ -235,7 +236,7 @@ export class ListsService {
         userId,
         timerType: intention.type,
         intentionSlug,
-        itemKind: 'task',
+        itemKind: In(['task', 'followUp']),
       },
     });
     if (activeChildren.length > 0) {
@@ -416,7 +417,10 @@ export class ListsService {
         restore.recurrenceInterval = null;
       }
       Object.assign(item, restore, {
-        itemKind: 'task' as const,
+        itemKind:
+          restore.itemKind === 'followUp'
+            ? ('followUp' as const)
+            : ('task' as const),
         listId: null,
         taskRestoreState: null,
         intentionSlug: restoreAsTopLevel
@@ -459,12 +463,14 @@ export class ListsService {
       recurrenceInterval: task.recurrenceInterval,
       recurrenceAnchorMode: task.recurrenceAnchorMode,
       followUpTaskId: task.followUpTaskId,
+      followUpDefinition: task.followUpDefinition,
       followUpDelayDays: task.followUpDelayDays,
       followUpSourceTaskId: task.followUpSourceTaskId,
       lastReminderKey: task.lastReminderKey,
       recurrenceSequenceIndex: task.recurrenceSequenceIndex,
       manualOrder: task.manualOrder,
       manualOrderOverride: task.manualOrderOverride,
+      itemKind: task.itemKind,
     };
     task.itemKind = 'listItem';
     task.listId = listId;
@@ -480,6 +486,7 @@ export class ListsService {
     task.recurrenceSequenceIndex = 0;
     task.recurrenceAnchorMode = 'planned';
     task.followUpTaskId = null;
+    task.followUpDefinition = null;
     task.followUpDelayDays = null;
     task.followUpSourceTaskId = null;
     task.lastReminderKey = null;

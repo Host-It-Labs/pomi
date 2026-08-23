@@ -2,6 +2,7 @@ import type {
   TaskCreationSource,
   TaskPriority,
   TaskRecurrenceAnchorMode,
+  TaskFollowUpDefinition,
   TaskStatus,
   TimerTypes,
 } from './types';
@@ -90,6 +91,7 @@ export interface TasksUserAction {
   expectedDueDate?: string | null;
   expectedDueTime?: string | null;
   followUpTaskId?: string | null;
+  followUpDefinition?: TaskFollowUpDefinition | null;
   followUpDelayDays?: number | null;
   vacationEligible?: boolean;
   creationSource?: TaskCreationSource;

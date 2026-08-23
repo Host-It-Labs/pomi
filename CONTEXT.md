@@ -64,6 +64,10 @@ _Avoid_: Open task, pending task
 A brief inline recovery affordance shown after a task is marked done. It lets the user restore accidental completions before the task fully leaves active task surfaces.
 _Avoid_: Timer action history, permanent completed task
 
+**Task follow-up**:
+A one-time action configured inside its Parent Task and generated when that Parent Task is completed. The generated Task stays visibly tied to its Parent context and preserves normal due-date, reminder, Vacation Coverage, completion, undo, and history behavior without becoming a standalone template, recurring Task, or pinnable Task.
+_Avoid_: Follow-up template, independent Task, recurring follow-up, Pinned Task
+
 **Archived task**:
 A task removed from active task surfaces without being marked complete. Archived tasks preserve history and statistics, and archiving a recurring task stops its future occurrences.
 _Avoid_: Deleted task, completed task

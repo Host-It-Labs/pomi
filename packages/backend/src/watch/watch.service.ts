@@ -401,6 +401,7 @@ export class WatchService {
       intentionEmoji: intention?.emoji ?? null,
       subIntentionTitle: subIntention?.title ?? null,
       subIntentionEmoji: subIntention?.emoji ?? null,
+      followUpParent: task.followUpParent ?? null,
       isFocused: task.pinnedAt !== null,
       isLinkedToTimer: this.isTaskLinkedToTimer(task, timer),
       isOverdue: this.isTaskOverdueAt(task, now, preferences.timeZone),

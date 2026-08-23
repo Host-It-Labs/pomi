@@ -404,12 +404,30 @@ export interface Task {
   recurrenceInterval: number | null;
   recurrenceAnchorMode: TaskRecurrenceAnchorMode;
   followUpTaskId: string | null;
+  followUpDefinition?: TaskFollowUpDefinition | null;
   followUpDelayDays: number | null;
   followUpSourceTaskId: string | null;
+  followUpParent?: TaskFollowUpParent | null;
   itemKind: 'task';
   vacationEligible: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TaskFollowUpDefinition {
+  title: string;
+  description: string | null;
+  dueTime: string | null;
+  priority: TaskPriority;
+  timerType: TimerTypes;
+  intentionSlug: string | null;
+  subIntentionSlug: string | null;
+  vacationEligible: boolean;
+}
+
+export interface TaskFollowUpParent {
+  id: string;
+  title: string;
 }
 
 export interface List {
@@ -664,6 +682,7 @@ export interface WatchTaskSummary {
   intentionEmoji: string | null;
   subIntentionTitle: string | null;
   subIntentionEmoji: string | null;
+  followUpParent: TaskFollowUpParent | null;
   isFocused: boolean;
   isLinkedToTimer: boolean;
   isOverdue: boolean;

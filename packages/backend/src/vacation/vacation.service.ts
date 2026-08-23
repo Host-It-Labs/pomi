@@ -76,10 +76,22 @@ export class VacationService implements OnModuleInit, OnModuleDestroy {
       );
     }
     await this.tasksRepository.update({ userId }, { vacationEligible: false });
+    await this.tasksRepository.query(
+      `UPDATE "tasks" SET "followUpDefinition" = jsonb_set("followUpDefinition", '{vacationEligible}', 'false'::jsonb, false) WHERE "userId" = $1 AND "followUpDefinition" IS NOT NULL`,
+      [userId]
+    );
     if (input.intentionSlugs.length) {
       await this.tasksRepository.update(
-        { userId, intentionSlug: In(input.intentionSlugs), itemKind: 'task' },
+        {
+          userId,
+          intentionSlug: In(input.intentionSlugs),
+          itemKind: In(['task', 'followUp']),
+        },
         { vacationEligible: true }
+      );
+      await this.tasksRepository.query(
+        `UPDATE "tasks" SET "followUpDefinition" = jsonb_set("followUpDefinition", '{vacationEligible}', 'true'::jsonb, false) WHERE "userId" = $1 AND "followUpDefinition" IS NOT NULL AND "followUpDefinition" ->> 'intentionSlug' = ANY($2::text[])`,
+        [userId, input.intentionSlugs]
       );
     }
     if (input.listIds.length) {

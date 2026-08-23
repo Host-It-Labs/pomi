@@ -22,6 +22,20 @@ const disabledIntention = {
   title: 'Disabled',
   allowsTasks: false,
 } as Intention;
+const parentWithChild = {
+  ...enabledIntention,
+  id: 'parent-with-child',
+  slug: 'parent-with-child',
+  title: 'Parent with child',
+} as Intention;
+const childIntention = {
+  ...enabledIntention,
+  id: 'child-intention',
+  slug: 'child-intention',
+  title: 'Child intention',
+  parentIntentionId: parentWithChild.id,
+  parentIntention: parentWithChild,
+} as Intention;
 const list = {
   id: 'list-1',
   title: 'Launch',
@@ -153,20 +167,20 @@ describe('shared Task editor destinations', () => {
     );
   });
 
-  it('creates a one-time follow-up link with its delay', async () => {
+  it('creates a parent-owned follow-up definition with its delay', async () => {
     const onCreate = vi.fn().mockResolvedValue(true);
     render(
       <TaskFormModal
         {...baseProps}
         task={null}
-        activeTasks={[followUpTemplate]}
         initialTitle="Review the source"
         onCreate={onCreate}
       />
     );
 
-    fireEvent.change(await screen.findByLabelText('Follow-up Task'), {
-      target: { value: followUpTemplate.id },
+    fireEvent.click(await screen.findByLabelText('Add a contextual follow-up'));
+    fireEvent.change(screen.getByLabelText('Follow-up title'), {
+      target: { value: 'Send the follow-up' },
     });
     expect(screen.getByLabelText('Follow-up delay (days)')).toHaveValue(0);
     fireEvent.change(screen.getByLabelText('Follow-up delay (days)'), {
@@ -177,11 +191,43 @@ describe('shared Task editor destinations', () => {
     await waitFor(() =>
       expect(onCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          followUpTaskId: followUpTemplate.id,
+          followUpTaskId: null,
+          followUpDefinition: {
+            title: 'Send the follow-up',
+            description: null,
+            dueTime: null,
+            priority: 'normal',
+            timerType: 'work',
+            intentionSlug: null,
+            subIntentionSlug: null,
+            vacationEligible: false,
+          },
           followUpDelayDays: 3,
         })
       )
     );
+  });
+
+  it('requires a child when a follow-up parent has active children', async () => {
+    render(
+      <TaskFormModal
+        {...baseProps}
+        intentions={[parentWithChild, childIntention]}
+        task={null}
+      />
+    );
+
+    fireEvent.click(await screen.findByLabelText('Add a contextual follow-up'));
+    fireEvent.change(screen.getByLabelText('Follow-up Intention'), {
+      target: { value: parentWithChild.slug },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Follow-up Sub-intention')).toHaveValue(
+        childIntention.slug
+      )
+    );
+    expect(screen.queryByRole('option', { name: 'None' })).toBeNull();
   });
 
   it('preserves an existing Task due date when moving it to a List', async () => {

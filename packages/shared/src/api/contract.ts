@@ -388,6 +388,17 @@ const intentionUpdateSchema = z.object({
   description: z.string().trim().max(1000).nullable().optional(),
 });
 
+const taskFollowUpDefinitionSchema = z.object({
+  title: z.string().min(1).max(TASK_TITLE_MAX_LENGTH),
+  description: z.string().max(TASK_DESCRIPTION_MAX_LENGTH).nullable(),
+  dueTime: taskDueTimeSchema.nullable(),
+  priority: taskPrioritySchema,
+  timerType: timerTypeSchema,
+  intentionSlug: z.string().max(TASK_SLUG_MAX_LENGTH).nullable(),
+  subIntentionSlug: z.string().max(TASK_SLUG_MAX_LENGTH).nullable(),
+  vacationEligible: z.boolean(),
+});
+
 const taskSchema = z.object({
   id: z.string(),
   userId: z.string(),
@@ -411,6 +422,7 @@ const taskSchema = z.object({
   recurrenceInterval: z.number().min(1).nullable(),
   recurrenceAnchorMode: taskRecurrenceAnchorModeSchema,
   followUpTaskId: z.string().nullable(),
+  followUpDefinition: taskFollowUpDefinitionSchema.nullable().optional(),
   followUpDelayDays: z
     .number()
     .int()
@@ -418,6 +430,10 @@ const taskSchema = z.object({
     .max(TASK_FOLLOW_UP_DELAY_MAX_DAYS)
     .nullable(),
   followUpSourceTaskId: z.string().nullable(),
+  followUpParent: z
+    .object({ id: z.string(), title: z.string() })
+    .nullable()
+    .optional(),
   itemKind: z.literal('task'),
   vacationEligible: z.boolean(),
   createdAt: z.string(),
@@ -483,6 +499,7 @@ const taskCreateSchema = z.object({
   recurrenceInterval: z.number().min(1).nullable().optional(),
   recurrenceAnchorMode: taskRecurrenceAnchorModeSchema.optional(),
   followUpTaskId: z.string().nullable().optional(),
+  followUpDefinition: taskFollowUpDefinitionSchema.nullable().optional(),
   followUpDelayDays: z
     .number()
     .int()
@@ -576,6 +593,7 @@ const taskUpdateSchema = z.object({
   expectedDueDate: z.string().min(1).nullable().optional(),
   expectedDueTime: taskDueTimeSchema.nullable().optional(),
   followUpTaskId: z.string().nullable().optional(),
+  followUpDefinition: taskFollowUpDefinitionSchema.nullable().optional(),
   followUpDelayDays: z
     .number()
     .int()
@@ -919,6 +937,7 @@ const watchTaskSummarySchema = z.object({
   intentionEmoji: z.string().nullable(),
   subIntentionTitle: z.string().nullable(),
   subIntentionEmoji: z.string().nullable(),
+  followUpParent: z.object({ id: z.string(), title: z.string() }).nullable(),
   isFocused: z.boolean(),
   isLinkedToTimer: z.boolean(),
   isOverdue: z.boolean(),
@@ -1088,6 +1107,7 @@ const userActionSchema = z
       expectedDueDate: z.string().min(1).nullable().optional(),
       expectedDueTime: taskDueTimeSchema.nullable().optional(),
       followUpTaskId: z.string().nullable().optional(),
+      followUpDefinition: taskFollowUpDefinitionSchema.nullable().optional(),
       followUpDelayDays: z
         .number()
         .int()

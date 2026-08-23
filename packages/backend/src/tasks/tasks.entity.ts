@@ -4,6 +4,7 @@ import {
   TaskCreationSource,
   TaskPriority,
   TaskLifecycleEventType,
+  TaskFollowUpDefinition,
   TaskRecurrenceAnchorMode,
   TaskStatus,
   TimerTypes,
@@ -98,6 +99,9 @@ export class TaskEntity {
   @Column({ type: 'uuid', nullable: true })
   followUpTaskId: string | null;
 
+  @Column({ type: 'jsonb', nullable: true })
+  followUpDefinition: TaskFollowUpDefinition | null;
+
   @Column({ type: 'integer', nullable: true })
   followUpDelayDays: number | null;
 
@@ -105,7 +109,9 @@ export class TaskEntity {
   followUpSourceTaskId: string | null;
 
   @Column({ type: 'varchar', default: 'task' })
-  itemKind: 'task' | 'listItem';
+  itemKind: 'task' | 'listItem' | 'followUp' | 'followUpTemplate';
+
+  followUpParent?: { id: string; title: string } | null;
 
   @Column({ type: 'uuid', nullable: true })
   listId: string | null;

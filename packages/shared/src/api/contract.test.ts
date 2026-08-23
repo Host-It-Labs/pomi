@@ -41,13 +41,24 @@ describe('accepted-action schemas', () => {
         operation: 'update',
         taskId: 'task',
         recurrenceAnchorMode: 'completion',
-        followUpTaskId: 'template',
+        followUpDefinition: {
+          title: 'Send the follow-up',
+          description: null,
+          dueTime: '09:00',
+          priority: 'normal',
+          timerType: 'work',
+          intentionSlug: null,
+          subIntentionSlug: null,
+          vacationEligible: false,
+        },
         followUpDelayDays: TASK_FOLLOW_UP_DELAY_MAX_DAYS,
       })
     ).toMatchObject({
       kind: 'tasks',
       recurrenceAnchorMode: 'completion',
-      followUpTaskId: 'template',
+      followUpDefinition: expect.objectContaining({
+        title: 'Send the follow-up',
+      }),
       followUpDelayDays: TASK_FOLLOW_UP_DELAY_MAX_DAYS,
     });
     expect(

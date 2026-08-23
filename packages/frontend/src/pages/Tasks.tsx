@@ -58,6 +58,7 @@ import {
   TaskDescriptionModal,
 } from '../components/tasks/TaskDescriptionModal';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
+import { TaskFollowUpContext } from '../components/tasks/TaskFollowUpContext';
 import { TaskTimerTypeBadge } from '../components/tasks/TaskTimerTypeBadge';
 import { TaskImportModal } from '../components/tasks/TaskImportModal';
 import { TaskQuickCreateRow } from '../components/tasks/TaskQuickCreateRow';
@@ -1595,7 +1596,6 @@ export function Tasks() {
         <TaskFormModal
           isOpen={isCreateOpen || editingTask !== null}
           task={editingTask}
-          activeTasks={tasks}
           intentions={intentions}
           lists={lists}
           preferences={preferences}
@@ -2248,6 +2248,11 @@ function TaskArchiveModal({
               className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-slate-800/70 bg-slate-950/25 px-3 py-2"
             >
               <div className="min-w-0">
+                {task.followUpParent && (
+                  <TaskFollowUpContext
+                    parentTitle={task.followUpParent.title}
+                  />
+                )}
                 <div className="truncate text-xs font-medium text-slate-200">
                   {task.title}
                 </div>
@@ -2892,7 +2897,12 @@ function MixedTaskList({
                 onEdit={onEdit}
                 onOpenDescription={onOpenDescription}
                 onUpdate={onUpdate}
-                canReorder={canReorder && !task.pinnedAt && !isCompleting}
+                canReorder={
+                  canReorder &&
+                  !task.pinnedAt &&
+                  !task.followUpParent &&
+                  !isCompleting
+                }
                 isDragging={draggingTaskId === task.id}
                 dropPlacement={
                   dropTarget?.id === task.id ? dropTarget.placement : null
@@ -3003,6 +3013,7 @@ function TaskRow({
           'bg-indigo-950/30 shadow-[inset_0_0_0_1px_rgba(129,140,248,0.24)]',
         !isPinned && isOverdue && 'bg-red-950/20',
         !isPinned && !isOverdue && 'bg-transparent hover:bg-slate-800/25',
+        task.followUpParent && 'ml-4 border-l-2 border-indigo-500/40',
         isCompleted && 'opacity-50',
         isSelected && 'bg-indigo-950/35',
         isHighlighted &&
@@ -3089,6 +3100,11 @@ function TaskRow({
           />
         )}
         <div data-testid="task-row-content" className="min-w-0">
+          {task.followUpParent && (
+            <div className="mb-0.5">
+              <TaskFollowUpContext parentTitle={task.followUpParent.title} />
+            </div>
+          )}
           <div className="flex min-w-0 items-center gap-2">
             {isPinned && (
               <FaThumbtack
@@ -3122,19 +3138,21 @@ function TaskRow({
           ) : null}
         </div>
         <div className="flex items-center gap-0.5 opacity-80 transition-opacity group-hover/task-row:opacity-100 group-focus-within/task-row:opacity-100">
-          <IconButton
-            label={t(isPinned ? 'task.unpinFor' : 'task.pinFor', {
-              title: task.title,
-            })}
-            title={t(isPinned ? 'task.unpin' : 'task.pin')}
-            size="sm"
-            variant={isPinned ? 'primary' : 'secondary'}
-            onClick={() => void updatePinned()}
-            disabled={saving || selectionMode}
-            className="!rounded-full"
-          >
-            <FaThumbtack />
-          </IconButton>
+          {!task.followUpParent && (
+            <IconButton
+              label={t(isPinned ? 'task.unpinFor' : 'task.pinFor', {
+                title: task.title,
+              })}
+              title={t(isPinned ? 'task.unpin' : 'task.pin')}
+              size="sm"
+              variant={isPinned ? 'primary' : 'secondary'}
+              onClick={() => void updatePinned()}
+              disabled={saving || selectionMode}
+              className="!rounded-full"
+            >
+              <FaThumbtack />
+            </IconButton>
+          )}
           <IconButton
             label={t('task.editFor', { title: task.title })}
             title={t('common.edit')}

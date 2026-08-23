@@ -1,6 +1,6 @@
 import type { Task } from '@pomi/shared';
 import { describe, expect, it } from 'vitest';
-import { searchMinimizedTasks } from './MinimizedTaskView';
+import { getPinShortcutTask, searchMinimizedTasks } from './MinimizedTaskView';
 
 function task(id: string, overrides: Partial<Task> = {}): Task {
   return {
@@ -82,5 +82,16 @@ describe('Minimized task search', () => {
     );
 
     expect(results.map(value => value.id)).toEqual(['visible']);
+  });
+
+  it('does not expose contextual follow-ups through pin shortcuts', () => {
+    const parent = task('parent');
+    const followUp = task('follow-up', {
+      followUpSourceTaskId: parent.id,
+      followUpParent: { id: parent.id, title: parent.title },
+    });
+
+    expect(getPinShortcutTask([followUp, parent], 'Digit1')).toBeNull();
+    expect(getPinShortcutTask([followUp, parent], 'Digit2')).toBe(parent);
   });
 });
