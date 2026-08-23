@@ -7,6 +7,22 @@ three required secrets: `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, and
 `JWT_SECRET`. Generate them with a cryptographically secure password generator;
 do not use the development values.
 
+Generate each secret separately so the three services do not share a value:
+
+```bash
+openssl rand -hex 32
+```
+
+- `POSTGRES_PASSWORD` protects PostgreSQL and must remain unchanged when an
+  existing database is upgraded. PostgreSQL only applies it automatically when
+  initializing an empty data directory.
+- `REDIS_PASSWORD` protects the private Redis instance. Compose passes the same
+  value to both Redis and the backend.
+- `JWT_SECRET` signs authentication tokens. Changing it signs every user out.
+- `CORS_ORIGINS` is not a secret. Native clients use the provided defaults. Add
+  a hosted web frontend as an exact origin such as `https://pomi.example.com`,
+  without a trailing slash or path.
+
 ```bash
 docker compose \
   --env-file /private/path/pomi.env \
@@ -19,6 +35,13 @@ front of it. Native Tauri origins are allowed by default; a separately hosted
 web frontend must set `CORS_ORIGINS` to its exact comma-separated origins.
 PostgreSQL and Redis are isolated on an internal Docker network and must not be
 published to the internet.
+
+Optional integrations can stay blank. Their values come from their respective
+service consoles: Sentry project settings for `NEST_SENTRY_DSN`, OpenRouter API
+keys for `OPENROUTER_API_KEY`, a fine-grained GitHub token for feedback, Firebase
+project settings under **Service accounts** for `FIREBASE_SERVICE_ACCOUNT_JSON`,
+and the Apple Developer portal for APNs values. The environment template has a
+comment beside each group.
 
 The container applies TypeORM migrations before startup. Back up PostgreSQL and
 test restores before upgrades. The public Compose stack uses a PostgreSQL 17
