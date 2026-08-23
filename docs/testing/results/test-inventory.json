@@ -8,7 +8,7 @@
     "sourceLines": "physical lines"
   },
   "vitest": {
-    "total": 797,
+    "total": 802,
     "projects": {
       "shared-unit": {
         "tests": 20,
@@ -17,22 +17,22 @@
         "declaredTests": 20
       },
       "backend-unit": {
-        "tests": 454,
+        "tests": 455,
         "files": 71,
-        "staticCollectedTests": 454,
-        "declaredTests": 445
+        "staticCollectedTests": 455,
+        "declaredTests": 446
       },
       "frontend-unit": {
-        "tests": 246,
-        "files": 61,
-        "staticCollectedTests": 246,
-        "declaredTests": 246
+        "tests": 249,
+        "files": 62,
+        "staticCollectedTests": 249,
+        "declaredTests": 249
       },
       "backend-integration": {
-        "tests": 60,
-        "files": 7,
+        "tests": 61,
+        "files": 8,
         "staticCollectedTests": 1,
-        "declaredTests": 60
+        "declaredTests": 61
       },
       "frontend-browser": {
         "tests": 17,
@@ -62,7 +62,7 @@
     "legacySourceLines": 0
   },
   "totals": {
-    "nonE2eTests": 841,
-    "activeTests": 854
+    "nonE2eTests": 846,
+    "activeTests": 859
   }
 }
