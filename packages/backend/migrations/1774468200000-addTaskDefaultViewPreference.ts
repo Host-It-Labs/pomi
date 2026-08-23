@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddTaskDefaultViewPreference1774468100000 implements MigrationInterface {
-  name = 'AddTaskDefaultViewPreference1774468100000';
+export class AddTaskDefaultViewPreference1774468200000 implements MigrationInterface {
+  name = 'AddTaskDefaultViewPreference1774468200000';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
