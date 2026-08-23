@@ -73,6 +73,7 @@ test('isolates Git commands from stored personal GitHub credentials', () => {
     'http.https://github.com/.extraheader'
   );
   assert.equal(environment.GIT_CONFIG_VALUE_1, '');
+  assert.equal(environment.GIT_SSH_COMMAND, 'false');
   assert.equal(environment.GIT_AUTHOR_NAME, 'Pomi Radar Bot');
   assert.match(environment.GIT_AUTHOR_EMAIL, /pomi-radar\[bot\]/);
 });

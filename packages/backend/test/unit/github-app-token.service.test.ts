@@ -3,7 +3,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { GitHubAppTokenService } from '../../src/feedback/github-app-token.service';
 
 describe('GitHubAppTokenService', () => {
@@ -110,5 +113,24 @@ describe('GitHubAppTokenService', () => {
       )
     );
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('translates installation-token transport failures', async () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'pomi-github-app-'));
+    temporaryDirectories.push(directory);
+    const privateKeyPath = path.join(directory, 'private-key.pem');
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    writeFileSync(
+      privateKeyPath,
+      privateKey.export({ type: 'pkcs8', format: 'pem' })
+    );
+    process.env.GITHUB_FEEDBACK_APP_ID = '4675891';
+    process.env.GITHUB_FEEDBACK_APP_INSTALLATION_ID = '155743206';
+    process.env.GITHUB_FEEDBACK_APP_PRIVATE_KEY_PATH = privateKeyPath;
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
+
+    await expect(new GitHubAppTokenService().getToken()).rejects.toEqual(
+      new BadGatewayException('GitHub feedback authentication is unavailable')
+    );
   });
 });

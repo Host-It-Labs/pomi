@@ -1,4 +1,7 @@
-import { ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FeedbackService } from '../../src/feedback/feedback.service';
 import { GitHubAppTokenService } from '../../src/feedback/github-app-token.service';
@@ -52,5 +55,19 @@ describe('FeedbackService', () => {
     await expect(
       new FeedbackService(new GitHubAppTokenService()).submit('Feedback')
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('translates issue-creation transport failures', async () => {
+    process.env.GITHUB_FEEDBACK_REPOSITORY = 'community/pomi-feedback';
+    const githubAppTokenService = {
+      getToken: vi.fn().mockResolvedValue('installation-token'),
+    } as unknown as GitHubAppTokenService;
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
+
+    await expect(
+      new FeedbackService(githubAppTokenService).submit('Feedback')
+    ).rejects.toEqual(
+      new BadGatewayException('GitHub feedback submission is unavailable')
+    );
   });
 });

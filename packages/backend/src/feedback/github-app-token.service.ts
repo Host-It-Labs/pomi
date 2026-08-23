@@ -81,20 +81,27 @@ export class GitHubAppTokenService {
       );
     }
 
-    const response = await fetch(
-      `https://api.github.com/app/installations/${installationId}/access_tokens`,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.github+json',
-          Authorization: `Bearer ${jwt}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'pomi-feedback',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        signal: AbortSignal.timeout(15_000),
-      }
-    );
+    let response: Response;
+    try {
+      response = await fetch(
+        `https://api.github.com/app/installations/${installationId}/access_tokens`,
+        {
+          method: 'POST',
+          headers: {
+            Accept: 'application/vnd.github+json',
+            Authorization: `Bearer ${jwt}`,
+            'Content-Type': 'application/json',
+            'User-Agent': 'pomi-feedback',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          signal: AbortSignal.timeout(15_000),
+        }
+      );
+    } catch {
+      throw new BadGatewayException(
+        'GitHub feedback authentication is unavailable'
+      );
+    }
     if (!response.ok) {
       throw new BadGatewayException(
         'GitHub did not authenticate the feedback application'

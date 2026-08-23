@@ -44,25 +44,32 @@ export class FeedbackService {
         : []),
     ].join('\n');
     const label = process.env.GITHUB_FEEDBACK_LABEL?.trim() || 'feedback';
-    const response = await fetch(
-      `https://api.github.com/repos/${repository}/issues`,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.github+json',
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'pomi-feedback',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        body: JSON.stringify({
-          title: this.title(feedback),
-          body,
-          ...(label ? { labels: [label] } : {}),
-        }),
-        signal: AbortSignal.timeout(15_000),
-      }
-    );
+    let response: Response;
+    try {
+      response = await fetch(
+        `https://api.github.com/repos/${repository}/issues`,
+        {
+          method: 'POST',
+          headers: {
+            Accept: 'application/vnd.github+json',
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'User-Agent': 'pomi-feedback',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          body: JSON.stringify({
+            title: this.title(feedback),
+            body,
+            ...(label ? { labels: [label] } : {}),
+          }),
+          signal: AbortSignal.timeout(15_000),
+        }
+      );
+    } catch {
+      throw new BadGatewayException(
+        'GitHub feedback submission is unavailable'
+      );
+    }
     if (!response.ok) {
       throw new BadGatewayException('GitHub did not accept the feedback');
     }

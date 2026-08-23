@@ -143,10 +143,7 @@ export async function getGitHubAppAuthentication({
   };
 }
 
-export function appAuthenticatedEnvironment(
-  authentication,
-  environment = process.env
-) {
+export function appAuthenticatedEnvironment(authentication, environment) {
   const botEmail = `${authentication.botUserId}+${authentication.botLogin}@users.noreply.github.com`;
   return {
     ...environment,
@@ -160,6 +157,7 @@ export function appAuthenticatedEnvironment(
     ),
     GIT_ASKPASS: path.join(repositoryRoot, 'scripts/github-app-askpass.sh'),
     GIT_TERMINAL_PROMPT: '0',
+    GIT_SSH_COMMAND: 'false',
     GIT_CONFIG_COUNT: '2',
     GIT_CONFIG_KEY_0: 'credential.helper',
     GIT_CONFIG_VALUE_0: '',
@@ -216,7 +214,7 @@ async function runCli() {
   const child = spawn(command, args, {
     stdio: 'inherit',
     cwd: repositoryRoot,
-    env: appAuthenticatedEnvironment(authentication),
+    env: appAuthenticatedEnvironment(authentication, process.env),
   });
   child.on('error', error => {
     console.error(error);
