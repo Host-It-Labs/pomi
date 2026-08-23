@@ -40,6 +40,17 @@ vi.mock('../../utils/userActionQueue', () => ({
   submitUserMutation: mocks.submitUserMutation,
 }));
 
+vi.mock('./VacationSetupModal', () => ({
+  VacationSetupModal: ({
+    isOpen,
+    onClose,
+  }: {
+    isOpen: boolean;
+    onClose: () => void;
+  }) =>
+    isOpen ? <button onClick={onClose}>Close coverage selector</button> : null,
+}));
+
 describe('Vacation activation', () => {
   beforeEach(() => {
     mocks.preferences.tasksShowVacationCovered = false;
@@ -84,5 +95,28 @@ describe('Vacation activation', () => {
     expect(
       screen.getByRole('checkbox', { name: 'Hide covered Tasks' })
     ).not.toBeChecked();
+  });
+
+  it('reconfigures coverage without losing pending activation choices', async () => {
+    const user = userEvent.setup();
+    render(<VacationControl />);
+
+    await user.click(screen.getByRole('button', { name: 'Vacation mode' }));
+    const returnDate = screen.getByLabelText(/Return date/);
+    await user.type(returnDate, '2026-08-20');
+    await user.click(
+      screen.getByRole('button', { name: 'Choose affected Tasks' })
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Start vacation' })
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole('button', { name: 'Close coverage selector' })
+    );
+
+    expect(screen.getByLabelText(/Return date/)).toHaveValue('2026-08-20');
+    expect(
+      screen.getByRole('checkbox', { name: 'Hide covered Tasks' })
+    ).toBeChecked();
   });
 });

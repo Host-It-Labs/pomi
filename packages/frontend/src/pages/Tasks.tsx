@@ -30,6 +30,7 @@ import {
   FaArchive,
   FaCalendarAlt,
   FaCheck,
+  FaCheckSquare,
   FaEdit,
   FaFileImport,
   FaFilter,
@@ -67,6 +68,21 @@ import { TaskArchiveConfirmationModal } from '../components/tasks/TaskArchiveCon
 import { CompletionButton } from '../components/tasks/CompletionButton';
 import { MobileSwipeActionRow } from '../components/tasks/MobileSwipeActionRow';
 import { FavoriteIntentionFilters } from '../components/tasks/FavoriteIntentionFilters';
+import {
+  EMPTY_TASK_PROPERTY_FILTERS,
+  hasTaskPropertyFilters,
+  matchesListItemPropertyFilters,
+  matchesTaskPropertyFilters,
+  TaskPropertyFilterMenu,
+  type TaskPropertyFilters,
+} from '../components/tasks/TaskPropertyFilterMenu';
+import {
+  buildTaskBulkAssignmentOptions,
+  TaskBulkActionModal,
+  runTaskBulkUpdates,
+  type TaskBulkAssignmentOption,
+  type TaskBulkUpdate,
+} from '../components/tasks/TaskBulkActionModal';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { IconButton } from '../components/ui/IconButton';
@@ -208,6 +224,24 @@ export function Tasks() {
     getTodayDateKey
   );
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const [propertyFilters, setPropertyFilters] = useState<TaskPropertyFilters>(
+    EMPTY_TASK_PROPERTY_FILTERS
+  );
+  const [isPropertyMenuOpen, setIsPropertyMenuOpen] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [isBulkActionOpen, setIsBulkActionOpen] = useState(false);
+  const [isBulkSaving, setIsBulkSaving] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [updatedTaskDestinationId, setUpdatedTaskDestinationId] = useState<
+    string | null
+  >(null);
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(
+    null
+  );
+  const updatedTaskHighlightTimeoutRef = useRef<number | null>(null);
   const [pinnedTaskDestinationId, setPinnedTaskDestinationId] = useState<
     string | null
   >(null);
@@ -518,6 +552,7 @@ export function Tasks() {
       item =>
         item.status === TASK_STATUSES.ACTIVE &&
         (!hideVacationCovered || !item.vacationEligible) &&
+        matchesListItemPropertyFilters(item, propertyFilters) &&
         (!query || normalizeSearchText(item.title).includes(query))
     );
     if (taskSortMode === 'created-desc') {
@@ -531,7 +566,13 @@ export function Tasks() {
       );
     }
     return matching;
-  }, [hideVacationCovered, selectedListItems, taskSearchQuery, taskSortMode]);
+  }, [
+    hideVacationCovered,
+    propertyFilters,
+    selectedListItems,
+    taskSearchQuery,
+    taskSortMode,
+  ]);
   const completedListItems = selectedListItems.filter(
     item => item.status === TASK_STATUSES.COMPLETED
   );
@@ -757,6 +798,14 @@ export function Tasks() {
       }),
     [hideVacationCovered, orderingClock, tasks]
   );
+  const revealUpdatedTask = useCallback((taskId: string) => {
+    setTaskSearchQuery('');
+    setSelectedIntentionFilter(null);
+    setSelectedListId(null);
+    setTimerTypeFilter('all');
+    setPropertyFilters(EMPTY_TASK_PROPERTY_FILTERS);
+    setUpdatedTaskDestinationId(taskId);
+  }, []);
   const updateTaskWithPositionFeedback = useCallback(
     async (updates: Parameters<typeof updateTask>[0]) => {
       const currentTask = tasks.find(task => task.id === updates.id);
@@ -772,11 +821,19 @@ export function Tasks() {
           setTaskMode,
         });
       }
+      if (didUpdate && isInlineTaskPropertyUpdate(updates)) {
+        showToastFromStore(t('task.updated'), 'success', 5000, {
+          label: t('task.viewUpdated'),
+          onClick: () => revealUpdatedTask(updates.id),
+        });
+      }
       return didUpdate;
     },
     [
       createOrResumeTimer,
       preferences,
+      revealUpdatedTask,
+      t,
       updatePreferenceWithResult,
       setTaskMode,
       tasks,
@@ -799,7 +856,8 @@ export function Tasks() {
           ? true
           : doesTaskMatchIntentionFilter(task, selectedFilterOption)
       )
-      .filter(task => doesTaskMatchSearch(task, taskSearchQuery, intentions));
+      .filter(task => doesTaskMatchSearch(task, taskSearchQuery, intentions))
+      .filter(task => matchesTaskPropertyFilters(task, propertyFilters));
     const sorted = sortTasksForMode(filteredTasks, taskSortMode);
     const ranked = rankTasksForSearch(
       sorted,
@@ -814,12 +872,74 @@ export function Tasks() {
   }, [
     intentions,
     isTaskSearchActive,
+    propertyFilters,
     selectedFilterOption,
     taskSortMode,
     taskSearchQuery,
     taskView.tasks,
     timerTypeFilter,
   ]);
+  useEffect(() => {
+    if (!selectionMode) return;
+    const visibleIds = new Set(visibleTasks.map(task => task.id));
+    setSelectedTaskIds(current => {
+      const next = new Set(
+        [...current].filter(taskId => visibleIds.has(taskId))
+      );
+      return next.size === current.size ? current : next;
+    });
+  }, [selectionMode, visibleTasks]);
+
+  const selectedBulkTasks = useMemo(
+    () => visibleTasks.filter(task => selectedTaskIds.has(task.id)),
+    [selectedTaskIds, visibleTasks]
+  );
+  const selectedBulkTimerTypes = useMemo(
+    () => new Set(selectedBulkTasks.map(task => task.timerType)),
+    [selectedBulkTasks]
+  );
+  const bulkAssignmentUnavailableReason =
+    selectedBulkTimerTypes.size > 1 ? t('task.bulkSameTimerType') : null;
+  const bulkAssignmentOptions = useMemo<TaskBulkAssignmentOption[]>(() => {
+    const onlyTimerType =
+      selectedBulkTimerTypes.size === 1 ? [...selectedBulkTimerTypes][0] : null;
+    return buildTaskBulkAssignmentOptions(
+      intentions,
+      onlyTimerType,
+      t('task.noIntention')
+    );
+  }, [intentions, selectedBulkTimerTypes, t]);
+
+  const applyBulkUpdates = useCallback(
+    async (updates: TaskBulkUpdate[]) => {
+      setIsBulkSaving(true);
+      setBulkError(null);
+      try {
+        const failed = new Set(await runTaskBulkUpdates(updates, updateTask));
+        await loadTasks();
+        if (failed.size > 0) {
+          setSelectedTaskIds(failed);
+          setBulkError(
+            t('task.bulkPartialFailure', {
+              failed: failed.size,
+              total: updates.length,
+            })
+          );
+          return;
+        }
+        setIsBulkActionOpen(false);
+        setSelectedTaskIds(new Set());
+        setSelectionMode(false);
+        showToastFromStore(
+          t('task.bulkUpdated', { count: updates.length }),
+          'success'
+        );
+      } finally {
+        setIsBulkSaving(false);
+      }
+    },
+    [loadTasks, t, updateTask]
+  );
   const eligibleMixedListItems = useMemo(() => {
     const query = normalizeSearchText(taskSearchQuery);
     if (
@@ -836,6 +956,7 @@ export function Tasks() {
     return listItems
       .filter(item => item.status === TASK_STATUSES.ACTIVE)
       .filter(item => !hideVacationCovered || !item.vacationEligible)
+      .filter(item => matchesListItemPropertyFilters(item, propertyFilters))
       .map(item => ({ item, list: listsById.get(item.listId) }))
       .filter(
         (entry): entry is { item: ListItem; list: List } =>
@@ -849,6 +970,7 @@ export function Tasks() {
     lists,
     hideVacationCovered,
     preferences?.listsExtension,
+    propertyFilters,
     selectedFilterOption,
     selectedList,
     taskSearchQuery,
@@ -893,11 +1015,38 @@ export function Tasks() {
     destination.focus({ preventScroll: true });
     setPinnedTaskDestinationId(null);
   }, [displayedTaskItems, pinnedTaskDestinationId]);
+  useLayoutEffect(() => {
+    if (!updatedTaskDestinationId) return;
+    const destination = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-testid="task-row"]')
+    ).find(row => row.dataset.taskId === updatedTaskDestinationId);
+    if (!destination) return;
+    destination.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    destination.focus({ preventScroll: true });
+    setHighlightedTaskId(updatedTaskDestinationId);
+    setUpdatedTaskDestinationId(null);
+    if (updatedTaskHighlightTimeoutRef.current !== null) {
+      window.clearTimeout(updatedTaskHighlightTimeoutRef.current);
+    }
+    updatedTaskHighlightTimeoutRef.current = window.setTimeout(() => {
+      setHighlightedTaskId(null);
+      updatedTaskHighlightTimeoutRef.current = null;
+    }, 1800);
+  }, [displayedTaskItems, updatedTaskDestinationId]);
+  useEffect(
+    () => () => {
+      if (updatedTaskHighlightTimeoutRef.current !== null) {
+        window.clearTimeout(updatedTaskHighlightTimeoutRef.current);
+      }
+    },
+    []
+  );
   const hasActiveFilters =
     taskSearchQuery.trim().length > 0 ||
     selectedFilterOption !== null ||
     selectedList !== null ||
-    timerTypeFilter !== 'all';
+    timerTypeFilter !== 'all' ||
+    hasTaskPropertyFilters(propertyFilters);
   const taskCountLabel = selectedList
     ? taskSearchQuery.trim()
       ? `${activeListItems.length} of ${visibleActiveSelectedListItemCount}`
@@ -1239,11 +1388,44 @@ export function Tasks() {
                   setSelectedIntentionFilter(null);
                   setSelectedListId(null);
                   setTimerTypeFilter('all');
+                  setPropertyFilters(EMPTY_TASK_PROPERTY_FILTERS);
                 }}
                 className="text-[11px] text-slate-500 transition-colors hover:text-slate-200"
               >
                 {t('common.clearFilters')}
               </button>
+            )}
+            {!selectedList && (
+              <TaskPropertyFilterMenu
+                filters={propertyFilters}
+                isOpen={isPropertyMenuOpen}
+                onOpenChange={setIsPropertyMenuOpen}
+                onChange={setPropertyFilters}
+              />
+            )}
+            {!selectedList && visibleTasks.length > 0 && (
+              <IconButton
+                label={
+                  selectionMode
+                    ? t('task.exitSelectionMode')
+                    : t('task.selectMultiple')
+                }
+                title={
+                  selectionMode
+                    ? t('task.exitSelectionMode')
+                    : t('task.selectMultiple')
+                }
+                size="sm"
+                variant={selectionMode ? 'primary' : 'secondary'}
+                onClick={() => {
+                  setSelectionMode(current => !current);
+                  setSelectedTaskIds(new Set());
+                  setBulkError(null);
+                }}
+                className="h-7 w-7 !p-0"
+              >
+                <FaCheckSquare size={11} />
+              </IconButton>
             )}
             {!selectedList && (
               <TaskTimerTypeFilterDropdown
@@ -1274,6 +1456,42 @@ export function Tasks() {
             />
           </div>
         </div>
+
+        {selectionMode && !selectedList ? (
+          <div className="mt-2 flex min-h-9 items-center gap-2 rounded-lg border border-indigo-500/25 bg-indigo-950/25 px-2.5 py-1.5 text-xs">
+            <span className="min-w-0 flex-1 truncate text-indigo-100">
+              {t('task.selectedCount', { count: selectedTaskIds.size })}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const allSelected = visibleTasks.every(task =>
+                  selectedTaskIds.has(task.id)
+                );
+                setSelectedTaskIds(
+                  allSelected
+                    ? new Set()
+                    : new Set(visibleTasks.map(task => task.id))
+                );
+              }}
+              className="rounded px-2 py-1 text-slate-300 hover:bg-slate-800"
+            >
+              {visibleTasks.every(task => selectedTaskIds.has(task.id))
+                ? t('common.clear')
+                : t('task.selectVisible')}
+            </button>
+            <Button
+              size="xs"
+              onClick={() => {
+                setBulkError(null);
+                setIsBulkActionOpen(true);
+              }}
+              disabled={selectedTaskIds.size === 0}
+            >
+              {t('task.bulkManage')}
+            </Button>
+          </div>
+        ) : null}
 
         <div className="mt-2 space-y-2.5">
           {error && <Alert variant="error">{error}</Alert>}
@@ -1345,6 +1563,7 @@ export function Tasks() {
                 )}
                 canReorder={
                   taskPageViewMode === 'list' &&
+                  !selectionMode &&
                   selectedFilterOption !== null &&
                   taskSortMode === 'default' &&
                   normalizeSearchText(taskSearchQuery).length === 0
@@ -1358,6 +1577,17 @@ export function Tasks() {
                 onUpdate={updateTaskWithPositionFeedback}
                 onReorder={reorderVisibleTasks}
                 showTypeBadge={timerTypeFilter === 'all' || isTaskSearchActive}
+                selectionMode={selectionMode}
+                selectedTaskIds={selectedTaskIds}
+                onToggleSelection={taskId =>
+                  setSelectedTaskIds(current => {
+                    const next = new Set(current);
+                    if (next.has(taskId)) next.delete(taskId);
+                    else next.add(taskId);
+                    return next;
+                  })
+                }
+                highlightedTaskId={highlightedTaskId}
               />
             ))}
         </div>
@@ -1386,6 +1616,20 @@ export function Tasks() {
           onArchive={task =>
             updateTask({ id: task.id, status: TASK_STATUSES.ARCHIVED })
           }
+        />
+        <TaskBulkActionModal
+          isOpen={isBulkActionOpen}
+          selectedTasks={selectedBulkTasks}
+          assignmentOptions={bulkAssignmentOptions}
+          assignmentUnavailableReason={bulkAssignmentUnavailableReason}
+          isSaving={isBulkSaving}
+          error={bulkError}
+          onClose={() => {
+            if (isBulkSaving) return;
+            setIsBulkActionOpen(false);
+            setBulkError(null);
+          }}
+          onConfirm={applyBulkUpdates}
         />
         <TaskDescriptionModal
           task={descriptionTask}
@@ -2365,6 +2609,10 @@ function MixedTaskList({
   onUpdate,
   onReorder,
   showTypeBadge,
+  selectionMode,
+  selectedTaskIds,
+  onToggleSelection,
+  highlightedTaskId,
 }: {
   entries: MixedTaskItem[];
   completingTaskIds: string[];
@@ -2397,6 +2645,10 @@ function MixedTaskList({
     placement: TaskDropPlacement
   ) => Promise<boolean>;
   showTypeBadge: boolean;
+  selectionMode: boolean;
+  selectedTaskIds: Set<string>;
+  onToggleSelection: (taskId: string) => void;
+  highlightedTaskId: string | null;
 }) {
   const tasks = entries
     .filter(
@@ -2648,6 +2900,10 @@ function MixedTaskList({
                 onPointerDown={event => handlePointerDown(event, task)}
                 onMouseDown={event => handleMouseDown(event, task)}
                 showTypeBadge={showTypeBadge}
+                selectionMode={selectionMode}
+                isSelected={selectedTaskIds.has(task.id)}
+                onToggleSelection={() => onToggleSelection(task.id)}
+                isHighlighted={highlightedTaskId === task.id}
               />
             </motion.div>
           );
@@ -2670,6 +2926,10 @@ function TaskRow({
   onPointerDown,
   onMouseDown,
   showTypeBadge,
+  selectionMode,
+  isSelected,
+  onToggleSelection,
+  isHighlighted,
 }: {
   task: Task;
   isCompleting: boolean;
@@ -2696,6 +2956,10 @@ function TaskRow({
   onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   onMouseDown: (event: ReactMouseEvent<HTMLElement>) => void;
   showTypeBadge: boolean;
+  selectionMode: boolean;
+  isSelected: boolean;
+  onToggleSelection: () => void;
+  isHighlighted: boolean;
 }) {
   const { t } = useI18n();
   const [saving, setSaving] = useState(false);
@@ -2739,7 +3003,10 @@ function TaskRow({
           'bg-indigo-950/30 shadow-[inset_0_0_0_1px_rgba(129,140,248,0.24)]',
         !isPinned && isOverdue && 'bg-red-950/20',
         !isPinned && !isOverdue && 'bg-transparent hover:bg-slate-800/25',
-        isCompleted && 'opacity-50'
+        isCompleted && 'opacity-50',
+        isSelected && 'bg-indigo-950/35',
+        isHighlighted &&
+          'ring-2 ring-inset ring-amber-300 shadow-[0_0_18px_rgba(252,211,77,0.18)]'
       )}
     >
       <div
@@ -2798,17 +3065,29 @@ function TaskRow({
             </button>
           </div>
         ) : null}
-        <CompletionButton
-          label={task.title}
-          isCompleted={task.status === TASK_STATUSES.COMPLETED}
-          isCompleting={isCompleting}
-          disabled={saving || isCompleting}
-          onClick={() =>
-            void updateStatus(
-              isCompleted ? TASK_STATUSES.ACTIVE : TASK_STATUSES.COMPLETED
-            )
-          }
-        />
+        {selectionMode ? (
+          <label className="flex h-8 w-8 cursor-pointer items-center justify-center">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={onToggleSelection}
+              aria-label={t('task.selectForBulk', { title: task.title })}
+              className="h-4 w-4 rounded border-slate-600 bg-slate-950 text-indigo-500"
+            />
+          </label>
+        ) : (
+          <CompletionButton
+            label={task.title}
+            isCompleted={task.status === TASK_STATUSES.COMPLETED}
+            isCompleting={isCompleting}
+            disabled={saving || isCompleting}
+            onClick={() =>
+              void updateStatus(
+                isCompleted ? TASK_STATUSES.ACTIVE : TASK_STATUSES.COMPLETED
+              )
+            }
+          />
+        )}
         <div data-testid="task-row-content" className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             {isPinned && (
@@ -2828,17 +3107,19 @@ function TaskRow({
             <TaskDescriptionButton task={task} onOpen={onOpenDescription} />
             {showTypeBadge && <TaskTimerTypeBadge timerType={task.timerType} />}
           </div>
-          <div className="mt-1">
-            <TaskInlineProperties
-              task={task}
-              intentions={intentions}
-              onUpdate={onUpdate}
-              onOpenEditor={() => onEdit(task)}
-              showIntention
-              compact={false}
-              isOverdue={isOverdue}
-            />
-          </div>
+          {!selectionMode ? (
+            <div className="mt-1">
+              <TaskInlineProperties
+                task={task}
+                intentions={intentions}
+                onUpdate={onUpdate}
+                onOpenEditor={() => onEdit(task)}
+                showIntention
+                compact={false}
+                isOverdue={isOverdue}
+              />
+            </div>
+          ) : null}
         </div>
         <div className="flex items-center gap-0.5 opacity-80 transition-opacity group-hover/task-row:opacity-100 group-focus-within/task-row:opacity-100">
           <IconButton
@@ -2849,7 +3130,7 @@ function TaskRow({
             size="sm"
             variant={isPinned ? 'primary' : 'secondary'}
             onClick={() => void updatePinned()}
-            disabled={saving}
+            disabled={saving || selectionMode}
             className="!rounded-full"
           >
             <FaThumbtack />
@@ -2860,7 +3141,7 @@ function TaskRow({
             size="sm"
             variant="secondary"
             onClick={() => onEdit(task)}
-            disabled={saving}
+            disabled={saving || selectionMode}
             className="!rounded-full"
           >
             <FaEdit />
@@ -2874,13 +3155,15 @@ function TaskRow({
     <>
       {isMobile ? (
         <MobileSwipeActionRow
-          disabled={saving || isCompleting}
+          disabled={saving || isCompleting || selectionMode}
           onComplete={
-            isCompleted
+            selectionMode || isCompleted
               ? undefined
               : () => void updateStatus(TASK_STATUSES.COMPLETED)
           }
-          onArchive={() => setShowArchiveConfirm(true)}
+          onArchive={() => {
+            if (!selectionMode) setShowArchiveConfirm(true);
+          }}
         >
           {row}
         </MobileSwipeActionRow>
@@ -2918,6 +3201,28 @@ function getAutomaticUnpinnedTasks(
     today: orderingClock.today,
     currentTime: orderingClock.currentTime,
   }).tasks.map(task => tasksById.get(task.id)!);
+}
+
+function isInlineTaskPropertyUpdate(update: {
+  dueDate?: string | null;
+  dueTime?: string | null;
+  priority?: Task['priority'];
+  intentionSlug?: string | null;
+  subIntentionSlug?: string | null;
+  recurrenceRule?: string | null;
+  recurrenceInterval?: number | null;
+  recurrenceAnchorMode?: Task['recurrenceAnchorMode'];
+}) {
+  return [
+    'dueDate',
+    'dueTime',
+    'priority',
+    'intentionSlug',
+    'subIntentionSlug',
+    'recurrenceRule',
+    'recurrenceInterval',
+    'recurrenceAnchorMode',
+  ].some(key => Object.prototype.hasOwnProperty.call(update, key));
 }
 
 function getFavoriteRowStorageKey(userId: string | null) {

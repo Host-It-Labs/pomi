@@ -177,8 +177,30 @@ describe('inline Task properties', () => {
     await user.clear(input);
     await user.type(input, '2026-08-12');
 
-    expect(screen.queryByRole('button', { name: 'Apply' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeVisible();
     await user.click(document.body);
+
+    await waitFor(() =>
+      expect(onUpdate).toHaveBeenCalledWith({
+        id: 'task-release',
+        dueDate: '2026-08-12',
+      })
+    );
+  });
+
+  it('saves the same due-date draft through Apply', async () => {
+    const user = userEvent.setup();
+    const onUpdate = renderProperties();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Change due date for Ship release notes',
+      })
+    );
+    const input = screen.getByLabelText('Due date');
+    await user.clear(input);
+    await user.type(input, '2026-08-12');
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
 
     await waitFor(() =>
       expect(onUpdate).toHaveBeenCalledWith({

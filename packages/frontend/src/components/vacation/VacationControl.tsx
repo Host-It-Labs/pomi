@@ -8,6 +8,7 @@ import { IconButton } from '../ui/IconButton';
 import { Modal } from '../ui/Modal';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { useI18n } from '../../i18n';
+import { VacationSetupModal } from './VacationSetupModal';
 
 export function VacationControl() {
   const { t } = useI18n();
@@ -18,6 +19,7 @@ export function VacationControl() {
   const state = useVacationStore.use.status();
   const load = useVacationStore.use.loadStatus();
   const [open, setOpen] = useState(false);
+  const [coverageOpen, setCoverageOpen] = useState(false);
   const [endsOn, setEndsOn] = useState('');
   const [busy, setBusy] = useState(false);
   const [hideCoveredTasks, setHideCoveredTasks] = useState(
@@ -102,7 +104,7 @@ export function VacationControl() {
         <FaUmbrellaBeach size={12} />
       </IconButton>
       <Modal
-        isOpen={open}
+        isOpen={open && !coverageOpen}
         onClose={() => setOpen(false)}
         title={state.active ? t('vacation.endEarly') : t('vacation.start')}
         closeOnBackdropClick
@@ -132,6 +134,14 @@ export function VacationControl() {
               onChange={setHideCoveredTasks}
               label={t('vacation.hideCoveredTasks')}
             />
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => setCoverageOpen(true)}
+              disabled={busy}
+            >
+              {t('vacation.reconfigureCoverage')}
+            </Button>
             <label className="block text-sm text-slate-300">
               <span className="mb-2 block">
                 {t('vacation.returnDate')}{' '}
@@ -155,6 +165,10 @@ export function VacationControl() {
           </div>
         )}
       </Modal>
+      <VacationSetupModal
+        isOpen={coverageOpen}
+        onClose={() => setCoverageOpen(false)}
+      />
     </>
   );
 }
