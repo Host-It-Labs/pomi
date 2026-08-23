@@ -209,7 +209,7 @@ function TaskDueDateControl({
           ) : null}
         </span>
       }
-      triggerLabel={`Change due date for ${task.title}`}
+      triggerLabel={t('task.changeDueDateFor', { title: task.title })}
       triggerTitle={dueLabel}
       direction={compact ? 'up' : 'auto'}
     >
@@ -344,7 +344,7 @@ function TaskRecurrenceControl({
           <span className="truncate">{label}</span>
         </span>
       }
-      triggerLabel={`Change recurrence for ${task.title}`}
+      triggerLabel={t('task.changeRecurrenceFor', { title: task.title })}
       triggerTitle={detail}
       direction={compact ? 'up' : 'auto'}
     >
@@ -475,10 +475,13 @@ function TaskPriorityControl({
               getTaskPriorityBadgeClass(task.priority)
             )}
           >
-            {task.priority}
+            {t(`common.${task.priority}`)}
           </span>
         }
-        triggerLabel={`Change priority for ${task.title}. Current priority ${task.priority}`}
+        triggerLabel={t('task.changePriorityFor', {
+          title: task.title,
+          priority: t(`common.${task.priority}`),
+        })}
         direction={compact ? 'up' : 'auto'}
       >
         <div className="w-36 space-y-1" data-testid="task-priority-popover">
@@ -606,8 +609,8 @@ function TaskIntentionControl({
       }
       triggerLabel={
         displayChoice.parentEmoji || displayChoice.subEmoji
-          ? `Change intention for ${task.title}`
-          : `${task.title} has no linked intention. Set intention`
+          ? t('intention.changeFor', { title: task.title })
+          : t('intention.setForUnlinkedTask', { title: task.title })
       }
       triggerTitle={
         displayChoice.parentEmoji || displayChoice.subEmoji
@@ -648,10 +651,10 @@ function TaskIntentionControl({
             onClick={() => setIsOpen(false)}
             disabled={saving}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button size="xs" onClick={() => void apply()} isLoading={saving}>
-            Apply
+            {t('common.apply')}
           </Button>
         </div>
       </div>

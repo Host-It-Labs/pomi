@@ -4,7 +4,7 @@ import { useAuthStoreBase } from './authStore';
 import { apiClient } from '../utils/apiClient';
 import { submitUserMutation } from '../utils/userActionQueue';
 import { createSelectors } from './createSelectors';
-import { normalizeLanguage, setLanguage } from '../i18n';
+import { normalizeLanguage, setLanguage, translateCurrent } from '../i18n';
 
 type LocalizedPreferences = Preferences & { language?: string | null };
 
@@ -86,7 +86,8 @@ const usePreferencesStoreBase = create<preferencesStore>((set, get) => ({
         set(state => ({
           isLoading: false,
           hasLoaded: state.hasLoaded,
-          loadError: errorBody?.message || 'Failed to load app settings.',
+          loadError:
+            errorBody?.message || translateCurrent('settings.loadFailed'),
         }));
       } catch (error) {
         console.error('Failed to load preferences for store:', error);
@@ -97,7 +98,7 @@ const usePreferencesStoreBase = create<preferencesStore>((set, get) => ({
           loadError:
             error instanceof Error
               ? error.message
-              : 'Failed to load app settings.',
+              : translateCurrent('settings.loadFailed'),
         }));
       } finally {
         loadPreferencesPromise = null;
@@ -116,7 +117,7 @@ const usePreferencesStoreBase = create<preferencesStore>((set, get) => ({
       const body = { [key]: value };
       const result = await submitUserMutation({
         kind: 'preferences',
-        label: 'Update setting',
+        label: translateCurrent('settings.update'),
         payload: { operation: 'update', updates: body },
       });
       const response =

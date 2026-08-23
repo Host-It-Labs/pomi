@@ -6,6 +6,7 @@ import {
 import { PUSH_PLATFORMS } from '@pomi/shared/src/constants';
 import { Platform } from '@tauri-apps/plugin-os';
 import { apiClient } from './apiClient';
+import { translateCurrent } from '../i18n';
 import { isAndroid, isMobile, isTauri } from './osUtils';
 
 declare global {
@@ -32,9 +33,7 @@ class NotificationService {
       '[NotificationService] User has denied notifications multiple times'
     );
 
-    alert(
-      'To enable notifications, please go to:\nSettings > Apps > Pomi > Notifications'
-    );
+    alert(translateCurrent('notifications.androidSettingsInstructions'));
   }
 
   async checkPermission(): Promise<boolean> {

@@ -1,5 +1,6 @@
 import type { Intention, Preferences, Task, Timer } from '@pomi/shared';
 import { TIMER_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
+import { getIntlLocale, getLanguage, translateCurrent } from '../i18n';
 import type { TaskMode } from '../stores/uiStore';
 
 type FocusTaskOnTimerOptions = {
@@ -61,7 +62,7 @@ export async function focusTaskOnTimer({
   let useMultiIntentions = preferences?.intentionMultiSelect === true;
   if (hasDifferentIntention && !useMultiIntentions) {
     const shouldEnableMultiIntentions = window.confirm(
-      'Enable multi-intention timers for this pinned Task?'
+      translateCurrent('task.enableMultiIntentionForPinned')
     );
     if (shouldEnableMultiIntentions) {
       const didEnable = await updatePreferenceWithResult(
@@ -103,7 +104,7 @@ export async function focusTaskOnTimer({
 
 export function formatTaskDue(task: Pick<Task, 'dueDate' | 'dueTime'>) {
   if (!task.dueDate) {
-    return 'No due date';
+    return translateCurrent('task.noDueDate');
   }
 
   const [year, month, day] = task.dueDate.split('-').map(Number);
@@ -117,10 +118,11 @@ export function formatTaskDue(task: Pick<Task, 'dueDate' | 'dueTime'>) {
   const dayDiff = Math.round((dueDay.getTime() - today.getTime()) / 86400000);
 
   if (!task.dueTime) {
-    if (dayDiff === 0) return 'due today';
-    if (dayDiff === 1) return 'due tomorrow';
-    if (dayDiff > 0) return `due in ${formatUnit(dayDiff, 'day')}`;
-    return `Due ${formatUnit(Math.abs(dayDiff), 'day')} ago`;
+    if (dayDiff === 0) return translateCurrent('task.dueToday');
+    if (dayDiff === 1) return translateCurrent('task.dueTomorrow');
+    return translateCurrent('task.dueRelative', {
+      relative: formatRelativeTime(dayDiff, 'day'),
+    });
   }
 
   const [hour, minute] = task.dueTime.split(':').map(Number);
@@ -133,12 +135,12 @@ export function formatTaskDue(task: Pick<Task, 'dueDate' | 'dueTime'>) {
       : absDiff < 86400000
         ? { count: Math.max(1, Math.round(absDiff / 3600000)), name: 'hour' }
         : { count: Math.max(1, Math.round(absDiff / 86400000)), name: 'day' };
-  const phrase = formatUnit(unit.count, unit.name);
-
-  if (diff >= 0) {
-    return `due in ${phrase}`;
-  }
-  return `Due ${phrase} ago`;
+  return translateCurrent('task.dueRelative', {
+    relative: formatRelativeTime(
+      diff >= 0 ? unit.count : -unit.count,
+      unit.name as Intl.RelativeTimeFormatUnit
+    ),
+  });
 }
 
 export function formatCompactTaskDue(task: Pick<Task, 'dueDate' | 'dueTime'>) {
@@ -154,8 +156,8 @@ export function formatCompactTaskDue(task: Pick<Task, 'dueDate' | 'dueTime'>) {
   );
 
   if (!task.dueTime) {
-    if (dayDiff === 0) return 'Today';
-    if (dayDiff === 1) return 'Tomorrow';
+    if (dayDiff === 0) return translateCurrent('common.today');
+    if (dayDiff === 1) return translateCurrent('common.tomorrow');
     if (dayDiff < 0) return `−${Math.abs(dayDiff)}d`;
     if (dayDiff <= 7) return `${dayDiff}d`;
     return formatMonthDay(dueDay);
@@ -216,20 +218,23 @@ export function formatTaskRecurrence(
   const normalizedInterval = Number.isFinite(interval)
     ? Math.max(1, interval)
     : 1;
-  const anchor =
-    recurrenceAnchorMode === 'completion' ? 'after done' : 'from due';
+  const anchor = translateCurrent(
+    recurrenceAnchorMode === 'completion'
+      ? 'task.recurrenceAfterDone'
+      : 'task.recurrenceFromDue'
+  );
 
   if (frequency === 'DAILY') {
-    return `repeats every ${formatUnit(normalizedInterval, 'day')} ${anchor}`;
+    return formatRecurrenceInterval(normalizedInterval, 'day', anchor);
   }
   if (frequency === 'WEEKLY') {
-    return `repeats every ${formatUnit(normalizedInterval, 'week')} ${anchor}`;
+    return formatRecurrenceInterval(normalizedInterval, 'week', anchor);
   }
   if (frequency === 'MONTHLY') {
-    return `repeats every ${formatUnit(normalizedInterval, 'month')} ${anchor}`;
+    return formatRecurrenceInterval(normalizedInterval, 'month', anchor);
   }
 
-  return `repeats ${anchor}`;
+  return translateCurrent('task.repeatsAnchor', { anchor });
 }
 
 export function formatCompactTaskRecurrence(
@@ -258,7 +263,7 @@ export function formatCompactTaskRecurrence(
     return formatCompactUnit(normalizedInterval, 'month');
   }
 
-  return 'repeats';
+  return translateCurrent('task.repeats');
 }
 
 export function isTaskOverdue(
@@ -316,20 +321,44 @@ function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-function formatUnit(count: number, unit: string) {
-  return `${count} ${unit}${count === 1 ? '' : 's'}`;
+function formatRelativeTime(count: number, unit: Intl.RelativeTimeFormatUnit) {
+  return new Intl.RelativeTimeFormat(getIntlLocale(getLanguage()), {
+    numeric: 'always',
+  }).format(count, unit);
 }
 
-function formatCompactUnit(count: number, unit: string) {
-  if (count === 1) {
-    return unit;
-  }
+function formatUnit(
+  count: number,
+  unit: 'day' | 'week' | 'month',
+  unitDisplay: 'long' | 'short'
+) {
+  return new Intl.NumberFormat(getIntlLocale(getLanguage()), {
+    style: 'unit',
+    unit,
+    unitDisplay,
+  }).format(count);
+}
 
-  return `${count} ${unit}s`;
+function formatRecurrenceInterval(
+  count: number,
+  unit: 'day' | 'week' | 'month',
+  anchor: string
+) {
+  return translateCurrent('task.repeatsEvery', {
+    interval: formatUnit(count, unit, 'long'),
+    anchor,
+  });
+}
+
+function formatCompactUnit(count: number, unit: 'day' | 'week' | 'month') {
+  if (getLanguage() === 'en') {
+    return count === 1 ? unit : `${count} ${unit}s`;
+  }
+  return formatUnit(count, unit, 'short');
 }
 
 function formatMonthDay(date: Date) {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(getIntlLocale(getLanguage()), {
     month: 'short',
     day: 'numeric',
   }).format(date);

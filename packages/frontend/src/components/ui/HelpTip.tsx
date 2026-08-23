@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { FaEyeSlash, FaQuestionCircle } from 'react-icons/fa';
+import { useI18n } from '../../i18n';
 
 interface HelpTipProps {
   label: string;
@@ -14,6 +15,7 @@ export function HelpTip({
   isDismissed,
   onDismiss,
 }: HelpTipProps) {
+  const { t } = useI18n();
   if (isDismissed) {
     return null;
   }
@@ -41,7 +43,7 @@ export function HelpTip({
             className="pointer-events-auto mt-2 inline-flex items-center gap-1 rounded-md border border-slate-700/50 bg-slate-900 px-2 py-1 text-[10px] font-medium text-slate-300 transition hover:border-indigo-500/50 hover:text-white"
           >
             <FaEyeSlash size={10} />
-            Don't show
+            {t('common.dontShow')}
           </button>
         )}
       </div>

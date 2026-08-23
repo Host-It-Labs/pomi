@@ -3,21 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { HeatmapYearData, MetricMode } from '../../stores/statisticsStore';
 import { useStatisticsStore } from '../../stores/statisticsStore';
 import { MILLISECONDS_PER_MINUTE } from '../../constants/time';
-
-const MONTH_NAMES = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
+import { useI18n } from '../../i18n';
 
 function getCellClass(
   value: number,
@@ -86,7 +72,7 @@ export function LazyHeatmap({
   loadedHeatmapYears: staticLoadedHeatmapYears,
   isLoadingHeatmapYear: staticIsLoadingHeatmapYear,
   sessionType,
-  countLabel = 'sessions',
+  countLabel,
 }: {
   firstLogDate: string | null;
   metricMode: MetricMode;
@@ -96,6 +82,30 @@ export function LazyHeatmap({
   sessionType?: string;
   countLabel?: string;
 }) {
+  const { locale, t } = useI18n();
+  const resolvedCountLabel = countLabel ?? t('statistics.sessionCountLabel');
+  const monthNames = useMemo(
+    () =>
+      Array.from({ length: 12 }, (_, month) =>
+        new Intl.DateTimeFormat(locale, { month: 'short' }).format(
+          new Date(2024, month, 1)
+        )
+      ),
+    [locale]
+  );
+  const weekdayNames = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, day) =>
+        new Intl.DateTimeFormat(locale, { weekday: 'narrow' }).format(
+          new Date(2024, 8, day + 1)
+        )
+      ),
+    [locale]
+  );
+  const cellDateFormatter = useMemo(
+    () => new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }),
+    [locale]
+  );
   const storeHeatmapYears = useStatisticsStore.use.heatmapYears();
   const storeLoadedHeatmapYears = useStatisticsStore.use.loadedHeatmapYears();
   const storeIsLoadingHeatmapYear =
@@ -315,7 +325,9 @@ export function LazyHeatmap({
           className="flex items-center justify-center text-sm text-slate-500"
           style={{ minHeight: `${contentHeight}px` }}
         >
-          {isLoadingHeatmapYear ? 'Loading activity...' : 'No activity yet'}
+          {isLoadingHeatmapYear
+            ? t('statistics.loadingActivity')
+            : t('statistics.noActivity')}
         </div>
       ) : (
         <div ref={contentHeightRef} className="relative">
@@ -334,19 +346,17 @@ export function LazyHeatmap({
                 return (
                   <div key={`${year}-${month}`} className="shrink-0">
                     <div className="mb-1 text-center text-xs text-slate-500">
-                      {MONTH_NAMES[month - 1]} {year}
+                      {monthNames[month - 1]} {year}
                     </div>
                     <div className="grid grid-cols-7 gap-0.5">
-                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(
-                        (label, index) => (
-                          <div
-                            key={index}
-                            className="h-3 w-3 text-center text-[9px] leading-3 text-slate-600"
-                          >
-                            {label}
-                          </div>
-                        )
-                      )}
+                      {weekdayNames.map((label, index) => (
+                        <div
+                          key={index}
+                          className="h-3 w-3 text-center text-[9px] leading-3 text-slate-600"
+                        >
+                          {label}
+                        </div>
+                      ))}
                       {Array.from({ length: firstDay }).map((_, index) => (
                         <div key={`e-${index}`} className="h-3 w-3" />
                       ))}
@@ -354,11 +364,21 @@ export function LazyHeatmap({
                         const day = (index + 1).toString().padStart(2, '0');
                         const monthString = month.toString().padStart(2, '0');
                         const dateString = `${year}-${monthString}-${day}`;
+                        const localizedDate = cellDateFormatter.format(
+                          new Date(year, month - 1, index + 1)
+                        );
                         const value = dataMap.get(dateString) || 0;
                         const tooltip =
                           metricMode === 'hours'
-                            ? `${dateString}: ${formatDurationCompact(value)}`
-                            : `${dateString}: ${value} ${countLabel}`;
+                            ? t('statistics.activityDuration', {
+                                date: localizedDate,
+                                duration: formatDurationCompact(value),
+                              })
+                            : t('statistics.activityCount', {
+                                date: localizedDate,
+                                count: value,
+                                label: resolvedCountLabel,
+                              });
 
                         return (
                           <div

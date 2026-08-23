@@ -506,11 +506,11 @@ export function Statistics() {
                           );
                         }}
                         allowClear
-                        clearLabel="All intentions"
-                        parentSelectionLabel="All {title} sub-intentions"
-                        noSelectionLabel="All intentions"
+                        clearLabel={t('intention.all')}
+                        parentSelectionLabel={t('intention.allSubIntentions')}
+                        noSelectionLabel={t('intention.all')}
                         showLabel={false}
-                        searchPlaceholder="Search intentions"
+                        searchPlaceholder={t('intention.search')}
                         triggerClassName="h-8 text-xs"
                         dropdownClassName="left-0 right-0 w-full"
                       />
@@ -610,7 +610,7 @@ export function Statistics() {
                 loadedHeatmapYears={taskLoadedHeatmapYears}
                 isLoadingHeatmapYear={taskStatistics === null}
                 sessionType={TIMER_TYPES.WORK}
-                countLabel="tasks"
+                countLabel={t('statistics.taskCountLabel')}
               />
               <TopIntentions
                 topIntentions={taskStatistics?.ranking ?? []}
@@ -940,7 +940,7 @@ function TaskLogsModal({
                     </div>
                     <div className="mt-1 flex flex-wrap gap-1 text-[10px] uppercase text-slate-500">
                       <span>{log.eventType}</span>
-                      <span>{log.priority}</span>
+                      <span>{t(`common.${log.priority}`)}</span>
                       {log.isOverdue && (
                         <span className="text-red-300">
                           {t('statistics.late')}

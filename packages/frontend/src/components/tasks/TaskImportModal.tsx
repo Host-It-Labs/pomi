@@ -48,7 +48,7 @@ import { KeyboardShortcut } from '../ui/KeyboardShortcut';
 import { Modal } from '../ui/Modal';
 import { UnsavedChangesDialog } from '../ui/UnsavedChangesDialog';
 import { useTasksStore } from '../../stores/tasksStore';
-import { useI18n } from '../../i18n';
+import { translateCurrent, useI18n } from '../../i18n';
 
 type ImportPreviewTask = {
   sourceId: string;
@@ -416,12 +416,12 @@ export function TaskImportModal({
       setPreviewTasks(nextTasks);
       setSelectedSourceId(nextTasks[0]?.sourceId ?? null);
       if (nextTasks.length === 0) {
-        setError('No active Vikunja tasks found in this export.');
+        setError(t('task.noActiveVikunjaTasks'));
       }
     } catch (err) {
       console.error('Failed to parse Vikunja export:', err);
       setPreviewTasks([]);
-      setError('Could not read this Vikunja export.');
+      setError(t('task.vikunjaReadFailed'));
     } finally {
       event.target.value = '';
     }
@@ -478,15 +478,15 @@ export function TaskImportModal({
 
   const handleReviewImport = async () => {
     if (!previewTasks.some(task => task.include)) {
-      setError('Choose at least one task to import.');
+      setError(t('task.chooseAtLeastOne'));
       return;
     }
     if (previewTasks.some(task => task.include && !task.title.trim())) {
-      setError('Every selected Task needs a title.');
+      setError(t('task.selectedTitleRequired'));
       return;
     }
     if (previewTasks.some(task => task.include && !task.intentionSlug)) {
-      setError('Every selected Task needs an Intention.');
+      setError(t('task.selectedIntentionRequired'));
       return;
     }
 
@@ -808,10 +808,10 @@ export function TaskImportModal({
         return;
       }
 
-      setError('Could not create Intention.');
+      setError(t('task.createIntentionFailed'));
     } catch (err) {
       console.error('Failed to create import Intention:', err);
-      setError('Could not create Intention.');
+      setError(t('task.createIntentionFailed'));
     } finally {
       setIsCreatingIntention(false);
     }
@@ -1055,7 +1055,9 @@ export function TaskImportModal({
             !isMessageDismissed('duplicates') && (
               <DismissibleAlert
                 variant="warning"
-                title={`Already imported (${duplicatePreviewTasks.length})`}
+                title={t('task.alreadyImportedCount', {
+                  count: duplicatePreviewTasks.length,
+                })}
                 onDismiss={() => dismissMessage('duplicates')}
               >
                 <ul className="space-y-1 text-xs">
@@ -1093,13 +1095,13 @@ export function TaskImportModal({
                         type="button"
                         aria-label={
                           task.include
-                            ? `Skip ${task.title}`
-                            : `Keep ${task.title}`
+                            ? t('task.skipFor', { title: task.title })
+                            : t('task.keepFor', { title: task.title })
                         }
                         title={
                           task.include
-                            ? `Skip ${task.title}`
-                            : `Keep ${task.title}`
+                            ? t('task.skipFor', { title: task.title })
+                            : t('task.keepFor', { title: task.title })
                         }
                         onClick={event => {
                           event.stopPropagation();
@@ -1349,7 +1351,7 @@ export function TaskImportModal({
                 className="relative h-8 gap-1.5 px-3 text-xs"
               >
                 <FaFileImport size={11} />
-                Import
+                {t('task.importAction')}
                 <KeyboardShortcut
                   text="↵"
                   showModIcon={false}
@@ -1374,11 +1376,9 @@ export function TaskImportModal({
           onSubmit={handleSubmitCreateImportIntention}
         >
           <p className="text-sm text-slate-300">
-            Create an Intention for{' '}
-            <span className="font-medium text-slate-100">
-              {createIntentionTask?.title ?? 'this Task'}
-            </span>
-            .
+            {t('task.createIntentionFor', {
+              title: createIntentionTask?.title ?? t('task.thisTask'),
+            })}
           </p>
           <div className="grid gap-3 sm:grid-cols-[5rem_minmax(0,1fr)]">
             <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
@@ -1651,7 +1651,7 @@ function ImportTaskMetaLine({
       </span>
     ) : null,
     recurrence ? <ImportTaskRecurrenceLabel task={task} /> : null,
-    <span className="capitalize">{task.priority}</span>,
+    <span>{t(`common.${task.priority}`)}</span>,
     task.alreadyImported ? (
       <span className="rounded-full border border-amber-400/40 px-1.5 py-0.5 text-amber-200">
         {t('task.alreadyImported')}
@@ -1925,7 +1925,10 @@ function hydrateImportTaskIntention(
     };
   }
 
-  const newTitle = task.projectTitle ?? task.labels[0] ?? 'Imported Tasks';
+  const newTitle =
+    task.projectTitle ??
+    task.labels[0] ??
+    translateCurrent('task.importedTasks');
   return {
     ...task,
     intentionSlug: buildNewIntentionValue(newTitle, task.timerType),
@@ -2060,9 +2063,10 @@ function formatSelectedIntention(
   intentions: Intention[]
 ) {
   if (task.intentionSlug?.startsWith(NEW_INTENTION_PREFIX)) {
-    return `New: ${task.newIntentionEmoji ?? ''} ${
-      task.newIntentionTitle ?? 'Imported Tasks'
-    }`;
+    return translateCurrent('task.newNamedIntention', {
+      emoji: task.newIntentionEmoji ?? '',
+      title: task.newIntentionTitle ?? translateCurrent('task.importedTasks'),
+    });
   }
 
   const intention = intentions.find(item => item.slug === task.intentionSlug);
@@ -2070,7 +2074,7 @@ function formatSelectedIntention(
     item => item.slug === task.subIntentionSlug
   );
   if (!intention) {
-    return 'No Intention';
+    return translateCurrent('task.noIntention');
   }
 
   return `${intention.emoji} ${intention.title}${
@@ -2083,16 +2087,18 @@ function formatImportIntentionChangeTarget(
   intentions: Intention[]
 ) {
   if (updates.intentionSlug?.startsWith(NEW_INTENTION_PREFIX)) {
-    return `New: ${updates.newIntentionEmoji ?? ''} ${
-      updates.newIntentionTitle ?? 'Imported Tasks'
-    }`;
+    return translateCurrent('task.newNamedIntention', {
+      emoji: updates.newIntentionEmoji ?? '',
+      title:
+        updates.newIntentionTitle ?? translateCurrent('task.importedTasks'),
+    });
   }
 
   const intention = intentions.find(
     item => item.slug === updates.intentionSlug
   );
   if (!intention) {
-    return 'No Intention';
+    return translateCurrent('task.noIntention');
   }
 
   return `${intention.emoji} ${intention.title}`;
@@ -2441,8 +2447,8 @@ function getPendingNewIntentionTitle(
 ) {
   const task = tasks.find(item => item.intentionSlug === intentionSlug);
   return task?.newIntentionTitle
-    ? `New: ${task.newIntentionTitle}`
-    : 'This new Intention';
+    ? translateCurrent('task.newIntention', { title: task.newIntentionTitle })
+    : translateCurrent('task.thisNewIntention');
 }
 
 function parseDueDate(record: Record<string, unknown>) {

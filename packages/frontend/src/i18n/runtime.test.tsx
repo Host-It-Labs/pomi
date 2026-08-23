@@ -58,16 +58,29 @@ describe('language catalog and detection', () => {
       'timer.startLongBreak',
       'statistics.title',
       'assistant.title',
+      'assistant.microphoneBlocked',
+      'task.noActiveVikunjaTasks',
+      'intention.all',
+      'statistics.loadingActivity',
+      'common.complete',
+      'common.dontShow',
+      'task.dueToday',
+      'timer.startPause',
+      'connection.retry',
     ];
     const englishCatalog = sourceTranslationCatalogs.en;
+    const untranslated: string[] = [];
     for (const language of SUPPORTED_LANGUAGES.filter(
       item => item.code !== 'en'
     )) {
       const catalog = sourceTranslationCatalogs[language.code];
       for (const key of representativeKeys) {
-        expect(catalog[key]).not.toBe(englishCatalog[key]);
+        if (catalog[key] === englishCatalog[key]) {
+          untranslated.push(`${language.code}:${key}`);
+        }
       }
     }
+    expect(untranslated).toEqual([]);
   });
 
   it('translates shared descriptions without dropping interpolation tokens', () => {
@@ -87,6 +100,75 @@ describe('language catalog and detection', () => {
       }
       expect(catalog['login.usingSelfHosted']).toContain('{{url}}');
     }
+  });
+
+  it('translates the audited component and state-message catalog', () => {
+    const englishCatalog = sourceTranslationCatalogs.en;
+    const keys = Object.keys(englishCatalog).slice(
+      Object.keys(englishCatalog).indexOf('common.complete')
+    );
+    const translatableKeys = keys.filter(key =>
+      /\p{L}/u.test(englishCatalog[key].replace(/\{\{\w+\}\}/g, ''))
+    );
+    const untranslated: string[] = [];
+
+    for (const language of SUPPORTED_LANGUAGES.filter(
+      item => item.code !== 'en'
+    )) {
+      const catalog = sourceTranslationCatalogs[language.code];
+      for (const key of translatableKeys) {
+        if (catalog[key] === englishCatalog[key]) {
+          untranslated.push(`${language.code}:${key}`);
+        }
+      }
+    }
+
+    expect(untranslated).toEqual([]);
+  });
+
+  it('uses complete reviewed translations for imported-task feedback', () => {
+    const expected = {
+      'zh-Hans': '此导出中未找到有效的 Vikunja 任务。',
+      hi: 'इस निर्यात में कोई सक्रिय Vikunja कार्य नहीं मिला।',
+      es: 'No se encontraron tareas activas de Vikunja en esta exportación.',
+      ar: 'لم يتم العثور على مهام Vikunja نشطة في هذا التصدير.',
+      fr: 'Aucune tâche Vikunja active trouvée dans cet export.',
+      bn: 'এই রপ্তানিতে কোনো সক্রিয় Vikunja কাজ পাওয়া যায়নি।',
+      'pt-BR':
+        'Nenhuma tarefa ativa do Vikunja foi encontrada nesta exportação.',
+      id: 'Tidak ada tugas Vikunja aktif dalam ekspor ini.',
+      ur: 'اس برآمد میں کوئی فعال Vikunja کام نہیں ملا۔',
+    } as const;
+
+    for (const [language, translation] of Object.entries(expected)) {
+      expect(
+        sourceTranslationCatalogs[language]['task.noActiveVikunjaTasks']
+      ).toBe(translation);
+    }
+  });
+
+  it('preserves interpolation identifiers in every locale', () => {
+    const placeholders = (value: string) =>
+      [...value.matchAll(/\{\{(\w+)\}\}/g)].map(match => match[1]).sort();
+    const englishCatalog = sourceTranslationCatalogs.en;
+
+    for (const language of SUPPORTED_LANGUAGES.filter(
+      item => item.code !== 'en'
+    )) {
+      const catalog = sourceTranslationCatalogs[language.code];
+      for (const [key, englishValue] of Object.entries(englishCatalog)) {
+        expect(placeholders(catalog[key]), `${language.code}:${key}`).toEqual(
+          placeholders(englishValue)
+        );
+      }
+    }
+
+    expect(sourceTranslationCatalogs.es['statistics.activityDuration']).toBe(
+      '{{date}}: {{duration}}'
+    );
+    expect(sourceTranslationCatalogs.es['task.actionFor']).toBe(
+      '{{action}} {{title}}'
+    );
   });
 });
 

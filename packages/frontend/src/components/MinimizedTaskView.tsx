@@ -1009,8 +1009,11 @@ export function MinimizedTaskView({
                   <div className="flex items-center justify-end gap-1 opacity-80 transition-opacity group-hover/minimized-task:opacity-100 group-focus-within/minimized-task:opacity-100">
                     <button
                       type="button"
-                      aria-label={`${isPinned ? 'Unpin' : 'Pin'} ${task.title}`}
-                      title={isPinned ? 'Unpin' : 'Pin'}
+                      aria-label={t(
+                        isPinned ? 'task.unpinFor' : 'task.pinFor',
+                        { title: task.title }
+                      )}
+                      title={t(isPinned ? 'task.unpin' : 'task.pin')}
                       onClick={() =>
                         void updateTaskWithDeferredOrder({
                           id: task.id,
@@ -1051,7 +1054,7 @@ export function MinimizedTaskView({
                     </button>
                     <button
                       type="button"
-                      aria-label={`Edit ${task.title}`}
+                      aria-label={t('task.editFor', { title: task.title })}
                       title={t('common.edit')}
                       onClick={() => {
                         if (compact) {

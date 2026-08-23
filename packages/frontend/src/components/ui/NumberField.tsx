@@ -1,5 +1,6 @@
 import { InputHTMLAttributes } from 'react';
 import { FaInfoCircle } from 'react-icons/fa';
+import { useI18n } from '../../i18n';
 
 interface NumberFieldProps extends Omit<
   InputHTMLAttributes<HTMLInputElement>,
@@ -18,6 +19,7 @@ export function NumberField({
   className,
   ...inputProps
 }: NumberFieldProps) {
+  const { t } = useI18n();
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
@@ -28,7 +30,7 @@ export function NumberField({
           {helperText ? (
             <button
               type="button"
-              aria-label={`About ${label}`}
+              aria-label={t('common.aboutFor', { label })}
               title={helperText}
               className="text-slate-600 hover:text-slate-300"
             >

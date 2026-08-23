@@ -16,6 +16,7 @@ import { platform } from '@tauri-apps/plugin-os';
 import { create } from 'zustand';
 
 import { showToastFromStore } from '../components/toast/ToastContext';
+import { translateCurrent } from '../i18n';
 import {
   DesktopNotificationEvent,
   desktopNotificationHandler,
@@ -389,7 +390,9 @@ const useTimerStoreBase = create<TimerState>((set, get) => ({
     try {
       await submitUserMutation({
         kind: 'timer',
-        label: focusedTaskId ? 'Focus pinned task' : 'Create or resume timer',
+        label: focusedTaskId
+          ? translateCurrent('timer.focusPinnedTask')
+          : translateCurrent('timer.createOrResume'),
         payload: {
           operation: 'createOrResume',
           timerType: type,
@@ -405,7 +408,9 @@ const useTimerStoreBase = create<TimerState>((set, get) => ({
       return true;
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Timer action failed.';
+        error instanceof Error
+          ? error.message
+          : translateCurrent('timer.actionFailed');
       if (!isTimerErrorReported(error)) {
         showToastFromStore(message, 'error');
       }
@@ -426,7 +431,9 @@ const useTimerStoreBase = create<TimerState>((set, get) => ({
     const isRunning = currentTimer?.status === TIMER_STATUSES.RUNNING;
     void submitUserMutation({
       kind: 'timer',
-      label: isRunning ? 'Pause timer' : 'Start timer',
+      label: isRunning
+        ? translateCurrent('timer.pause')
+        : translateCurrent('timer.startAction'),
       payload: isRunning
         ? { operation: 'pause' }
         : {
@@ -438,7 +445,9 @@ const useTimerStoreBase = create<TimerState>((set, get) => ({
       },
     }).catch(error => {
       const message =
-        error instanceof Error ? error.message : 'Timer action failed.';
+        error instanceof Error
+          ? error.message
+          : translateCurrent('timer.actionFailed');
       if (!isTimerErrorReported(error)) {
         showToastFromStore(message, 'error');
       }
@@ -499,7 +508,9 @@ const useTimerStoreBase = create<TimerState>((set, get) => ({
       });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Timer action failed.';
+        error instanceof Error
+          ? error.message
+          : translateCurrent('timer.actionFailed');
       if (!isTimerErrorReported(error)) {
         showToastFromStore(message, 'error');
       }

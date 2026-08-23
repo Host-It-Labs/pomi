@@ -110,6 +110,10 @@ export function translate(
   );
 }
 
+export function translateCurrent(key: string, values?: TranslationValues) {
+  return translate(key, values, getLanguage());
+}
+
 type I18nContextValue = {
   language: AppLanguage;
   locale: string;

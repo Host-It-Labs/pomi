@@ -588,7 +588,7 @@ export function TaskFormModal({
           task ? (
             <button
               type="button"
-              aria-label={`Archive ${task.title}`}
+              aria-label={t('task.archiveFor', { title: task.title })}
               title={t('common.archive')}
               onClick={() => setShowArchiveConfirm(true)}
               disabled={saving || archiving}
@@ -1047,6 +1047,7 @@ function Field({
   error?: string;
   children: ReactNode;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
 
   return (
@@ -1058,8 +1059,8 @@ function Field({
             type="button"
             onClick={() => setOpen(value => !value)}
             className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-600 text-[10px] text-slate-400 hover:border-indigo-500/60 hover:text-indigo-200"
-            aria-label={`${label} help`}
-            title={`${label} help`}
+            aria-label={t('common.helpFor', { label })}
+            title={t('common.helpFor', { label })}
           >
             ?
           </button>
