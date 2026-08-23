@@ -213,28 +213,28 @@ importers:
         specifier: ^4.3.3
         version: 4.3.3(vite@8.2.2(@types/node@26.2.0)(jiti@2.7.0)(terser@5.50.0))
       '@tauri-apps/api':
-        specifier: ^2
+        specifier: ~2.11.1
         version: 2.11.1
       '@tauri-apps/plugin-deep-link':
-        specifier: ^2.4.9
+        specifier: 2.4.9
         version: 2.4.9
       '@tauri-apps/plugin-dialog':
-        specifier: ^2
+        specifier: 2.7.2
         version: 2.7.2
       '@tauri-apps/plugin-global-shortcut':
-        specifier: ~2
+        specifier: 2.3.2
         version: 2.3.2
       '@tauri-apps/plugin-http':
-        specifier: ^2.5.9
+        specifier: 2.5.9
         version: 2.5.9
       '@tauri-apps/plugin-opener':
-        specifier: ~2
+        specifier: 2.5.4
         version: 2.5.4
       '@tauri-apps/plugin-os':
-        specifier: ^2.3.2
+        specifier: 2.3.2
         version: 2.3.2
       '@tauri-apps/plugin-shell':
-        specifier: ^2.3.5
+        specifier: 2.3.5
         version: 2.3.5
       '@ts-rest/core':
         specifier: ^3.52.1
@@ -274,7 +274,7 @@ importers:
         version: 5.0.15(@types/react@19.2.18)(react@19.2.8)
     devDependencies:
       '@tauri-apps/cli':
-        specifier: ^2.11.4
+        specifier: ~2.11.4
         version: 2.11.4
       '@types/node':
         specifier: ^26.2.0
