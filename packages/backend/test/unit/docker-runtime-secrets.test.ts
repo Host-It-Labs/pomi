@@ -48,7 +48,9 @@ describe('backend Docker secret boundary', () => {
     expect(compose).toContain('tauri://localhost');
     expect(compose).not.toContain('DATABASE_URL: postgres://${');
     expect(compose).not.toContain('REDIS_URL: redis://:${');
-    expect(compose).toContain('pgdata17:/var/lib/postgresql/data');
+    expect(compose).toContain('image: postgres:18-alpine');
+    expect(compose).toContain('pgdata18:/var/lib/postgresql');
+    expect(compose).toContain('image: redis:8-alpine');
     expect(compose).toContain('--requirepass');
 
     const redisService = compose.slice(compose.indexOf('\n  redis:'));
@@ -66,6 +68,15 @@ describe('backend Docker secret boundary', () => {
     expect(securityGuide).toContain(
       'docker compose -f packages/backend/docker-compose.yml exec redis redis-cli'
     );
+  });
+
+  it('documents the PostgreSQL and Redis major-upgrade boundaries', () => {
+    const selfHostingGuide = repositoryFile('docs/self-hosting.md');
+
+    expect(selfHostingGuide).toContain('pg_dump --format=custom');
+    expect(selfHostingGuide).toContain('pg_restore --exit-on-error');
+    expect(selfHostingGuide).toContain('Redis 8 can read Redis 7');
+    expect(selfHostingGuide).toContain('Do not downgrade');
   });
 
   it('sets explicit production authentication capacity defaults', () => {

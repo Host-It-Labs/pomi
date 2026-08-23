@@ -32,18 +32,18 @@ services:
       - FIREBASE_SERVICE_ACCOUNT_PATH=/app/${POMI_FIREBASE_SERVICE_ACCOUNT_PATH:-config/secrets/firebase-service-account.json}
 
   db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
       POSTGRES_DB: pomodoro
     volumes:
-      - ./pgdata:/var/lib/postgresql/data
+      - ./pgdata18:/var/lib/postgresql
     ports:
       - '${POMI_DB_PORT:-5432}:5432'
 
   redis:
-    image: redis:alpine
+    image: redis:8-alpine
     ports:
       - '${POMI_REDIS_PORT:-6379}:6379'
 

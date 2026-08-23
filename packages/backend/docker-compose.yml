@@ -73,15 +73,15 @@ services:
       - private
 
   db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-pomi}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-pomi}
     volumes:
-      # Back up and restore PostgreSQL before changing its major version or
-      # moving an existing installation to this named volume.
-      - pgdata17:/var/lib/postgresql/data
+      # PostgreSQL 18 uses a major-specific PGDATA below /var/lib/postgresql.
+      # Dump PostgreSQL 17 and restore it here; never reuse the old volume.
+      - pgdata18:/var/lib/postgresql
     healthcheck:
       test:
         ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
@@ -93,7 +93,7 @@ services:
       - private
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     # Do not publish port 6379. Only services on the private network need Redis.
     command:
       - redis-server
@@ -115,7 +115,7 @@ services:
       - private
 
 volumes:
-  pgdata17:
+  pgdata18:
   redisdata:
 
 networks:

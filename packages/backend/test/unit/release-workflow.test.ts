@@ -33,7 +33,7 @@ describe('public release workflow', () => {
       'refs:[{repository:$repository,commit:$commit}]'
     );
     expect(workflow).toContain('dateReleased');
-    expect(workflow).toContain('actions/create-github-app-token@v2');
+    expect(workflow).toContain('actions/create-github-app-token@v3');
     expect(workflow).toContain('POMI_RADAR_APP_PRIVATE_KEY');
     expect(workflow).toContain('scripts/radar-lifecycle.mjs release');
   });

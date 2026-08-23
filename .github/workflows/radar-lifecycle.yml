@@ -15,13 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out trusted lifecycle tooling
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: main
 
       - name: Mint Pomi Radar bot token
         id: radar-token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ vars.POMI_RADAR_APP_ID }}
           private-key: ${{ secrets.POMI_RADAR_APP_PRIVATE_KEY }}
