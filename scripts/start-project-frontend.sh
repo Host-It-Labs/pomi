@@ -116,7 +116,7 @@ POMI_COPYME_USERNAME="$copyme_username" \
   POMI_COPYME_PASSWORD="$copyme_password" \
   pnpm --filter @pomi/backend ensure:copyme
 
-docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" up -d --build backend >/dev/null
+docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" up -d --build --renew-anon-volumes backend >/dev/null
 
 for attempt in $(seq 1 60); do
   if curl --silent --fail --max-time 5 "$POMI_BACKEND_BASE_URL/health" >/dev/null 2>&1; then

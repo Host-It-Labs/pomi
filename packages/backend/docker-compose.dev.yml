@@ -17,6 +17,7 @@ services:
       - DATABASE_URL=postgres://user:password@db:5432/pomodoro
       - REDIS_URL=redis://redis:6379
       - NODE_ENV=development
+      - PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false
       - TRUST_PROXY_HOPS=${TRUST_PROXY_HOPS:-0}
       - NEST_PORT=3000
       - APP_NAME=${APP_NAME:-pomi}
