@@ -105,6 +105,7 @@ import { useI18n } from '../i18n';
 import { useDefaultTaskSort } from './taskDefaultSort';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
 import { isTaskInTimerTypeSearchScope } from '../utils/taskSearchScope';
+import { TASKS_PAGE_CONTAINER_CLASS } from '../constants/taskLayout';
 
 type TaskIntentionFilterValue = string | null;
 type TaskDropPlacement = 'before' | 'after';
@@ -965,7 +966,7 @@ export function Tasks() {
 
   return (
     <PageShell className="overflow-x-clip">
-      <PageContainer className="relative min-w-0 overflow-x-clip pb-24 md:pb-8">
+      <PageContainer className={TASKS_PAGE_CONTAINER_CLASS}>
         <header className="sticky top-0 z-30 -mx-4 border-b border-slate-800/70 bg-slate-950/94 px-4 pb-3 pt-5 shadow-[0_10px_24px_rgba(2,6,23,0.34)] backdrop-blur-md">
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
             <BackButton
@@ -1615,7 +1616,7 @@ function TaskTimerTypeFilterDropdown({
   );
 }
 
-function TaskIntentionFilterDropdown({
+export function TaskIntentionFilterDropdown({
   options,
   lists,
   selectedValue,
@@ -1709,7 +1710,7 @@ function TaskIntentionFilterDropdown({
         )?.value ?? parentValue)
       : parentValue;
 
-    onSelect(nextValue);
+    onSelect(nextValue === selectedValue ? null : nextValue);
     if (change.reason !== 'intention' || !subIntentionsByParent[parentValue]) {
       setIsOpen(false);
     }
