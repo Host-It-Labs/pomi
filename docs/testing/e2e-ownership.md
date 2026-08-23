@@ -278,9 +278,9 @@ This matrix preserves the complete pre-revamp Playwright inventory after deletio
 | Measure                      |                     Before |                    After |
 | ---------------------------- | -------------------------: | -----------------------: |
 | Playwright tests             |                        240 |                       13 |
-| Playwright source lines      |                     13,815 |                     1239 |
+| Playwright source lines      |                     13,815 |                     1253 |
 | Parallel full-suite duration | 20-minute timeout baseline | p50 30.11 s; p95 31.28 s |
 | Serial full-suite duration   |               not recorded | p50 67.33 s; p95 67.96 s |
-| Active non-E2E tests         |          pending inventory |                      504 |
+| Active non-E2E tests         |          pending inventory |                      835 |
 
 The final PR records measured p50/p95 timing after ten parallel runs and three single-worker runs. Machine-readable evidence is generated under `docs/testing/results/`.
