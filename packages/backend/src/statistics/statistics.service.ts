@@ -37,6 +37,10 @@ type StatisticsPeriodKey =
   | 'previousYear';
 type StatisticsPeriod = { count: number; duration: number };
 type StatisticsPeriods = Record<StatisticsPeriodKey, StatisticsPeriod>;
+type FirstStatisticsLog = {
+  date: string | null;
+  completedAt: number | null;
+};
 
 type TodayIntentionCountRow = {
   kind: 'parent' | 'sub';
@@ -708,11 +712,12 @@ export class StatisticsService {
       subIntention
     );
 
-    const [heatmap, firstLogDate, firstLogTimestamp] = await Promise.all([
+    const [heatmap, firstLog] = await Promise.all([
       this.getHeatmapData(userId, sessionType, intention, subIntention, 365),
-      this.getFirstLogDate(userId, sessionType, intention, subIntention),
-      this.getFirstLogTimestamp(userId, sessionType, intention, subIntention),
+      this.getFirstStatisticsLog(userId, sessionType, intention, subIntention),
     ]);
+    const firstLogDate = firstLog.date;
+    const firstLogTimestamp = firstLog.completedAt;
 
     const heatmapThresholds = this.calculateHeatmapThresholds(heatmap);
     const hasCompletePreviousPeriod = {
@@ -1327,50 +1332,34 @@ export class StatisticsService {
     );
   }
 
-  async getFirstLogDate(
+  private async getFirstStatisticsLog(
     userId: string,
     sessionType?: IntentionType,
     intention?: string,
     subIntention?: string
-  ): Promise<string | null> {
+  ): Promise<FirstStatisticsLog> {
     const queryBuilder = this.statisticsRepository
       .createQueryBuilder('statistic')
       .select('MIN(statistic.date)', 'minDate')
+      .addSelect('MIN(statistic.completedAt)', 'minCompletedAt')
       .where('statistic.userId = :userId', { userId });
 
     this.applyTypeFilter(queryBuilder, sessionType);
     this.applyIntentionFilter(queryBuilder, intention);
     this.applySubIntentionFilter(queryBuilder, intention, subIntention);
 
-    const result = await queryBuilder.getRawOne();
+    const result = await queryBuilder.getRawOne<{
+      minDate: string | null;
+      minCompletedAt: string | number | null;
+    }>();
 
-    return result?.minDate || null;
-  }
-
-  private async getFirstLogTimestamp(
-    userId: string,
-    sessionType?: IntentionType,
-    intention?: string,
-    subIntention?: string
-  ): Promise<number | null> {
-    const queryBuilder = this.statisticsRepository
-      .createQueryBuilder('statistic')
-      .select('MIN(statistic.completedAt)', 'minCompletedAt')
-      .where('statistic.userId = :userId', { userId });
-
-    this.applyTypeFilter(queryBuilder, sessionType);
-    this.applyIntentionFilter(queryBuilder, intention);
-    this.applySubIntentionFilter(queryBuilder, intention, subIntention);
-
-    const result = await queryBuilder.getRawOne();
-    if (
-      result?.minCompletedAt === undefined ||
-      result?.minCompletedAt === null
-    ) {
-      return null;
-    }
-
-    return Number(result.minCompletedAt);
+    return {
+      date: result?.minDate ?? null,
+      completedAt:
+        result?.minCompletedAt === undefined || result.minCompletedAt === null
+          ? null
+          : Number(result.minCompletedAt),
+    };
   }
 
   async getHeatmapForYear(
