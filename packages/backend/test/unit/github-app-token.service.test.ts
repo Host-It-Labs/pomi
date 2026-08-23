@@ -18,6 +18,7 @@ describe('GitHubAppTokenService', () => {
     vi.unstubAllGlobals();
     delete process.env.GITHUB_FEEDBACK_APP_ID;
     delete process.env.GITHUB_FEEDBACK_APP_INSTALLATION_ID;
+    delete process.env.GITHUB_FEEDBACK_APP_PRIVATE_KEY;
     delete process.env.GITHUB_FEEDBACK_APP_PRIVATE_KEY_PATH;
     for (const directory of temporaryDirectories.splice(0)) {
       rmSync(directory, { recursive: true, force: true });
@@ -59,17 +60,13 @@ describe('GitHubAppTokenService', () => {
   });
 
   it('mints and caches an installation token for feedback issue creation', async () => {
-    const directory = mkdtempSync(path.join(tmpdir(), 'pomi-github-app-'));
-    temporaryDirectories.push(directory);
-    const privateKeyPath = path.join(directory, 'private-key.pem');
     const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
-    writeFileSync(
-      privateKeyPath,
-      privateKey.export({ type: 'pkcs8', format: 'pem' })
-    );
     process.env.GITHUB_FEEDBACK_APP_ID = '4675891';
     process.env.GITHUB_FEEDBACK_APP_INSTALLATION_ID = '155743206';
-    process.env.GITHUB_FEEDBACK_APP_PRIVATE_KEY_PATH = privateKeyPath;
+    process.env.GITHUB_FEEDBACK_APP_PRIVATE_KEY = privateKey
+      .export({ type: 'pkcs8', format: 'pem' })
+      .toString()
+      .replaceAll('\n', '\\n');
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -97,13 +94,9 @@ describe('GitHubAppTokenService', () => {
   });
 
   it('rejects a malformed private key without exposing the crypto error', async () => {
-    const directory = mkdtempSync(path.join(tmpdir(), 'pomi-github-app-'));
-    temporaryDirectories.push(directory);
-    const privateKeyPath = path.join(directory, 'private-key.pem');
-    writeFileSync(privateKeyPath, 'not-a-private-key');
     process.env.GITHUB_FEEDBACK_APP_ID = '4675891';
     process.env.GITHUB_FEEDBACK_APP_INSTALLATION_ID = '155743206';
-    process.env.GITHUB_FEEDBACK_APP_PRIVATE_KEY_PATH = privateKeyPath;
+    process.env.GITHUB_FEEDBACK_APP_PRIVATE_KEY = 'not-a-private-key';
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 

@@ -17,10 +17,6 @@ services:
         source: ${APN_KEY_FILE:-/dev/null}
         target: /run/secrets/pomi-apns-key.p8
         read_only: true
-      - type: bind
-        source: ${GITHUB_FEEDBACK_APP_PRIVATE_KEY_FILE:-/dev/null}
-        target: /run/secrets/pomi-feedback-github-app.pem
-        read_only: true
     depends_on:
       db:
         condition: service_healthy
@@ -57,7 +53,7 @@ services:
       OPENROUTER_HTTP_REFERER: ${OPENROUTER_HTTP_REFERER:-}
       GITHUB_FEEDBACK_APP_ID: ${GITHUB_FEEDBACK_APP_ID:-}
       GITHUB_FEEDBACK_APP_INSTALLATION_ID: ${GITHUB_FEEDBACK_APP_INSTALLATION_ID:-}
-      GITHUB_FEEDBACK_APP_PRIVATE_KEY_PATH: /run/secrets/pomi-feedback-github-app.pem
+      GITHUB_FEEDBACK_APP_PRIVATE_KEY: ${GITHUB_FEEDBACK_APP_PRIVATE_KEY:-}
       GITHUB_FEEDBACK_REPOSITORY: ${GITHUB_FEEDBACK_REPOSITORY:-}
       GITHUB_FEEDBACK_LABEL: ${GITHUB_FEEDBACK_LABEL:-feedback}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}

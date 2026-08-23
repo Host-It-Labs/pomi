@@ -35,6 +35,8 @@ export class GitHubAppTokenService {
     const appId = process.env.GITHUB_FEEDBACK_APP_ID?.trim();
     const installationId =
       process.env.GITHUB_FEEDBACK_APP_INSTALLATION_ID?.trim();
+    const configuredPrivateKey =
+      process.env.GITHUB_FEEDBACK_APP_PRIVATE_KEY?.trim();
     const privateKeyPath =
       process.env.GITHUB_FEEDBACK_APP_PRIVATE_KEY_PATH?.trim();
     if (!appId && !installationId) {
@@ -45,7 +47,7 @@ export class GitHubAppTokenService {
     if (
       !appId ||
       !installationId ||
-      !privateKeyPath ||
+      (!configuredPrivateKey && !privateKeyPath) ||
       !/^\d+$/.test(appId) ||
       !/^\d+$/.test(installationId)
     ) {
@@ -54,21 +56,33 @@ export class GitHubAppTokenService {
       );
     }
 
-    const resolvedPrivateKeyPath = path.isAbsolute(privateKeyPath)
-      ? privateKeyPath
-      : [
-          path.resolve(process.cwd(), privateKeyPath),
-          path.resolve(process.cwd(), '../..', privateKeyPath),
-        ].find(candidate => existsSync(candidate));
     let privateKey: string;
-    try {
-      privateKey = readFileSync(
-        resolvedPrivateKeyPath ?? privateKeyPath,
-        'utf8'
-      );
-    } catch {
+    if (configuredPrivateKey) {
+      privateKey =
+        configuredPrivateKey.includes('\\n') &&
+        !configuredPrivateKey.includes('\n')
+          ? configuredPrivateKey.replaceAll('\\n', '\n')
+          : configuredPrivateKey;
+    } else if (privateKeyPath) {
+      const resolvedPrivateKeyPath = path.isAbsolute(privateKeyPath)
+        ? privateKeyPath
+        : [
+            path.resolve(process.cwd(), privateKeyPath),
+            path.resolve(process.cwd(), '../..', privateKeyPath),
+          ].find(candidate => existsSync(candidate));
+      try {
+        privateKey = readFileSync(
+          resolvedPrivateKeyPath ?? privateKeyPath,
+          'utf8'
+        );
+      } catch {
+        throw new ServiceUnavailableException(
+          'Feedback GitHub App private key is unavailable'
+        );
+      }
+    } else {
       throw new ServiceUnavailableException(
-        'Feedback GitHub App private key is unavailable'
+        'Feedback GitHub App configuration is invalid'
       );
     }
 
