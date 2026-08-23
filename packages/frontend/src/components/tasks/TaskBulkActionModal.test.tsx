@@ -90,6 +90,7 @@ describe('bulk Task updates', () => {
         type: 'work',
         isArchived: false,
         parentIntentionId: null,
+        allowsTasks: true,
       },
       {
         id: 'work-child',
@@ -99,6 +100,7 @@ describe('bulk Task updates', () => {
         type: 'work',
         isArchived: false,
         parentIntentionId: 'work-parent',
+        allowsTasks: true,
       },
       {
         id: 'break-leaf',
@@ -108,6 +110,7 @@ describe('bulk Task updates', () => {
         type: 'break',
         isArchived: false,
         parentIntentionId: null,
+        allowsTasks: true,
       },
     ] as Intention[];
 
@@ -132,6 +135,51 @@ describe('bulk Task updates', () => {
     ).toEqual([
       expect.objectContaining({ value: 'none' }),
       expect.objectContaining({ value: 'walk::', intentionSlug: 'walk' }),
+    ]);
+  });
+
+  it('excludes task-disabled Parent Intentions and their child trees', () => {
+    const intentions = [
+      {
+        id: 'disabled-parent',
+        slug: 'private',
+        title: 'Private',
+        emoji: '🔒',
+        type: 'work',
+        isArchived: false,
+        parentIntentionId: null,
+        allowsTasks: false,
+      },
+      {
+        id: 'disabled-child',
+        slug: 'private-child',
+        title: 'Private child',
+        emoji: '🔐',
+        type: 'work',
+        isArchived: false,
+        parentIntentionId: 'disabled-parent',
+        allowsTasks: true,
+      },
+      {
+        id: 'enabled-leaf',
+        slug: 'planning',
+        title: 'Planning',
+        emoji: '🗺️',
+        type: 'work',
+        isArchived: false,
+        parentIntentionId: null,
+        allowsTasks: true,
+      },
+    ] as Intention[];
+
+    expect(
+      buildTaskBulkAssignmentOptions(intentions, 'work', 'No Intention')
+    ).toEqual([
+      expect.objectContaining({ value: 'none' }),
+      expect.objectContaining({
+        value: 'planning::',
+        intentionSlug: 'planning',
+      }),
     ]);
   });
 

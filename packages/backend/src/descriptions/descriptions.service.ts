@@ -58,7 +58,7 @@ export class DescriptionsService {
           titles: tasks
             .filter(
               task =>
-                task.itemKind === 'task' &&
+                (task.itemKind === 'task' || task.itemKind === 'followUp') &&
                 task.intentionSlug === intention.slug
             )
             .slice(0, MAX_TASK_TITLES)

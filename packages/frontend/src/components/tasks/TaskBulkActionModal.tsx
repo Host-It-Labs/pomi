@@ -57,7 +57,9 @@ export function buildTaskBulkAssignmentOptions(
   const available = intentions.filter(
     intention => intention.type === timerType && !intention.isArchived
   );
-  const parents = available.filter(intention => !intention.parentIntentionId);
+  const parents = available.filter(
+    intention => !intention.parentIntentionId && intention.allowsTasks !== false
+  );
   return parents.reduce<TaskBulkAssignmentOption[]>(
     (options, parent) => {
       const children = available.filter(
