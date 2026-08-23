@@ -85,6 +85,15 @@ const english: TranslationCatalog = {
   'common.min': 'min',
   'common.days': 'days',
   'common.day': 'day',
+  'common.week': 'week',
+  'common.month': 'month',
+  'common.year': 'year',
+  'common.today': 'Today',
+  'common.list': 'List',
+  'common.calendar': 'Calendar',
+  'common.item': 'item',
+  'common.items': 'items',
+  'common.undated': 'Undated',
   'common.all': 'All',
   'common.none': 'None',
   'common.off': 'Off',
@@ -399,6 +408,13 @@ const english: TranslationCatalog = {
   'task.defaultSort': 'Default Task sort',
   'task.defaultSortAbout':
     'Used when Tasks open without a visit-specific sort choice.',
+  'task.defaultView': 'Default Tasks view',
+  'task.defaultViewAbout': 'Choose how the full Tasks page opens.',
+  'task.calendar': 'Task calendar',
+  'task.goToToday': 'Go to today',
+  'task.previousCalendarPeriod': 'Previous {{period}}',
+  'task.nextCalendarPeriod': 'Next {{period}}',
+  'task.noTasksForDate': 'No tasks for this date',
   'task.sortDefaultDescription':
     'Overdue by priority, upcoming by due date, undated by priority then newest.',
   'task.daysFromCreation': 'Days from creation',
@@ -3149,6 +3165,94 @@ Object.assign(generatedTerms.ur, {
   in: 'میں',
 });
 
+const generatedCalendarTerms: Record<string, Record<string, string>> = {
+  'zh-Hans': {
+    calendar: '日历',
+    Calendar: '日历',
+    month: '月',
+    year: '年',
+    Undated: '未指定日期',
+    item: '项',
+    items: '项',
+  },
+  hi: {
+    calendar: 'कैलेंडर',
+    Calendar: 'कैलेंडर',
+    month: 'महीना',
+    year: 'वर्ष',
+    Undated: 'बिना तारीख',
+    item: 'आइटम',
+    items: 'आइटम',
+  },
+  es: {
+    calendar: 'calendario',
+    Calendar: 'Calendario',
+    month: 'mes',
+    year: 'año',
+    Undated: 'Sin fecha',
+    item: 'elemento',
+    items: 'elementos',
+  },
+  ar: {
+    calendar: 'التقويم',
+    Calendar: 'التقويم',
+    month: 'شهر',
+    year: 'سنة',
+    Undated: 'بلا تاريخ',
+    item: 'عنصر',
+    items: 'عناصر',
+  },
+  fr: {
+    calendar: 'calendrier',
+    Calendar: 'Calendrier',
+    month: 'mois',
+    year: 'année',
+    Undated: 'Sans date',
+    item: 'élément',
+    items: 'éléments',
+  },
+  bn: {
+    calendar: 'ক্যালেন্ডার',
+    Calendar: 'ক্যালেন্ডার',
+    month: 'মাস',
+    year: 'বছর',
+    Undated: 'তারিখহীন',
+    item: 'আইটেম',
+    items: 'আইটেম',
+  },
+  'pt-BR': {
+    calendar: 'calendário',
+    Calendar: 'Calendário',
+    month: 'mês',
+    year: 'ano',
+    Undated: 'Sem data',
+    item: 'item',
+    items: 'itens',
+  },
+  id: {
+    calendar: 'kalender',
+    Calendar: 'Kalender',
+    month: 'bulan',
+    year: 'tahun',
+    Undated: 'Tanpa tanggal',
+    item: 'item',
+    items: 'item',
+  },
+  ur: {
+    calendar: 'کیلنڈر',
+    Calendar: 'کیلنڈر',
+    month: 'مہینہ',
+    year: 'سال',
+    Undated: 'بغیر تاریخ',
+    item: 'آئٹم',
+    items: 'آئٹمز',
+  },
+};
+
+for (const [language, terms] of Object.entries(generatedCalendarTerms)) {
+  Object.assign(generatedTerms[language], terms);
+}
+
 /**
  * Exact phrase overrides cover the labels and short descriptions that cannot
  * be translated reliably by independent word replacement. The row order is
@@ -3179,6 +3283,48 @@ type GeneratedPhraseTargets = readonly [
 ];
 
 const generatedPhraseRows: Array<[string, GeneratedPhraseTargets]> = [
+  [
+    'Task calendar',
+    [
+      '任务日历',
+      'कार्य कैलेंडर',
+      'Calendario de tareas',
+      'تقويم المهام',
+      'Calendrier des tâches',
+      'কাজের ক্যালেন্ডার',
+      'Calendário de tarefas',
+      'Kalender tugas',
+      'ٹاسک کیلنڈر',
+    ],
+  ],
+  [
+    'Go to today',
+    [
+      '回到今天',
+      'आज पर जाएँ',
+      'Ir a hoy',
+      'الانتقال إلى اليوم',
+      'Aller à aujourd’hui',
+      'আজকে যান',
+      'Ir para hoje',
+      'Ke hari ini',
+      'آج پر جائیں',
+    ],
+  ],
+  [
+    'No tasks for this date',
+    [
+      '此日期无任务',
+      'इस तारीख के लिए कोई कार्य नहीं',
+      'No hay tareas para esta fecha',
+      'لا توجد مهام لهذا التاريخ',
+      'Aucune tâche pour cette date',
+      'এই তারিখে কোনো কাজ নেই',
+      'Nenhuma tarefa para esta data',
+      'Tidak ada tugas untuk tanggal ini',
+      'اس تاریخ کے لیے کوئی ٹاسک نہیں',
+    ],
+  ],
   [
     'Back to Timer',
     [

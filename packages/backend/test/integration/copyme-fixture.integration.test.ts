@@ -89,7 +89,7 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
       [fixtureName]
     );
     assert.equal(marker.rows.length, 1);
-    assert.equal(marker.rows[0].seedVersion, 5);
+    assert.equal(marker.rows[0].seedVersion, 6);
     assert.equal(marker.rows[0].isAdmin, true);
     assert.match(marker.rows[0].credentialFingerprint, /^[a-f0-9]{64}$/);
     const firstUserId = marker.rows[0].id;
@@ -135,6 +135,7 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
     }
     assert.equal(preference.taskDefaultDueDateMode, 'tomorrow');
     assert.equal(preference.taskDefaultSortMode, 'default');
+    assert.equal(preference.taskDefaultViewMode, 'calendar');
     assert.deepEqual(preference.taskReminderPriorities, ['high', 'urgent']);
     assert.equal(preference.taskUrgentReminderRepeatEnabled, false);
     assert.equal(preference.taskUrgentReminderRepeatIntervalMinutes, 30);

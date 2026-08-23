@@ -56,6 +56,7 @@ const DEFAULT_PREFERENCES = {
   taskDefaultDueDateMode: 'tomorrow',
   taskDefaultDueDateDays: 1,
   taskDefaultSortMode: 'default',
+  taskDefaultViewMode: 'list',
   hiddenHelpTips: [],
   taskReminderPriorities: ['high', 'urgent'],
   taskBeforeDueReminderMinutes: 0,
