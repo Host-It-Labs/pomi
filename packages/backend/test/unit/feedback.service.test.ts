@@ -1,21 +1,20 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FeedbackService } from '../../src/feedback/feedback.service';
+import { GitHubAppTokenService } from '../../src/feedback/github-app-token.service';
 
 describe('FeedbackService', () => {
-  const originalToken = process.env.GITHUB_FEEDBACK_TOKEN;
-
   afterEach(() => {
     vi.unstubAllGlobals();
-    if (originalToken === undefined) delete process.env.GITHUB_FEEDBACK_TOKEN;
-    else process.env.GITHUB_FEEDBACK_TOKEN = originalToken;
     delete process.env.GITHUB_FEEDBACK_REPOSITORY;
     delete process.env.GITHUB_FEEDBACK_LABEL;
   });
 
   it('creates a GitHub issue with only feedback and bounded safe diagnostics', async () => {
-    process.env.GITHUB_FEEDBACK_TOKEN = 'test-token';
     process.env.GITHUB_FEEDBACK_REPOSITORY = 'community/pomi-feedback';
+    const githubAppTokenService = {
+      getToken: vi.fn().mockResolvedValue('installation-token'),
+    } as unknown as GitHubAppTokenService;
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({ number: 42, html_url: 'https://example.test/42' }),
@@ -27,13 +26,19 @@ describe('FeedbackService', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await new FeedbackService().submit('The dock is useful.', {
-      platform: 'android',
-      viewport: '412x915',
-    });
+    const result = await new FeedbackService(githubAppTokenService).submit(
+      'The dock is useful.',
+      {
+        platform: 'android',
+        viewport: '412x915',
+      }
+    );
 
     expect(result.issueNumber).toBe(42);
     const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(request.headers).toMatchObject({
+      Authorization: 'Bearer installation-token',
+    });
     const body = JSON.parse(String(request.body));
     expect(body.title).toBe('[Feedback] The dock is useful.');
     expect(body.body).toContain('- platform: android');
@@ -43,9 +48,9 @@ describe('FeedbackService', () => {
   });
 
   it('fails clearly when GitHub submission is not configured', async () => {
-    delete process.env.GITHUB_FEEDBACK_TOKEN;
+    process.env.GITHUB_FEEDBACK_REPOSITORY = 'community/pomi-feedback';
     await expect(
-      new FeedbackService().submit('Feedback')
+      new FeedbackService(new GitHubAppTokenService()).submit('Feedback')
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 });

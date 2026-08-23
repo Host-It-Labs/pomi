@@ -31,6 +31,10 @@ describe('backend Docker secret boundary', () => {
     expect(compose).toContain(
       'GITHUB_FEEDBACK_REPOSITORY: ${GITHUB_FEEDBACK_REPOSITORY:-}'
     );
+    expect(compose).toContain(
+      'source: ${GITHUB_FEEDBACK_APP_PRIVATE_KEY_FILE:-/dev/null}'
+    );
+    expect(compose).not.toContain('GITHUB_FEEDBACK_TOKEN');
   });
 
   it('requires production secrets and does not publish data services', () => {

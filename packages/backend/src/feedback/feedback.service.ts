@@ -4,6 +4,7 @@ import {
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { GitHubAppTokenService } from './github-app-token.service';
 
 type FeedbackDiagnostics = {
   appVersion?: string;
@@ -14,13 +15,9 @@ type FeedbackDiagnostics = {
 
 @Injectable()
 export class FeedbackService {
+  constructor(private readonly githubAppTokenService: GitHubAppTokenService) {}
+
   async submit(text: string, diagnostics?: FeedbackDiagnostics) {
-    const token = process.env.GITHUB_FEEDBACK_TOKEN?.trim();
-    if (!token) {
-      throw new ServiceUnavailableException(
-        'Feedback submission is not configured'
-      );
-    }
     const repository = process.env.GITHUB_FEEDBACK_REPOSITORY?.trim();
     if (!repository) {
       throw new ServiceUnavailableException(
@@ -32,6 +29,7 @@ export class FeedbackService {
     }
     const feedback = text.trim();
     if (!feedback) throw new BadRequestException('Feedback is required');
+    const token = await this.githubAppTokenService.getToken();
 
     const diagnosticsLines = Object.entries(diagnostics ?? {})
       .filter((entry): entry is [string, string] => Boolean(entry[1]))
