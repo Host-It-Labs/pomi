@@ -15,13 +15,16 @@ import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
 import { AuthenticateDto } from './dto/authenticate.dto';
 import { LogoutDto } from './dto/logout.dto';
+import { SocialAuthDto } from './dto/social-auth.dto';
+import { SocialTokenService } from './social-token.service';
 
 @Controller()
 export class AuthController {
   constructor(
     private authService: AuthService,
     private usersService: UsersService,
-    private timerService: TimerService
+    private timerService: TimerService,
+    private socialTokens: SocialTokenService
   ) {}
 
   @TsRestHandler(apiContract.sessions.create)
@@ -51,6 +54,35 @@ export class AuthController {
     });
   }
 
+  @TsRestHandler(apiContract.sessions.socialChallenge)
+  async socialChallenge(): Promise<unknown> {
+    return tsRestHandler(apiContract.sessions.socialChallenge, async () => ({
+      status: 201,
+      body: await this.socialTokens.createChallenge(),
+    }));
+  }
+
+  @TsRestHandler(apiContract.sessions.createSocial)
+  async authenticateSocial(@Body() body: SocialAuthDto): Promise<unknown> {
+    return tsRestHandler(apiContract.sessions.createSocial, async () => {
+      const result = await this.authService.authenticateSocial(body);
+      const createdAt = result.user.createdAt;
+      return {
+        status: 200,
+        body: {
+          ...result,
+          user: {
+            ...result.user,
+            createdAt:
+              createdAt instanceof Date
+                ? createdAt.toISOString()
+                : String(createdAt),
+          },
+        },
+      };
+    });
+  }
+
   @UseGuards(AuthGuard)
   @TsRestHandler(apiContract.sessions.deleteCurrent)
   async logout(
@@ -64,7 +96,11 @@ export class AuthController {
       }
 
       if (query.platform === 'android' || query.platform === 'ios') {
-        await this.usersService.clearPushToken(userId, query.platform);
+        await this.usersService.clearPushToken(
+          userId,
+          query.platform,
+          query.token
+        );
       }
       await this.timerService.clearTimerHistory(userId);
 

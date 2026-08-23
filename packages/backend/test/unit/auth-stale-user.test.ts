@@ -89,6 +89,47 @@ describe('stale-user authentication', () => {
     expect(timerStateCalls).toBe(0);
   });
 
+  it('rejects hosted socket access without an active subscription', async () => {
+    let timerStateCalls = 0;
+    let disconnectCalls = 0;
+    const gateway = new TimerGateway(
+      {
+        onTimerUpdate: createEventSource(),
+        onClientNotification: createEventSource(),
+        onExtensionStateUpdate: createEventSource(),
+        onTimerHistoryUpdate: createEventSource(),
+        getTimerByUserId: async () => {
+          timerStateCalls += 1;
+          return null;
+        },
+      } as never,
+      { verify: () => ({ sub: 'unpaid-user' }) } as never,
+      {
+        findUserById: async () => ({ id: 'unpaid-user' }),
+      } as never,
+      { onPreferencesUpdate: createEventSource() } as never,
+      {
+        onTasksUpdate: createEventSource(),
+        onUserActionUpdate: createEventSource(),
+      } as never,
+      { hasProductAccess: async () => false } as never,
+      { get: () => 'hosted' } as never
+    );
+    const client = {
+      id: 'socket-unpaid',
+      handshake: { auth: { token: 'valid-token' }, headers: {} },
+      disconnect: () => {
+        disconnectCalls += 1;
+      },
+      emit: () => undefined,
+    };
+
+    await gateway.handleConnection(client as never);
+
+    expect(disconnectCalls).toBe(1);
+    expect(timerStateCalls).toBe(0);
+  });
+
   it('revalidates socket users before every message action', async () => {
     let userLookupCount = 0;
     let disconnectCalls = 0;

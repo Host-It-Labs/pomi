@@ -141,6 +141,11 @@ const useTimerStoreBase = create<TimerState>((set, get) => ({
 
       const { user } = useAuthStoreBase.getState();
       if (!user?.id) return;
+      if (
+        usePreferencesStore.getState().preferences?.pushNotifications !== true
+      ) {
+        return;
+      }
 
       console.warn('[Socket] Server requires push token registration');
 

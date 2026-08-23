@@ -31,7 +31,7 @@ function createGateway(currentTimer: object | null = { id: 'timer-1' }) {
     canUndo: false,
     canRedo: false,
   }));
-  const legacyHasPushToken = vi.fn(async () => true);
+  const hasPushToken = vi.fn(async () => true);
   const findUserById = vi.fn(async () => ({
     id: 'user-1',
     fcmToken: 'push-token',
@@ -51,7 +51,7 @@ function createGateway(currentTimer: object | null = { id: 'timer-1' }) {
     {
       findUserById,
       userExists: async () => true,
-      hasPushToken: legacyHasPushToken,
+      hasPushToken,
     } as never,
     { onPreferencesUpdate: preferencesUpdate.source } as never,
     {
@@ -66,7 +66,7 @@ function createGateway(currentTimer: object | null = { id: 'timer-1' }) {
     getTimerByUserId,
     getTimerHistoryStatus,
     findUserById,
-    legacyHasPushToken,
+    hasPushToken,
     preferencesUpdate,
     tasksUpdate,
     timerUpdate,
@@ -75,7 +75,7 @@ function createGateway(currentTimer: object | null = { id: 'timer-1' }) {
 
 describe('TimerGateway multi-instance fanout', () => {
   it('joins authenticated sockets to user and device rooms', async () => {
-    const { gateway, legacyHasPushToken, tasksUpdate } = createGateway();
+    const { gateway, hasPushToken, tasksUpdate } = createGateway();
     const join = vi.fn();
     const emit = vi.fn();
     const to = vi.fn(() => ({ emit }));
@@ -96,7 +96,7 @@ describe('TimerGateway multi-instance fanout', () => {
     await gateway.handleConnection(client as never);
 
     expect(join).toHaveBeenCalledWith(['user:user-1', 'user:user-1:mobile']);
-    expect(legacyHasPushToken).not.toHaveBeenCalled();
+    expect(hasPushToken).toHaveBeenCalledWith('user-1');
 
     tasksUpdate.next({ userId: 'user-1' });
     expect(to).toHaveBeenCalledWith('user:user-1');
@@ -155,6 +155,33 @@ describe('TimerGateway multi-instance fanout', () => {
     expect(error).toHaveBeenCalledWith(lookupError, undefined, 'TimerGateway');
     expect(warn).not.toHaveBeenCalledWith(
       'Socket connection rejected: authentication failed'
+    );
+    expect(client.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('routes expired subscriptions to billing without expiring the session', async () => {
+    const { gateway } = createGateway();
+    Object.assign(gateway as object, {
+      billing: { hasProductAccess: vi.fn(async () => false) },
+      configService: { get: vi.fn(() => 'hosted') },
+    });
+    const client = {
+      id: 'socket-1',
+      handshake: { auth: { token: 'valid-token' }, headers: {} },
+      data: {},
+      emit: vi.fn(),
+      disconnect: vi.fn(),
+    };
+
+    await gateway.handleConnection(client as never);
+
+    expect(client.emit).toHaveBeenCalledWith(
+      SOCKET_EVENTS.ENTITLEMENT_REQUIRED,
+      expect.objectContaining({ message: expect.any(String) })
+    );
+    expect(client.emit).not.toHaveBeenCalledWith(
+      SOCKET_EVENTS.SESSION_EXPIRED,
+      expect.anything()
     );
     expect(client.disconnect).toHaveBeenCalledOnce();
   });

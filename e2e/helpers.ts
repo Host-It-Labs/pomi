@@ -179,8 +179,19 @@ export class TestHelpers {
 
   async login(username: string, password: string) {
     await this.page.goto('/');
-    await this.page.fill('#username', username);
-    await this.page.fill('#password', password);
+    const usernameInput = this.page.locator('#username');
+    const welcomeLoginButton = this.page.getByRole('button', {
+      name: 'Log in',
+      exact: true,
+    });
+    await expect(usernameInput.or(welcomeLoginButton)).toBeVisible({
+      timeout: 10000,
+    });
+    if (await welcomeLoginButton.isVisible()) {
+      await welcomeLoginButton.click();
+    }
+    await usernameInput.fill(username);
+    await this.page.locator('#password').fill(password);
     const authResponsePromise = this.page
       .waitForResponse(
         response => {

@@ -1,5 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PreferencesService } from '../../src/preferences/preferences.service';
+
+function createPreferencesService(
+  repository: Record<string, unknown>,
+  clearAllPushTokens = vi.fn()
+) {
+  return {
+    clearAllPushTokens,
+    service: new PreferencesService(
+      repository as never,
+      undefined as never,
+      { clearAllPushTokens } as never
+    ),
+  };
+}
 
 describe('PreferencesService', () => {
   it('does not write a stale snapshot while reading existing preferences', async () => {
@@ -10,14 +24,14 @@ describe('PreferencesService', () => {
       intentionExtension: true,
       tasksExtension: true,
     };
-    const service = new PreferencesService({
+    const { service } = createPreferencesService({
       findOne: async () => existingPreferences,
       create: (entity: unknown) => entity,
       save: async (entity: unknown) => {
         saved.push(entity);
         return entity;
       },
-    } as never);
+    });
 
     await expect(service.getPreferences('user-1')).resolves.toBe(
       existingPreferences
@@ -39,11 +53,11 @@ describe('PreferencesService', () => {
       orIgnore: () => builder,
       execute: async () => undefined,
     };
-    const service = new PreferencesService({
+    const { service } = createPreferencesService({
       findOne: async () => stored,
       create: (entity: Record<string, unknown>) => entity,
       createQueryBuilder: () => builder,
-    } as never);
+    });
 
     await expect(service.getPreferences('user-2', 'fr')).resolves.toMatchObject(
       {
@@ -63,13 +77,13 @@ describe('PreferencesService', () => {
       language: null,
     };
     const saved: unknown[] = [];
-    const service = new PreferencesService({
+    const { service } = createPreferencesService({
       findOne: async () => existingPreferences,
       save: async (entity: unknown) => {
         saved.push(entity);
         return entity;
       },
-    } as never);
+    });
 
     await expect(service.getPreferences('user-3', 'ar')).resolves.toMatchObject(
       {
@@ -78,5 +92,28 @@ describe('PreferencesService', () => {
       }
     );
     expect(saved).toHaveLength(1);
+  });
+
+  it('clears every registered device when push notifications are disabled', async () => {
+    const preferences = {
+      userId: 'user-4',
+      pushNotifications: true,
+    };
+    const clearAllPushTokens = vi.fn<() => Promise<void>>();
+    clearAllPushTokens.mockResolvedValue();
+    const { service } = createPreferencesService(
+      {
+        findOne: async () => preferences,
+        save: async (entity: unknown) => entity,
+      },
+      clearAllPushTokens
+    );
+
+    await expect(
+      service.updatePreferences('user-4', { pushNotifications: false })
+    ).resolves.toMatchObject({ pushNotifications: false });
+
+    expect(clearAllPushTokens).toHaveBeenCalledOnce();
+    expect(clearAllPushTokens).toHaveBeenCalledWith('user-4');
   });
 });

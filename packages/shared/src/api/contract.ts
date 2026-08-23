@@ -78,11 +78,19 @@ const userSchema = z.object({
   username: z.string(),
   createdAt: z.string(),
   isAdmin: z.boolean().optional(),
+  email: z.string().email().nullable().optional(),
 });
 
 const systemInfoSchema = z.object({
   hostingMode: z.enum(['hosted', 'self-hosted']),
   selfHosted: z.boolean(),
+  paymentsRequired: z.boolean().default(false),
+  authProviders: z
+    .object({
+      google: z.boolean(),
+      apple: z.boolean(),
+    })
+    .default({ google: false, apple: false }),
 });
 
 const userDataTransferRowSchema = z.record(z.unknown());
@@ -337,6 +345,53 @@ const sessionResponseSchema = z.object({
   token: z.string(),
   isNewUser: z.boolean(),
   language: appLanguageSchema,
+});
+
+const socialAuthProviderSchema = z.enum(['google', 'apple']);
+const socialChallengeSchema = z.object({
+  state: z.string().uuid(),
+  nonce: z.string().uuid(),
+});
+const socialSessionCreateSchema = z.object({
+  provider: socialAuthProviderSchema,
+  identityToken: z.string().min(1),
+  state: z.string().uuid(),
+  nonce: z.string().uuid(),
+  email: z.string().email().nullable().optional(),
+  givenName: z.string().max(200).nullable().optional(),
+  familyName: z.string().max(200).nullable().optional(),
+  authorizationCode: z.string().max(4096).nullable().optional(),
+  language: appLanguageSchema.optional(),
+});
+
+const subscriptionEntitlementSchema = z.object({
+  required: z.boolean(),
+  active: z.boolean(),
+  state: z.enum(['active', 'expired', 'pending', 'revoked', 'none']),
+  plan: z.enum(['monthly', 'yearly']).nullable(),
+  productId: z.string().nullable(),
+  platform: z.enum(['ios', 'android']).nullable(),
+  expiresAt: z.string().nullable(),
+  autoRenews: z.boolean().nullable(),
+});
+
+const subscriptionSyncSchema = z.object({
+  platform: z.enum(['ios', 'android']),
+  productId: z.string().min(1).max(300),
+  purchaseToken: z.string().min(1).max(20_000),
+  originalId: z.string().max(500).optional(),
+  jwsRepresentation: z.string().max(50_000).optional(),
+  originalJson: z.string().max(50_000).optional(),
+  signature: z.string().max(20_000).optional(),
+});
+
+const billingCheckoutSchema = z.object({
+  checkoutId: z.string().uuid(),
+  checkoutToken: z.string().min(1).max(5_000),
+});
+
+const subscriptionClaimSchema = subscriptionSyncSchema.extend({
+  checkoutToken: z.string().min(1).max(5_000),
 });
 
 const intentionsQuerySchema = z.object({
@@ -1503,15 +1558,100 @@ export const apiContract = c.router({
         409: errorSchema,
       },
     },
+    socialChallenge: {
+      method: 'POST',
+      path: '/sessions/social/challenge',
+      body: z.object({}),
+      responses: {
+        201: socialChallengeSchema,
+      },
+    },
+    createSocial: {
+      method: 'POST',
+      path: '/sessions/social',
+      body: socialSessionCreateSchema,
+      responses: {
+        200: sessionResponseSchema,
+        400: errorSchema,
+        401: errorSchema,
+        503: errorSchema,
+      },
+    },
     deleteCurrent: {
       method: 'DELETE',
       path: '/sessions/current',
       query: z.object({
         platform: platformSchema,
+        token: z.string().max(5_000).optional(),
       }),
       responses: {
         200: successSchema,
         401: errorSchema,
+      },
+    },
+  }),
+  billing: c.router({
+    createCheckout: {
+      method: 'POST',
+      path: '/billing/checkouts',
+      body: z.object({}),
+      responses: {
+        201: billingCheckoutSchema,
+        400: errorSchema,
+        429: errorSchema,
+        503: errorSchema,
+      },
+    },
+    verifyCheckoutPurchase: {
+      method: 'POST',
+      path: '/billing/checkouts/verify',
+      body: subscriptionClaimSchema,
+      responses: {
+        200: successSchema,
+        400: errorSchema,
+        401: errorSchema,
+        429: errorSchema,
+        503: errorSchema,
+      },
+    },
+    entitlement: {
+      method: 'GET',
+      path: '/billing/entitlement',
+      responses: {
+        200: subscriptionEntitlementSchema,
+        401: errorSchema,
+      },
+    },
+    sync: {
+      method: 'POST',
+      path: '/billing/entitlement/sync',
+      body: subscriptionSyncSchema,
+      responses: {
+        200: subscriptionEntitlementSchema,
+        400: errorSchema,
+        401: errorSchema,
+        503: errorSchema,
+      },
+    },
+    claimCheckout: {
+      method: 'POST',
+      path: '/billing/entitlement/claim',
+      body: subscriptionClaimSchema,
+      responses: {
+        200: subscriptionEntitlementSchema,
+        400: errorSchema,
+        401: errorSchema,
+        503: errorSchema,
+      },
+    },
+    appleNotifications: {
+      method: 'POST',
+      path: '/billing/apple/notifications',
+      body: z.object({ signedPayload: z.string().min(1).max(100_000) }),
+      responses: {
+        200: successSchema,
+        400: errorSchema,
+        503: errorSchema,
       },
     },
   }),

@@ -35,6 +35,8 @@
         "default",
         "desktop-capability",
         "mobile-capability",
+        "apple-capability",
+        "apple-desktop-capability",
         {
           "identifier": "draggable-window",
           "windows": ["*"],
@@ -47,6 +49,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "macOS": {
+      "entitlements": "./Entitlements.plist"
+    },
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico"

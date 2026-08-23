@@ -1,9 +1,12 @@
 import {
   Inject,
+  HttpException,
   Logger,
+  Optional,
   UnauthorizedException,
   forwardRef,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
   ConnectedSocket,
@@ -17,10 +20,12 @@ import { isCorsOriginAllowed } from '../config/environment';
 import { SOCKET_EVENTS, TIMER_TYPES } from '@pomi/shared';
 import type { Timer, Preferences } from '@pomi/shared';
 import { Namespace, Socket } from 'socket.io';
+import { BillingService } from '../billing/billing.service';
 import { PreferencesService } from '../preferences/preferences.service';
 import { RealtimeEvents } from '../realtime/realtime-events';
 import { isTransientDependencyError } from '../logging/dependency-errors';
 import { formatSafeError } from '../logging/sanitize-log';
+import { resolveHostingMode } from '../system/system.service';
 import type { UserEntity } from '../users/users.entity';
 import { UsersService } from '../users/users.service';
 import { ClientNotificationEvent } from './timer-events';
@@ -69,7 +74,9 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private usersService: UsersService,
     @Inject(forwardRef(() => PreferencesService))
     private preferencesService: PreferencesService,
-    private realtimeEvents: RealtimeEvents
+    private realtimeEvents: RealtimeEvents,
+    @Optional() private billing?: BillingService,
+    @Optional() private configService?: ConfigService
   ) {
     this.timerService.onTimerUpdate.subscribe(update => {
       this.sendTimerUpdateToUser(update.userId, update.timer);
@@ -113,7 +120,9 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
       );
       user = await this.authorizeSocketUser(client);
     } catch (error) {
-      if (error instanceof UnauthorizedException) {
+      if (this.isEntitlementRequired(error)) {
+        this.notifyEntitlementRequired(client);
+      } else if (error instanceof UnauthorizedException) {
         this.logger.warn('Socket connection rejected: authentication failed');
         this.notifySessionExpired(client);
       } else {
@@ -138,7 +147,7 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
         ),
       ]);
 
-      const hasPushToken = Boolean(user.fcmToken || user.apnToken);
+      const hasPushToken = await this.usersService.hasPushToken(userId);
       if (!hasPushToken) {
         this.logger.warn('Mobile connection has no push token');
         client.emit(SOCKET_EVENTS.PUSH_TOKEN_REQUIRED, {
@@ -239,7 +248,18 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!user) {
       throw new UnauthorizedException('User no longer exists');
     }
+    await this.enforceHostedEntitlement(userId);
     return user;
+  }
+
+  private async enforceHostedEntitlement(userId: string): Promise<void> {
+    const hostingMode = resolveHostingMode(
+      this.configService?.get<string>('POMI_HOSTING_MODE')
+    );
+    if (hostingMode !== 'hosted') return;
+    if (!this.billing || !(await this.billing.hasProductAccess(userId))) {
+      throw new HttpException('An active subscription is required', 402);
+    }
   }
 
   private verifySocketTokenPayload(client: Socket): VerifiedSocketPayload {
@@ -315,12 +335,15 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
         if (!(await this.usersService.userExists(userId))) {
           throw new UnauthorizedException('User no longer exists');
         }
+        await this.enforceHostedEntitlement(userId);
         next();
       } catch (error) {
         this.logger.warn(
           `Socket authorization failed. Disconnecting client ${client.id}`
         );
-        if (error instanceof UnauthorizedException) {
+        if (this.isEntitlementRequired(error)) {
+          this.notifyEntitlementRequired(client);
+        } else if (error instanceof UnauthorizedException) {
           this.notifySessionExpired(client);
         } else {
           this.logger.error(error, undefined, TimerGateway.name);
@@ -341,6 +364,18 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
       message: 'Your session has expired. Please sign in again.',
     });
     client.disconnect();
+  }
+
+  private notifyEntitlementRequired(client: Socket): void {
+    this.clearSocketExpiry(client);
+    client.emit(SOCKET_EVENTS.ENTITLEMENT_REQUIRED, {
+      message: 'An active Pomi subscription is required.',
+    });
+    client.disconnect();
+  }
+
+  private isEntitlementRequired(error: unknown): boolean {
+    return error instanceof HttpException && error.getStatus() === 402;
   }
 
   private sendTimerUpdateToUser(userId: string, timer: Timer) {

@@ -17,6 +17,9 @@ export class UserEntity {
   @Column()
   password: string;
 
+  @Column({ type: 'varchar', nullable: true, unique: true })
+  email?: string | null;
+
   @Column({ type: 'boolean', default: false })
   isAdmin: boolean;
 

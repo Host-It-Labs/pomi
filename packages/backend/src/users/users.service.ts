@@ -1,15 +1,17 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { PUSH_PLATFORMS, PushPlatform } from '@pomi/shared';
+import { PushPlatform } from '@pomi/shared';
 import Redis from 'ioredis';
 import { Repository } from 'typeorm';
 import { REDIS_CLIENT } from '../redis/redis.constants';
+import { PushDeviceEntity } from './push-device.entity';
 import { UserEntity } from './users.entity';
 
 interface CreateUserDto {
   username: string;
   password: string;
   isAdmin?: boolean;
+  email?: string | null;
 }
 
 @Injectable()
@@ -19,6 +21,8 @@ export class UsersService {
   constructor(
     @InjectRepository(UserEntity)
     private userRepository: Repository<UserEntity>,
+    @InjectRepository(PushDeviceEntity)
+    private pushDevices: Repository<PushDeviceEntity>,
     @Inject(REDIS_CLIENT)
     redis: Redis
   ) {
@@ -27,6 +31,9 @@ export class UsersService {
 
   async findUserByUsername(username: string): Promise<UserEntity | null> {
     return await this.userRepository.findOne({ where: { username } });
+  }
+  async findUserByEmail(email: string): Promise<UserEntity | null> {
+    return await this.userRepository.findOne({ where: { email } });
   }
   async findUserById(userId: string): Promise<UserEntity | null> {
     return await this.userRepository.findOne({ where: { id: userId } });
@@ -76,35 +83,43 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    if (platform === PUSH_PLATFORMS.ANDROID) {
-      user.fcmToken = token;
-    } else if (platform === PUSH_PLATFORMS.IOS) {
-      user.apnToken = token;
-    }
-
-    await this.userRepository.save(user);
+    await this.pushDevices.upsert(
+      { userId, token, platform, lastSeenAt: new Date() },
+      { conflictPaths: ['token'], skipUpdateIfNoValuesChanged: false }
+    );
   }
 
   async hasPushToken(userId: string): Promise<boolean> {
-    const user = await this.findUserById(userId);
-    if (!user) {
-      return false;
-    }
-    return !!(user.fcmToken || user.apnToken);
+    return (await this.pushDevices.count({ where: { userId } })) > 0;
   }
 
-  async clearPushToken(userId: string, platform: PushPlatform): Promise<void> {
+  async getPushTokens(
+    userId: string,
+    platform: PushPlatform
+  ): Promise<string[]> {
+    const devices = await this.pushDevices.find({
+      where: { userId, platform },
+      order: { lastSeenAt: 'DESC' },
+    });
+    return devices.map(device => device.token);
+  }
+
+  async clearPushToken(
+    userId: string,
+    platform: PushPlatform,
+    token?: string
+  ): Promise<void> {
     const user = await this.findUserById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    if (platform === PUSH_PLATFORMS.ANDROID) {
-      user.fcmToken = null;
-    } else if (platform === PUSH_PLATFORMS.IOS) {
-      user.apnToken = null;
-    }
+    await this.pushDevices.delete(
+      token ? { userId, platform, token } : { userId, platform }
+    );
+  }
 
-    await this.userRepository.save(user);
+  async clearAllPushTokens(userId: string): Promise<void> {
+    await this.pushDevices.delete({ userId });
   }
 }

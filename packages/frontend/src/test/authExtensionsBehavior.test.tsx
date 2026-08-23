@@ -13,6 +13,7 @@ import {
 } from 'vitest';
 import { ToastProvider } from '../components/toast/ToastContext';
 import { Login } from '../pages/Login';
+import { SelfHostSetup } from '../pages/access/SelfHostSetup';
 import { SessionConfigModal } from '../pages/extensions/SessionConfigModal';
 import { useAuthStoreBase } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
@@ -108,6 +109,53 @@ describe('authentication behavior migrated from legacy Playwright documentation'
     });
   });
 
+  it('does not mark the user authenticated until a pending purchase is claimed', async () => {
+    server.use(
+      http.post('http://localhost:3000/sessions', () =>
+        HttpResponse.json({
+          user: {
+            id: 'checkout-user',
+            username: 'checkout-user',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            isAdmin: false,
+          },
+          token: 'checkout-auth-token',
+          isNewUser: true,
+          language: 'en',
+        })
+      )
+    );
+    let finishClaim!: () => void;
+    const onSession = vi.fn(
+      () =>
+        new Promise<void>(resolve => {
+          finishClaim = resolve;
+        })
+    );
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <Login onSession={onSession} />
+      </ToastProvider>
+    );
+
+    await user.type(screen.getByLabelText('Username'), 'checkout-user');
+    await user.type(screen.getByLabelText('Password'), 'safe-password');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    await waitFor(() => expect(onSession).toHaveBeenCalledOnce());
+    expect(useAuthStoreBase.getState()).toMatchObject({
+      token: 'checkout-auth-token',
+      isAuthenticated: false,
+      user: null,
+    });
+
+    finishClaim();
+    await waitFor(() =>
+      expect(useAuthStoreBase.getState().isAuthenticated).toBe(true)
+    );
+  });
+
   it('uses the selected first-run language when creating an account', async () => {
     const requestBodies: unknown[] = [];
     server.use(
@@ -130,9 +178,7 @@ describe('authentication behavior migrated from legacy Playwright documentation'
     renderLogin();
 
     await user.selectOptions(screen.getByLabelText('Language'), 'fr');
-    expect(
-      screen.getByRole('heading', { name: 'Bienvenue sur Pomi' })
-    ).toBeVisible();
+    expect(document.documentElement.lang).toBe('fr');
     await user.type(screen.getByLabelText("Nom d'utilisateur"), 'fr-user');
     await user.type(screen.getByLabelText('Mot de passe'), 'safe-password');
     await user.click(screen.getByRole('button', { name: 'Continuer' }));
@@ -233,27 +279,37 @@ describe('authentication behavior migrated from legacy Playwright documentation'
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
   });
 
-  it('persists a normalized self-hosted URL and clears it when returning to hosted service', async () => {
+  it('persists a normalized self-hosted URL before opening server login', async () => {
+    server.use(
+      http.get('https://self-hosted.example/system', () =>
+        HttpResponse.json({
+          hostingMode: 'self-hosted',
+          selfHosted: true,
+          paymentsRequired: false,
+          authProviders: { google: false, apple: false },
+        })
+      )
+    );
     const user = userEvent.setup();
-    renderLogin();
+    const onReady = vi.fn();
+    render(
+      <ToastProvider>
+        <SelfHostSetup onReady={onReady} />
+      </ToastProvider>
+    );
 
-    await user.click(screen.getByRole('button', { name: 'I am self-hosting' }));
     await user.type(
-      screen.getByPlaceholderText('https://pomi.yourdomain.com'),
+      screen.getByLabelText('Server URL'),
       ' https://self-hosted.example/// '
     );
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.click(screen.getByRole('button', { name: 'Continue to login' }));
 
     expect(localStorage.getItem('pomi-backend-url')).toBe(
       'https://self-hosted.example'
     );
-    expect(screen.getByText(/Using self-hosted backend/)).toHaveTextContent(
-      'https://self-hosted.example'
+    await waitFor(() =>
+      expect(onReady).toHaveBeenCalledWith('https://self-hosted.example')
     );
-    await user.click(
-      screen.getByRole('button', { name: 'Use hosted service instead' })
-    );
-    expect(localStorage.getItem('pomi-backend-url')).toBeNull();
   });
 });
 

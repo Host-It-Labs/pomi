@@ -10,6 +10,9 @@ import * as bcrypt from 'bcrypt';
 import { PreferencesService } from '../preferences/preferences.service';
 import { SystemService } from '../system/system.service';
 import { UsersService } from '../users/users.service';
+import { SocialAuthDto } from './dto/social-auth.dto';
+import { SocialIdentityService } from './social-identity.service';
+import { SocialTokenService } from './social-token.service';
 
 @Injectable()
 export class AuthService {
@@ -17,7 +20,9 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private preferencesService: PreferencesService,
-    private systemService: SystemService
+    private systemService: SystemService,
+    private socialTokens: SocialTokenService,
+    private socialIdentities: SocialIdentityService
   ) {}
 
   async signUp(username: string, password: string, language?: AppLanguage) {
@@ -120,6 +125,37 @@ export class AuthService {
       return await this.signUp(username, password, requestedLanguage);
     }
     return await this.login(username, password, requestedLanguage);
+  }
+
+  async authenticateSocial(body: SocialAuthDto) {
+    if (this.systemService.isSelfHosted()) {
+      throw new BadRequestException(
+        'Social sign-in is available on the hosted service only'
+      );
+    }
+    const verifiedIdentity = await this.socialTokens.verify(
+      body.provider,
+      body.identityToken,
+      body.state,
+      body.nonce
+    );
+    const { user, isNewUser } =
+      await this.socialIdentities.findOrCreate(verifiedIdentity);
+    const preferences = await this.preferencesService.getPreferences(
+      user.id,
+      this.normalizeLanguage(body.language)
+    );
+    const token = this.jwtService.sign({
+      sub: user.id,
+      username: user.username,
+    });
+    const { password: _, ...userWithoutPassword } = user;
+    return {
+      user: userWithoutPassword,
+      token,
+      isNewUser,
+      language: preferences.language,
+    };
   }
 
   private normalizeLanguage(language?: AppLanguage): AppLanguage | undefined {

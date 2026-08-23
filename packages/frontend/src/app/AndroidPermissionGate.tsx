@@ -114,8 +114,14 @@ export function AndroidPermissionGate({
       return;
     }
 
+    if (user?.id) {
+      void notificationService.registerForPushNotificationsIfMobile(
+        user.id,
+        'android'
+      );
+    }
     void reconcileAndroidForegroundSync(token, true);
-  }, [requiredReady, shouldCheckAndroidPermissions, token]);
+  }, [requiredReady, shouldCheckAndroidPermissions, token, user?.id]);
 
   const permissionRows = useMemo(
     () => [

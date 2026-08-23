@@ -31,6 +31,7 @@ import { AssistantModelsQueryDto } from '../../src/assistant/dto/assistant-model
 import { UpdateAssistantSettingsDto } from '../../src/assistant/dto/update-assistant-settings.dto';
 import { AuthenticateDto } from '../../src/auth/dto/authenticate.dto';
 import { LogoutDto } from '../../src/auth/dto/logout.dto';
+import { SocialAuthDto } from '../../src/auth/dto/social-auth.dto';
 import { CreateIntentionDto } from '../../src/intentions/dto/create-intention.dto';
 import { IntentionsQueryDto } from '../../src/intentions/dto/intentions-query.dto';
 import { ReparentIntentionDto } from '../../src/intentions/dto/reparent-intention.dto';
@@ -131,6 +132,32 @@ describe('backend scalar and parameter DTO validation', () => {
       valid: { platform: 'web' },
       invalid: { platform: 'watch' },
       property: 'platform',
+    },
+    {
+      Dto: SocialAuthDto,
+      valid: {
+        provider: 'google',
+        identityToken: 'identity-token',
+        state: UUID,
+        nonce: UUID,
+        email: 'person@example.com',
+        givenName: 'Pomi',
+        familyName: 'User',
+        authorizationCode: 'authorization-code',
+        language: 'en',
+      },
+      invalid: {
+        provider: 'github',
+        identityToken: '',
+        state: 'invalid',
+        nonce: 'invalid',
+        email: 'invalid',
+        givenName: 'x'.repeat(201),
+        familyName: 'x'.repeat(201),
+        authorizationCode: 'x'.repeat(4097),
+        language: 'invalid',
+      },
+      property: 'provider',
     },
     {
       Dto: SlugParamDto,

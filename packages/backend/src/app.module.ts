@@ -22,6 +22,7 @@ import { FeedbackModule } from './feedback/feedback.module';
 import { DescriptionsModule } from './descriptions/descriptions.module';
 import { validateEnvironment } from './config/environment';
 import { resolveBackendLocalEnvironmentFile } from './config/local-environment';
+import { BillingModule } from './billing/billing.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { resolveBackendLocalEnvironmentFile } from './config/local-environment';
     FeedbackModule,
     DescriptionsModule,
     SystemModule,
+    BillingModule,
   ],
   providers: [
     {

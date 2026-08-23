@@ -22,7 +22,7 @@ pub fn run() {
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[tauri::mobile_entry_point]
 pub fn mobile_main() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -31,6 +31,13 @@ pub fn mobile_main() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_android_battery_optimization::init())
         .plugin(tauri_plugin_mcp_bridge::init())
+        .plugin(tauri_plugin_google_auth::init())
+        .plugin(tauri_plugin_iap::init());
+    #[cfg(target_os = "ios")]
+    let builder = builder
+        .plugin(tauri_plugin_siwa::init())
+        .plugin(tauri_plugin_watch_sync::init());
+    builder
         .invoke_handler(tauri::generate_handler![greet])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -38,7 +45,7 @@ pub fn mobile_main() {
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn desktop_main() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -48,6 +55,12 @@ pub fn desktop_main() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_mcp_bridge::init())
+        .plugin(tauri_plugin_google_auth::init());
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .plugin(tauri_plugin_iap::init())
+        .plugin(tauri_plugin_siwa::init());
+    builder
         .setup(|app| {
             // use `app` on non-Windows targets to avoid unused variable warning
             #[cfg(not(target_os = "windows"))]

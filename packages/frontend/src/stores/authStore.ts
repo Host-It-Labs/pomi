@@ -1,6 +1,7 @@
 import { User } from '@pomi/shared';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { PUSH_TOKEN_STORAGE_KEY } from '../constants/pushNotifications';
 import { apiClient } from '../utils/apiClient';
 import { platformName } from '../utils/osUtils';
 import { createSelectors } from './createSelectors';
@@ -60,6 +61,8 @@ const useAuthStoreBase = create<AuthState>()(
               await apiClient.sessions.deleteCurrent({
                 query: {
                   platform: resolvedPlatform,
+                  token:
+                    localStorage.getItem(PUSH_TOKEN_STORAGE_KEY) ?? undefined,
                 },
               });
             } catch (error) {
@@ -67,6 +70,7 @@ const useAuthStoreBase = create<AuthState>()(
             }
           }
         } finally {
+          localStorage.removeItem(PUSH_TOKEN_STORAGE_KEY);
           set({
             user: null,
             token: null,

@@ -20,6 +20,8 @@
     "node": "24.x"
   },
   "dependencies": {
+    "@choochmeque/tauri-plugin-google-auth-api": "^0.5",
+    "@choochmeque/tauri-plugin-iap-api": "^0.9",
     "@choochmeque/tauri-plugin-notifications-api": "0.4.3",
     "@pomi/shared": "workspace:*",
     "@sentry/react": "^9.46.0",
@@ -42,6 +44,7 @@
     "socket.io-client": "^4.8.1",
     "tailwindcss": "^4.0.12",
     "tauri-plugin-android-battery-optimization-api": "^0.1.0",
+    "tauri-plugin-siwa-api": "^1.0",
     "uuid": "^11.1.0",
     "zustand": "^5.0.11"
   },

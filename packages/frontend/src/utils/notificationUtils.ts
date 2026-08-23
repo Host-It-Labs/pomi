@@ -1,12 +1,18 @@
 import {
   isPermissionGranted,
+  onAction,
+  onNotificationClicked,
   registerForPushNotifications,
+  registerActionTypes,
   requestPermission,
+  unregisterForPushNotifications,
 } from '@choochmeque/tauri-plugin-notifications-api';
 import { PUSH_PLATFORMS } from '@pomi/shared/src/constants';
 import { Platform } from '@tauri-apps/plugin-os';
+import { PUSH_TOKEN_STORAGE_KEY } from '../constants/pushNotifications';
+import { useUiStore } from '../stores/uiStore';
 import { apiClient } from './apiClient';
-import { isAndroid, isMobile, isTauri } from './osUtils';
+import { isAndroid, isIos, isMobile, isTauri } from './osUtils';
 
 declare global {
   interface Window {
@@ -21,9 +27,38 @@ class NotificationService {
 
   constructor() {
     this.checkPermission();
+    void this.configureIosActions();
     const stored = localStorage.getItem('notification_denial_count');
     if (stored) {
       this.denialCount = parseInt(stored, 10);
+    }
+  }
+
+  private async configureIosActions() {
+    if (!isTauri || !isIos) return;
+    try {
+      await registerActionTypes([
+        {
+          id: 'POMI_TIMER',
+          actions: [
+            {
+              id: 'open-timer',
+              title: 'Open Pomi',
+              foreground: true,
+            },
+          ],
+          hiddenPreviewsBodyPlaceholder: 'Pomi timer update',
+          hiddenPreviewsShowTitle: true,
+        },
+      ]);
+      const openTimer = async () => {
+        useUiStore.getState().setExpanded(true);
+        useUiStore.getState().setActiveTab('timer');
+      };
+      await onNotificationClicked(() => void openTimer());
+      await onAction(() => void openTimer());
+    } catch (error) {
+      console.error('Failed to configure iOS notification actions:', error);
     }
   }
 
@@ -136,6 +171,7 @@ class NotificationService {
             platform: platformType,
           },
         });
+        localStorage.setItem(PUSH_TOKEN_STORAGE_KEY, token);
 
         return true;
       }
@@ -143,6 +179,21 @@ class NotificationService {
     } catch (error) {
       console.error('Error registering for push notifications:', error);
 
+      return false;
+    }
+  }
+
+  async unregisterFromPushNotificationsIfMobile(): Promise<boolean> {
+    if (!isMobile) return false;
+
+    try {
+      if (isTauri) {
+        await unregisterForPushNotifications();
+      }
+      localStorage.removeItem(PUSH_TOKEN_STORAGE_KEY);
+      return true;
+    } catch (error) {
+      console.error('Error unregistering from push notifications:', error);
       return false;
     }
   }

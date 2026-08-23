@@ -468,8 +468,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fac4744fb15ae8337dc853fee7fb3f4e48c0fbaa23d0afe49c447b4fab126118"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-link 0.2.1",
 ]
 
@@ -1127,6 +1129,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dff15bf788c671c1934e366d07e30c1814a8ef514e1af724a602e8a2fbe1b10"
 dependencies = [
  "futures-core",
+ "futures-sink",
 ]
 
 [[package]]
@@ -2400,6 +2403,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "oauth2"
+version = "5.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51e219e79014df21a225b1860a479e2dcd7cbd9130f4defd4bd0e191ea31d67d"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "getrandom 0.2.17",
+ "http",
+ "rand 0.8.5",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "sha2",
+ "thiserror 1.0.69",
+ "url",
+]
+
+[[package]]
 name = "objc-sys"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3213,12 +3236,16 @@ dependencies = [
  "tauri-plugin-deep-link",
  "tauri-plugin-dialog",
  "tauri-plugin-global-shortcut",
+ "tauri-plugin-google-auth",
  "tauri-plugin-http",
+ "tauri-plugin-iap",
  "tauri-plugin-mcp-bridge",
  "tauri-plugin-notifications",
  "tauri-plugin-opener",
  "tauri-plugin-os",
  "tauri-plugin-shell",
+ "tauri-plugin-siwa",
+ "tauri-plugin-watch-sync",
 ]
 
 [[package]]
@@ -3655,6 +3682,7 @@ dependencies = [
  "cookie",
  "cookie_store 0.22.0",
  "encoding_rs",
+ "futures-channel",
  "futures-core",
  "futures-util",
  "h2",
@@ -3971,6 +3999,17 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "serde_path_to_error"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10a9ff822e371bb5403e391ecd83e182e0e77ba7f6fe0160b795797109d1b457"
+dependencies = [
+ "itoa",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -4700,6 +4739,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-plugin-google-auth"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2887559d9aeda0ef71eb8d2e0a9934df8e48ba96d90b0d6d3e4731608e28e4a8"
+dependencies = [
+ "oauth2",
+ "open",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.18",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "tauri-plugin-http"
 version = "2.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4721,6 +4777,23 @@ dependencies = [
  "tokio",
  "url",
  "urlpattern",
+]
+
+[[package]]
+name = "tauri-plugin-iap"
+version = "0.9.1"
+dependencies = [
+ "base64 0.22.1",
+ "log",
+ "serde",
+ "serde_json",
+ "swift-bridge",
+ "swift-bridge-build",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.18",
+ "windows",
+ "windows-collections",
 ]
 
 [[package]]
@@ -4829,6 +4902,30 @@ dependencies = [
  "tauri-plugin",
  "thiserror 2.0.18",
  "tokio",
+]
+
+[[package]]
+name = "tauri-plugin-siwa"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5dcba3d6329e004a5750cc88575c511f0971012ffab34bf1d10de540798ac069"
+dependencies = [
+ "serde",
+ "serde_json",
+ "swift-rs",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "tauri-plugin-watch-sync"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

@@ -32,6 +32,7 @@
     "directory": "packages/backend"
   },
   "dependencies": {
+    "@apple/app-store-server-library": "^2",
     "@nestjs/common": "^11.0.11",
     "@nestjs/config": "^4.0.1",
     "@nestjs/core": "^11.0.11",
@@ -55,6 +56,7 @@
     "firebase-admin": "^13.5.0",
     "google-auth-library": "^9.15.1",
     "ioredis": "^5.6.0",
+    "jose": "^6",
     "pg": "^8.14.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",

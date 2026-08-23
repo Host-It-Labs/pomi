@@ -12,7 +12,7 @@
 
     <application
         android:allowBackup="false"
-        android:icon="@drawable/ic_watch_launcher"
+        android:icon="@mipmap/ic_watch_launcher"
         android:label="@string/watch_app_name"
         android:theme="@style/Theme.PomiWatch"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
@@ -24,7 +24,7 @@
             android:name=".PomiTileService"
             android:description="@string/pomi_tile_description"
             android:exported="true"
-            android:icon="@drawable/ic_watch_launcher"
+            android:icon="@mipmap/ic_watch_launcher"
             android:label="@string/pomi_tile_label"
             android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
             <intent-filter>
