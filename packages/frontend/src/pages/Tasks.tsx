@@ -124,7 +124,6 @@ import {
 } from '../utils/mixedTaskItems';
 import { useI18n } from '../i18n';
 import { useDefaultTaskSort } from './taskDefaultSort';
-import { useDefaultTaskView } from './taskDefaultView';
 import { useUpdatedTaskReveal } from './taskUpdatedReveal';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
 import { isTaskInTimerTypeSearchScope } from '../utils/taskSearchScope';
@@ -166,8 +165,6 @@ export function Tasks() {
   const taskCreateRequested = useUiStore.use.taskCreateRequested();
   const taskCreateInitialTitle = useUiStore.use.taskCreateInitialTitle();
   const clearTaskCreateRequest = useUiStore.use.clearTaskCreateRequest();
-  const taskRevealRequestedId = useUiStore.use.taskRevealRequestedId();
-  const clearTaskRevealRequest = useUiStore.use.clearTaskRevealRequest();
   const intentionPickerOpenRequest =
     useUiStore.use.intentionPickerOpenRequest();
   const taskSearchFocusRequest = useUiStore.use.taskSearchFocusRequest();
@@ -265,13 +262,6 @@ export function Tasks() {
     configuredMode: preferences?.taskDefaultSortMode,
     preferencesLoaded: preferences !== null,
     onApply: setTaskSortMode,
-  });
-
-  useDefaultTaskView({
-    userId: user?.id,
-    configuredMode: preferences?.taskDefaultViewMode,
-    preferencesLoaded: preferences !== null,
-    onApply: setTaskPageViewMode,
   });
 
   const loadImportStatus = useCallback(async () => {
@@ -809,16 +799,6 @@ export function Tasks() {
     setPageViewMode: setTaskPageViewMode,
     setDestinationTaskId: setUpdatedTaskDestinationId,
   });
-  useEffect(() => {
-    if (!taskRevealRequestedId || preferences === null) return;
-    revealUpdatedTask(taskRevealRequestedId);
-    clearTaskRevealRequest();
-  }, [
-    clearTaskRevealRequest,
-    preferences,
-    revealUpdatedTask,
-    taskRevealRequestedId,
-  ]);
   const updateTaskWithPositionFeedback = useCallback(
     async (updates: Parameters<typeof updateTask>[0]) => {
       const currentTask = tasks.find(task => task.id === updates.id);

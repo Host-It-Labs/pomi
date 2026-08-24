@@ -444,8 +444,6 @@ const english: TranslationCatalog = {
   'task.defaultSort': 'Default Task sort',
   'task.defaultSortAbout':
     'Used when Tasks open without a visit-specific sort choice.',
-  'task.defaultView': 'Default Tasks view',
-  'task.defaultViewAbout': 'Choose how the full Tasks page opens.',
   'task.calendar': 'Task calendar',
   'task.goToToday': 'Go to today',
   'task.previousCalendarPeriod': 'Previous {{period}}',

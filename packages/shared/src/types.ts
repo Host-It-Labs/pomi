@@ -11,10 +11,7 @@ export type TaskPageViewMode = 'list' | 'calendar';
 export type AssistantDebugLogKind = 'taskCapture' | 'voiceCommand';
 export type AssistantDebugLogSource = 'typed' | 'dictation' | 'assistantVoice';
 export type AssistantDebugLogStatus =
-  | 'dictated'
-  | 'succeeded'
-  | 'fallback'
-  | 'failed';
+  'dictated' | 'succeeded' | 'fallback' | 'failed';
 export type TaskLifecycleEventType = 'created' | 'completed' | 'archived';
 export type AssistantUsageBudgetPeriod = 'daily' | 'monthly';
 export type AssistantVoiceAction =
@@ -220,7 +217,6 @@ export interface Preferences {
   taskDefaultDueDateMode: TaskDefaultDueDateMode;
   taskDefaultDueDateDays: number;
   taskDefaultSortMode: TaskSortMode;
-  taskDefaultViewMode?: TaskPageViewMode;
   hiddenHelpTips: string[];
   taskReminderPriorities: TaskPriority[];
   taskBeforeDueReminderMinutes: number;
@@ -252,11 +248,7 @@ export interface TaskStatisticsSummary {
 }
 
 export type TaskStatisticsFilter =
-  | 'created'
-  | 'completed'
-  | 'overdue'
-  | 'onTime'
-  | 'archived';
+  'created' | 'completed' | 'overdue' | 'onTime' | 'archived';
 
 export interface TaskEventLog {
   id: string;
@@ -574,10 +566,7 @@ export interface AssistantDebugProcessedOutput {
 }
 
 export type AssistantDebugModelCallStage =
-  | 'transcription'
-  | 'initial'
-  | 'repair'
-  | 'review';
+  'transcription' | 'initial' | 'repair' | 'review';
 
 export interface AssistantDebugModelCallAttempt {
   request: Record<string, unknown>;

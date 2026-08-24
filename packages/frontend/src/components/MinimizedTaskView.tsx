@@ -66,7 +66,6 @@ import {
 import { showToastFromStore } from './toast/ToastContext';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
 import { getWheelPageDirection } from '../utils/pagedGesture';
-import type { Tab } from '../types/uiTypes';
 
 const TASK_ACTION_BUTTON_BASE_CLASS =
   'group/task-action relative flex items-center justify-center overflow-visible rounded-full border border-slate-700/60 bg-slate-950/40 p-0 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-50';
@@ -105,22 +104,15 @@ export function getPinShortcutTask(tasks: Task[], code: string) {
   return task && canToggleTaskPin(task) ? task : null;
 }
 
-export function navigateToUpdatedTask({
-  taskId,
-  compact,
-  setActiveTab,
-  setExpanded,
-  requestTaskReveal,
-}: {
-  taskId: string;
-  compact: boolean;
-  setActiveTab: (activeTab: Tab) => void;
-  setExpanded: (expanded?: boolean) => void;
-  requestTaskReveal: (taskId: string) => void;
-}) {
-  if (compact) setExpanded(true);
-  setActiveTab('tasks');
-  requestTaskReveal(taskId);
+export function getTaskDestinationPageIndex(
+  tasks: Array<Pick<Task, 'id'>>,
+  taskId: string,
+  tasksPerPage: number
+) {
+  const destinationIndex = tasks.findIndex(task => task.id === taskId);
+  return destinationIndex < 0
+    ? null
+    : Math.floor(destinationIndex / tasksPerPage);
 }
 
 export function MinimizedTaskView({
@@ -172,7 +164,6 @@ export function MinimizedTaskView({
   const setActiveTab = useUiStore.use.setActiveTab();
   const setExpanded = useUiStore.use.setExpanded();
   const requestTaskCreate = useUiStore.use.requestTaskCreate();
-  const requestTaskReveal = useUiStore.use.requestTaskReveal();
   const taskEditRequestedId = useUiStore.use.taskEditRequestedId();
   const requestTaskEdit = useUiStore.use.requestTaskEdit();
   const clearTaskEditRequest = useUiStore.use.clearTaskEditRequest();
@@ -192,9 +183,13 @@ export function MinimizedTaskView({
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const [intentions, setIntentions] = useState<Intention[]>([]);
   const [lists, setLists] = useState<List[]>([]);
-  const [pinnedTaskDestinationId, setPinnedTaskDestinationId] = useState<
-    string | null
-  >(null);
+  const [taskDestinationId, setTaskDestinationId] = useState<string | null>(
+    null
+  );
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(
+    null
+  );
+  const taskHighlightTimeoutRef = useRef<number | null>(null);
   const [pinningTaskIds, setPinningTaskIds] = useState<string[]>([]);
   const pinningTaskIdsRef = useRef(new Set<string>());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -400,7 +395,7 @@ export function MinimizedTaskView({
       try {
         const didUpdate = await updateTask(updates);
         if (didUpdate && updates.pinned === true && currentTask) {
-          setPinnedTaskDestinationId(currentTask.id);
+          setTaskDestinationId(currentTask.id);
           await focusTaskOnTimer({
             task: currentTask,
             timer,
@@ -413,15 +408,7 @@ export function MinimizedTaskView({
         if (didUpdate && isInlineTaskPropertyUpdate(updates)) {
           showToastFromStore(t('task.updated'), 'success', 5000, {
             label: t('task.viewUpdated'),
-            onClick: () => {
-              navigateToUpdatedTask({
-                taskId: updates.id,
-                compact,
-                setActiveTab,
-                setExpanded,
-                requestTaskReveal,
-              });
-            },
+            onClick: () => setTaskDestinationId(updates.id),
           });
         }
         return didUpdate;
@@ -433,12 +420,8 @@ export function MinimizedTaskView({
       }
     },
     [
-      compact,
       createOrResumeTimer,
       preferences,
-      requestTaskReveal,
-      setActiveTab,
-      setExpanded,
       setTaskMode,
       tasks,
       timer,
@@ -489,15 +472,60 @@ export function MinimizedTaskView({
     setPageIndex(currentPage => Math.min(currentPage, pageCount - 1));
   }, [pageCount]);
 
-  useEffect(() => {
-    if (!pinnedTaskDestinationId) return;
-    const destinationIndex = displayTasks.findIndex(
-      task => task.id === pinnedTaskDestinationId
+  useLayoutEffect(() => {
+    if (!taskDestinationId) return;
+    const destinationPage = getTaskDestinationPageIndex(
+      displayTasks,
+      taskDestinationId,
+      tasksPerPage
     );
-    if (destinationIndex < 0) return;
-    setPageIndex(Math.floor(destinationIndex / tasksPerPage));
-    setPinnedTaskDestinationId(null);
-  }, [displayTasks, pinnedTaskDestinationId, tasksPerPage]);
+    if (destinationPage === null) {
+      setTaskDestinationId(null);
+      return;
+    }
+
+    if (!mobileExpandedLayout) {
+      if (destinationPage !== pageIndex) {
+        setPageIndex(destinationPage);
+        return;
+      }
+    }
+
+    const destination = Array.from(
+      taskScrollRef.current?.querySelectorAll<HTMLElement>(
+        '[data-testid="minimized-task-row"]'
+      ) ?? []
+    ).find(row => row.dataset.taskId === taskDestinationId);
+    if (!destination) return;
+
+    if (mobileExpandedLayout) {
+      destination.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    setHighlightedTaskId(taskDestinationId);
+    setTaskDestinationId(null);
+    if (taskHighlightTimeoutRef.current !== null) {
+      window.clearTimeout(taskHighlightTimeoutRef.current);
+    }
+    taskHighlightTimeoutRef.current = window.setTimeout(() => {
+      setHighlightedTaskId(null);
+      taskHighlightTimeoutRef.current = null;
+    }, 1800);
+  }, [
+    displayTasks,
+    mobileExpandedLayout,
+    pageIndex,
+    taskDestinationId,
+    tasksPerPage,
+  ]);
+
+  useEffect(
+    () => () => {
+      if (taskHighlightTimeoutRef.current !== null) {
+        window.clearTimeout(taskHighlightTimeoutRef.current);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     if (effectiveTaskSearchQuery.trim().length > 0) {
@@ -973,6 +1001,7 @@ export function MinimizedTaskView({
                 <div
                   key={task.id}
                   data-testid="minimized-task-row"
+                  data-task-id={task.id}
                   data-pinned={isPinned}
                   data-overdue={isOverdue}
                   data-completing={isCompleting}
@@ -992,7 +1021,9 @@ export function MinimizedTaskView({
                       'border-slate-800/70 bg-red-950/35',
                     !isPinned &&
                       !isOverdue &&
-                      'border-slate-800/70 bg-slate-950/35 hover:border-slate-700/80 hover:bg-slate-900/55'
+                      'border-slate-800/70 bg-slate-950/35 hover:border-slate-700/80 hover:bg-slate-900/55',
+                    highlightedTaskId === task.id &&
+                      'border-indigo-300/90 ring-2 ring-indigo-400/60'
                   )}
                 >
                   <div

@@ -1,8 +1,8 @@
 import type { Task } from '@pomi/shared';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   getPinShortcutTask,
-  navigateToUpdatedTask,
+  getTaskDestinationPageIndex,
   searchMinimizedTasks,
 } from './MinimizedTaskView';
 
@@ -99,21 +99,16 @@ describe('Minimized task search', () => {
     expect(getPinShortcutTask([followUp, parent], 'Digit2')).toBe(parent);
   });
 
-  it('opens the full Tasks page for an updated compact task', () => {
-    const setActiveTab = vi.fn();
-    const setExpanded = vi.fn();
-    const requestTaskReveal = vi.fn();
-
-    navigateToUpdatedTask({
-      taskId: 'updated-task',
-      compact: true,
-      setActiveTab,
-      setExpanded,
-      requestTaskReveal,
-    });
-
-    expect(setExpanded).toHaveBeenCalledWith(true);
-    expect(setActiveTab).toHaveBeenCalledWith('tasks');
-    expect(requestTaskReveal).toHaveBeenCalledWith('updated-task');
+  it('maps an updated Task to its minimized pagination page', () => {
+    expect(
+      getTaskDestinationPageIndex(
+        [{ id: 'first' }, { id: 'second' }, { id: 'third' }, { id: 'updated' }],
+        'updated',
+        3
+      )
+    ).toBe(1);
+    expect(getTaskDestinationPageIndex([{ id: 'first' }], 'missing', 3)).toBe(
+      null
+    );
   });
 });

@@ -4,7 +4,6 @@ import {
   HELP_TIP_IDS,
   TASK_DEFAULT_DUE_DATE_MODES,
   TASK_PRIORITIES,
-  TASK_PAGE_VIEW_MODES,
   TASK_SORT_MODES,
   TaskPriority,
 } from '@pomi/shared';
@@ -207,10 +206,6 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsIn(Object.values(TASK_SORT_MODES))
   taskDefaultSortMode?: 'default' | 'created-desc' | 'created-asc';
-
-  @IsOptional()
-  @IsIn(Object.values(TASK_PAGE_VIEW_MODES))
-  taskDefaultViewMode?: 'list' | 'calendar';
 
   @IsOptional()
   @IsArray()

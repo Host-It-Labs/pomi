@@ -13,7 +13,6 @@ import {
   DEFAULT_APP_LANGUAGE,
   TaskDefaultDueDateMode,
   TaskPriority,
-  TaskPageViewMode,
   TaskSortMode,
 } from '@pomi/shared';
 
@@ -162,9 +161,6 @@ export class Preferences {
 
   @Column({ type: 'varchar', default: 'default' })
   taskDefaultSortMode: TaskSortMode;
-
-  @Column({ type: 'varchar', default: 'list' })
-  taskDefaultViewMode: TaskPageViewMode;
 
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   hiddenHelpTips: string[];

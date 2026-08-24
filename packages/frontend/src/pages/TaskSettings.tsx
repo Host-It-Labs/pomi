@@ -113,24 +113,6 @@ export function TaskSettings({
             </span>
           )}
         </label>
-
-        <label className="block space-y-2 text-sm text-slate-200">
-          <span className="font-medium">{t('task.defaultView')}</span>
-          <select
-            aria-label={t('task.defaultView')}
-            value={preferences.taskDefaultViewMode ?? 'list'}
-            onChange={event =>
-              void updatePreference('taskDefaultViewMode', event.target.value)
-            }
-            className="h-10 w-full rounded-md border border-slate-700/60 bg-slate-900 px-3 text-sm text-slate-100"
-          >
-            <option value="list">{t('common.list')}</option>
-            <option value="calendar">{t('common.calendar')}</option>
-          </select>
-          <span className="block text-xs text-slate-500">
-            {t('task.defaultViewAbout')}
-          </span>
-        </label>
       </SettingsControlGroup>
 
       <ExtrasSection sectionId="tasks">

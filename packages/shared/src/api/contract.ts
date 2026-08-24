@@ -10,7 +10,6 @@ import {
   TASK_IMPORT_MAX_ROWS,
   TASK_IMPORT_SOURCES,
   TASK_PRIORITIES,
-  TASK_PAGE_VIEW_MODES,
   TASK_RECURRENCE_RULE_MAX_LENGTH,
   TASK_SORT_MODES,
   TASK_SLUG_MAX_LENGTH,
@@ -199,9 +198,6 @@ const preferencesSchema = z.object({
     TASK_SORT_MODES.CREATED_DESC,
     TASK_SORT_MODES.CREATED_ASC,
   ]),
-  taskDefaultViewMode: z
-    .enum([TASK_PAGE_VIEW_MODES.LIST, TASK_PAGE_VIEW_MODES.CALENDAR])
-    .optional(),
   hiddenHelpTips: z.array(z.string()).default([]),
   taskReminderPriorities: z.array(taskPrioritySchema),
   taskBeforeDueReminderMinutes: z.number().int().min(0),
