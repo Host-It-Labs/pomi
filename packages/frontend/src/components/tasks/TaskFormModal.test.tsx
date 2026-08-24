@@ -178,7 +178,13 @@ describe('shared Task editor destinations', () => {
       />
     );
 
-    fireEvent.click(await screen.findByLabelText('Add a contextual follow-up'));
+    fireEvent.click(await screen.findByLabelText('Create a follow-up'));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create a follow-up help' })
+    );
+    expect(screen.getByRole('note')).toHaveTextContent(
+      'For recurring Tasks, a new follow-up is created after every completion.'
+    );
     fireEvent.change(screen.getByLabelText('Follow-up title'), {
       target: { value: 'Send the follow-up' },
     });
@@ -217,7 +223,7 @@ describe('shared Task editor destinations', () => {
       />
     );
 
-    fireEvent.click(await screen.findByLabelText('Add a contextual follow-up'));
+    fireEvent.click(await screen.findByLabelText('Create a follow-up'));
     fireEvent.change(screen.getByLabelText('Follow-up Intention'), {
       target: { value: parentWithChild.slug },
     });

@@ -969,16 +969,20 @@ export function TaskFormModal({
                   <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
                     {t('task.afterCompletion')}
                   </h3>
-                  <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-800/70 bg-slate-900/35 px-3 py-2">
+                  <div className="relative flex items-center justify-between gap-3 rounded-lg border border-slate-800/70 bg-slate-900/35 px-3 py-2">
                     <span className="min-w-0">
-                      <span className="block text-sm font-medium text-slate-100">
-                        {t('task.followUpEnabled')}
-                      </span>
-                      <span className="mt-0.5 block text-xs leading-5 text-slate-400">
-                        {t('task.followUpHelp')}
+                      <span className="flex items-center gap-1 text-sm font-medium text-slate-100">
+                        <label htmlFor="task-follow-up-enabled">
+                          {t('task.followUpEnabled')}
+                        </label>
+                        <HelpButton
+                          label={t('task.followUpEnabled')}
+                          help={t('task.followUpHelp')}
+                        />
                       </span>
                     </span>
                     <input
+                      id="task-follow-up-enabled"
                       aria-label={t('task.followUpEnabled')}
                       type="checkbox"
                       checked={followUpEnabled}
@@ -997,7 +1001,7 @@ export function TaskFormModal({
                       }}
                       className="h-4 w-4 shrink-0 accent-indigo-500"
                     />
-                  </label>
+                  </div>
                   {followUpEnabled && (
                     <div className="space-y-3 border-l-2 border-indigo-500/40 pl-3">
                       <Field label={t('common.title')}>
@@ -1279,24 +1283,11 @@ function Field({
   error?: string;
   children: ReactNode;
 }) {
-  const { t } = useI18n();
-  const [open, setOpen] = useState(false);
-
   return (
     <div className="relative space-y-1">
       <div className="flex items-center gap-1 text-xs font-medium text-slate-300">
         <span>{label}</span>
-        {help && (
-          <button
-            type="button"
-            onClick={() => setOpen(value => !value)}
-            className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-600 text-[10px] text-slate-400 hover:border-indigo-500/60 hover:text-indigo-200"
-            aria-label={t('common.helpFor', { label })}
-            title={t('common.helpFor', { label })}
-          >
-            ?
-          </button>
-        )}
+        {help && <HelpButton label={label} help={help} />}
       </div>
       {children}
       {error && (
@@ -1308,7 +1299,31 @@ function Field({
           {error}
         </p>
       )}
-      {open && help && (
+    </div>
+  );
+}
+
+function HelpButton({ label, help }: { label: string; help: string }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const isOpen = open;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          const nextOpen = !isOpen;
+          setOpen(nextOpen);
+        }}
+        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-600 text-[10px] text-slate-400 hover:border-indigo-500/60 hover:text-indigo-200"
+        aria-label={t('common.helpFor', { label })}
+        title={t('common.helpFor', { label })}
+        aria-expanded={isOpen}
+      >
+        ?
+      </button>
+      {isOpen && (
         <p
           role="note"
           className="absolute left-0 top-6 z-30 w-64 rounded-md border border-slate-700/70 bg-slate-950/95 px-3 py-2 text-xs leading-5 text-slate-300 shadow-xl shadow-black/30 backdrop-blur-sm"
@@ -1316,6 +1331,6 @@ function Field({
           {help}
         </p>
       )}
-    </div>
+    </>
   );
 }

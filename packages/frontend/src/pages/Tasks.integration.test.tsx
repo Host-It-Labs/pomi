@@ -163,7 +163,9 @@ vi.mock('../components/tasks/TaskDescriptionModal', () => ({
 }));
 
 vi.mock('../components/tasks/TaskInlineProperties', () => ({
-  TaskInlineProperties: () => null,
+  TaskInlineProperties: ({ task }: { task: Task }) => (
+    <div data-testid={`task-inline-properties-${task.id}`}>Properties</div>
+  ),
 }));
 
 vi.mock('../components/tasks/FavoriteIntentionFilters', () => ({
@@ -217,6 +219,25 @@ beforeEach(() => {
 });
 
 describe('Tasks page interactions', () => {
+  it('keeps task properties visible when bulk selection is enabled', async () => {
+    mocks.tasks = [task({ id: 'task-with-properties', title: 'Task' })];
+
+    render(<Tasks />);
+
+    await screen.findByText('Task');
+    expect(
+      screen.getByTestId('task-inline-properties-task-with-properties')
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Select multiple Tasks' })
+    );
+
+    expect(
+      screen.getByTestId('task-inline-properties-task-with-properties')
+    ).toBeInTheDocument();
+  });
+
   it('uses one Calendar button to enter and leave the week view', async () => {
     mocks.tasks = [
       task({

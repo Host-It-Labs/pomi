@@ -147,7 +147,7 @@ const english: TranslationCatalog = {
 
   'task.newList': 'New List',
   'task.filter': 'Filter Tasks',
-  'task.propertyFilters': 'Task property filters',
+  'task.propertyFilters': 'Task filters',
   'task.timerTypes': 'Task Timer types',
   'task.hasDueDate': 'Has due date',
   'task.oneTime': 'One-time',
@@ -192,7 +192,7 @@ const english: TranslationCatalog = {
   'task.priority': 'Task priority',
   'task.vacationCoverage': 'Vacation Coverage',
   'task.followUp': 'Follow-up Task',
-  'task.followUpEnabled': 'Add a contextual follow-up',
+  'task.followUpEnabled': 'Create a follow-up',
   'task.followUpTitle': 'Follow-up title',
   'task.followUpTitleRequired': 'Follow-up title is required.',
   'task.followUpDescription': 'Follow-up description',
@@ -496,11 +496,11 @@ const english: TranslationCatalog = {
   'task.cadenceHelp':
     'Leave empty for a one-off task. The saved rule remains calendar-compatible.',
   'task.followUpHelp':
-    'Define a one-time follow-up inside this parent Task instead of creating a separate Task template.',
+    'Create a follow-up each time this Task is completed. For recurring Tasks, a new follow-up is created after every completion.',
   'task.activeTasks': 'Active Tasks',
   'task.followUpDueAfter': 'Follow-up due after',
   'task.followUpDueAfterHelp':
-    'The contextual follow-up appears after completion and receives this due-date offset.',
+    'Set how many days after completion the follow-up is due.',
   'task.discardChanges': 'Discard task changes?',
   'task.discardChangesMessage':
     'Closing now will discard unsaved task changes.',

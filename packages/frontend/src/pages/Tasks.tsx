@@ -6,7 +6,6 @@ import {
   type TaskPageViewMode,
   type TaskSortMode,
   TaskStatus,
-  TimerTypes,
 } from '@pomi/shared';
 import {
   TASK_MANUAL_ORDER_BOTTOM,
@@ -29,11 +28,9 @@ import {
 import {
   FaArchive,
   FaCalendarAlt,
-  FaCheck,
   FaCheckSquare,
   FaEdit,
   FaFileImport,
-  FaFilter,
   FaGripVertical,
   FaListUl,
   FaRegStar,
@@ -126,13 +123,11 @@ import { useI18n } from '../i18n';
 import { useDefaultTaskSort } from './taskDefaultSort';
 import { useUpdatedTaskReveal } from './taskUpdatedReveal';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
-import { isTaskInTimerTypeSearchScope } from '../utils/taskSearchScope';
 import { TASKS_PAGE_CONTAINER_CLASS } from '../constants/taskLayout';
 import { filterCalendarEntries, getTodayDateKey } from '../utils/taskCalendar';
 
 type TaskIntentionFilterValue = string | null;
 type TaskDropPlacement = 'before' | 'after';
-type TaskTimerTypeFilter = 'all' | TimerTypes;
 type TaskIntentionFilterOption = {
   value: string;
   title: string;
@@ -196,9 +191,6 @@ export function Tasks() {
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const [selectedIntentionFilter, setSelectedIntentionFilter] =
     useState<TaskIntentionFilterValue>(null);
-  const [timerTypeFilter, setTimerTypeFilter] =
-    useState<TaskTimerTypeFilter>('all');
-  const [isTypeMenuOpen, setIsTypeMenuOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createInitialTitle, setCreateInitialTitle] = useState('');
@@ -349,12 +341,11 @@ export function Tasks() {
   }, [taskSearchFocusRequest]);
 
   const filterOptions = useMemo(() => {
-    const availableIntentions =
-      timerTypeFilter === 'all'
-        ? intentions
-        : intentions.filter(intention => intention.type === timerTypeFilter);
+    const availableIntentions = intentions.filter(intention =>
+      propertyFilters.timerTypes.includes(intention.type)
+    );
     return buildTaskIntentionFilterOptions(availableIntentions);
-  }, [intentions, timerTypeFilter]);
+  }, [intentions, propertyFilters.timerTypes]);
   const selectedFilterOption = useMemo(
     () =>
       selectedIntentionFilter
@@ -397,7 +388,20 @@ export function Tasks() {
   }, [selectedFilterOption]);
   const taskFormDefaultTimerType =
     selectedFilterOption?.intention.type ??
-    (timerTypeFilter === 'all' ? TIMER_TYPES.WORK : timerTypeFilter);
+    propertyFilters.timerTypes[0] ??
+    TIMER_TYPES.WORK;
+
+  const updatePropertyFilters = useCallback(
+    (nextFilters: TaskPropertyFilters) => {
+      const selectedType = selectedFilterOption?.intention.type;
+      if (selectedType && !nextFilters.timerTypes.includes(selectedType)) {
+        setSelectedIntentionFilter(null);
+        showToastFromStore(t('intention.filterCleared'), 'info');
+      }
+      setPropertyFilters(nextFilters);
+    },
+    [selectedFilterOption, t]
+  );
 
   useEffect(() => {
     if (
@@ -791,7 +795,6 @@ export function Tasks() {
     setTaskSearchQuery('');
     setSelectedIntentionFilter(null);
     setSelectedListId(null);
-    setTimerTypeFilter('all');
     setPropertyFilters(EMPTY_TASK_PROPERTY_FILTERS);
   }, []);
   const revealUpdatedTask = useUpdatedTaskReveal({
@@ -838,13 +841,6 @@ export function Tasks() {
   const visibleTasks = useMemo(() => {
     const filteredTasks = taskView.tasks
       .filter(task =>
-        isTaskInTimerTypeSearchScope(
-          task.timerType,
-          timerTypeFilter,
-          isTaskSearchActive
-        )
-      )
-      .filter(task =>
         isTaskSearchActive
           ? true
           : doesTaskMatchIntentionFilter(task, selectedFilterOption)
@@ -870,7 +866,6 @@ export function Tasks() {
     taskSortMode,
     taskSearchQuery,
     taskView.tasks,
-    timerTypeFilter,
   ]);
   const applyBulkUpdates = useCallback(
     async (updates: TaskBulkUpdate[]) => {
@@ -907,9 +902,8 @@ export function Tasks() {
     if (
       selectedList !== null ||
       preferences?.listsExtension !== true ||
-      (!query &&
-        (selectedFilterOption !== null ||
-          (timerTypeFilter !== 'all' && timerTypeFilter !== TIMER_TYPES.WORK)))
+      (!query && selectedFilterOption !== null) ||
+      !propertyFilters.timerTypes.includes(TIMER_TYPES.WORK)
     ) {
       return [];
     }
@@ -936,7 +930,6 @@ export function Tasks() {
     selectedFilterOption,
     selectedList,
     taskSearchQuery,
-    timerTypeFilter,
   ]);
   const mixedTaskItems = useMemo<MixedTaskItem[]>(
     () =>
@@ -1051,7 +1044,6 @@ export function Tasks() {
     taskSearchQuery.trim().length > 0 ||
     selectedFilterOption !== null ||
     selectedList !== null ||
-    timerTypeFilter !== 'all' ||
     hasTaskPropertyFilters(propertyFilters);
   const taskCountLabel = selectedList
     ? taskSearchQuery.trim()
@@ -1064,9 +1056,7 @@ export function Tasks() {
             taskView.tasks.length +
             (selectedFilterOption === null &&
             preferences?.listsExtension === true &&
-            (isTaskSearchActive ||
-              timerTypeFilter === 'all' ||
-              timerTypeFilter === TIMER_TYPES.WORK)
+            propertyFilters.timerTypes.includes(TIMER_TYPES.WORK)
               ? listItems.filter(
                   item =>
                     item.status === TASK_STATUSES.ACTIVE &&
@@ -1358,7 +1348,7 @@ export function Tasks() {
         </section>
 
         <div className="mt-4 flex min-h-7 items-center justify-between gap-3 px-0.5">
-          <div className="flex items-baseline gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
               {t('common.active')}
             </h2>
@@ -1368,31 +1358,6 @@ export function Tasks() {
             >
               {taskCountLabel}
             </span>
-          </div>
-          <div className="flex items-center gap-2">
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={() => {
-                  setTaskSearchQuery('');
-                  setSelectedIntentionFilter(null);
-                  setSelectedListId(null);
-                  setTimerTypeFilter('all');
-                  setPropertyFilters(EMPTY_TASK_PROPERTY_FILTERS);
-                }}
-                className="text-[11px] text-slate-500 transition-colors hover:text-slate-200"
-              >
-                {t('common.clearFilters')}
-              </button>
-            )}
-            {!selectedList && (
-              <TaskPropertyFilterMenu
-                filters={propertyFilters}
-                isOpen={isPropertyMenuOpen}
-                onOpenChange={setIsPropertyMenuOpen}
-                onChange={setPropertyFilters}
-              />
-            )}
             {!selectedList && (selectionMode || displayedTasks.length > 0) && (
               <IconButton
                 label={
@@ -1407,6 +1372,7 @@ export function Tasks() {
                 }
                 size="sm"
                 variant={selectionMode ? 'primary' : 'secondary'}
+                aria-pressed={selectionMode}
                 onClick={() => {
                   setSelectionMode(current => !current);
                   setSelectedTaskIds(new Set());
@@ -1417,23 +1383,28 @@ export function Tasks() {
                 <FaCheckSquare size={11} />
               </IconButton>
             )}
-            {!selectedList && (
-              <TaskTimerTypeFilterDropdown
-                value={timerTypeFilter}
-                isOpen={isTypeMenuOpen}
-                onOpenChange={setIsTypeMenuOpen}
-                onChange={nextType => {
-                  const selectedType = selectedFilterOption?.intention.type;
-                  if (
-                    nextType !== 'all' &&
-                    selectedType &&
-                    selectedType !== nextType
-                  ) {
-                    setSelectedIntentionFilter(null);
-                    showToastFromStore(t('intention.filterCleared'), 'info');
-                  }
-                  setTimerTypeFilter(nextType);
+          </div>
+          <div className="flex items-center gap-2">
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTaskSearchQuery('');
+                  setSelectedIntentionFilter(null);
+                  setSelectedListId(null);
+                  setPropertyFilters(EMPTY_TASK_PROPERTY_FILTERS);
                 }}
+                className="text-[11px] text-slate-500 transition-colors hover:text-slate-200"
+              >
+                {t('common.clearFilters')}
+              </button>
+            )}
+            {!selectedList && (
+              <TaskPropertyFilterMenu
+                filters={propertyFilters}
+                isOpen={isPropertyMenuOpen}
+                onOpenChange={setIsPropertyMenuOpen}
+                onChange={updatePropertyFilters}
               />
             )}
             <TaskSortDropdown
@@ -1550,7 +1521,6 @@ export function Tasks() {
                 )}
                 canReorder={
                   taskPageViewMode === 'list' &&
-                  !selectionMode &&
                   selectedFilterOption !== null &&
                   taskSortMode === 'default' &&
                   normalizeSearchText(taskSearchQuery).length === 0
@@ -1563,7 +1533,9 @@ export function Tasks() {
                 onOpenDescription={setDescriptionTask}
                 onUpdate={updateTaskWithPositionFeedback}
                 onReorder={reorderVisibleTasks}
-                showTypeBadge={timerTypeFilter === 'all' || isTaskSearchActive}
+                showTypeBadge={
+                  propertyFilters.timerTypes.length !== 1 || isTaskSearchActive
+                }
                 selectionMode={selectionMode}
                 selectedTaskIds={selectedTaskIds}
                 onToggleSelection={taskId =>
@@ -1872,63 +1844,6 @@ function TaskSortDropdown({
               {option.mode === mode && (
                 <span className="h-1.5 w-1.5 rounded-full bg-indigo-300" />
               )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TaskTimerTypeFilterDropdown({
-  value,
-  isOpen,
-  onOpenChange,
-  onChange,
-}: {
-  value: TaskTimerTypeFilter;
-  isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
-  onChange: (value: TaskTimerTypeFilter) => void;
-}) {
-  const { t } = useI18n();
-  const options: Array<{ value: TaskTimerTypeFilter; label: string }> = [
-    { value: 'all', label: t('common.all') },
-    { value: TIMER_TYPES.WORK, label: t('common.work') },
-    { value: TIMER_TYPES.BREAK, label: t('common.break') },
-    { value: TIMER_TYPES.LONG_BREAK, label: t('common.longBreak') },
-  ];
-  const activeLabel = options.find(option => option.value === value)?.label;
-  return (
-    <div className="relative">
-      <IconButton
-        label={`${t('task.timerType')}: ${activeLabel}`}
-        title={`${t('task.timerType')}: ${activeLabel}`}
-        size="sm"
-        variant={value === 'all' ? 'secondary' : 'primary'}
-        onClick={() => onOpenChange(!isOpen)}
-        aria-expanded={isOpen}
-        className="h-7 w-7 !p-0"
-      >
-        <FaFilter size={11} />
-      </IconButton>
-      {isOpen && (
-        <div className="absolute right-0 top-full z-40 mt-1 w-32 overflow-hidden rounded-md border border-slate-800 bg-slate-950 py-1 text-xs shadow-xl shadow-black/30">
-          {options.map(option => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => {
-                onChange(option.value);
-                onOpenChange(false);
-              }}
-              className={clsx(
-                'flex w-full items-center justify-between px-3 py-2 text-left hover:bg-slate-800/80',
-                option.value === value ? 'text-indigo-100' : 'text-slate-300'
-              )}
-            >
-              {option.label}
-              {option.value === value && <FaCheck size={9} />}
             </button>
           ))}
         </div>
@@ -3063,13 +2978,20 @@ function TaskRow({
           </div>
         ) : null}
         {selectionMode ? (
-          <label className="flex h-8 w-8 cursor-pointer items-center justify-center">
+          <label
+            className={clsx(
+              'flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border-2 transition-colors',
+              isSelected
+                ? 'border-indigo-300 bg-indigo-500/25 text-indigo-100'
+                : 'border-indigo-400/65 bg-indigo-950/35 text-indigo-200 hover:border-indigo-300 hover:bg-indigo-500/15'
+            )}
+          >
             <input
               type="checkbox"
               checked={isSelected}
               onChange={onToggleSelection}
               aria-label={t('task.selectForBulk', { title: task.title })}
-              className="h-4 w-4 rounded border-slate-600 bg-slate-950 text-indigo-500"
+              className="h-4 w-4 rounded border-2 border-indigo-200/80 bg-transparent accent-indigo-400"
             />
           </label>
         ) : (
@@ -3109,19 +3031,17 @@ function TaskRow({
             <TaskDescriptionButton task={task} onOpen={onOpenDescription} />
             {showTypeBadge && <TaskTimerTypeBadge timerType={task.timerType} />}
           </div>
-          {!selectionMode ? (
-            <div className="mt-1">
-              <TaskInlineProperties
-                task={task}
-                intentions={intentions}
-                onUpdate={onUpdate}
-                onOpenEditor={() => onEdit(task)}
-                showIntention
-                compact={false}
-                isOverdue={isOverdue}
-              />
-            </div>
-          ) : null}
+          <div className="mt-1">
+            <TaskInlineProperties
+              task={task}
+              intentions={intentions}
+              onUpdate={onUpdate}
+              onOpenEditor={() => onEdit(task)}
+              showIntention
+              compact={false}
+              isOverdue={isOverdue}
+            />
+          </div>
         </div>
         <div className="flex items-center gap-0.5 opacity-80 transition-opacity group-hover/task-row:opacity-100 group-focus-within/task-row:opacity-100">
           {!task.followUpParent && (
