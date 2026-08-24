@@ -4,6 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+test('uses an explicit HTTP backend URL for local Vite clients', async () => {
+  const { getViteBackendUrl } = await import('./dev-ports.mjs');
+
+  assert.equal(getViteBackendUrl(4321), 'http://localhost:4321');
+});
+
 test('writes dev ports atomically with private permissions', async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pomi-ports-test-'));
   const stateFile = path.join(directory, 'dev-ports.env');

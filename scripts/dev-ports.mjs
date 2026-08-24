@@ -134,7 +134,7 @@ export const getAndroidBackendUrl = backendPort => `10.0.2.2:${backendPort}`;
 export const getFrontendBaseUrl = frontendPort =>
   `http://localhost:${frontendPort}`;
 
-export const getViteBackendUrl = backendPort => `localhost:${backendPort}`;
+export const getViteBackendUrl = backendPort => getBackendBaseUrl(backendPort);
 
 const isPortInUseByLsof = port => {
   try {
