@@ -4,7 +4,7 @@ import {
   getGitHubAppAuthentication,
   githubRequest,
 } from './github-app-auth.mjs';
-import { loadLocalEnvironment } from './local-env.mjs';
+import { loadAutomationEnvironment } from './local-env.mjs';
 
 export const MIGRATION_MARKER = 'pomi-radar-migration:v1';
 const SECRET_PATTERNS = [
@@ -347,7 +347,7 @@ async function migrateIssue({
 }
 
 async function run() {
-  loadLocalEnvironment();
+  loadAutomationEnvironment();
   const args = new Set(process.argv.slice(2));
   const dryRun = args.has('--dry-run');
   const issueIndex = process.argv.indexOf('--issue');

@@ -33,3 +33,4 @@ config/*.jks
 **/google-services.json
 **/*service-account*.json
 config/pomi-automation.env
+config/pomi-release.env

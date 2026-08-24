@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # shellcheck disable=SC1091
 . "$ROOT_DIR/scripts/local-env.sh"
-pomi_load_local_environment
+pomi_load_release_environment
 
 cd "$ROOT_DIR"
 

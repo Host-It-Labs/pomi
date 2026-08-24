@@ -3,9 +3,14 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import {
+  environmentFiles,
+  loadAutomationEnvironment,
+  loadLocalEnvironment,
+  loadReleaseEnvironment,
   mergeEnvironment,
   parseEnvironmentFile,
   repositoryRoot,
+  resolveEnvironmentFile,
   resolveRepositoryPath,
 } from './local-env.mjs';
 
@@ -39,11 +44,38 @@ test('resolves credential paths from the repository root', () => {
   );
 });
 
+test('keeps development, automation, and release profiles separate', () => {
+  const local = loadLocalEnvironment({
+    environment: {},
+    filePath: '.env.example',
+  });
+  const automation = loadAutomationEnvironment({
+    environment: {},
+    filePath: 'config/pomi-automation.example.env',
+  });
+  const release = loadReleaseEnvironment({
+    environment: {},
+    filePath: 'config/pomi-release.example.env',
+  });
+
+  assert.equal(local.POMI_RADAR_GITHUB_APP_ID, undefined);
+  assert.equal(automation.POMI_RADAR_GITHUB_APP_ID, '4675891');
+  assert.equal(automation.VITE_BACKEND_URL, undefined);
+  assert.equal(release.VITE_USE_HTTPS, 'true');
+  assert.equal(release.POMI_RADAR_GITHUB_APP_ID, undefined);
+  assert.equal(
+    resolveEnvironmentFile({ profile: 'automation' }),
+    environmentFiles.automation
+  );
+});
+
 test('documents the ignored files copied into Codex worktrees', () => {
   const includeFile = readFileSync(
     path.join(repositoryRoot, '.worktreeinclude'),
     'utf8'
   );
   assert.match(includeFile, /^\.env\.local$/m);
+  assert.match(includeFile, /^config\/pomi-automation\.env$/m);
+  assert.match(includeFile, /^config\/pomi-release\.env$/m);
   assert.match(includeFile, /^config\/secrets\/$/m);
 });

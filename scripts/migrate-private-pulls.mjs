@@ -4,7 +4,7 @@ import {
   getGitHubAppAuthentication,
   githubRequest,
 } from './github-app-auth.mjs';
-import { loadLocalEnvironment } from './local-env.mjs';
+import { loadAutomationEnvironment } from './local-env.mjs';
 import {
   assertSafeMigrationText,
   MIGRATION_MARKER as ISSUE_MIGRATION_MARKER,
@@ -325,7 +325,7 @@ async function migratePull({
 }
 
 async function run() {
-  loadLocalEnvironment();
+  loadAutomationEnvironment();
   const args = new Set(process.argv.slice(2));
   const dryRun = args.has('--dry-run');
   const pullIndex = process.argv.indexOf('--pr');

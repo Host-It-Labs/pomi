@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createSign } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadLocalEnvironment, repositoryRoot } from './local-env.mjs';
+import { loadAutomationEnvironment, repositoryRoot } from './local-env.mjs';
 
 const API_BASE = 'https://api.github.com';
 const PUBLIC_REPOSITORY = 'Host-It-Labs/pomi';
@@ -76,7 +76,7 @@ export function readGitHubAppConfiguration(environment = process.env) {
     environment.POMI_RADAR_GITHUB_APP_PRIVATE_KEY_PATH?.trim();
   if (!appId || !installationId || !configuredPrivateKeyPath) {
     throw new Error(
-      'GitHub App configuration is incomplete in .env.local (App ID, installation ID, and private-key path are required).'
+      'GitHub App configuration is incomplete in config/pomi-automation.env (App ID, installation ID, and private-key path are required).'
     );
   }
   if (!/^\d+$/.test(appId) || !/^\d+$/.test(installationId)) {
@@ -171,7 +171,7 @@ export function appAuthenticatedEnvironment(authentication, environment) {
 }
 
 async function runCli() {
-  loadLocalEnvironment();
+  loadAutomationEnvironment();
   const mode = process.argv[2];
   const authentication = await getGitHubAppAuthentication();
   if (mode === 'check') {

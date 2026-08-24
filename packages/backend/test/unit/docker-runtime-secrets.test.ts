@@ -15,6 +15,8 @@ describe('backend Docker secret boundary', () => {
     expect(dockerIgnore).toMatch(/^\*\*\/\.env$/m);
     expect(dockerIgnore).toMatch(/^\*\*\/\.env\.\*$/m);
     expect(dockerIgnore).toMatch(/^!\*\*\/\.env\.example$/m);
+    expect(dockerIgnore).toMatch(/^config\/pomi-\*\.env$/m);
+    expect(dockerIgnore).toMatch(/^!config\/pomi-\*\.example\.env$/m);
     expect(dockerIgnore).toMatch(/^\*\*\/\*\.key$/m);
     expect(dockerIgnore).toMatch(/^\*\*\/\*\.pem$/m);
   });

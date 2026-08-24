@@ -81,4 +81,15 @@ describe('public release workflow', () => {
     expect(dockerScript).toContain('--builder "$POMI_DOCKER_BUILDER"');
     expect(dockerScript).not.toContain('--push');
   });
+
+  it('uses the release profile and unsigned mode for local macOS builds', async () => {
+    const packageJson = await readFile(
+      new URL('../../../../package.json', import.meta.url),
+      'utf8'
+    );
+
+    expect(packageJson).toContain('build:macos');
+    expect(packageJson).toContain('--profile release');
+    expect(packageJson).toContain('--no-sign');
+  });
 });

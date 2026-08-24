@@ -9,9 +9,9 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
-import { loadLocalEnvironment, repositoryRoot } from './local-env.mjs';
+import { loadReleaseEnvironment, repositoryRoot } from './local-env.mjs';
 
-loadLocalEnvironment();
+loadReleaseEnvironment();
 
 const androidRoot = path.join(
   repositoryRoot,

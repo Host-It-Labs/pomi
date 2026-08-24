@@ -35,7 +35,7 @@ test('creates a short-lived RS256 GitHub App JWT', () => {
 test('fails closed with a redacted missing-configuration diagnostic', () => {
   assert.throws(
     () => readGitHubAppConfiguration({}),
-    /GitHub App configuration is incomplete/
+    /GitHub App configuration is incomplete in config\/pomi-automation\.env/
   );
 });
 

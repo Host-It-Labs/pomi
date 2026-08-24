@@ -1,2 +1,4 @@
 .env.local
+config/pomi-automation.env
+config/pomi-release.env
 config/secrets/

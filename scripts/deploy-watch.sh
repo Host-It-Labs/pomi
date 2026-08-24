@@ -2,13 +2,13 @@
 set -u
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LOCAL_ENV_FILE="$ROOT_DIR/.env.local"
+RELEASE_ENV_FILE="$ROOT_DIR/config/pomi-release.env"
 ANDROID_DIR="$ROOT_DIR/packages/frontend/src-tauri/gen/android"
 WATCH_APK="$ANDROID_DIR/wear/build/outputs/apk/debug/wear-debug.apk"
 
 # shellcheck disable=SC1091
 . "$ROOT_DIR/scripts/local-env.sh"
-pomi_load_local_environment
+pomi_load_release_environment
 
 warn() {
   echo "[pomi] watch deployment warning: $*" >&2
@@ -19,18 +19,18 @@ save_watch_address() {
   local source_file="/dev/null"
   local temp_file
 
-  if ! temp_file="$(mktemp "${LOCAL_ENV_FILE}.tmp.XXXXXX")"; then
-    warn "could not create a temporary file for $LOCAL_ENV_FILE."
+  if ! temp_file="$(mktemp "${RELEASE_ENV_FILE}.tmp.XXXXXX")"; then
+    warn "could not create a temporary file for $RELEASE_ENV_FILE."
     return 1
   fi
 
-  if [[ -f "$LOCAL_ENV_FILE" ]]; then
-    if ! cp -p "$LOCAL_ENV_FILE" "$temp_file"; then
+  if [[ -f "$RELEASE_ENV_FILE" ]]; then
+    if ! cp -p "$RELEASE_ENV_FILE" "$temp_file"; then
       rm -f "$temp_file"
-      warn "could not prepare $LOCAL_ENV_FILE for update."
+      warn "could not prepare $RELEASE_ENV_FILE for update."
       return 1
     fi
-    source_file="$LOCAL_ENV_FILE"
+    source_file="$RELEASE_ENV_FILE"
   fi
 
   if ! awk -v address="$address" '
@@ -50,13 +50,13 @@ save_watch_address() {
     }
   ' "$source_file" > "$temp_file"; then
     rm -f "$temp_file"
-    warn "could not update $LOCAL_ENV_FILE."
+    warn "could not update $RELEASE_ENV_FILE."
     return 1
   fi
 
-  if ! mv "$temp_file" "$LOCAL_ENV_FILE"; then
+  if ! mv "$temp_file" "$RELEASE_ENV_FILE"; then
     rm -f "$temp_file"
-    warn "could not replace $LOCAL_ENV_FILE."
+    warn "could not replace $RELEASE_ENV_FILE."
     return 1
   fi
 }
@@ -64,8 +64,8 @@ save_watch_address() {
 read_saved_watch_address() {
   local value
 
-  if [[ -f "$LOCAL_ENV_FILE" ]]; then
-    value="$(sed -n 's/^POMI_WATCH_ADB_ADDRESS=//p' "$LOCAL_ENV_FILE" | tail -n 1)"
+  if [[ -f "$RELEASE_ENV_FILE" ]]; then
+    value="$(sed -n 's/^POMI_WATCH_ADB_ADDRESS=//p' "$RELEASE_ENV_FILE" | tail -n 1)"
     value="${value%$'\r'}"
     if [[ "$value" == \"*\" && "$value" == *\" ]]; then
       value="${value:1:${#value}-2}"
@@ -235,7 +235,7 @@ main() {
       if ! save_watch_address "$watch_address"; then
         return 0
       fi
-      echo "[pomi] saved POMI_WATCH_ADB_ADDRESS=$watch_address to $LOCAL_ENV_FILE."
+      echo "[pomi] saved POMI_WATCH_ADB_ADDRESS=$watch_address to $RELEASE_ENV_FILE."
     fi
   fi
 

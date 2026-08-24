@@ -3,7 +3,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-default_env_file="$script_dir/../.env.local"
+default_env_file="$script_dir/../config/pomi-automation.env"
 env_file=${POMI_SENTRY_ENV_FILE:-$default_env_file}
 loaded_from_file=false
 carriage_return=$(printf '\r')
