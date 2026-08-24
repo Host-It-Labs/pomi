@@ -221,8 +221,8 @@ describe('Tasks page interactions', () => {
       }),
       task({
         id: 'tomorrow-task',
-        title: 'Tomorrow task',
-        dueDate: '2026-08-24',
+        title: 'Next task',
+        dueDate: '2026-08-22',
         createdAt: '2026-08-23T09:00:00.000Z',
       }),
     ];
@@ -234,7 +234,7 @@ describe('Tasks page interactions', () => {
 
     expect(screen.getByText('Today task')).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.queryByText('Tomorrow task')).not.toBeInTheDocument()
+      expect(screen.queryByText('Next task')).not.toBeInTheDocument()
     );
 
     fireEvent.click(
@@ -246,11 +246,11 @@ describe('Tasks page interactions', () => {
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'August 24, 2026: 1 item',
+        name: 'August 22, 2026: 1 item',
       })
     );
 
-    await screen.findByText('Tomorrow task');
+    await screen.findByText('Next task');
     await waitFor(() =>
       expect(screen.queryByText('Today task')).not.toBeInTheDocument()
     );

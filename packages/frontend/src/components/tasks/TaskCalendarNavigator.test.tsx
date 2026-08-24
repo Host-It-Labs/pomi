@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_LANGUAGE } from '../../i18n/languages';
 import { setLanguage } from '../../i18n/runtime';
 import type { MixedTaskItem } from '../../utils/mixedTaskItems';
-import type { TaskCalendarScale } from '../../utils/taskCalendar';
 import { TaskCalendarNavigator } from './TaskCalendarNavigator';
 
 function taskEntry(
@@ -19,22 +18,19 @@ function taskEntry(
 }
 
 function CalendarHarness() {
-  const [scale, setScale] = useState<TaskCalendarScale>('month');
   const [anchorDate, setAnchorDate] = useState('2026-08-12');
   const [selectedDate, setSelectedDate] = useState<string | null>('2026-08-12');
   return (
     <>
       <TaskCalendarNavigator
         entries={[taskEntry('dated', '2026-08-12'), taskEntry('undated', null)]}
-        scale={scale}
         anchorDate={anchorDate}
         selectedDate={selectedDate}
-        onScaleChange={setScale}
         onAnchorDateChange={setAnchorDate}
         onSelectedDateChange={setSelectedDate}
       />
       <output aria-label="Calendar state">
-        {scale}:{anchorDate}:{selectedDate ?? 'undated'}
+        {anchorDate}:{selectedDate ?? 'undated'}
       </output>
     </>
   );
@@ -45,27 +41,26 @@ describe('TaskCalendarNavigator', () => {
     setLanguage(DEFAULT_LANGUAGE, { persist: false });
   });
 
-  it('switches scales and drills from year into a selected month', () => {
+  it('renders a fixed week view and moves by one week', () => {
     render(<CalendarHarness />);
     expect(
       screen.getByRole('button', { name: /August 12, 2026: 1 item/i })
     ).toHaveAttribute('aria-pressed', 'true');
 
-    fireEvent.click(screen.getByRole('button', { name: 'year' }));
+    expect(
+      screen.queryByRole('button', { name: 'month' })
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Next week' }));
     expect(screen.getByLabelText('Calendar state')).toHaveTextContent(
-      'year:2026-08-12:2026-08-12'
-    );
-    fireEvent.click(screen.getByRole('button', { name: /Aug 1 item/i }));
-    expect(screen.getByLabelText('Calendar state')).toHaveTextContent(
-      'month:2026-08-01:2026-08-01'
+      '2026-08-19:2026-08-19'
     );
   });
 
-  it('keeps undated Tasks reachable from every calendar scale', () => {
+  it('keeps undated Tasks reachable from the week view', () => {
     render(<CalendarHarness />);
     fireEvent.click(screen.getByRole('button', { name: /Undated 1/i }));
     expect(screen.getByLabelText('Calendar state')).toHaveTextContent(
-      'month:2026-08-12:undated'
+      '2026-08-12:undated'
     );
   });
 

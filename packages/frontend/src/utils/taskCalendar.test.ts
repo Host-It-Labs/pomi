@@ -2,11 +2,11 @@ import type { Task } from '@pomi/shared';
 import { describe, expect, it } from 'vitest';
 import type { MixedTaskItem } from './mixedTaskItems';
 import {
-  addCalendarPeriod,
+  addCalendarWeek,
   countCalendarEntriesByDate,
   filterCalendarEntries,
-  getCalendarGridDates,
-  getCalendarRange,
+  getCalendarWeekDates,
+  getCalendarWeekRange,
   parseLocalDateKey,
 } from './taskCalendar';
 
@@ -25,26 +25,25 @@ function taskEntry(
 }
 
 describe('Task calendar dates', () => {
-  it('builds local Monday-first week and padded month ranges', () => {
-    expect(getCalendarRange('week', '2026-08-12')).toEqual({
+  it('builds a local Monday-first week', () => {
+    expect(getCalendarWeekRange('2026-08-12')).toEqual({
       start: '2026-08-10',
       end: '2026-08-16',
     });
-    expect(getCalendarRange('month', '2026-08-12')).toEqual({
-      start: '2026-08-01',
-      end: '2026-08-31',
-    });
-    const month = getCalendarGridDates('month', '2026-08-12');
-    expect(month).toHaveLength(42);
-    expect(month[0]).toBe('2026-07-27');
-    expect(month[41]).toBe('2026-09-06');
+    expect(getCalendarWeekDates('2026-08-12')).toEqual([
+      '2026-08-10',
+      '2026-08-11',
+      '2026-08-12',
+      '2026-08-13',
+      '2026-08-14',
+      '2026-08-15',
+      '2026-08-16',
+    ]);
   });
 
-  it('moves each scale without UTC date drift', () => {
-    expect(addCalendarPeriod('day', '2026-02-28', 1)).toBe('2026-03-01');
-    expect(addCalendarPeriod('week', '2026-12-28', 1)).toBe('2027-01-04');
-    expect(addCalendarPeriod('month', '2026-01-31', 1)).toBe('2026-02-01');
-    expect(addCalendarPeriod('year', '2024-02-29', 1)).toBe('2025-02-01');
+  it('moves by whole weeks without UTC date drift', () => {
+    expect(addCalendarWeek('2026-12-28', 1)).toBe('2027-01-04');
+    expect(addCalendarWeek('2026-12-28', -1)).toBe('2026-12-21');
     expect(parseLocalDateKey('2026-02-30')).toBeNull();
   });
 

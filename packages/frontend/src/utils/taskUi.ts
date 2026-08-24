@@ -102,6 +102,33 @@ export async function focusTaskOnTimer({
   return true;
 }
 
+export function isInlineTaskPropertyUpdate(
+  update: Partial<
+    Pick<
+      Task,
+      | 'dueDate'
+      | 'dueTime'
+      | 'priority'
+      | 'intentionSlug'
+      | 'subIntentionSlug'
+      | 'recurrenceRule'
+      | 'recurrenceInterval'
+      | 'recurrenceAnchorMode'
+    >
+  >
+) {
+  return [
+    'dueDate',
+    'dueTime',
+    'priority',
+    'intentionSlug',
+    'subIntentionSlug',
+    'recurrenceRule',
+    'recurrenceInterval',
+    'recurrenceAnchorMode',
+  ].some(key => Object.prototype.hasOwnProperty.call(update, key));
+}
+
 export function formatTaskDue(task: Pick<Task, 'dueDate' | 'dueTime'>) {
   if (!task.dueDate) {
     return translateCurrent('task.noDueDate');

@@ -52,6 +52,7 @@ import {
   focusTaskOnTimer,
   getTaskIntentionEmojis,
   getTaskPriorityAccentClass,
+  isInlineTaskPropertyUpdate,
   isTaskOverdue,
 } from '../utils/taskUi';
 import { getSelectedTimerIntentions } from '../utils/timerIntentions';
@@ -389,6 +390,9 @@ export function MinimizedTaskView({
             setTaskMode,
           });
         }
+        if (didUpdate && isInlineTaskPropertyUpdate(updates)) {
+          showToastFromStore(t('task.updated'), 'success', 5000);
+        }
         return didUpdate;
       } finally {
         if (isPinUpdate) {
@@ -403,6 +407,7 @@ export function MinimizedTaskView({
       setTaskMode,
       tasks,
       timer,
+      t,
       updateTask,
       updatePreferenceWithResult,
     ]

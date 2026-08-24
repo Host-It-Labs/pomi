@@ -104,6 +104,7 @@ import {
   focusTaskOnTimer,
   getTaskPriorityAccentClass,
   isTaskOverdue,
+  isInlineTaskPropertyUpdate,
 } from '../utils/taskUi';
 import {
   applyIntentionFamilyManualOrder,
@@ -128,11 +129,7 @@ import { useUpdatedTaskReveal } from './taskUpdatedReveal';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
 import { isTaskInTimerTypeSearchScope } from '../utils/taskSearchScope';
 import { TASKS_PAGE_CONTAINER_CLASS } from '../constants/taskLayout';
-import {
-  filterCalendarEntries,
-  getTodayDateKey,
-  type TaskCalendarScale,
-} from '../utils/taskCalendar';
+import { filterCalendarEntries, getTodayDateKey } from '../utils/taskCalendar';
 
 type TaskIntentionFilterValue = string | null;
 type TaskDropPlacement = 'before' | 'after';
@@ -219,8 +216,6 @@ export function Tasks() {
   const [taskSortMode, setTaskSortMode] = useState<TaskSortMode>('default');
   const [taskPageViewMode, setTaskPageViewMode] =
     useState<TaskPageViewMode>('list');
-  const [taskCalendarScale, setTaskCalendarScale] =
-    useState<TaskCalendarScale>('month');
   const [taskCalendarAnchor, setTaskCalendarAnchor] = useState(getTodayDateKey);
   const [taskCalendarDate, setTaskCalendarDate] = useState<string | null>(
     getTodayDateKey
@@ -1221,50 +1216,45 @@ export function Tasks() {
                   <FaFileImport size={11} />
                 </IconButton>
               )}
+              {!selectedList && (
+                <div className="ml-0.5 flex items-center gap-1 border-l border-slate-800/80 pl-1">
+                  <IconButton
+                    label={t('common.list')}
+                    title={t('common.list')}
+                    size="sm"
+                    variant={
+                      taskPageViewMode === 'list' ? 'primary' : 'secondary'
+                    }
+                    aria-pressed={taskPageViewMode === 'list'}
+                    onClick={() => setTaskPageViewMode('list')}
+                    className="h-8 w-8 !p-0"
+                  >
+                    <FaListUl size={11} />
+                  </IconButton>
+                  <IconButton
+                    label={t('common.calendar')}
+                    title={t('common.calendar')}
+                    size="sm"
+                    variant={
+                      taskPageViewMode === 'calendar' ? 'primary' : 'secondary'
+                    }
+                    aria-pressed={taskPageViewMode === 'calendar'}
+                    onClick={() => setTaskPageViewMode('calendar')}
+                    className="h-8 w-8 !p-0"
+                  >
+                    <FaCalendarAlt size={11} />
+                  </IconButton>
+                </div>
+              )}
             </div>
           </div>
         </header>
 
-        {!selectedList && (
-          <div className="mt-4 grid grid-cols-2 gap-1 rounded-lg border border-slate-800/70 bg-slate-900/35 p-1">
-            <button
-              type="button"
-              aria-pressed={taskPageViewMode === 'list'}
-              onClick={() => setTaskPageViewMode('list')}
-              className={clsx(
-                'flex h-8 items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-colors',
-                taskPageViewMode === 'list'
-                  ? 'bg-indigo-500/25 text-indigo-100'
-                  : 'text-slate-500 hover:bg-slate-800/80 hover:text-slate-200'
-              )}
-            >
-              <FaListUl size={10} />
-              {t('common.list')}
-            </button>
-            <button
-              type="button"
-              aria-pressed={taskPageViewMode === 'calendar'}
-              onClick={() => setTaskPageViewMode('calendar')}
-              className={clsx(
-                'flex h-8 items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-colors',
-                taskPageViewMode === 'calendar'
-                  ? 'bg-indigo-500/25 text-indigo-100'
-                  : 'text-slate-500 hover:bg-slate-800/80 hover:text-slate-200'
-              )}
-            >
-              <FaCalendarAlt size={10} />
-              {t('common.calendar')}
-            </button>
-          </div>
-        )}
-
         {taskPageViewMode === 'calendar' && !selectedList && (
           <TaskCalendarNavigator
             entries={mixedTaskItems}
-            scale={taskCalendarScale}
             anchorDate={taskCalendarAnchor}
             selectedDate={taskCalendarDate}
-            onScaleChange={setTaskCalendarScale}
             onAnchorDateChange={setTaskCalendarAnchor}
             onSelectedDateChange={setTaskCalendarDate}
           />
@@ -3234,28 +3224,6 @@ function getAutomaticUnpinnedTasks(
     today: orderingClock.today,
     currentTime: orderingClock.currentTime,
   }).tasks.map(task => tasksById.get(task.id)!);
-}
-
-function isInlineTaskPropertyUpdate(update: {
-  dueDate?: string | null;
-  dueTime?: string | null;
-  priority?: Task['priority'];
-  intentionSlug?: string | null;
-  subIntentionSlug?: string | null;
-  recurrenceRule?: string | null;
-  recurrenceInterval?: number | null;
-  recurrenceAnchorMode?: Task['recurrenceAnchorMode'];
-}) {
-  return [
-    'dueDate',
-    'dueTime',
-    'priority',
-    'intentionSlug',
-    'subIntentionSlug',
-    'recurrenceRule',
-    'recurrenceInterval',
-    'recurrenceAnchorMode',
-  ].some(key => Object.prototype.hasOwnProperty.call(update, key));
 }
 
 function getFavoriteRowStorageKey(userId: string | null) {
