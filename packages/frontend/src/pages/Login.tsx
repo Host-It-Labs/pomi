@@ -10,6 +10,7 @@ import { useSystemStore } from '../stores/systemStore';
 import { useUiStore } from '../stores/uiStore';
 import { apiClient, baseUrl } from '../utils/apiClient';
 import { getApiErrorMessage } from '../utils/apiError';
+import { isDevAutoLoginEnabled } from '../config/environmentVariables';
 import { normalizeLanguage, SUPPORTED_LANGUAGES, useI18n } from '../i18n';
 import {
   clearStoredBackendUrl,
@@ -85,8 +86,8 @@ export function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [customBackendUrl, setCustomBackendUrl] = useState(
-    () => getStoredBackendUrl() || ''
+  const [customBackendUrl, setCustomBackendUrl] = useState(() =>
+    isDevAutoLoginEnabled ? '' : getStoredBackendUrl() || ''
   );
   const [selfHostInput, setSelfHostInput] = useState('');
   const [showSelfHostPrompt, setShowSelfHostPrompt] = useState(false);
