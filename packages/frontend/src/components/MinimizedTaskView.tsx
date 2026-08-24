@@ -66,6 +66,7 @@ import {
 import { showToastFromStore } from './toast/ToastContext';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
 import { getWheelPageDirection } from '../utils/pagedGesture';
+import type { Tab } from '../types/uiTypes';
 
 const TASK_ACTION_BUTTON_BASE_CLASS =
   'group/task-action relative flex items-center justify-center overflow-visible rounded-full border border-slate-700/60 bg-slate-950/40 p-0 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-50';
@@ -102,6 +103,24 @@ export function getPinShortcutTask(tasks: Task[], code: string) {
   if (!/^Digit[1-9]$/.test(code)) return null;
   const task = tasks[Number(code.slice(-1)) - 1];
   return task && canToggleTaskPin(task) ? task : null;
+}
+
+export function navigateToUpdatedTask({
+  taskId,
+  compact,
+  setActiveTab,
+  setExpanded,
+  requestTaskReveal,
+}: {
+  taskId: string;
+  compact: boolean;
+  setActiveTab: (activeTab: Tab) => void;
+  setExpanded: (expanded?: boolean) => void;
+  requestTaskReveal: (taskId: string) => void;
+}) {
+  if (compact) setExpanded(true);
+  setActiveTab('tasks');
+  requestTaskReveal(taskId);
 }
 
 export function MinimizedTaskView({
@@ -153,6 +172,7 @@ export function MinimizedTaskView({
   const setActiveTab = useUiStore.use.setActiveTab();
   const setExpanded = useUiStore.use.setExpanded();
   const requestTaskCreate = useUiStore.use.requestTaskCreate();
+  const requestTaskReveal = useUiStore.use.requestTaskReveal();
   const taskEditRequestedId = useUiStore.use.taskEditRequestedId();
   const requestTaskEdit = useUiStore.use.requestTaskEdit();
   const clearTaskEditRequest = useUiStore.use.clearTaskEditRequest();
@@ -391,7 +411,18 @@ export function MinimizedTaskView({
           });
         }
         if (didUpdate && isInlineTaskPropertyUpdate(updates)) {
-          showToastFromStore(t('task.updated'), 'success', 5000);
+          showToastFromStore(t('task.updated'), 'success', 5000, {
+            label: t('task.viewUpdated'),
+            onClick: () => {
+              navigateToUpdatedTask({
+                taskId: updates.id,
+                compact,
+                setActiveTab,
+                setExpanded,
+                requestTaskReveal,
+              });
+            },
+          });
         }
         return didUpdate;
       } finally {
@@ -402,8 +433,12 @@ export function MinimizedTaskView({
       }
     },
     [
+      compact,
       createOrResumeTimer,
       preferences,
+      requestTaskReveal,
+      setActiveTab,
+      setExpanded,
       setTaskMode,
       tasks,
       timer,

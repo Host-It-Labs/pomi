@@ -166,6 +166,8 @@ export function Tasks() {
   const taskCreateRequested = useUiStore.use.taskCreateRequested();
   const taskCreateInitialTitle = useUiStore.use.taskCreateInitialTitle();
   const clearTaskCreateRequest = useUiStore.use.clearTaskCreateRequest();
+  const taskRevealRequestedId = useUiStore.use.taskRevealRequestedId();
+  const clearTaskRevealRequest = useUiStore.use.clearTaskRevealRequest();
   const intentionPickerOpenRequest =
     useUiStore.use.intentionPickerOpenRequest();
   const taskSearchFocusRequest = useUiStore.use.taskSearchFocusRequest();
@@ -807,6 +809,16 @@ export function Tasks() {
     setPageViewMode: setTaskPageViewMode,
     setDestinationTaskId: setUpdatedTaskDestinationId,
   });
+  useEffect(() => {
+    if (!taskRevealRequestedId || preferences === null) return;
+    revealUpdatedTask(taskRevealRequestedId);
+    clearTaskRevealRequest();
+  }, [
+    clearTaskRevealRequest,
+    preferences,
+    revealUpdatedTask,
+    taskRevealRequestedId,
+  ]);
   const updateTaskWithPositionFeedback = useCallback(
     async (updates: Parameters<typeof updateTask>[0]) => {
       const currentTask = tasks.find(task => task.id === updates.id);
@@ -1217,34 +1229,23 @@ export function Tasks() {
                 </IconButton>
               )}
               {!selectedList && (
-                <div className="ml-0.5 flex items-center gap-1 border-l border-slate-800/80 pl-1">
-                  <IconButton
-                    label={t('common.list')}
-                    title={t('common.list')}
-                    size="sm"
-                    variant={
-                      taskPageViewMode === 'list' ? 'primary' : 'secondary'
-                    }
-                    aria-pressed={taskPageViewMode === 'list'}
-                    onClick={() => setTaskPageViewMode('list')}
-                    className="h-8 w-8 !p-0"
-                  >
-                    <FaListUl size={11} />
-                  </IconButton>
-                  <IconButton
-                    label={t('common.calendar')}
-                    title={t('common.calendar')}
-                    size="sm"
-                    variant={
-                      taskPageViewMode === 'calendar' ? 'primary' : 'secondary'
-                    }
-                    aria-pressed={taskPageViewMode === 'calendar'}
-                    onClick={() => setTaskPageViewMode('calendar')}
-                    className="h-8 w-8 !p-0"
-                  >
-                    <FaCalendarAlt size={11} />
-                  </IconButton>
-                </div>
+                <IconButton
+                  label={t('common.calendar')}
+                  title={t('common.calendar')}
+                  size="sm"
+                  variant={
+                    taskPageViewMode === 'calendar' ? 'primary' : 'secondary'
+                  }
+                  aria-pressed={taskPageViewMode === 'calendar'}
+                  onClick={() =>
+                    setTaskPageViewMode(currentMode =>
+                      currentMode === 'calendar' ? 'list' : 'calendar'
+                    )
+                  }
+                  className="h-8 w-8 !p-0"
+                >
+                  <FaCalendarAlt size={11} />
+                </IconButton>
               )}
             </div>
           </div>

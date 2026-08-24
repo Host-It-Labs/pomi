@@ -58,7 +58,11 @@ describe('TaskCalendarNavigator', () => {
 
   it('keeps undated Tasks reachable from the week view', () => {
     render(<CalendarHarness />);
-    fireEvent.click(screen.getByRole('button', { name: /Undated 1/i }));
+    const undatedButton = screen.getByRole('button', { name: /Undated 1/i });
+    expect(screen.getByTestId('task-calendar-header')).toContainElement(
+      undatedButton
+    );
+    fireEvent.click(undatedButton);
     expect(screen.getByLabelText('Calendar state')).toHaveTextContent(
       '2026-08-12:undated'
     );

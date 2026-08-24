@@ -1,6 +1,10 @@
 import type { Task } from '@pomi/shared';
-import { describe, expect, it } from 'vitest';
-import { getPinShortcutTask, searchMinimizedTasks } from './MinimizedTaskView';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  getPinShortcutTask,
+  navigateToUpdatedTask,
+  searchMinimizedTasks,
+} from './MinimizedTaskView';
 
 function task(id: string, overrides: Partial<Task> = {}): Task {
   return {
@@ -93,5 +97,23 @@ describe('Minimized task search', () => {
 
     expect(getPinShortcutTask([followUp, parent], 'Digit1')).toBeNull();
     expect(getPinShortcutTask([followUp, parent], 'Digit2')).toBe(parent);
+  });
+
+  it('opens the full Tasks page for an updated compact task', () => {
+    const setActiveTab = vi.fn();
+    const setExpanded = vi.fn();
+    const requestTaskReveal = vi.fn();
+
+    navigateToUpdatedTask({
+      taskId: 'updated-task',
+      compact: true,
+      setActiveTab,
+      setExpanded,
+      requestTaskReveal,
+    });
+
+    expect(setExpanded).toHaveBeenCalledWith(true);
+    expect(setActiveTab).toHaveBeenCalledWith('tasks');
+    expect(requestTaskReveal).toHaveBeenCalledWith('updated-task');
   });
 });

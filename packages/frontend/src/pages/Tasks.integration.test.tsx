@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   createOrResumeTimer: vi.fn().mockResolvedValue(undefined),
   setTaskMode: vi.fn(),
   clearTaskCreateRequest: vi.fn(),
+  taskRevealRequestedId: null as string | null,
+  clearTaskRevealRequest: vi.fn(),
 }));
 
 vi.mock('../stores/tasksStore', () => ({
@@ -79,6 +81,8 @@ vi.mock('../stores/uiStore', () => ({
       taskCreateRequested: () => false,
       taskCreateInitialTitle: () => '',
       clearTaskCreateRequest: () => mocks.clearTaskCreateRequest,
+      taskRevealRequestedId: () => mocks.taskRevealRequestedId,
+      clearTaskRevealRequest: () => mocks.clearTaskRevealRequest,
       intentionPickerOpenRequest: () => 0,
       taskSearchFocusRequest: () => 0,
       taskQuickCreateFocusRequest: () => 0,
@@ -202,15 +206,77 @@ beforeAll(() => {
       disconnect() {}
     }
   );
+  if (!HTMLElement.prototype.scrollIntoView) {
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(),
+    });
+  }
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.tasks = [];
   mocks.intentions = [];
+  mocks.taskRevealRequestedId = null;
 });
 
 describe('Tasks page interactions', () => {
+  it('uses one Calendar button to enter and leave the week view', async () => {
+    mocks.tasks = [
+      task({
+        id: 'today-task',
+        title: 'Today task',
+        dueDate: '2026-08-23',
+      }),
+      task({
+        id: 'next-task',
+        title: 'Next task',
+        dueDate: '2026-08-22',
+      }),
+    ];
+
+    render(<Tasks />);
+
+    const calendarButton = await screen.findByRole('button', {
+      name: 'Calendar',
+    });
+    expect(calendarButton).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(calendarButton);
+    expect(calendarButton).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() =>
+      expect(screen.queryByText('Next task')).not.toBeInTheDocument()
+    );
+
+    fireEvent.click(calendarButton);
+    expect(calendarButton).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('Today task')).toBeInTheDocument();
+    expect(screen.getByText('Next task')).toBeInTheDocument();
+  });
+
+  it('consumes a task reveal request from the minimized task view', async () => {
+    mocks.tasks = [
+      task({
+        id: 'updated-task',
+        title: 'Updated task',
+        dueDate: '2026-08-22',
+      }),
+    ];
+    mocks.taskRevealRequestedId = 'updated-task';
+
+    render(<Tasks />);
+
+    await waitFor(() =>
+      expect(mocks.clearTaskRevealRequest).toHaveBeenCalledOnce()
+    );
+    expect(screen.getByRole('button', { name: 'Calendar' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+    expect(screen.getByText('Updated task')).toBeInTheDocument();
+  });
+
   it('limits Calendar bulk selection to the selected date and clears it when the date changes', async () => {
     mocks.tasks = [
       task({

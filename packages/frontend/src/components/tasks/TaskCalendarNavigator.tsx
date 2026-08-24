@@ -53,7 +53,10 @@ export function TaskCalendarNavigator({
       aria-label={t('task.calendar')}
       className="mt-3 rounded-xl border border-slate-800/70 bg-slate-900/35 p-2"
     >
-      <div className="flex items-center justify-between gap-1.5">
+      <div
+        data-testid="task-calendar-header"
+        className="flex items-center gap-1.5"
+      >
         <IconButton
           label={t('task.previousCalendarPeriod', {
             period: t('common.week'),
@@ -74,11 +77,27 @@ export function TaskCalendarNavigator({
             onAnchorDateChange(today);
             onSelectedDateChange(today);
           }}
-          className="min-w-0 truncate rounded-md px-2 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-slate-800"
+          className="min-w-0 flex-1 truncate rounded-md px-2 py-1 text-center text-[11px] font-semibold text-slate-200 transition hover:bg-slate-800"
           title={t('task.goToToday')}
         >
           {heading(anchorDate, locale)}
         </button>
+        {undatedCount > 0 && (
+          <button
+            type="button"
+            aria-pressed={selectedDate === null}
+            onClick={() => onSelectedDateChange(null)}
+            className={clsx(
+              'inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-1 text-[10px] transition',
+              selectedDate === null
+                ? 'border-indigo-400/70 bg-indigo-500/20 text-indigo-100'
+                : 'border-slate-800/70 bg-slate-950/30 text-slate-400 hover:border-slate-600'
+            )}
+          >
+            {t('common.undated')}{' '}
+            <span className="text-slate-600">{undatedCount}</span>
+          </button>
+        )}
         <IconButton
           label={t('task.nextCalendarPeriod', {
             period: t('common.week'),
@@ -136,23 +155,6 @@ export function TaskCalendarNavigator({
           );
         })}
       </div>
-
-      {undatedCount > 0 && (
-        <button
-          type="button"
-          aria-pressed={selectedDate === null}
-          onClick={() => onSelectedDateChange(null)}
-          className={clsx(
-            'mt-1.5 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] transition',
-            selectedDate === null
-              ? 'border-indigo-400/70 bg-indigo-500/20 text-indigo-100'
-              : 'border-slate-800/70 bg-slate-950/30 text-slate-400 hover:border-slate-600'
-          )}
-        >
-          {t('common.undated')}{' '}
-          <span className="text-slate-600">{undatedCount}</span>
-        </button>
-      )}
     </section>
   );
 }

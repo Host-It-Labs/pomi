@@ -41,6 +41,9 @@ interface UiState {
   taskEditRequestedId: string | null;
   requestTaskEdit: (taskId: string) => void;
   clearTaskEditRequest: () => void;
+  taskRevealRequestedId: string | null;
+  requestTaskReveal: (taskId: string) => void;
+  clearTaskRevealRequest: () => void;
   intentionCreateRequested: boolean;
   requestIntentionCreate: () => void;
   clearIntentionCreateRequest: () => void;
@@ -171,6 +174,9 @@ const useUiStoreBase = create<UiState>((set, state) => ({
   taskEditRequestedId: null,
   requestTaskEdit: (taskId: string) => set({ taskEditRequestedId: taskId }),
   clearTaskEditRequest: () => set({ taskEditRequestedId: null }),
+  taskRevealRequestedId: null,
+  requestTaskReveal: (taskId: string) => set({ taskRevealRequestedId: taskId }),
+  clearTaskRevealRequest: () => set({ taskRevealRequestedId: null }),
   intentionCreateRequested: false,
   requestIntentionCreate: () => set({ intentionCreateRequested: true }),
   clearIntentionCreateRequest: () => set({ intentionCreateRequested: false }),
