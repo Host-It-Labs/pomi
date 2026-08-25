@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # shellcheck disable=SC1091
 . "$ROOT_DIR/scripts/local-env.sh"
-pomi_load_local_environment
+pomi_load_release_environment
 
 cd "$ROOT_DIR"
 
@@ -16,7 +16,14 @@ build_for_platform() {
   local platform="$1" target_dir="$2"
 
   docker run --rm --platform "$platform" \
-    --env VITE_SENTRY_DSN \
+    --env "VITE_BACKEND_URL=${VITE_BACKEND_URL:-}" \
+    --env "VITE_USE_HTTPS=${VITE_USE_HTTPS:-}" \
+    --env "VITE_RENDER_SYSTEM_TRAY_ICON=${VITE_RENDER_SYSTEM_TRAY_ICON:-}" \
+    --env "VITE_DEBUG_PANEL_ENABLED=${VITE_DEBUG_PANEL_ENABLED:-}" \
+    --env "VITE_PROD=${VITE_PROD:-}" \
+    --env "VITE_ANDROID_BACKEND_URL=${VITE_ANDROID_BACKEND_URL:-}" \
+    --env "VITE_SENTRY_DSN=${VITE_SENTRY_DSN:-}" \
+    --env "VITE_SENTRY_RELEASE=${VITE_SENTRY_RELEASE:-}" \
     -v "$ROOT_DIR:/workspace" \
     --mount type=volume,destination=/workspace/.pnpm-store \
     --mount type=volume,destination=/workspace/node_modules \

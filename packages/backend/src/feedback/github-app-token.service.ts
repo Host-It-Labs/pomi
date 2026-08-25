@@ -122,7 +122,14 @@ export class GitHubAppTokenService {
       );
     }
 
-    const result = (await response.json()) as InstallationToken;
+    let result: InstallationToken;
+    try {
+      result = (await response.json()) as InstallationToken;
+    } catch {
+      throw new BadGatewayException(
+        'GitHub returned invalid feedback application credentials'
+      );
+    }
     const expiresAt = Date.parse(result.expires_at ?? '');
     if (!result.token || !Number.isFinite(expiresAt)) {
       throw new BadGatewayException(

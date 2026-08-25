@@ -10,6 +10,11 @@ command through:
 node scripts/github-app-auth.mjs exec -- <command> [args...]
 ```
 
+For local scheduled-agent work, copy `config/pomi-automation.example.env` to
+`config/pomi-automation.env`. The helper loads that profile automatically; do
+not put scheduled Radar credentials in `.env.local` or use a personal GitHub
+token as a fallback.
+
 The helper fails closed when App authentication is unavailable, isolates Git
 from stored personal credentials, and supplies the bot Git identity and
 short-lived token only to that child command. Never fall back to the user's Git
