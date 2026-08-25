@@ -43,8 +43,14 @@ export function parseEnvironmentFile(contents) {
   return values;
 }
 
-export function resolveEnvironmentFile({ profile = 'local', filePath } = {}) {
+export function resolveEnvironmentFile(options) {
+  const { profile, filePath } = options ?? {};
   if (filePath) return resolveRepositoryPath(filePath) ?? filePath;
+  if (!profile) {
+    throw new Error(
+      `Pomi environment profile is required. Expected one of: ${Object.keys(environmentFiles).join(', ')}.`
+    );
+  }
   const environmentFile = environmentFiles[profile];
   if (!environmentFile) {
     throw new Error(
@@ -54,7 +60,7 @@ export function resolveEnvironmentFile({ profile = 'local', filePath } = {}) {
   return environmentFile;
 }
 
-export function readEnvironmentFile(filePath = defaultLocalEnvironmentFile) {
+export function readEnvironmentFile(filePath) {
   if (!existsSync(filePath)) return {};
   return parseEnvironmentFile(readFileSync(filePath, 'utf8'));
 }
@@ -70,35 +76,26 @@ export function mergeEnvironment(environment, values) {
   return environment;
 }
 
-export function loadEnvironment({
-  environment = process.env,
-  profile = 'local',
-  filePath,
-} = {}) {
+export function loadEnvironment(options) {
+  const { environment, profile, filePath } = options ?? {};
   return mergeEnvironment(
-    environment,
+    environment ?? process.env,
     readEnvironmentFile(resolveEnvironmentFile({ profile, filePath }))
   );
 }
 
-export function loadLocalEnvironment({
-  environment = process.env,
-  filePath,
-} = {}) {
+export function loadLocalEnvironment(options) {
+  const { environment = process.env, filePath } = options ?? {};
   return loadEnvironment({ environment, profile: 'local', filePath });
 }
 
-export function loadAutomationEnvironment({
-  environment = process.env,
-  filePath,
-} = {}) {
+export function loadAutomationEnvironment(options) {
+  const { environment = process.env, filePath } = options ?? {};
   return loadEnvironment({ environment, profile: 'automation', filePath });
 }
 
-export function loadReleaseEnvironment({
-  environment = process.env,
-  filePath,
-} = {}) {
+export function loadReleaseEnvironment(options) {
+  const { environment = process.env, filePath } = options ?? {};
   return loadEnvironment({ environment, profile: 'release', filePath });
 }
 
@@ -113,7 +110,7 @@ function quoteForShell(value) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
-  let profile = 'local';
+  let profile;
   let filePath;
   let valid = args[0] === '--shell-exports';
 
@@ -128,9 +125,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     }
   }
 
-  if (!valid) {
+  if (!valid || !profile) {
     process.stderr.write(
-      'Usage: node scripts/local-env.mjs --shell-exports [--profile local|automation|release] [--env-file path]\n'
+      'Usage: node scripts/local-env.mjs --shell-exports --profile local|automation|release [--env-file path]\n'
     );
     process.exitCode = 2;
   } else {

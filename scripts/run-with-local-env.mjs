@@ -15,7 +15,7 @@ const commands = {
   sh: 'sh',
 };
 const command = requestedCommand ? commands[requestedCommand] : undefined;
-let profile = 'local';
+let profile;
 let filePath;
 let validOptions = true;
 
@@ -30,9 +30,9 @@ for (let index = 0; index < options.length; index += 1) {
   }
 }
 
-if (!command || !validOptions) {
+if (!command || !validOptions || !profile) {
   process.stderr.write(
-    `Usage: node scripts/run-with-local-env.mjs [--profile local|automation|release] [--env-file path] -- <${Object.keys(commands).join('|')}> [args...]\n`
+    `Usage: node scripts/run-with-local-env.mjs --profile local|automation|release [--env-file path] -- <${Object.keys(commands).join('|')}> [args...]\n`
   );
   process.exit(2);
 }

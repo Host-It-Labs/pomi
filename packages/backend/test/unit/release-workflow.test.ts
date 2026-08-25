@@ -73,6 +73,18 @@ describe('public release workflow', () => {
       expect(script).toContain(
         '--mount type=volume,destination=/workspace/node_modules'
       );
+      for (const variable of [
+        'VITE_BACKEND_URL',
+        'VITE_USE_HTTPS',
+        'VITE_RENDER_SYSTEM_TRAY_ICON',
+        'VITE_DEBUG_PANEL_ENABLED',
+        'VITE_PROD',
+        'VITE_ANDROID_BACKEND_URL',
+        'VITE_SENTRY_DSN',
+        'VITE_SENTRY_RELEASE',
+      ]) {
+        expect(script).toContain(variable);
+      }
       expect(script).not.toContain('pomi_0.1.0');
     }
     expect(amd64Script).toContain('target/linux-amd64');

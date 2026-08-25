@@ -13,7 +13,14 @@ APP_VERSION="$(node -p "require('./packages/frontend/package.json').version")"
 FRONTEND_SENTRY_RELEASE="${VITE_SENTRY_RELEASE:-pomi-frontend@${RELEASE_TAG:-$(node -p "require('./packages/frontend/package.json').version")}}"
 
 docker run --rm --platform linux/arm64 \
-  --env VITE_SENTRY_DSN \
+  --env "VITE_BACKEND_URL=${VITE_BACKEND_URL:-}" \
+  --env "VITE_USE_HTTPS=${VITE_USE_HTTPS:-}" \
+  --env "VITE_RENDER_SYSTEM_TRAY_ICON=${VITE_RENDER_SYSTEM_TRAY_ICON:-}" \
+  --env "VITE_DEBUG_PANEL_ENABLED=${VITE_DEBUG_PANEL_ENABLED:-}" \
+  --env "VITE_PROD=${VITE_PROD:-}" \
+  --env "VITE_ANDROID_BACKEND_URL=${VITE_ANDROID_BACKEND_URL:-}" \
+  --env "VITE_SENTRY_DSN=${VITE_SENTRY_DSN:-}" \
+  --env "VITE_SENTRY_RELEASE=${VITE_SENTRY_RELEASE:-}" \
   -v "$ROOT_DIR:/workspace" \
   --mount type=volume,destination=/workspace/.pnpm-store \
   --mount type=volume,destination=/workspace/node_modules \

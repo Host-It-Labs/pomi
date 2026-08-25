@@ -69,6 +69,13 @@ test('keeps development, automation, and release profiles separate', () => {
   );
 });
 
+test('requires generic callers to select an environment profile', () => {
+  assert.throws(
+    () => resolveEnvironmentFile(),
+    /Pomi environment profile is required/
+  );
+});
+
 test('documents the ignored files copied into Codex worktrees', () => {
   const includeFile = readFileSync(
     path.join(repositoryRoot, '.worktreeinclude'),

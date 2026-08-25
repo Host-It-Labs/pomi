@@ -17,7 +17,7 @@ Single-context repo: use root `CONTEXT.md` and root `docs/adr/`. See `docs/agent
 - Treat this file as the main project agent entrypoint.
 - For any app development, including frontend, UI, UX, layout, Tauri window behavior, or user-facing interaction changes, read `DESIGN.md` before planning or editing.
 - For any end-to-end testing work, including writing, updating, running, debugging, or reviewing Playwright tests, read `skills/end-to-end-testing/SKILL.md` before planning, editing, or running tests.
-- Local configuration belongs in the ignored root `.env.local`; do not create package-local environment files. `POMI_CURRENT_WORK_SLUG` is optional and may be overridden in the process environment for a specific worktree.
+- Interactive local-development configuration belongs in the ignored root `.env.local`; scheduled automation configuration belongs in the ignored `config/pomi-automation.env`; and local release configuration belongs in the ignored `config/pomi-release.env`. Do not create package-local environment files. `POMI_CURRENT_WORK_SLUG` is optional and may be overridden in the process environment for a specific worktree.
 
 ## Package And Build
 

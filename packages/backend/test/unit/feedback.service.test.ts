@@ -2,15 +2,36 @@ import {
   BadGatewayException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FeedbackService } from '../../src/feedback/feedback.service';
 import { GitHubAppTokenService } from '../../src/feedback/github-app-token.service';
 
 describe('FeedbackService', () => {
+  const environmentKeys = [
+    'GITHUB_FEEDBACK_APP_ID',
+    'GITHUB_FEEDBACK_APP_INSTALLATION_ID',
+    'GITHUB_FEEDBACK_APP_PRIVATE_KEY',
+    'GITHUB_FEEDBACK_APP_PRIVATE_KEY_PATH',
+    'GITHUB_FEEDBACK_REPOSITORY',
+    'GITHUB_FEEDBACK_LABEL',
+  ];
+  const originalEnvironment = new Map();
+
+  beforeEach(() => {
+    originalEnvironment.clear();
+    for (const key of environmentKeys) {
+      originalEnvironment.set(key, process.env[key]);
+      delete process.env[key];
+    }
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
-    delete process.env.GITHUB_FEEDBACK_REPOSITORY;
-    delete process.env.GITHUB_FEEDBACK_LABEL;
+    for (const key of environmentKeys) {
+      const value = originalEnvironment.get(key);
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   });
 
   it('creates a GitHub issue with only feedback and bounded safe diagnostics', async () => {

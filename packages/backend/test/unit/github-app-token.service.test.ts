@@ -126,4 +126,23 @@ describe('GitHubAppTokenService', () => {
       new BadGatewayException('GitHub feedback authentication is unavailable')
     );
   });
+
+  it('translates malformed installation-token responses', async () => {
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    process.env.GITHUB_FEEDBACK_APP_ID = '4675891';
+    process.env.GITHUB_FEEDBACK_APP_INSTALLATION_ID = '155743206';
+    process.env.GITHUB_FEEDBACK_APP_PRIVATE_KEY = privateKey
+      .export({ type: 'pkcs8', format: 'pem' })
+      .toString();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('not-json', { status: 201 }))
+    );
+
+    await expect(new GitHubAppTokenService().getToken()).rejects.toEqual(
+      new BadGatewayException(
+        'GitHub returned invalid feedback application credentials'
+      )
+    );
+  });
 });
