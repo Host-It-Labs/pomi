@@ -2,6 +2,35 @@ import { describe, expect, it, vi } from 'vitest';
 import { VacationService } from '../../src/vacation/vacation.service';
 
 describe('VacationService', () => {
+  it('keeps embedded follow-up Vacation Coverage aligned with its Intention', async () => {
+    const taskQueries: Array<{ statement: string; parameters: unknown[] }> = [];
+    const tasksRepository = {
+      update: vi.fn(),
+      query: vi.fn(async (statement: string, parameters: unknown[]) => {
+        taskQueries.push({ statement, parameters });
+      }),
+    };
+    const service = new VacationService(
+      {} as never,
+      tasksRepository as never,
+      { update: vi.fn() } as never,
+      { update: vi.fn() } as never,
+      { updatePreferences: vi.fn() } as never,
+      { emitTasksUpdate: vi.fn() } as never
+    );
+
+    await service.configure('user-1', {
+      intentionSlugs: ['focus'],
+      listIds: [],
+      excludedItemIds: [],
+    });
+
+    expect(taskQueries).toHaveLength(2);
+    expect(taskQueries[0].statement).toContain("'false'::jsonb");
+    expect(taskQueries[1].statement).toContain("'true'::jsonb");
+    expect(taskQueries[1].parameters).toEqual(['user-1', ['focus']]);
+  });
+
   it('catches up one calendar day at a time without shifting a day twice', async () => {
     const state = {
       userId: 'user-1',

@@ -28,5 +28,8 @@ describe('Task settings', () => {
     expect(
       screen.queryByRole('checkbox', { name: 'Hide covered Tasks' })
     ).toBeNull();
+    expect(
+      screen.queryByRole('combobox', { name: 'Default Tasks view' })
+    ).toBeNull();
   });
 });

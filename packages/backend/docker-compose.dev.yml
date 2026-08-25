@@ -17,6 +17,8 @@ services:
       - DATABASE_URL=postgres://user:password@db:5432/pomodoro
       - REDIS_URL=redis://redis:6379
       - NODE_ENV=development
+      - PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false
+      - TRUST_PROXY_HOPS=${TRUST_PROXY_HOPS:-0}
       - NEST_PORT=3000
       - APP_NAME=${APP_NAME:-pomi}
       - JWT_SECRET=${JWT_SECRET:-pomi-development-only-secret-never-use-in-production}
@@ -25,24 +27,26 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1/}
       - OPENROUTER_HTTP_REFERER=${OPENROUTER_HTTP_REFERER:-}
-      - GITHUB_FEEDBACK_TOKEN=${GITHUB_FEEDBACK_TOKEN:-}
+      - GITHUB_FEEDBACK_APP_ID=${GITHUB_FEEDBACK_APP_ID:-}
+      - GITHUB_FEEDBACK_APP_INSTALLATION_ID=${GITHUB_FEEDBACK_APP_INSTALLATION_ID:-}
+      - GITHUB_FEEDBACK_APP_PRIVATE_KEY_PATH=/app/${GITHUB_FEEDBACK_APP_PRIVATE_KEY_PATH:-config/secrets/pomi-radar.private-key.pem}
       - GITHUB_FEEDBACK_REPOSITORY=${GITHUB_FEEDBACK_REPOSITORY:-}
       - GITHUB_FEEDBACK_LABEL=${GITHUB_FEEDBACK_LABEL:-ignore}
       - FIREBASE_SERVICE_ACCOUNT_PATH=/app/${POMI_FIREBASE_SERVICE_ACCOUNT_PATH:-config/secrets/firebase-service-account.json}
 
   db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
       POSTGRES_DB: pomodoro
     volumes:
-      - ./pgdata:/var/lib/postgresql/data
+      - ./pgdata18:/var/lib/postgresql
     ports:
       - '${POMI_DB_PORT:-5432}:5432'
 
   redis:
-    image: redis:alpine
+    image: redis:8-alpine
     ports:
       - '${POMI_REDIS_PORT:-6379}:6379'
 

@@ -581,7 +581,8 @@ export function DebugPanel() {
         throw new Error(t('debug.unsupportedFile'));
       }
 
-      const sourceUsername = payload.sourceUser?.username ?? 'exported user';
+      const sourceUsername =
+        payload.sourceUser?.username ?? t('debug.exportedUser');
       if (
         !window.confirm(
           t('debug.replaceUserDataConfirm', { username: sourceUsername })
@@ -1017,14 +1018,14 @@ export function DebugPanel() {
                                 disabled={updatingAssistantDebugLogId !== null}
                                 aria-label={
                                   log.flagged
-                                    ? 'Remove AI debug log flag'
-                                    : 'Flag AI debug log for export'
+                                    ? t('debug.removeLogFlag')
+                                    : t('debug.flagLogForExport')
                                 }
                                 aria-pressed={log.flagged}
                                 title={
                                   log.flagged
-                                    ? 'Remove flag'
-                                    : 'Flag for export'
+                                    ? t('debug.removeFlag')
+                                    : t('debug.flagForExport')
                                 }
                                 variant="ghost"
                                 size="xs"
@@ -1183,8 +1184,8 @@ export function DebugPanel() {
                         setLagMs(ms);
                         showToast(
                           ms === 0
-                            ? 'Lag simulator disabled'
-                            : `Lag set to ${ms}ms`,
+                            ? t('debug.lagDisabled')
+                            : t('debug.lagSet', { milliseconds: ms }),
                           'success'
                         );
                       }}

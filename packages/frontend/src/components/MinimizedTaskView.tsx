@@ -43,6 +43,7 @@ import { MobileSwipeActionRow } from './tasks/MobileSwipeActionRow';
 import { TaskArchiveConfirmationModal } from './tasks/TaskArchiveConfirmationModal';
 import { OverflowTaskTitle } from './tasks/OverflowTaskTitle';
 import { TaskInlineProperties } from './tasks/TaskInlineProperties';
+import { TaskFollowUpContext } from './tasks/TaskFollowUpContext';
 import { Button } from './ui/Button';
 import { CompactIconButton } from './ui/CompactIconButton';
 import { IntentionEmojiPair } from './ui/IntentionEmojiPair';
@@ -51,6 +52,7 @@ import {
   focusTaskOnTimer,
   getTaskIntentionEmojis,
   getTaskPriorityAccentClass,
+  isInlineTaskPropertyUpdate,
   isTaskOverdue,
 } from '../utils/taskUi';
 import { getSelectedTimerIntentions } from '../utils/timerIntentions';
@@ -90,6 +92,27 @@ function isTypingInField(event: globalThis.KeyboardEvent) {
   return (
     tagName === 'input' || tagName === 'textarea' || target.isContentEditable
   );
+}
+
+function canToggleTaskPin(task: Task) {
+  return !task.followUpSourceTaskId && !task.followUpParent;
+}
+
+export function getPinShortcutTask(tasks: Task[], code: string) {
+  if (!/^Digit[1-9]$/.test(code)) return null;
+  const task = tasks[Number(code.slice(-1)) - 1];
+  return task && canToggleTaskPin(task) ? task : null;
+}
+
+export function getTaskDestinationPageIndex(
+  tasks: Array<Pick<Task, 'id'>>,
+  taskId: string,
+  tasksPerPage: number
+) {
+  const destinationIndex = tasks.findIndex(task => task.id === taskId);
+  return destinationIndex < 0
+    ? null
+    : Math.floor(destinationIndex / tasksPerPage);
 }
 
 export function MinimizedTaskView({
@@ -160,9 +183,13 @@ export function MinimizedTaskView({
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const [intentions, setIntentions] = useState<Intention[]>([]);
   const [lists, setLists] = useState<List[]>([]);
-  const [pinnedTaskDestinationId, setPinnedTaskDestinationId] = useState<
-    string | null
-  >(null);
+  const [taskDestinationId, setTaskDestinationId] = useState<string | null>(
+    null
+  );
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(
+    null
+  );
+  const taskHighlightTimeoutRef = useRef<number | null>(null);
   const [pinningTaskIds, setPinningTaskIds] = useState<string[]>([]);
   const pinningTaskIdsRef = useRef(new Set<string>());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -368,7 +395,7 @@ export function MinimizedTaskView({
       try {
         const didUpdate = await updateTask(updates);
         if (didUpdate && updates.pinned === true && currentTask) {
-          setPinnedTaskDestinationId(currentTask.id);
+          setTaskDestinationId(currentTask.id);
           await focusTaskOnTimer({
             task: currentTask,
             timer,
@@ -376,6 +403,12 @@ export function MinimizedTaskView({
             createOrResumeTimer,
             updatePreferenceWithResult,
             setTaskMode,
+          });
+        }
+        if (didUpdate && isInlineTaskPropertyUpdate(updates)) {
+          showToastFromStore(t('task.updated'), 'success', 5000, {
+            label: t('task.viewUpdated'),
+            onClick: () => setTaskDestinationId(updates.id),
           });
         }
         return didUpdate;
@@ -392,6 +425,7 @@ export function MinimizedTaskView({
       setTaskMode,
       tasks,
       timer,
+      t,
       updateTask,
       updatePreferenceWithResult,
     ]
@@ -438,15 +472,60 @@ export function MinimizedTaskView({
     setPageIndex(currentPage => Math.min(currentPage, pageCount - 1));
   }, [pageCount]);
 
-  useEffect(() => {
-    if (!pinnedTaskDestinationId) return;
-    const destinationIndex = displayTasks.findIndex(
-      task => task.id === pinnedTaskDestinationId
+  useLayoutEffect(() => {
+    if (!taskDestinationId) return;
+    const destinationPage = getTaskDestinationPageIndex(
+      displayTasks,
+      taskDestinationId,
+      tasksPerPage
     );
-    if (destinationIndex < 0) return;
-    setPageIndex(Math.floor(destinationIndex / tasksPerPage));
-    setPinnedTaskDestinationId(null);
-  }, [displayTasks, pinnedTaskDestinationId, tasksPerPage]);
+    if (destinationPage === null) {
+      setTaskDestinationId(null);
+      return;
+    }
+
+    if (!mobileExpandedLayout) {
+      if (destinationPage !== pageIndex) {
+        setPageIndex(destinationPage);
+        return;
+      }
+    }
+
+    const destination = Array.from(
+      taskScrollRef.current?.querySelectorAll<HTMLElement>(
+        '[data-testid="minimized-task-row"]'
+      ) ?? []
+    ).find(row => row.dataset.taskId === taskDestinationId);
+    if (!destination) return;
+
+    if (mobileExpandedLayout) {
+      destination.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    setHighlightedTaskId(taskDestinationId);
+    setTaskDestinationId(null);
+    if (taskHighlightTimeoutRef.current !== null) {
+      window.clearTimeout(taskHighlightTimeoutRef.current);
+    }
+    taskHighlightTimeoutRef.current = window.setTimeout(() => {
+      setHighlightedTaskId(null);
+      taskHighlightTimeoutRef.current = null;
+    }, 1800);
+  }, [
+    displayTasks,
+    mobileExpandedLayout,
+    pageIndex,
+    taskDestinationId,
+    tasksPerPage,
+  ]);
+
+  useEffect(
+    () => () => {
+      if (taskHighlightTimeoutRef.current !== null) {
+        window.clearTimeout(taskHighlightTimeoutRef.current);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     if (effectiveTaskSearchQuery.trim().length > 0) {
@@ -667,7 +746,7 @@ export function MinimizedTaskView({
         event.code.startsWith('Digit') &&
         event.code !== 'Digit0'
       ) {
-        const task = visibleTasks[Number(event.code.replace('Digit', '')) - 1];
+        const task = getPinShortcutTask(visibleTasks, event.code);
         if (!task) {
           return;
         }
@@ -922,6 +1001,7 @@ export function MinimizedTaskView({
                 <div
                   key={task.id}
                   data-testid="minimized-task-row"
+                  data-task-id={task.id}
                   data-pinned={isPinned}
                   data-overdue={isOverdue}
                   data-completing={isCompleting}
@@ -941,7 +1021,9 @@ export function MinimizedTaskView({
                       'border-slate-800/70 bg-red-950/35',
                     !isPinned &&
                       !isOverdue &&
-                      'border-slate-800/70 bg-slate-950/35 hover:border-slate-700/80 hover:bg-slate-900/55'
+                      'border-slate-800/70 bg-slate-950/35 hover:border-slate-700/80 hover:bg-slate-900/55',
+                    highlightedTaskId === task.id &&
+                      'border-indigo-300/90 ring-2 ring-indigo-400/60'
                   )}
                 >
                   <div
@@ -968,6 +1050,12 @@ export function MinimizedTaskView({
                     compact={!mobileExpandedLayout}
                   />
                   <div className="min-w-0">
+                    {task.followUpParent && (
+                      <TaskFollowUpContext
+                        parentTitle={task.followUpParent.title}
+                        compact
+                      />
+                    )}
                     <div className="flex min-w-0 items-center gap-1">
                       {isPinned && (
                         <FaThumbtack
@@ -1007,51 +1095,56 @@ export function MinimizedTaskView({
                     />
                   </div>
                   <div className="flex items-center justify-end gap-1 opacity-80 transition-opacity group-hover/minimized-task:opacity-100 group-focus-within/minimized-task:opacity-100">
-                    <button
-                      type="button"
-                      aria-label={`${isPinned ? 'Unpin' : 'Pin'} ${task.title}`}
-                      title={isPinned ? 'Unpin' : 'Pin'}
-                      onClick={() =>
-                        void updateTaskWithDeferredOrder({
-                          id: task.id,
-                          pinned: !isPinned,
-                        })
-                      }
-                      className={clsx(
-                        taskActionButtonClassName,
-                        isPinned &&
-                          '!border-indigo-300/80 !bg-indigo-500 !text-white shadow-sm shadow-indigo-500/30'
-                      )}
-                      disabled={isPinning}
-                      aria-pressed={isPinned}
-                    >
-                      <FaThumbtack
-                        size={taskActionIconSize}
-                        className="shrink-0"
-                      />
-                      {(intentionEmojis.parentEmoji ||
-                        intentionEmojis.subEmoji) && (
-                        <span
-                          data-testid="task-pin-intention-badge"
-                          className="pointer-events-none absolute -right-0.5 -top-1 origin-top-right scale-75 drop-shadow"
-                        >
-                          <IntentionEmojiPair
-                            parentEmoji={intentionEmojis.parentEmoji}
-                            subEmoji={intentionEmojis.subEmoji}
-                            size="xs"
-                          />
-                        </span>
-                      )}
-                      {visibleTasks.indexOf(task) < 9 && (
-                        <KeyboardShortcut
-                          text={`⇧${visibleTasks.indexOf(task) + 1}`}
-                          showModIcon
+                    {canToggleTaskPin(task) && (
+                      <button
+                        type="button"
+                        aria-label={t(
+                          isPinned ? 'task.unpinFor' : 'task.pinFor',
+                          { title: task.title }
+                        )}
+                        title={t(isPinned ? 'task.unpin' : 'task.pin')}
+                        onClick={() =>
+                          void updateTaskWithDeferredOrder({
+                            id: task.id,
+                            pinned: !isPinned,
+                          })
+                        }
+                        className={clsx(
+                          taskActionButtonClassName,
+                          isPinned &&
+                            '!border-indigo-300/80 !bg-indigo-500 !text-white shadow-sm shadow-indigo-500/30'
+                        )}
+                        disabled={isPinning}
+                        aria-pressed={isPinned}
+                      >
+                        <FaThumbtack
+                          size={taskActionIconSize}
+                          className="shrink-0"
                         />
-                      )}
-                    </button>
+                        {(intentionEmojis.parentEmoji ||
+                          intentionEmojis.subEmoji) && (
+                          <span
+                            data-testid="task-pin-intention-badge"
+                            className="pointer-events-none absolute -right-0.5 -top-1 origin-top-right scale-75 drop-shadow"
+                          >
+                            <IntentionEmojiPair
+                              parentEmoji={intentionEmojis.parentEmoji}
+                              subEmoji={intentionEmojis.subEmoji}
+                              size="xs"
+                            />
+                          </span>
+                        )}
+                        {visibleTasks.indexOf(task) < 9 && (
+                          <KeyboardShortcut
+                            text={`⇧${visibleTasks.indexOf(task) + 1}`}
+                            showModIcon
+                          />
+                        )}
+                      </button>
+                    )}
                     <button
                       type="button"
-                      aria-label={`Edit ${task.title}`}
+                      aria-label={t('task.editFor', { title: task.title })}
                       title={t('common.edit')}
                       onClick={() => {
                         if (compact) {
@@ -1102,7 +1195,6 @@ export function MinimizedTaskView({
         <TaskFormModal
           isOpen={isCreateOpen || editingTask !== undefined}
           task={editingTask ?? null}
-          activeTasks={tasks}
           intentions={intentions}
           lists={lists}
           preferences={preferences}

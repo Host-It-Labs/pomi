@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   CLIENT_NOTIFICATION_TYPES,
@@ -21,7 +21,7 @@ const TASK_REMINDER_SCAN_INTERVAL_MS = 60 * 1000;
 const DEFAULT_DUE_TIME = '10:00';
 
 @Injectable()
-export class TaskNotificationService implements OnModuleInit {
+export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new PomiLogger(TaskNotificationService.name);
   private readonly lastUrgentReminderAt = new Map<string, number>();
   private scanInterval: NodeJS.Timeout | null = null;
@@ -42,8 +42,21 @@ export class TaskNotificationService implements OnModuleInit {
     void this.scanDueTasks();
   }
 
+  onModuleDestroy(): void {
+    if (this.scanInterval) clearInterval(this.scanInterval);
+    this.scanInterval = null;
+  }
+
   async scanDueTasks(now = new Date()): Promise<void> {
-    const tasks = await this.getReminderCandidates();
+    let tasks: TaskEntity[];
+    try {
+      tasks = await this.getReminderCandidates();
+    } catch {
+      this.logger.warn(
+        'Task reminder scan skipped while storage is unavailable'
+      );
+      return;
+    }
 
     for (const task of tasks) {
       try {
@@ -66,7 +79,9 @@ export class TaskNotificationService implements OnModuleInit {
     return this.tasksRepository
       .createQueryBuilder('task')
       .where('task.status = :status', { status: TASK_STATUSES.ACTIVE })
-      .andWhere('task.itemKind = :itemKind', { itemKind: 'task' })
+      .andWhere('task.itemKind IN (:...itemKinds)', {
+        itemKinds: ['task', 'followUp'],
+      })
       .andWhere('task.dueDate IS NOT NULL')
       .getMany();
   }

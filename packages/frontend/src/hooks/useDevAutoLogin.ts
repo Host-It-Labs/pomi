@@ -38,6 +38,8 @@ export function useDevAutoLogin() {
       return;
     }
 
+    clearStoredBackendUrl();
+
     if (hasExplicitlySignedOut) {
       setIsPending(false);
       return;
@@ -56,7 +58,6 @@ export function useDevAutoLogin() {
     attemptedForUserRef.current = username;
     devAutoLoginInFlight = true;
     setIsPending(true);
-    clearStoredBackendUrl();
     setToken(null);
     setUser(null);
     setHasLoggedIn(false);

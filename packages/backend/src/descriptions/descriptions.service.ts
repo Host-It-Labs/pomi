@@ -32,7 +32,7 @@ export class DescriptionsService {
     const [intentions, lists, tasks] = await Promise.all([
       this.intentions.find({
         where: { userId, isArchived: false },
-        relations: ['parentIntention'],
+        relations: { parentIntention: true },
         order: { title: 'ASC' },
       }),
       this.lists.find({
@@ -58,7 +58,7 @@ export class DescriptionsService {
           titles: tasks
             .filter(
               task =>
-                task.itemKind === 'task' &&
+                (task.itemKind === 'task' || task.itemKind === 'followUp') &&
                 task.intentionSlug === intention.slug
             )
             .slice(0, MAX_TASK_TITLES)

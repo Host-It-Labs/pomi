@@ -6,6 +6,16 @@ import { isAndroid, isTauri } from '../utils/osUtils';
 
 const ANDROID_EMULATOR_HOST = '10.0.2.2';
 const LOCAL_BACKEND_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+const isProductionBuild = import.meta.env.PROD;
+const devAutoLoginUsername = isProductionBuild
+  ? ''
+  : import.meta.env.VITE_DEV_AUTO_LOGIN_USERNAME || '';
+const devAutoLoginPassword = isProductionBuild
+  ? ''
+  : import.meta.env.VITE_DEV_AUTO_LOGIN_PASSWORD || '';
+
+export const isDevAutoLoginEnabled =
+  !!devAutoLoginUsername.trim() && !!devAutoLoginPassword;
 
 const getAndroidReachableBackendUrl = (backendUrl: string): string => {
   const trimmedUrl = backendUrl.trim();
@@ -50,6 +60,10 @@ const getDefaultBackendUrl = (): string => {
 };
 
 export const getBackendUrl = (): string => {
+  if (isDevAutoLoginEnabled) {
+    return getDefaultBackendUrl();
+  }
+
   const storedUrl = getStoredBackendUrl();
   if (!storedUrl) {
     return getDefaultBackendUrl();
@@ -59,8 +73,6 @@ export const getBackendUrl = (): string => {
     ? getAndroidReachableBackendUrl(storedUrl)
     : storedUrl;
 };
-
-const isProductionBuild = import.meta.env.PROD;
 
 export const environmentVariables = {
   NODE_ENV: isProductionBuild ? 'production' : 'development',
@@ -72,12 +84,8 @@ export const environmentVariables = {
       ? import.meta.env.VITE_DEBUG_PANEL_ENABLED === 'true'
       : !isProductionBuild,
   BACKEND_URL: getBackendUrl(),
-  DEV_AUTO_LOGIN_USERNAME: isProductionBuild
-    ? ''
-    : import.meta.env.VITE_DEV_AUTO_LOGIN_USERNAME || '',
-  DEV_AUTO_LOGIN_PASSWORD: isProductionBuild
-    ? ''
-    : import.meta.env.VITE_DEV_AUTO_LOGIN_PASSWORD || '',
+  DEV_AUTO_LOGIN_USERNAME: devAutoLoginUsername,
+  DEV_AUTO_LOGIN_PASSWORD: devAutoLoginPassword,
   TEST_CONTEXT_SLUG: isProductionBuild
     ? ''
     : import.meta.env.VITE_TEST_CONTEXT_SLUG || '',

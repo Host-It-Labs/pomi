@@ -4,12 +4,14 @@ import {
   configureHttpApp,
   createValidationException,
   formatValidationErrors,
+  getTrustedProxyHops,
 } from '../../src/configure-app';
 
 describe('configureHttpApp', () => {
   it('shares body parsing, CORS, and strict global validation', () => {
     const app = {
       use: vi.fn(),
+      set: vi.fn(),
       enableCors: vi.fn(),
       useGlobalPipes: vi.fn(),
     };
@@ -19,6 +21,7 @@ describe('configureHttpApp', () => {
     expect(app.use).toHaveBeenCalledTimes(4);
     expect(app.use.mock.calls[0][0]).toBe('/system/user-data/import');
     expect(app.use.mock.calls[1][0]).toBe('/assistant');
+    expect(app.set).toHaveBeenCalledWith('trust proxy', expect.any(Number));
     expect(app.enableCors).toHaveBeenCalledWith({
       origin: expect.any(Function),
     });
@@ -32,6 +35,14 @@ describe('configureHttpApp', () => {
     callback.mockClear();
     origin('https://attacker.example', callback);
     expect(callback).toHaveBeenCalledWith(null, false);
+  });
+
+  it('accepts only a non-negative trusted proxy hop count', () => {
+    expect(getTrustedProxyHops(undefined)).toBe(0);
+    expect(getTrustedProxyHops('2')).toBe(2);
+    expect(() => getTrustedProxyHops('1.5')).toThrow(
+      'TRUST_PROXY_HOPS must be a non-negative integer'
+    );
   });
 
   it('formats nested validation failures as field-oriented safe messages', () => {

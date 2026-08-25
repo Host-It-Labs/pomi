@@ -84,7 +84,7 @@ export class IntentionsService {
 
     const intentions = await this.intentionsRepository.find({
       where: whereClause,
-      relations: ['parentIntention'],
+      relations: { parentIntention: true },
     });
 
     return intentions
@@ -100,7 +100,7 @@ export class IntentionsService {
   async getActiveIntentionsForAssistant(userId: string): Promise<Intention[]> {
     const intentions = await this.intentionsRepository.find({
       where: { userId, isArchived: false },
-      relations: ['parentIntention'],
+      relations: { parentIntention: true },
       order: { title: 'ASC' },
     });
     return intentions.filter(intention =>
@@ -224,7 +224,7 @@ export class IntentionsService {
   ): Promise<Intention> {
     const intention = await this.intentionsRepository.findOne({
       where: { userId, slug, type },
-      relations: ['parentIntention'],
+      relations: { parentIntention: true },
     });
 
     if (!intention) {
@@ -270,9 +270,13 @@ export class IntentionsService {
     intention: Intention
   ) {
     if (intention.parentIntentionId) {
-      await this.tasksRepository.update(
-        { userId, timerType: type, subIntentionSlug: slug },
-        { subIntentionSlug: null }
+      await this.updateTaskLinksForMovedSubIntention(
+        this.tasksRepository,
+        userId,
+        type,
+        slug,
+        null,
+        false
       );
       this.realtimeEvents.emitTasksUpdate(userId);
       return;
@@ -281,6 +285,12 @@ export class IntentionsService {
     await this.tasksRepository.update(
       { userId, timerType: type, intentionSlug: slug },
       { intentionSlug: null, subIntentionSlug: null }
+    );
+    await this.unlinkFollowUpDefinitions(
+      this.tasksRepository,
+      userId,
+      type,
+      slug
     );
     this.realtimeEvents.emitTasksUpdate(userId);
   }
@@ -336,7 +346,7 @@ export class IntentionsService {
   ): Promise<Intention> {
     const intention = await this.intentionsRepository.findOne({
       where: { userId, slug, type },
-      relations: ['parentIntention'],
+      relations: { parentIntention: true },
     });
     if (!intention) {
       throw new NotFoundException('Intention not found');
@@ -379,7 +389,7 @@ export class IntentionsService {
   ): Promise<Intention> {
     const intention = await this.intentionsRepository.findOne({
       where: { userId, slug, type },
-      relations: ['parentIntention'],
+      relations: { parentIntention: true },
     });
 
     if (!intention) {
@@ -508,9 +518,15 @@ export class IntentionsService {
                       userId,
                       timerType: type,
                       intentionSlug: savedIntention.slug,
-                      itemKind: 'task',
+                      itemKind: In(['task', 'followUp']),
                     },
                     { intentionSlug: null, subIntentionSlug: null }
+                  );
+                  await this.unlinkFollowUpDefinitions(
+                    manager.getRepository(TaskEntity),
+                    userId,
+                    type,
+                    savedIntention.slug
                   );
                   return savedIntention;
                 }
@@ -539,7 +555,7 @@ export class IntentionsService {
     const baseSlug = generateIntentionSlug(title);
     const existing = await this.intentionsRepository.find({
       where: { userId, type },
-      select: ['id', 'slug'],
+      select: { id: true, slug: true },
     });
     const reserved = new Set(
       existing
@@ -582,6 +598,10 @@ export class IntentionsService {
           parameters
         );
         await manager.query(
+          `UPDATE "tasks" SET "followUpDefinition" = jsonb_set("followUpDefinition", '{subIntentionSlug}', to_jsonb($4::text), false) WHERE "userId" = $1 AND "followUpDefinition" IS NOT NULL AND "followUpDefinition" ->> 'timerType' = $2 AND "followUpDefinition" ->> 'subIntentionSlug' = $3`,
+          parameters
+        );
+        await manager.query(
           `UPDATE "task_events" SET "subIntentionSlugSnapshot" = $4 WHERE "userId" = $1 AND "timerTypeSnapshot" = $2 AND "subIntentionSlugSnapshot" = $3`,
           parameters
         );
@@ -592,6 +612,10 @@ export class IntentionsService {
       } else {
         await manager.query(
           `UPDATE "tasks" SET "intentionSlug" = $4 WHERE "userId" = $1 AND "timerType" = $2 AND "intentionSlug" = $3`,
+          parameters
+        );
+        await manager.query(
+          `UPDATE "tasks" SET "followUpDefinition" = jsonb_set("followUpDefinition", '{intentionSlug}', to_jsonb($4::text), false) WHERE "userId" = $1 AND "followUpDefinition" IS NOT NULL AND "followUpDefinition" ->> 'timerType' = $2 AND "followUpDefinition" ->> 'intentionSlug' = $3`,
           parameters
         );
         await manager.query(
@@ -617,9 +641,15 @@ export class IntentionsService {
             userId: intention.userId,
             timerType: intention.type,
             intentionSlug: intention.slug,
-            itemKind: 'task',
+            itemKind: In(['task', 'followUp']),
           },
           { intentionSlug: null, subIntentionSlug: null }
+        );
+        await this.unlinkFollowUpDefinitions(
+          manager.getRepository(TaskEntity),
+          intention.userId,
+          intention.type,
+          intention.slug
         );
       }
       if (movedParent) {
@@ -666,12 +696,42 @@ export class IntentionsService {
     nextParentAllowsTasks: boolean
   ): Promise<void> {
     await tasksRepository.update(
-      { userId, timerType: type, subIntentionSlug, itemKind: 'task' },
+      {
+        userId,
+        timerType: type,
+        subIntentionSlug,
+        itemKind: In(['task', 'followUp']),
+      },
       nextParentSlug
         ? nextParentAllowsTasks
           ? { intentionSlug: nextParentSlug }
           : { intentionSlug: null, subIntentionSlug: null }
         : { subIntentionSlug: null }
+    );
+    if (nextParentSlug && nextParentAllowsTasks) {
+      await tasksRepository.query(
+        `UPDATE "tasks" SET "followUpDefinition" = jsonb_set("followUpDefinition", '{intentionSlug}', to_jsonb($4::text), false) WHERE "userId" = $1 AND "followUpDefinition" IS NOT NULL AND "followUpDefinition" ->> 'timerType' = $2 AND "followUpDefinition" ->> 'subIntentionSlug' = $3`,
+        [userId, type, subIntentionSlug, nextParentSlug]
+      );
+      return;
+    }
+    await tasksRepository.query(
+      nextParentSlug
+        ? `UPDATE "tasks" SET "followUpDefinition" = jsonb_set(jsonb_set("followUpDefinition", '{intentionSlug}', 'null'::jsonb, false), '{subIntentionSlug}', 'null'::jsonb, false) WHERE "userId" = $1 AND "followUpDefinition" IS NOT NULL AND "followUpDefinition" ->> 'timerType' = $2 AND "followUpDefinition" ->> 'subIntentionSlug' = $3`
+        : `UPDATE "tasks" SET "followUpDefinition" = jsonb_set("followUpDefinition", '{subIntentionSlug}', 'null'::jsonb, false) WHERE "userId" = $1 AND "followUpDefinition" IS NOT NULL AND "followUpDefinition" ->> 'timerType' = $2 AND "followUpDefinition" ->> 'subIntentionSlug' = $3`,
+      [userId, type, subIntentionSlug]
+    );
+  }
+
+  private async unlinkFollowUpDefinitions(
+    tasksRepository: Repository<TaskEntity>,
+    userId: string,
+    type: IntentionType,
+    intentionSlug: string
+  ) {
+    await tasksRepository.query(
+      `UPDATE "tasks" SET "followUpDefinition" = jsonb_set(jsonb_set("followUpDefinition", '{intentionSlug}', 'null'::jsonb, false), '{subIntentionSlug}', 'null'::jsonb, false) WHERE "userId" = $1 AND "followUpDefinition" IS NOT NULL AND "followUpDefinition" ->> 'timerType' = $2 AND "followUpDefinition" ->> 'intentionSlug' = $3`,
+      [userId, type, intentionSlug]
     );
   }
 
@@ -756,7 +816,7 @@ export class IntentionsService {
 
     const intentions = await this.intentionsRepository.find({
       where: whereClause,
-      relations: ['parentIntention'],
+      relations: { parentIntention: true },
     });
 
     return intentions.reduce(
@@ -765,6 +825,38 @@ export class IntentionsService {
         return acc;
       },
       {} as Record<string, Intention>
+    );
+  }
+
+  async getIntentionLabelsByTypeAndSlug(
+    userId: string,
+    lookups: Array<{ type: IntentionType; slugs: string[] }>
+  ): Promise<Record<string, string>> {
+    const where = lookups
+      .map(({ type, slugs }) => ({
+        userId,
+        type,
+        slugs: Array.from(new Set(slugs)),
+      }))
+      .filter(lookup => lookup.slugs.length > 0)
+      .map(({ slugs, ...lookup }) => ({ ...lookup, slug: In(slugs) }));
+    if (where.length === 0) return {};
+
+    const intentions = await this.intentionsRepository.find({
+      select: {
+        type: true,
+        slug: true,
+        emoji: true,
+        title: true,
+      },
+      where,
+    });
+
+    return Object.fromEntries(
+      intentions.map(intention => [
+        `${intention.type}:${intention.slug}`,
+        `${intention.emoji} ${intention.title}`,
+      ])
     );
   }
 

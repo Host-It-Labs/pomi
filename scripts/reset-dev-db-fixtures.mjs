@@ -4,17 +4,36 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readDevPorts } from './dev-ports.mjs';
 import { loadLocalEnvironment } from './local-env.mjs';
+import {
+  resolveContainedPath,
+  resolveExistingFileInside,
+  resolveManagedDirectory,
+} from './path-safety.mjs';
 
 loadLocalEnvironment();
 
 const rootDir = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
-const composeFile =
-  process.env.POMI_DOCKER_COMPOSE_FILE ||
-  path.join(rootDir, 'packages/backend/docker-compose.dev.yml');
+const backendRoot = resolveContainedPath({
+  root: rootDir,
+  relativePath: 'packages/backend',
+  label: 'Backend root',
+});
+const composeFile = resolveExistingFileInside({
+  candidate:
+    process.env.POMI_DOCKER_COMPOSE_FILE ||
+    path.join(backendRoot, 'docker-compose.dev.yml'),
+  root: rootDir,
+  label: 'Development Docker Compose file',
+});
 const composeProject = process.env.POMI_COMPOSE_PROJECT || 'pomi';
-const pgdataDir =
-  process.env.POMI_DEV_DB_DATA_DIR ||
-  path.join(rootDir, 'packages/backend/pgdata');
+const defaultPgdataDir = path.join(backendRoot, 'pgdata18');
+const pgdataDir = resolveManagedDirectory({
+  allowedRoot: backendRoot,
+  candidate: process.env.POMI_DEV_DB_DATA_DIR || defaultPgdataDir,
+  label: 'Development database data directory',
+  sentinelName: 'pomi-managed-dev-db',
+  trustedDirectory: defaultPgdataDir,
+});
 const args = process.argv.slice(2);
 const unsupportedArgs = args.filter(argument => argument !== '--copyme-only');
 
@@ -88,6 +107,7 @@ async function main() {
   });
 
   process.stdout.write(`[pomi] removing dev database data at ${pgdataDir}\n`);
+  // codeql[js/path-injection] -- The canonical target is the fixed pgdata directory or a contained custom directory with an explicit deletion sentinel.
   await rm(pgdataDir, { recursive: true, force: true });
 
   process.stdout.write('[pomi] starting dev stack\n');

@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import { AnimatePresence, motion } from 'framer-motion';
 import { FaUndo } from 'react-icons/fa';
+import { useI18n } from '../../i18n';
 
 export function CompletionButton({
   label,
@@ -17,13 +18,15 @@ export function CompletionButton({
   onClick: () => void;
   compact?: boolean;
 }) {
+  const { t } = useI18n();
   const isUndo = isCompleted || isCompleting === true;
   const isCompact = compact === true;
+  const actionLabel = isUndo ? t('common.undo') : t('common.complete');
   return (
     <motion.button
       type="button"
-      aria-label={`${isUndo ? 'Undo' : 'Complete'} ${label}`}
-      title={isUndo ? 'Undo' : 'Complete'}
+      aria-label={`${actionLabel} ${label}`}
+      title={actionLabel}
       aria-pressed={isUndo}
       disabled={disabled === true}
       onClick={onClick}

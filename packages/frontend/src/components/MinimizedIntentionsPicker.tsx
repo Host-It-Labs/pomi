@@ -987,7 +987,7 @@ export function MinimizedIntentionsPicker({
         'relative flex items-center justify-center rounded-md border border-indigo-400/55 bg-indigo-500/20 text-indigo-100 transition-all hover:border-indigo-300/70 hover:bg-indigo-500/30 select-none',
         compactForTasks ? 'h-7 w-7 text-[11px]' : 'h-8 w-8 text-xs'
       )}
-      title={`Add new intention (${isMac ? '⌘' : 'Ctrl+'}0)`}
+      title={`${t('intention.addNew')} (${isMac ? '⌘' : 'Ctrl+'}0)`}
       aria-label={t('intention.addNew')}
     >
       <FaPlus size={compactForTasks ? 9 : 10} />
@@ -1064,8 +1064,8 @@ export function MinimizedIntentionsPicker({
                 pageCount={pageCount}
                 onPrevious={prevPage}
                 onNext={nextPage}
-                previousLabel="Previous intentions page"
-                nextLabel="Next intentions page"
+                previousLabel={t('navigation.previousIntentionsPage')}
+                nextLabel={t('navigation.nextIntentionsPage')}
                 showShortcuts={false}
                 className="contents"
                 buttonSizeClassName="h-5 w-5"
@@ -1125,8 +1125,8 @@ export function MinimizedIntentionsPicker({
                     pageCount={pageCount}
                     onPrevious={prevPage}
                     onNext={nextPage}
-                    previousLabel="Previous sub-intentions page"
-                    nextLabel="Next sub-intentions page"
+                    previousLabel={t('navigation.previousSubIntentionsPage')}
+                    nextLabel={t('navigation.nextSubIntentionsPage')}
                     showShortcuts={false}
                     className={compactForTasks ? 'gap-2' : 'gap-1'}
                     buttonSizeClassName="h-5 w-5"
@@ -1173,8 +1173,8 @@ export function MinimizedIntentionsPicker({
                     pageCount={pageCount}
                     onPrevious={prevPage}
                     onNext={nextPage}
-                    previousLabel="Previous intentions page"
-                    nextLabel="Next intentions page"
+                    previousLabel={t('navigation.previousIntentionsPage')}
+                    nextLabel={t('navigation.nextIntentionsPage')}
                     showShortcuts={false}
                     className="absolute inset-x-1 justify-between gap-0"
                     buttonSizeClassName="h-4 w-5"

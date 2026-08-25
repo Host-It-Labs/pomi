@@ -4,6 +4,7 @@ import { TrayIcon } from '@tauri-apps/api/tray';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useEffect, useRef, useState } from 'react';
 import { HEX_COLORS } from '../config/colors';
+import { useI18n } from '../i18n';
 import { useTimerStore } from '../stores/timerStore';
 import { generateMiniTimerIcon } from '../utils/generateMiniTimerIcon';
 import { isDesktop } from '../utils/osUtils';
@@ -13,6 +14,7 @@ export function SystemTray() {
   const toggleTimer = useTimerStore.use.toggleTimer();
   const resetTimer = useTimerStore.use.resetTimer();
   const skipTimer = useTimerStore.use.skipTimer();
+  const { t } = useI18n();
   const [trayInstance, setTrayInstance] = useState<TrayIcon | null>(null);
   const updateIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -20,13 +22,15 @@ export function SystemTray() {
     if (!isDesktop) return;
 
     const Window = getCurrentWindow();
+    let isDisposed = false;
+    let currentTray: TrayIcon | null = null;
     const setupTray = async () => {
       try {
         const menu = await Menu.new({
           items: [
             {
               id: 'show-app',
-              text: 'Show App',
+              text: t('shortcuts.showApp'),
               action: () => {
                 Window.show();
                 Window.setFocus();
@@ -35,51 +39,55 @@ export function SystemTray() {
             { item: 'Separator' },
             {
               id: 'start-resume',
-              text: 'Start / Pause Timer',
+              text: t('timer.startPause'),
               action: () => {
                 toggleTimer();
               },
             },
             {
               id: 'reset',
-              text: 'Reset Timer',
+              text: t('timer.reset'),
               action: () => resetTimer(),
             },
             {
               id: 'skip',
-              text: 'Skip Timer',
+              text: t('timer.skipTimer'),
               action: () => skipTimer(),
             },
             { item: 'Separator' },
             {
               id: 'quit',
-              text: 'Quit',
+              text: t('common.quit'),
               action: () => Window.close(),
             },
           ],
         });
 
         const tray = await TrayIcon.new({
-          tooltip: 'Work Timer',
+          tooltip: t('timer.workTimer'),
           menu,
         });
 
+        if (isDisposed) {
+          await tray.close();
+          return;
+        }
+        currentTray = tray;
         setTrayInstance(tray);
       } catch (error) {
         console.error('Failed to create system tray:', error);
       }
     };
 
-    if (!trayInstance) {
-      setupTray();
-    }
+    setupTray();
 
     return () => {
-      if (trayInstance) {
-        trayInstance.close();
+      isDisposed = true;
+      if (currentTray) {
+        currentTray.close();
       }
     };
-  }, []);
+  }, [resetTimer, skipTimer, t, toggleTimer]);
 
   useEffect(() => {
     if (!trayInstance || !isDesktop) return;

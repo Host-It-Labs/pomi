@@ -94,6 +94,7 @@ class WatchLanguageTest {
             subIntentionSlug = null,
             subIntentionTitle = null,
             subIntentionEmoji = null,
+            followUpParentTitle = null,
             isFocused = false,
             isLinkedToTimer = false,
             isOverdue = false

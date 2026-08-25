@@ -4,6 +4,7 @@ import {
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { GitHubAppTokenService } from './github-app-token.service';
 
 type FeedbackDiagnostics = {
   appVersion?: string;
@@ -12,26 +13,44 @@ type FeedbackDiagnostics = {
   viewport?: string;
 };
 
+const GITHUB_API_ORIGIN = 'https://api.github.com';
+const GITHUB_OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
+const GITHUB_REPOSITORY_PATTERN =
+  /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9._-])?$/;
+
+function githubIssuesUrl(repository: string) {
+  const parts = repository.split('/');
+  if (
+    parts.length !== 2 ||
+    !GITHUB_OWNER_PATTERN.test(parts[0]) ||
+    !GITHUB_REPOSITORY_PATTERN.test(parts[1])
+  ) {
+    throw new ServiceUnavailableException('Feedback repository is invalid');
+  }
+
+  const url = new URL(GITHUB_API_ORIGIN);
+  url.pathname = ['repos', parts[0], parts[1], 'issues'].join('/');
+  if (url.origin !== GITHUB_API_ORIGIN) {
+    throw new ServiceUnavailableException('Feedback repository is invalid');
+  }
+  return url;
+}
+
 @Injectable()
 export class FeedbackService {
+  constructor(private readonly githubAppTokenService: GitHubAppTokenService) {}
+
   async submit(text: string, diagnostics?: FeedbackDiagnostics) {
-    const token = process.env.GITHUB_FEEDBACK_TOKEN?.trim();
-    if (!token) {
-      throw new ServiceUnavailableException(
-        'Feedback submission is not configured'
-      );
-    }
     const repository = process.env.GITHUB_FEEDBACK_REPOSITORY?.trim();
     if (!repository) {
       throw new ServiceUnavailableException(
         'Feedback submission is not configured'
       );
     }
-    if (!/^[^/]+\/[^/]+$/.test(repository)) {
-      throw new ServiceUnavailableException('Feedback repository is invalid');
-    }
+    const issuesUrl = githubIssuesUrl(repository);
     const feedback = text.trim();
     if (!feedback) throw new BadRequestException('Feedback is required');
+    const token = await this.githubAppTokenService.getToken();
 
     const diagnosticsLines = Object.entries(diagnostics ?? {})
       .filter((entry): entry is [string, string] => Boolean(entry[1]))
@@ -46,10 +65,12 @@ export class FeedbackService {
         : []),
     ].join('\n');
     const label = process.env.GITHUB_FEEDBACK_LABEL?.trim() || 'feedback';
-    const response = await fetch(
-      `https://api.github.com/repos/${repository}/issues`,
-      {
+    let response: Response;
+    try {
+      // codeql[js/request-forgery] -- githubIssuesUrl fixes and rechecks the API origin after validating both path segments.
+      response = await fetch(issuesUrl, {
         method: 'POST',
+        redirect: 'error',
         headers: {
           Accept: 'application/vnd.github+json',
           Authorization: `Bearer ${token}`,
@@ -63,8 +84,12 @@ export class FeedbackService {
           ...(label ? { labels: [label] } : {}),
         }),
         signal: AbortSignal.timeout(15_000),
-      }
-    );
+      });
+    } catch {
+      throw new BadGatewayException(
+        'GitHub feedback submission is unavailable'
+      );
+    }
     if (!response.ok) {
       throw new BadGatewayException('GitHub did not accept the feedback');
     }

@@ -3,15 +3,17 @@ import {
   Controller,
   Query,
   Req,
+  Res,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { apiContract } from '@pomi/shared';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { UsersService } from '../users/users.service';
 import { TimerService } from '../timer/timer.service';
 import { AuthGuard } from './auth.guard';
+import { AuthRateLimitException } from './auth-rate-limit.exception';
 import { AuthService } from './auth.service';
 import { AuthenticateDto } from './dto/authenticate.dto';
 import { LogoutDto } from './dto/logout.dto';
@@ -25,13 +27,26 @@ export class AuthController {
   ) {}
 
   @TsRestHandler(apiContract.sessions.create)
-  async authenticate(@Body() body: AuthenticateDto): Promise<unknown> {
+  async authenticate(
+    @Body() body: AuthenticateDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response
+  ): Promise<unknown> {
     return tsRestHandler(apiContract.sessions.create, async () => {
-      const result = await this.authService.authenticateUser(
-        body.username,
-        body.password,
-        body.language
-      );
+      let result;
+      try {
+        result = await this.authService.authenticateUser(
+          body.username,
+          body.password,
+          request.ip || request.socket.remoteAddress || 'unknown',
+          body.language
+        );
+      } catch (error) {
+        if (error instanceof AuthRateLimitException) {
+          response.setHeader('Retry-After', String(error.retryAfterSeconds));
+        }
+        throw error;
+      }
       const createdAt = result.user.createdAt;
       const user = {
         ...result.user,

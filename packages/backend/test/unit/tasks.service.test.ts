@@ -32,6 +32,10 @@ function createQueryBuilder(
       this.params.push({ [key]: value });
       return this;
     },
+    setParameters(values) {
+      this.params.push(values);
+      return this;
+    },
     groupBy() {
       return this;
     },
@@ -90,6 +94,7 @@ function createService(
   const taskEventBuilders = [];
   const emittedTaskUsers = [];
   const importRuns = [];
+  const rankingLabelLookups = [];
   let preferenceReads = 0;
 
   const service = new TasksService(
@@ -208,6 +213,25 @@ function createService(
                   (type === undefined || intention.type === type)
               )
               .map(intention => [intention.slug, intention])
+          )
+        );
+      },
+      getIntentionLabelsByTypeAndSlug(userId, lookups) {
+        rankingLabelLookups.push({ userId, lookups });
+        return Promise.resolve(
+          Object.fromEntries(
+            intentions
+              .filter(intention =>
+                lookups.some(
+                  lookup =>
+                    intention.type === lookup.type &&
+                    lookup.slugs.includes(intention.slug)
+                )
+              )
+              .map(intention => [
+                `${intention.type}:${intention.slug}`,
+                `${intention.emoji} ${intention.title}`,
+              ])
           )
         );
       },
@@ -332,6 +356,7 @@ function createService(
     taskEventBuilders,
     emittedTaskUsers,
     importRuns,
+    rankingLabelLookups,
     getPreferenceReads: () => preferenceReads,
   };
 }
@@ -763,6 +788,31 @@ test('an unlinked Task can be pinned and completion clears its pin', async () =>
   assert.equal(savedTasks.at(-1).pinnedAt, null);
 });
 
+test('a contextual follow-up cannot be pinned, reordered, or recurring', async () => {
+  const task = {
+    id: 'contextual-follow-up',
+    userId: 'user-1',
+    title: 'Send the summary',
+    status: TASK_STATUSES.ACTIVE,
+    itemKind: 'followUp',
+    followUpSourceTaskId: 'parent-task',
+  };
+  const { service } = createService(task);
+
+  for (const updates of [
+    { pinned: true },
+    { manualOrder: 0 },
+    { manualOrderOverride: true },
+    { recurrenceRule: 'FREQ=DAILY' },
+    { recurrenceInterval: 2 },
+  ]) {
+    await assert.rejects(
+      () => service.updateTask('user-1', task.id, updates),
+      /cannot be pinned, reordered, or recurring/
+    );
+  }
+});
+
 test('Task links cannot cross timer types', async () => {
   const { service, intentions } = createService(null);
   intentions.push({
@@ -811,12 +861,22 @@ test('completion replaces an active follow-up and preserves source recurrence', 
     recurrenceInterval: null,
     recurrenceSequenceIndex: 0,
     recurrenceAnchorMode: 'planned',
-    followUpTaskId: 'follow-up-template',
+    followUpTaskId: null,
+    followUpDefinition: {
+      title: 'Send the follow-up',
+      description: null,
+      dueTime: '09:00',
+      priority: 'high',
+      timerType: 'work',
+      intentionSlug: null,
+      subIntentionSlug: null,
+      vacationEligible: false,
+    },
     followUpDelayDays: 2,
     followUpSourceTaskId: null,
     itemKind: 'task',
   };
-  const template = {
+  const previousGenerated = {
     id: 'follow-up-template',
     userId: 'user-1',
     title: 'Send the follow-up',
@@ -834,26 +894,14 @@ test('completion replaces an active follow-up and preserves source recurrence', 
     recurrenceAnchorMode: 'planned',
     followUpTaskId: null,
     followUpDelayDays: null,
-    followUpSourceTaskId: null,
-    itemKind: 'task',
-    vacationEligible: false,
-  };
-  const previousGenerated = {
-    ...template,
-    id: 'generated-follow-up',
-    title: 'Send the follow-up',
     followUpSourceTaskId: source.id,
+    itemKind: 'followUp',
+    vacationEligible: false,
   };
   const { service, savedTasks, savedEvents } = createService(source);
   const taskRepository = service['tasksRepository'];
   taskRepository.findOne = ({ where }) =>
-    Promise.resolve(
-      where.id === source.id
-        ? source
-        : where.id === template.id
-          ? template
-          : null
-    );
+    Promise.resolve(where.id === source.id ? source : null);
   taskRepository.find = ({ where }) =>
     Promise.resolve(
       where.followUpSourceTaskId === source.id ? [previousGenerated] : []
@@ -896,6 +944,39 @@ test('completion replaces an active follow-up and preserves source recurrence', 
       ?.eventType,
     'created'
   );
+});
+
+test('active follow-ups retain context when their parent becomes a List item', async () => {
+  const parent = {
+    id: 'parent-task',
+    userId: 'user-1',
+    title: 'Review the launch',
+    status: TASK_STATUSES.ACTIVE,
+    itemKind: 'listItem',
+    followUpSourceTaskId: null,
+  };
+  const followUp = {
+    id: 'follow-up-task',
+    userId: 'user-1',
+    title: 'Send the summary',
+    status: TASK_STATUSES.ACTIVE,
+    itemKind: 'followUp',
+    followUpSourceTaskId: parent.id,
+  };
+  const { service } = createService(null);
+  const taskRepository = service['tasksRepository'];
+  taskRepository.find = vi
+    .fn()
+    .mockResolvedValueOnce([followUp])
+    .mockResolvedValueOnce([parent]);
+
+  const tasks = await service.getActiveTasks('user-1');
+
+  assert.equal(tasks.length, 1);
+  assert.deepEqual((followUp as { followUpParent?: unknown }).followUpParent, {
+    id: parent.id,
+    title: parent.title,
+  });
 });
 
 test('recurring completion advances successive occurrences and ignores a replay', async () => {
@@ -990,7 +1071,17 @@ test('follow-up delay validation enforces the shared maximum', async () => {
     service.createTask({
       userId: 'user-1',
       title: 'Source Task',
-      followUpTaskId: 'template',
+      followUpTaskId: null,
+      followUpDefinition: {
+        title: 'Send the follow-up',
+        description: null,
+        dueTime: null,
+        priority: 'normal',
+        timerType: 'work',
+        intentionSlug: null,
+        subIntentionSlug: null,
+        vacationEligible: false,
+      },
       followUpDelayDays: TASK_FOLLOW_UP_DELAY_MAX_DAYS + 1,
       creationSource: TASK_CREATION_SOURCES.MANUAL,
     }),
@@ -1355,7 +1446,7 @@ test('linked Tasks require a child when their parent has active sub-intentions',
 });
 
 test('task ranking labels remain type-aware when slugs collide', async () => {
-  const { service, intentions } = createService(null);
+  const { service, intentions, rankingLabelLookups } = createService(null);
   intentions.push(
     {
       id: 'work-intention-1',
@@ -1394,6 +1485,15 @@ test('task ranking labels remain type-aware when slugs collide', async () => {
 
   assert.equal(labels['work:focus'], '🎯 Work Focus');
   assert.equal(labels['break:focus'], '☕ Break Focus');
+  assert.deepEqual(rankingLabelLookups, [
+    {
+      userId: 'user-1',
+      lookups: [
+        { type: 'work', slugs: ['focus'] },
+        { type: 'break', slugs: ['focus'] },
+      ],
+    },
+  ]);
 });
 
 test('task statistics period counts use one bounded aggregate query', async () => {
@@ -1462,6 +1562,23 @@ test('task statistics period counts use one bounded aggregate query', async () =
   );
 });
 
+test('task overview includes active contextual follow-ups', async () => {
+  const { service, taskBuilders } = createService(null);
+
+  await service['getTaskOverview'](
+    'user-1',
+    new Date('2026-08-16T00:00:00.000Z'),
+    'UTC'
+  );
+
+  assert.ok(
+    taskBuilders[0].conditions.includes('task.itemKind IN (:...itemKinds)')
+  );
+  assert.deepEqual(taskBuilders[0].params.at(-2), {
+    itemKinds: ['task', 'followUp'],
+  });
+});
+
 test('task ranking distinguishes a none slug from an unlinked Task', async () => {
   const { service, intentions, taskEventBuilders } = createService(null, [
     {
@@ -1508,4 +1625,50 @@ test('task ranking distinguishes a none slug from an unlinked Task', async () =>
       .flatMap(builder => builder.params)
       .some(params => params.noIntention === '[no-intention]')
   );
+});
+
+test('task ranking labels archived intentions and preserves missing history', async () => {
+  const { service, intentions, rankingLabelLookups } = createService(null, [
+    {
+      slug: 'work:archived-focus',
+      timerType: 'work',
+      intentionSlug: 'archived-focus',
+      count: '2',
+    },
+    {
+      slug: 'break:deleted-focus',
+      timerType: 'break',
+      intentionSlug: 'deleted-focus',
+      count: '1',
+    },
+  ]);
+  intentions.push({
+    id: 'archived-work-intention',
+    userId: 'user-1',
+    title: 'Archived Focus',
+    emoji: '📦',
+    slug: 'archived-focus',
+    type: 'work',
+    isArchived: true,
+  });
+
+  const ranking = await service.getTaskRanking(
+    'user-1',
+    'all',
+    'week',
+    '2026-07-10',
+    'UTC'
+  );
+
+  assert.equal(ranking[0].label, '📦 Archived Focus');
+  assert.equal(ranking[1].label, 'break:deleted-focus');
+  assert.deepEqual(rankingLabelLookups, [
+    {
+      userId: 'user-1',
+      lookups: [
+        { type: 'work', slugs: ['archived-focus'] },
+        { type: 'break', slugs: ['deleted-focus'] },
+      ],
+    },
+  ]);
 });

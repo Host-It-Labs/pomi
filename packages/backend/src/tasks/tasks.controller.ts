@@ -27,10 +27,14 @@ export class TasksController {
   constructor(private tasksService: TasksService) {}
 
   private formatTask(task: TaskEntity) {
-    const { recurrenceSequenceIndex, ...publicTask } = task;
+    const { recurrenceSequenceIndex, followUpTaskId, ...publicTask } = task;
     void recurrenceSequenceIndex;
+    void followUpTaskId;
     return {
       ...publicTask,
+      followUpTaskId: null,
+      followUpDefinition: task.followUpDefinition ?? null,
+      followUpParent: task.followUpParent ?? null,
       itemKind: 'task' as const,
       pinnedAt:
         task.pinnedAt instanceof Date
@@ -152,6 +156,7 @@ export class TasksController {
         recurrenceInterval: data.recurrenceInterval,
         recurrenceAnchorMode: data.recurrenceAnchorMode,
         followUpTaskId: data.followUpTaskId,
+        followUpDefinition: data.followUpDefinition,
         followUpDelayDays: data.followUpDelayDays,
         vacationEligible: data.vacationEligible,
         creationSource: TASK_CREATION_SOURCES.MANUAL,

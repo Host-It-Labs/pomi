@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import { type ButtonHTMLAttributes } from 'react';
 import { Spinner } from './Spinner.tsx';
+import { useI18n } from '../../i18n';
 
 type ButtonVariant =
   | 'primary'
@@ -30,6 +31,7 @@ export function Button({
   disabled,
   ...props
 }: ButtonProps) {
+  const { t } = useI18n();
   const resolvedVariant = variant ?? 'primary';
   const resolvedSize = size ?? 'md';
   const showLoading = Boolean(isLoading);
@@ -71,7 +73,7 @@ export function Button({
       {showLoading ? (
         <span className="inline-flex items-center gap-2">
           <Spinner size="sm" />
-          <span>{loadingText || 'Loading...'}</span>
+          <span>{loadingText || t('common.loading')}</span>
         </span>
       ) : (
         children

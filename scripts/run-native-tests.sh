@@ -12,4 +12,4 @@ cargo check
 cargo test
 
 cd "${ROOT_DIR}/packages/frontend/src-tauri/gen/android"
-./gradlew --settings-file wear.settings.gradle :wear:testDebugUnitTest :wear:koverVerifyDebug :wear:koverXmlReportDebug
+./gradlew -p wear testDebugUnitTest koverVerifyDebug koverXmlReportDebug

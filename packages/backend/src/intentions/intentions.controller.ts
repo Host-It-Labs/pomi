@@ -34,6 +34,8 @@ export class IntentionsController {
             slug: intention.parentIntention.slug,
           }
         : null,
+      description: intention.description ?? null,
+      vacationDefault: intention.vacationDefault ?? false,
       createdAt:
         intention.createdAt instanceof Date
           ? intention.createdAt.toISOString()

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createSign } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadLocalEnvironment, repositoryRoot } from './local-env.mjs';
+import { loadAutomationEnvironment, repositoryRoot } from './local-env.mjs';
 
 const API_BASE = 'https://api.github.com';
 const PUBLIC_REPOSITORY = 'Host-It-Labs/pomi';
@@ -76,7 +76,7 @@ export function readGitHubAppConfiguration(environment = process.env) {
     environment.POMI_RADAR_GITHUB_APP_PRIVATE_KEY_PATH?.trim();
   if (!appId || !installationId || !configuredPrivateKeyPath) {
     throw new Error(
-      'GitHub App configuration is incomplete in .env.local (App ID, installation ID, and private-key path are required).'
+      'GitHub App configuration is incomplete in config/pomi-automation.env (App ID, installation ID, and private-key path are required).'
     );
   }
   if (!/^\d+$/.test(appId) || !/^\d+$/.test(installationId)) {
@@ -143,8 +143,35 @@ export async function getGitHubAppAuthentication({
   };
 }
 
+export function appAuthenticatedEnvironment(authentication, environment) {
+  const botEmail = `${authentication.botUserId}+${authentication.botLogin}@users.noreply.github.com`;
+  return {
+    ...environment,
+    GH_TOKEN: authentication.token,
+    GITHUB_TOKEN: authentication.token,
+    POMI_GITHUB_APP_TOKEN: authentication.token,
+    POMI_GITHUB_APP_ID: String(authentication.app.id),
+    POMI_GITHUB_APP_BOT_LOGIN: authentication.botLogin,
+    POMI_GITHUB_APP_PERMISSIONS: JSON.stringify(
+      authentication.permissions ?? {}
+    ),
+    GIT_ASKPASS: path.join(repositoryRoot, 'scripts/github-app-askpass.sh'),
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_SSH_COMMAND: 'false',
+    GIT_CONFIG_COUNT: '2',
+    GIT_CONFIG_KEY_0: 'credential.helper',
+    GIT_CONFIG_VALUE_0: '',
+    GIT_CONFIG_KEY_1: 'http.https://github.com/.extraheader',
+    GIT_CONFIG_VALUE_1: '',
+    GIT_AUTHOR_NAME: `${authentication.app.name} Bot`,
+    GIT_AUTHOR_EMAIL: botEmail,
+    GIT_COMMITTER_NAME: `${authentication.app.name} Bot`,
+    GIT_COMMITTER_EMAIL: botEmail,
+  };
+}
+
 async function runCli() {
-  loadLocalEnvironment();
+  loadAutomationEnvironment();
   const mode = process.argv[2];
   const authentication = await getGitHubAppAuthentication();
   if (mode === 'check') {
@@ -183,28 +210,11 @@ async function runCli() {
       `GitHub App command must be one of: ${[...ALLOWED_COMMANDS].join(', ')}.`
     );
   }
-  const botEmail = `${authentication.botUserId}+${authentication.botLogin}@users.noreply.github.com`;
   // This local CLI intentionally forwards explicit arguments to a small executable allowlist.
   const child = spawn(command, args, {
     stdio: 'inherit',
     cwd: repositoryRoot,
-    env: {
-      ...process.env,
-      GH_TOKEN: authentication.token,
-      GITHUB_TOKEN: authentication.token,
-      POMI_GITHUB_APP_TOKEN: authentication.token,
-      POMI_GITHUB_APP_ID: String(authentication.app.id),
-      POMI_GITHUB_APP_BOT_LOGIN: authentication.botLogin,
-      POMI_GITHUB_APP_PERMISSIONS: JSON.stringify(
-        authentication.permissions ?? {}
-      ),
-      GIT_ASKPASS: path.join(repositoryRoot, 'scripts/github-app-askpass.sh'),
-      GIT_TERMINAL_PROMPT: '0',
-      GIT_AUTHOR_NAME: `${authentication.app.name} Bot`,
-      GIT_AUTHOR_EMAIL: botEmail,
-      GIT_COMMITTER_NAME: `${authentication.app.name} Bot`,
-      GIT_COMMITTER_EMAIL: botEmail,
-    },
+    env: appAuthenticatedEnvironment(authentication, process.env),
   });
   child.on('error', error => {
     console.error(error);

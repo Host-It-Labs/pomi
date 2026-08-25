@@ -3,9 +3,9 @@ import {
   List,
   ListItem,
   Task,
+  type TaskPageViewMode,
   type TaskSortMode,
   TaskStatus,
-  TimerTypes,
 } from '@pomi/shared';
 import {
   TASK_MANUAL_ORDER_BOTTOM,
@@ -27,10 +27,10 @@ import {
 } from 'react';
 import {
   FaArchive,
-  FaCheck,
+  FaCalendarAlt,
+  FaCheckSquare,
   FaEdit,
   FaFileImport,
-  FaFilter,
   FaGripVertical,
   FaListUl,
   FaRegStar,
@@ -55,15 +55,32 @@ import {
   TaskDescriptionModal,
 } from '../components/tasks/TaskDescriptionModal';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
+import { TaskFollowUpContext } from '../components/tasks/TaskFollowUpContext';
 import { TaskTimerTypeBadge } from '../components/tasks/TaskTimerTypeBadge';
 import { TaskImportModal } from '../components/tasks/TaskImportModal';
 import { TaskQuickCreateRow } from '../components/tasks/TaskQuickCreateRow';
 import { OverflowTaskTitle } from '../components/tasks/OverflowTaskTitle';
 import { TaskInlineProperties } from '../components/tasks/TaskInlineProperties';
+import { TaskCalendarNavigator } from '../components/tasks/TaskCalendarNavigator';
 import { TaskArchiveConfirmationModal } from '../components/tasks/TaskArchiveConfirmationModal';
 import { CompletionButton } from '../components/tasks/CompletionButton';
 import { MobileSwipeActionRow } from '../components/tasks/MobileSwipeActionRow';
 import { FavoriteIntentionFilters } from '../components/tasks/FavoriteIntentionFilters';
+import {
+  EMPTY_TASK_PROPERTY_FILTERS,
+  hasTaskPropertyFilters,
+  matchesListItemPropertyFilters,
+  matchesTaskPropertyFilters,
+  TaskPropertyFilterMenu,
+  type TaskPropertyFilters,
+} from '../components/tasks/TaskPropertyFilterMenu';
+import {
+  buildTaskBulkAssignmentOptions,
+  TaskBulkActionModal,
+  runTaskBulkUpdates,
+  type TaskBulkAssignmentOption,
+  type TaskBulkUpdate,
+} from '../components/tasks/TaskBulkActionModal';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { IconButton } from '../components/ui/IconButton';
@@ -84,6 +101,7 @@ import {
   focusTaskOnTimer,
   getTaskPriorityAccentClass,
   isTaskOverdue,
+  isInlineTaskPropertyUpdate,
 } from '../utils/taskUi';
 import {
   applyIntentionFamilyManualOrder,
@@ -103,12 +121,13 @@ import {
 } from '../utils/mixedTaskItems';
 import { useI18n } from '../i18n';
 import { useDefaultTaskSort } from './taskDefaultSort';
+import { useUpdatedTaskReveal } from './taskUpdatedReveal';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
-import { isTaskInTimerTypeSearchScope } from '../utils/taskSearchScope';
+import { TASKS_PAGE_CONTAINER_CLASS } from '../constants/taskLayout';
+import { filterCalendarEntries, getTodayDateKey } from '../utils/taskCalendar';
 
 type TaskIntentionFilterValue = string | null;
 type TaskDropPlacement = 'before' | 'after';
-type TaskTimerTypeFilter = 'all' | TimerTypes;
 type TaskIntentionFilterOption = {
   value: string;
   title: string;
@@ -172,9 +191,6 @@ export function Tasks() {
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const [selectedIntentionFilter, setSelectedIntentionFilter] =
     useState<TaskIntentionFilterValue>(null);
-  const [timerTypeFilter, setTimerTypeFilter] =
-    useState<TaskTimerTypeFilter>('all');
-  const [isTypeMenuOpen, setIsTypeMenuOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createInitialTitle, setCreateInitialTitle] = useState('');
@@ -189,7 +205,31 @@ export function Tasks() {
   const [restoringTaskId, setRestoringTaskId] = useState<string | null>(null);
   const [descriptionTask, setDescriptionTask] = useState<Task | null>(null);
   const [taskSortMode, setTaskSortMode] = useState<TaskSortMode>('default');
+  const [taskPageViewMode, setTaskPageViewMode] =
+    useState<TaskPageViewMode>('list');
+  const [taskCalendarAnchor, setTaskCalendarAnchor] = useState(getTodayDateKey);
+  const [taskCalendarDate, setTaskCalendarDate] = useState<string | null>(
+    getTodayDateKey
+  );
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const [propertyFilters, setPropertyFilters] = useState<TaskPropertyFilters>(
+    EMPTY_TASK_PROPERTY_FILTERS
+  );
+  const [isPropertyMenuOpen, setIsPropertyMenuOpen] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [isBulkActionOpen, setIsBulkActionOpen] = useState(false);
+  const [isBulkSaving, setIsBulkSaving] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [updatedTaskDestinationId, setUpdatedTaskDestinationId] = useState<
+    string | null
+  >(null);
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(
+    null
+  );
+  const updatedTaskHighlightTimeoutRef = useRef<number | null>(null);
   const [pinnedTaskDestinationId, setPinnedTaskDestinationId] = useState<
     string | null
   >(null);
@@ -301,12 +341,11 @@ export function Tasks() {
   }, [taskSearchFocusRequest]);
 
   const filterOptions = useMemo(() => {
-    const availableIntentions =
-      timerTypeFilter === 'all'
-        ? intentions
-        : intentions.filter(intention => intention.type === timerTypeFilter);
+    const availableIntentions = intentions.filter(intention =>
+      propertyFilters.timerTypes.includes(intention.type)
+    );
     return buildTaskIntentionFilterOptions(availableIntentions);
-  }, [intentions, timerTypeFilter]);
+  }, [intentions, propertyFilters.timerTypes]);
   const selectedFilterOption = useMemo(
     () =>
       selectedIntentionFilter
@@ -349,7 +388,20 @@ export function Tasks() {
   }, [selectedFilterOption]);
   const taskFormDefaultTimerType =
     selectedFilterOption?.intention.type ??
-    (timerTypeFilter === 'all' ? TIMER_TYPES.WORK : timerTypeFilter);
+    propertyFilters.timerTypes[0] ??
+    TIMER_TYPES.WORK;
+
+  const updatePropertyFilters = useCallback(
+    (nextFilters: TaskPropertyFilters) => {
+      const selectedType = selectedFilterOption?.intention.type;
+      if (selectedType && !nextFilters.timerTypes.includes(selectedType)) {
+        setSelectedIntentionFilter(null);
+        showToastFromStore(t('intention.filterCleared'), 'info');
+      }
+      setPropertyFilters(nextFilters);
+    },
+    [selectedFilterOption, t]
+  );
 
   useEffect(() => {
     if (
@@ -493,6 +545,7 @@ export function Tasks() {
       item =>
         item.status === TASK_STATUSES.ACTIVE &&
         (!hideVacationCovered || !item.vacationEligible) &&
+        matchesListItemPropertyFilters(item, propertyFilters) &&
         (!query || normalizeSearchText(item.title).includes(query))
     );
     if (taskSortMode === 'created-desc') {
@@ -506,7 +559,13 @@ export function Tasks() {
       );
     }
     return matching;
-  }, [hideVacationCovered, selectedListItems, taskSearchQuery, taskSortMode]);
+  }, [
+    hideVacationCovered,
+    propertyFilters,
+    selectedListItems,
+    taskSearchQuery,
+    taskSortMode,
+  ]);
   const completedListItems = selectedListItems.filter(
     item => item.status === TASK_STATUSES.COMPLETED
   );
@@ -732,6 +791,17 @@ export function Tasks() {
       }),
     [hideVacationCovered, orderingClock, tasks]
   );
+  const resetUpdatedTaskFilters = useCallback(() => {
+    setTaskSearchQuery('');
+    setSelectedIntentionFilter(null);
+    setSelectedListId(null);
+    setPropertyFilters(EMPTY_TASK_PROPERTY_FILTERS);
+  }, []);
+  const revealUpdatedTask = useUpdatedTaskReveal({
+    resetFilters: resetUpdatedTaskFilters,
+    setPageViewMode: setTaskPageViewMode,
+    setDestinationTaskId: setUpdatedTaskDestinationId,
+  });
   const updateTaskWithPositionFeedback = useCallback(
     async (updates: Parameters<typeof updateTask>[0]) => {
       const currentTask = tasks.find(task => task.id === updates.id);
@@ -747,11 +817,19 @@ export function Tasks() {
           setTaskMode,
         });
       }
+      if (didUpdate && isInlineTaskPropertyUpdate(updates)) {
+        showToastFromStore(t('task.updated'), 'success', 5000, {
+          label: t('task.viewUpdated'),
+          onClick: () => revealUpdatedTask(updates.id),
+        });
+      }
       return didUpdate;
     },
     [
       createOrResumeTimer,
       preferences,
+      revealUpdatedTask,
+      t,
       updatePreferenceWithResult,
       setTaskMode,
       tasks,
@@ -763,18 +841,12 @@ export function Tasks() {
   const visibleTasks = useMemo(() => {
     const filteredTasks = taskView.tasks
       .filter(task =>
-        isTaskInTimerTypeSearchScope(
-          task.timerType,
-          timerTypeFilter,
-          isTaskSearchActive
-        )
-      )
-      .filter(task =>
         isTaskSearchActive
           ? true
           : doesTaskMatchIntentionFilter(task, selectedFilterOption)
       )
-      .filter(task => doesTaskMatchSearch(task, taskSearchQuery, intentions));
+      .filter(task => doesTaskMatchSearch(task, taskSearchQuery, intentions))
+      .filter(task => matchesTaskPropertyFilters(task, propertyFilters));
     const sorted = sortTasksForMode(filteredTasks, taskSortMode);
     const ranked = rankTasksForSearch(
       sorted,
@@ -789,20 +861,49 @@ export function Tasks() {
   }, [
     intentions,
     isTaskSearchActive,
+    propertyFilters,
     selectedFilterOption,
     taskSortMode,
     taskSearchQuery,
     taskView.tasks,
-    timerTypeFilter,
   ]);
+  const applyBulkUpdates = useCallback(
+    async (updates: TaskBulkUpdate[]) => {
+      setIsBulkSaving(true);
+      setBulkError(null);
+      try {
+        const failed = new Set(await runTaskBulkUpdates(updates, updateTask));
+        await loadTasks();
+        if (failed.size > 0) {
+          setSelectedTaskIds(failed);
+          setBulkError(
+            t('task.bulkPartialFailure', {
+              failed: failed.size,
+              total: updates.length,
+            })
+          );
+          return;
+        }
+        setIsBulkActionOpen(false);
+        setSelectedTaskIds(new Set());
+        setSelectionMode(false);
+        showToastFromStore(
+          t('task.bulkUpdated', { count: updates.length }),
+          'success'
+        );
+      } finally {
+        setIsBulkSaving(false);
+      }
+    },
+    [loadTasks, t, updateTask]
+  );
   const eligibleMixedListItems = useMemo(() => {
     const query = normalizeSearchText(taskSearchQuery);
     if (
       selectedList !== null ||
       preferences?.listsExtension !== true ||
-      (!query &&
-        (selectedFilterOption !== null ||
-          (timerTypeFilter !== 'all' && timerTypeFilter !== TIMER_TYPES.WORK)))
+      (!query && selectedFilterOption !== null) ||
+      !propertyFilters.timerTypes.includes(TIMER_TYPES.WORK)
     ) {
       return [];
     }
@@ -811,6 +912,7 @@ export function Tasks() {
     return listItems
       .filter(item => item.status === TASK_STATUSES.ACTIVE)
       .filter(item => !hideVacationCovered || !item.vacationEligible)
+      .filter(item => matchesListItemPropertyFilters(item, propertyFilters))
       .map(item => ({ item, list: listsById.get(item.listId) }))
       .filter(
         (entry): entry is { item: ListItem; list: List } =>
@@ -824,16 +926,66 @@ export function Tasks() {
     lists,
     hideVacationCovered,
     preferences?.listsExtension,
+    propertyFilters,
     selectedFilterOption,
     selectedList,
     taskSearchQuery,
-    timerTypeFilter,
   ]);
   const mixedTaskItems = useMemo<MixedTaskItem[]>(
     () =>
       mixTaskAndListItems(visibleTasks, eligibleMixedListItems, taskSortMode),
     [eligibleMixedListItems, taskSortMode, visibleTasks]
   );
+  const displayedTaskItems = useMemo(
+    () =>
+      taskPageViewMode === 'calendar' && selectedList === null
+        ? filterCalendarEntries(mixedTaskItems, taskCalendarDate)
+        : mixedTaskItems,
+    [mixedTaskItems, selectedList, taskCalendarDate, taskPageViewMode]
+  );
+  const displayedTasks = useMemo(
+    () =>
+      displayedTaskItems
+        .filter(
+          (entry): entry is Extract<MixedTaskItem, { kind: 'task' }> =>
+            entry.kind === 'task'
+        )
+        .map(entry => entry.task),
+    [displayedTaskItems]
+  );
+  useEffect(() => {
+    if (!selectionMode) return;
+    const displayedIds = new Set(displayedTasks.map(task => task.id));
+    setSelectedTaskIds(current => {
+      const next = new Set(
+        [...current].filter(taskId => displayedIds.has(taskId))
+      );
+      return next.size === current.size ? current : next;
+    });
+  }, [displayedTasks, selectionMode]);
+
+  const selectedBulkTasks = useMemo(
+    () => displayedTasks.filter(task => selectedTaskIds.has(task.id)),
+    [displayedTasks, selectedTaskIds]
+  );
+  const allDisplayedTasksSelected =
+    displayedTasks.length > 0 &&
+    displayedTasks.every(task => selectedTaskIds.has(task.id));
+  const selectedBulkTimerTypes = useMemo(
+    () => new Set(selectedBulkTasks.map(task => task.timerType)),
+    [selectedBulkTasks]
+  );
+  const bulkAssignmentUnavailableReason =
+    selectedBulkTimerTypes.size > 1 ? t('task.bulkSameTimerType') : null;
+  const bulkAssignmentOptions = useMemo<TaskBulkAssignmentOption[]>(() => {
+    const onlyTimerType =
+      selectedBulkTimerTypes.size === 1 ? [...selectedBulkTimerTypes][0] : null;
+    return buildTaskBulkAssignmentOptions(
+      intentions,
+      onlyTimerType,
+      t('task.noIntention')
+    );
+  }, [intentions, selectedBulkTimerTypes, t]);
   const orderedIntentionFamilyTasks = useMemo(() => {
     if (!selectedFilterOption) return [];
     const parentSlug =
@@ -843,6 +995,7 @@ export function Tasks() {
         task =>
           task.status === TASK_STATUSES.ACTIVE &&
           task.pinnedAt === null &&
+          !task.followUpParent &&
           task.timerType === selectedFilterOption.intention.type &&
           task.intentionSlug === parentSlug
       ),
@@ -860,32 +1013,58 @@ export function Tasks() {
     destination.scrollIntoView({ behavior: 'auto', block: 'center' });
     destination.focus({ preventScroll: true });
     setPinnedTaskDestinationId(null);
-  }, [pinnedTaskDestinationId, visibleTasks]);
+  }, [displayedTaskItems, pinnedTaskDestinationId]);
+  useLayoutEffect(() => {
+    if (!updatedTaskDestinationId) return;
+    const destination = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-testid="task-row"]')
+    ).find(row => row.dataset.taskId === updatedTaskDestinationId);
+    if (!destination) return;
+    destination.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    destination.focus({ preventScroll: true });
+    setHighlightedTaskId(updatedTaskDestinationId);
+    setUpdatedTaskDestinationId(null);
+    if (updatedTaskHighlightTimeoutRef.current !== null) {
+      window.clearTimeout(updatedTaskHighlightTimeoutRef.current);
+    }
+    updatedTaskHighlightTimeoutRef.current = window.setTimeout(() => {
+      setHighlightedTaskId(null);
+      updatedTaskHighlightTimeoutRef.current = null;
+    }, 1800);
+  }, [displayedTaskItems, updatedTaskDestinationId]);
+  useEffect(
+    () => () => {
+      if (updatedTaskHighlightTimeoutRef.current !== null) {
+        window.clearTimeout(updatedTaskHighlightTimeoutRef.current);
+      }
+    },
+    []
+  );
   const hasActiveFilters =
     taskSearchQuery.trim().length > 0 ||
     selectedFilterOption !== null ||
     selectedList !== null ||
-    timerTypeFilter !== 'all';
+    hasTaskPropertyFilters(propertyFilters);
   const taskCountLabel = selectedList
     ? taskSearchQuery.trim()
       ? `${activeListItems.length} of ${visibleActiveSelectedListItemCount}`
       : `${activeListItems.length}`
-    : hasActiveFilters
-      ? `${mixedTaskItems.length} of ${
-          taskView.tasks.length +
-          (selectedFilterOption === null &&
-          preferences?.listsExtension === true &&
-          (isTaskSearchActive ||
-            timerTypeFilter === 'all' ||
-            timerTypeFilter === TIMER_TYPES.WORK)
-            ? listItems.filter(
-                item =>
-                  item.status === TASK_STATUSES.ACTIVE &&
-                  (!hideVacationCovered || !item.vacationEligible)
-              ).length
-            : 0)
-        }`
-      : `${mixedTaskItems.length}`;
+    : taskPageViewMode === 'calendar'
+      ? `${displayedTaskItems.length} of ${mixedTaskItems.length}`
+      : hasActiveFilters
+        ? `${mixedTaskItems.length} of ${
+            taskView.tasks.length +
+            (selectedFilterOption === null &&
+            preferences?.listsExtension === true &&
+            propertyFilters.timerTypes.includes(TIMER_TYPES.WORK)
+              ? listItems.filter(
+                  item =>
+                    item.status === TASK_STATUSES.ACTIVE &&
+                    (!hideVacationCovered || !item.vacationEligible)
+                ).length
+              : 0)
+          }`
+        : `${mixedTaskItems.length}`;
   const showImportAction = hasImportedTasks === false;
   const hideTasksTitle =
     showImportAction &&
@@ -965,7 +1144,7 @@ export function Tasks() {
 
   return (
     <PageShell className="overflow-x-clip">
-      <PageContainer className="relative min-w-0 overflow-x-clip pb-24 md:pb-8">
+      <PageContainer className={TASKS_PAGE_CONTAINER_CLASS}>
         <header className="sticky top-0 z-30 -mx-4 border-b border-slate-800/70 bg-slate-950/94 px-4 pb-3 pt-5 shadow-[0_10px_24px_rgba(2,6,23,0.34)] backdrop-blur-md">
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
             <BackButton
@@ -1019,13 +1198,44 @@ export function Tasks() {
                   <FaFileImport size={11} />
                 </IconButton>
               )}
+              {!selectedList && (
+                <IconButton
+                  label={t('common.calendar')}
+                  title={t('common.calendar')}
+                  size="sm"
+                  variant={
+                    taskPageViewMode === 'calendar' ? 'primary' : 'secondary'
+                  }
+                  aria-pressed={taskPageViewMode === 'calendar'}
+                  onClick={() =>
+                    setTaskPageViewMode(currentMode =>
+                      currentMode === 'calendar' ? 'list' : 'calendar'
+                    )
+                  }
+                  className="h-8 w-8 !p-0"
+                >
+                  <FaCalendarAlt size={11} />
+                </IconButton>
+              )}
             </div>
           </div>
         </header>
 
+        {taskPageViewMode === 'calendar' && !selectedList && (
+          <TaskCalendarNavigator
+            entries={mixedTaskItems}
+            anchorDate={taskCalendarAnchor}
+            selectedDate={taskCalendarDate}
+            onAnchorDateChange={setTaskCalendarAnchor}
+            onSelectedDateChange={setTaskCalendarDate}
+          />
+        )}
+
         <section
           aria-label={
-            selectedList ? `Add to ${selectedList.title}` : 'Capture a Task'
+            selectedList
+              ? t('task.addToList', { title: selectedList.title })
+              : t('task.capture')
           }
           className="mt-4 rounded-xl border border-indigo-500/25 bg-linear-to-br from-indigo-950/40 via-slate-900/65 to-slate-950/75 p-2.5 shadow-sm shadow-indigo-950/30"
         >
@@ -1044,7 +1254,9 @@ export function Tasks() {
                 autoFocus
                 value={newListItemTitle}
                 onChange={event => setNewListItemTitle(event.target.value)}
-                placeholder={`Add to ${selectedList.title}`}
+                placeholder={t('task.addToList', {
+                  title: selectedList.title,
+                })}
                 className="h-10 min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-white outline-none focus:border-indigo-500"
               />
               <Button
@@ -1136,7 +1348,7 @@ export function Tasks() {
         </section>
 
         <div className="mt-4 flex min-h-7 items-center justify-between gap-3 px-0.5">
-          <div className="flex items-baseline gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
               {t('common.active')}
             </h2>
@@ -1146,6 +1358,31 @@ export function Tasks() {
             >
               {taskCountLabel}
             </span>
+            {!selectedList && (selectionMode || displayedTasks.length > 0) && (
+              <IconButton
+                label={
+                  selectionMode
+                    ? t('task.exitSelectionMode')
+                    : t('task.selectMultiple')
+                }
+                title={
+                  selectionMode
+                    ? t('task.exitSelectionMode')
+                    : t('task.selectMultiple')
+                }
+                size="sm"
+                variant={selectionMode ? 'primary' : 'secondary'}
+                aria-pressed={selectionMode}
+                onClick={() => {
+                  setSelectionMode(current => !current);
+                  setSelectedTaskIds(new Set());
+                  setBulkError(null);
+                }}
+                className="h-7 w-7 !p-0"
+              >
+                <FaCheckSquare size={11} />
+              </IconButton>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {hasActiveFilters && (
@@ -1155,7 +1392,7 @@ export function Tasks() {
                   setTaskSearchQuery('');
                   setSelectedIntentionFilter(null);
                   setSelectedListId(null);
-                  setTimerTypeFilter('all');
+                  setPropertyFilters(EMPTY_TASK_PROPERTY_FILTERS);
                 }}
                 className="text-[11px] text-slate-500 transition-colors hover:text-slate-200"
               >
@@ -1163,22 +1400,11 @@ export function Tasks() {
               </button>
             )}
             {!selectedList && (
-              <TaskTimerTypeFilterDropdown
-                value={timerTypeFilter}
-                isOpen={isTypeMenuOpen}
-                onOpenChange={setIsTypeMenuOpen}
-                onChange={nextType => {
-                  const selectedType = selectedFilterOption?.intention.type;
-                  if (
-                    nextType !== 'all' &&
-                    selectedType &&
-                    selectedType !== nextType
-                  ) {
-                    setSelectedIntentionFilter(null);
-                    showToastFromStore(t('intention.filterCleared'), 'info');
-                  }
-                  setTimerTypeFilter(nextType);
-                }}
+              <TaskPropertyFilterMenu
+                filters={propertyFilters}
+                isOpen={isPropertyMenuOpen}
+                onOpenChange={setIsPropertyMenuOpen}
+                onChange={updatePropertyFilters}
               />
             )}
             <TaskSortDropdown
@@ -1191,6 +1417,39 @@ export function Tasks() {
             />
           </div>
         </div>
+
+        {selectionMode && !selectedList ? (
+          <div className="mt-2 flex min-h-9 items-center gap-2 rounded-lg border border-indigo-500/25 bg-indigo-950/25 px-2.5 py-1.5 text-xs">
+            <span className="min-w-0 flex-1 truncate text-indigo-100">
+              {t('task.selectedCount', { count: selectedBulkTasks.length })}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedTaskIds(
+                  allDisplayedTasksSelected
+                    ? new Set()
+                    : new Set(displayedTasks.map(task => task.id))
+                );
+              }}
+              className="rounded px-2 py-1 text-slate-300 hover:bg-slate-800"
+            >
+              {allDisplayedTasksSelected
+                ? t('common.clear')
+                : t('task.selectVisible')}
+            </button>
+            <Button
+              size="xs"
+              onClick={() => {
+                setBulkError(null);
+                setIsBulkActionOpen(true);
+              }}
+              disabled={selectedBulkTasks.length === 0}
+            >
+              {t('task.bulkManage')}
+            </Button>
+          </div>
+        ) : null}
 
         <div className="mt-2 space-y-2.5">
           {error && <Alert variant="error">{error}</Alert>}
@@ -1231,7 +1490,7 @@ export function Tasks() {
                 }}
                 className="w-full rounded-xl border border-dashed border-slate-700/60 bg-slate-900/25 px-5 py-10 text-sm text-slate-400 transition hover:border-indigo-500/60 hover:bg-indigo-950/15 hover:text-slate-200"
               >
-                Add task
+                {t('task.add')}
               </button>
             )}
 
@@ -1240,40 +1499,61 @@ export function Tasks() {
             mixedTaskItems.length === 0 &&
             hasActiveFilters && (
               <div className="rounded-lg border border-slate-800/60 bg-slate-900/35 px-5 py-8 text-center text-sm text-slate-400">
-                {hasActiveFilters ? 'No matching tasks' : 'No tasks'}
+                {hasActiveFilters ? t('task.noMatching') : t('task.noTasks')}
               </div>
             )}
 
-          {!selectedList && !isLoading && mixedTaskItems.length > 0 && (
-            <MixedTaskList
-              entries={mixedTaskItems}
-              completingTaskIds={completingTaskIds}
-              completingListItemIds={completingListItemIds}
-              orderedUndatedTaskIds={orderedIntentionFamilyTasks.map(
-                task => task.id
-              )}
-              canReorder={
-                selectedFilterOption !== null &&
-                taskSortMode === 'default' &&
-                normalizeSearchText(taskSearchQuery).length === 0
-              }
-              intentions={intentions}
-              onEdit={setEditingTask}
-              onEditListItem={setEditingListItem}
-              onCompleteListItem={completeListItem}
-              onArchiveListItem={setArchivingListItem}
-              onOpenDescription={setDescriptionTask}
-              onUpdate={updateTaskWithPositionFeedback}
-              onReorder={reorderVisibleTasks}
-              showTypeBadge={timerTypeFilter === 'all' || isTaskSearchActive}
-            />
-          )}
+          {!selectedList &&
+            !isLoading &&
+            mixedTaskItems.length > 0 &&
+            (taskPageViewMode === 'calendar' &&
+            displayedTaskItems.length === 0 ? (
+              <div className="rounded-lg border border-slate-800/60 bg-slate-900/35 px-5 py-8 text-center text-sm text-slate-400">
+                {t('task.noTasksForDate')}
+              </div>
+            ) : (
+              <MixedTaskList
+                entries={displayedTaskItems}
+                completingTaskIds={completingTaskIds}
+                completingListItemIds={completingListItemIds}
+                orderedUndatedTaskIds={orderedIntentionFamilyTasks.map(
+                  task => task.id
+                )}
+                canReorder={
+                  taskPageViewMode === 'list' &&
+                  selectedFilterOption !== null &&
+                  taskSortMode === 'default' &&
+                  normalizeSearchText(taskSearchQuery).length === 0
+                }
+                intentions={intentions}
+                onEdit={setEditingTask}
+                onEditListItem={setEditingListItem}
+                onCompleteListItem={completeListItem}
+                onArchiveListItem={setArchivingListItem}
+                onOpenDescription={setDescriptionTask}
+                onUpdate={updateTaskWithPositionFeedback}
+                onReorder={reorderVisibleTasks}
+                showTypeBadge={
+                  propertyFilters.timerTypes.length !== 1 || isTaskSearchActive
+                }
+                selectionMode={selectionMode}
+                selectedTaskIds={selectedTaskIds}
+                onToggleSelection={taskId =>
+                  setSelectedTaskIds(current => {
+                    const next = new Set(current);
+                    if (next.has(taskId)) next.delete(taskId);
+                    else next.add(taskId);
+                    return next;
+                  })
+                }
+                highlightedTaskId={highlightedTaskId}
+              />
+            ))}
         </div>
 
         <TaskFormModal
           isOpen={isCreateOpen || editingTask !== null}
           task={editingTask}
-          activeTasks={tasks}
           intentions={intentions}
           lists={lists}
           preferences={preferences}
@@ -1294,6 +1574,20 @@ export function Tasks() {
           onArchive={task =>
             updateTask({ id: task.id, status: TASK_STATUSES.ARCHIVED })
           }
+        />
+        <TaskBulkActionModal
+          isOpen={isBulkActionOpen}
+          selectedTasks={selectedBulkTasks}
+          assignmentOptions={bulkAssignmentOptions}
+          assignmentUnavailableReason={bulkAssignmentUnavailableReason}
+          isSaving={isBulkSaving}
+          error={bulkError}
+          onClose={() => {
+            if (isBulkSaving) return;
+            setIsBulkActionOpen(false);
+            setBulkError(null);
+          }}
+          onConfirm={applyBulkUpdates}
         />
         <TaskDescriptionModal
           task={descriptionTask}
@@ -1558,64 +1852,7 @@ function TaskSortDropdown({
   );
 }
 
-function TaskTimerTypeFilterDropdown({
-  value,
-  isOpen,
-  onOpenChange,
-  onChange,
-}: {
-  value: TaskTimerTypeFilter;
-  isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
-  onChange: (value: TaskTimerTypeFilter) => void;
-}) {
-  const { t } = useI18n();
-  const options: Array<{ value: TaskTimerTypeFilter; label: string }> = [
-    { value: 'all', label: t('common.all') },
-    { value: TIMER_TYPES.WORK, label: t('common.work') },
-    { value: TIMER_TYPES.BREAK, label: t('common.break') },
-    { value: TIMER_TYPES.LONG_BREAK, label: t('common.longBreak') },
-  ];
-  const activeLabel = options.find(option => option.value === value)?.label;
-  return (
-    <div className="relative">
-      <IconButton
-        label={`${t('task.timerType')}: ${activeLabel}`}
-        title={`${t('task.timerType')}: ${activeLabel}`}
-        size="sm"
-        variant={value === 'all' ? 'secondary' : 'primary'}
-        onClick={() => onOpenChange(!isOpen)}
-        aria-expanded={isOpen}
-        className="h-7 w-7 !p-0"
-      >
-        <FaFilter size={11} />
-      </IconButton>
-      {isOpen && (
-        <div className="absolute right-0 top-full z-40 mt-1 w-32 overflow-hidden rounded-md border border-slate-800 bg-slate-950 py-1 text-xs shadow-xl shadow-black/30">
-          {options.map(option => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => {
-                onChange(option.value);
-                onOpenChange(false);
-              }}
-              className={clsx(
-                'flex w-full items-center justify-between px-3 py-2 text-left hover:bg-slate-800/80',
-                option.value === value ? 'text-indigo-100' : 'text-slate-300'
-              )}
-            >
-              {option.label}
-              {option.value === value && <FaCheck size={9} />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TaskIntentionFilterDropdown({
+export function TaskIntentionFilterDropdown({
   options,
   lists,
   selectedValue,
@@ -1709,7 +1946,7 @@ function TaskIntentionFilterDropdown({
         )?.value ?? parentValue)
       : parentValue;
 
-    onSelect(nextValue);
+    onSelect(nextValue === selectedValue ? null : nextValue);
     if (change.reason !== 'intention' || !subIntentionsByParent[parentValue]) {
       setIsOpen(false);
     }
@@ -1755,7 +1992,10 @@ function TaskIntentionFilterDropdown({
           return (
             <button
               type="button"
-              aria-label={`${actionLabel} ${list.title}`}
+              aria-label={t('task.actionFor', {
+                action: actionLabel,
+                title: list.title,
+              })}
               title={actionLabel}
               onClick={event => {
                 event.stopPropagation();
@@ -1909,12 +2149,17 @@ function TaskArchiveModal({
               className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-slate-800/70 bg-slate-950/25 px-3 py-2"
             >
               <div className="min-w-0">
+                {task.followUpParent && (
+                  <TaskFollowUpContext
+                    parentTitle={task.followUpParent.title}
+                  />
+                )}
                 <div className="truncate text-xs font-medium text-slate-200">
                   {task.title}
                 </div>
                 <div className="mt-0.5 flex flex-wrap gap-1.5 text-[11px] capitalize text-slate-500">
-                  <span>{task.status}</span>
-                  <span>{task.priority}</span>
+                  <span>{t(`common.${task.status}`)}</span>
+                  <span>{t(`common.${task.priority}`)}</span>
                   <TaskTimerTypeBadge timerType={task.timerType} />
                 </div>
               </div>
@@ -1927,7 +2172,7 @@ function TaskArchiveModal({
                 className="h-7 gap-1.5 px-2 text-[11px]"
               >
                 <FaUndo size={10} />
-                Restore
+                {t('common.restore')}
               </Button>
             </div>
           ))
@@ -1960,6 +2205,7 @@ function SelectedListItems({
   onRestore: (item: ListItem) => Promise<void>;
   onReset: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="space-y-4" data-testid="selected-list-items">
       <div className="space-y-2.5">
@@ -1976,7 +2222,7 @@ function SelectedListItems({
         ))}
         {activeItems.length === 0 && (
           <div className="rounded-xl border border-dashed border-slate-700/70 px-5 py-8 text-center text-sm text-slate-500">
-            No active items in {list.title}.
+            {t('task.noActiveItemsInList', { title: list.title })}
           </div>
         )}
       </div>
@@ -1985,10 +2231,10 @@ function SelectedListItems({
         <section className="border-t border-slate-800/70 pt-3">
           <div className="mb-2 flex items-center justify-between gap-3">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-emerald-300">
-              Completed ({completedItems.length})
+              {t('task.completedCount', { count: completedItems.length })}
             </h3>
             <Button size="xs" variant="secondary" onClick={onReset}>
-              <FaUndo size={9} /> Reset List
+              <FaUndo size={9} /> {t('task.resetListAction')}
             </Button>
           </div>
           <div className="space-y-2">
@@ -2010,7 +2256,7 @@ function SelectedListItems({
       {archivedItems.length > 0 && (
         <section className="border-t border-slate-800/70 pt-3">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-amber-300">
-            Archived ({archivedItems.length})
+            {t('task.archivedCount', { count: archivedItems.length })}
           </h3>
           <div className="space-y-2">
             {archivedItems.map(item => (
@@ -2084,12 +2330,12 @@ function ListItemTaskRow({
           <span className="truncate text-indigo-200/75">
             {list.emoji ?? '📋'} {list.title}
           </span>
-          <span className="capitalize">{item.priority}</span>
+          <span>{t(`common.${item.priority}`)}</span>
           {item.dueDate && <time data-swipe-start>{item.dueDate}</time>}
         </div>
       </div>
       <IconButton
-        label={`Edit ${item.title}`}
+        label={t('task.editFor', { title: item.title })}
         title={t('common.edit')}
         size="sm"
         variant="secondary"
@@ -2153,7 +2399,7 @@ function ListItemEditModal({
         item?.status === TASK_STATUSES.ACTIVE ? (
           <button
             type="button"
-            aria-label={`Archive ${item.title}`}
+            aria-label={t('task.archiveFor', { title: item.title })}
             title={t('common.archive')}
             onClick={() => onArchive(item)}
             disabled={saving}
@@ -2269,6 +2515,10 @@ function MixedTaskList({
   onUpdate,
   onReorder,
   showTypeBadge,
+  selectionMode,
+  selectedTaskIds,
+  onToggleSelection,
+  highlightedTaskId,
 }: {
   entries: MixedTaskItem[];
   completingTaskIds: string[];
@@ -2301,11 +2551,15 @@ function MixedTaskList({
     placement: TaskDropPlacement
   ) => Promise<boolean>;
   showTypeBadge: boolean;
+  selectionMode: boolean;
+  selectedTaskIds: Set<string>;
+  onToggleSelection: (taskId: string) => void;
+  highlightedTaskId: string | null;
 }) {
   const tasks = entries
     .filter(
       (entry): entry is Extract<MixedTaskItem, { kind: 'task' }> =>
-        entry.kind === 'task'
+        entry.kind === 'task' && !entry.task.followUpParent
     )
     .map(entry => entry.task);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
@@ -2416,7 +2670,7 @@ function MixedTaskList({
 
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>, task: Task) => {
-      if (task.pinnedAt || event.button !== 0) {
+      if (task.pinnedAt || task.followUpParent || event.button !== 0) {
         return;
       }
 
@@ -2428,7 +2682,7 @@ function MixedTaskList({
 
   const handleMouseDown = useCallback(
     (event: ReactMouseEvent<HTMLElement>, task: Task) => {
-      if (task.pinnedAt || event.button !== 0) {
+      if (task.pinnedAt || task.followUpParent || event.button !== 0) {
         return;
       }
 
@@ -2544,7 +2798,12 @@ function MixedTaskList({
                 onEdit={onEdit}
                 onOpenDescription={onOpenDescription}
                 onUpdate={onUpdate}
-                canReorder={canReorder && !task.pinnedAt && !isCompleting}
+                canReorder={
+                  canReorder &&
+                  !task.pinnedAt &&
+                  !task.followUpParent &&
+                  !isCompleting
+                }
                 isDragging={draggingTaskId === task.id}
                 dropPlacement={
                   dropTarget?.id === task.id ? dropTarget.placement : null
@@ -2552,6 +2811,10 @@ function MixedTaskList({
                 onPointerDown={event => handlePointerDown(event, task)}
                 onMouseDown={event => handleMouseDown(event, task)}
                 showTypeBadge={showTypeBadge}
+                selectionMode={selectionMode}
+                isSelected={selectedTaskIds.has(task.id)}
+                onToggleSelection={() => onToggleSelection(task.id)}
+                isHighlighted={highlightedTaskId === task.id}
               />
             </motion.div>
           );
@@ -2574,6 +2837,10 @@ function TaskRow({
   onPointerDown,
   onMouseDown,
   showTypeBadge,
+  selectionMode,
+  isSelected,
+  onToggleSelection,
+  isHighlighted,
 }: {
   task: Task;
   isCompleting: boolean;
@@ -2600,6 +2867,10 @@ function TaskRow({
   onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   onMouseDown: (event: ReactMouseEvent<HTMLElement>) => void;
   showTypeBadge: boolean;
+  selectionMode: boolean;
+  isSelected: boolean;
+  onToggleSelection: () => void;
+  isHighlighted: boolean;
 }) {
   const { t } = useI18n();
   const [saving, setSaving] = useState(false);
@@ -2643,7 +2914,11 @@ function TaskRow({
           'bg-indigo-950/30 shadow-[inset_0_0_0_1px_rgba(129,140,248,0.24)]',
         !isPinned && isOverdue && 'bg-red-950/20',
         !isPinned && !isOverdue && 'bg-transparent hover:bg-slate-800/25',
-        isCompleted && 'opacity-50'
+        task.followUpParent && 'ml-4 border-l-2 border-indigo-500/40',
+        isCompleted && 'opacity-50',
+        isSelected && 'bg-indigo-950/35',
+        isHighlighted &&
+          'ring-2 ring-inset ring-amber-300 shadow-[0_0_18px_rgba(252,211,77,0.18)]'
       )}
     >
       <div
@@ -2688,7 +2963,7 @@ function TaskRow({
             )}
             <button
               type="button"
-              aria-label={`Drag ${task.title}`}
+              aria-label={t('task.dragFor', { title: task.title })}
               onPointerDown={onPointerDown}
               onMouseDown={onMouseDown}
               className={clsx(
@@ -2702,18 +2977,42 @@ function TaskRow({
             </button>
           </div>
         ) : null}
-        <CompletionButton
-          label={task.title}
-          isCompleted={task.status === TASK_STATUSES.COMPLETED}
-          isCompleting={isCompleting}
-          disabled={saving || isCompleting}
-          onClick={() =>
-            void updateStatus(
-              isCompleted ? TASK_STATUSES.ACTIVE : TASK_STATUSES.COMPLETED
-            )
-          }
-        />
+        {selectionMode ? (
+          <label
+            className={clsx(
+              'flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border-2 transition-colors',
+              isSelected
+                ? 'border-indigo-300 bg-indigo-500/25 text-indigo-100'
+                : 'border-indigo-400/65 bg-indigo-950/35 text-indigo-200 hover:border-indigo-300 hover:bg-indigo-500/15'
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={onToggleSelection}
+              aria-label={t('task.selectForBulk', { title: task.title })}
+              className="h-4 w-4 rounded border-2 border-indigo-200/80 bg-transparent accent-indigo-400"
+            />
+          </label>
+        ) : (
+          <CompletionButton
+            label={task.title}
+            isCompleted={task.status === TASK_STATUSES.COMPLETED}
+            isCompleting={isCompleting}
+            disabled={saving || isCompleting}
+            onClick={() =>
+              void updateStatus(
+                isCompleted ? TASK_STATUSES.ACTIVE : TASK_STATUSES.COMPLETED
+              )
+            }
+          />
+        )}
         <div data-testid="task-row-content" className="min-w-0">
+          {task.followUpParent && (
+            <div className="mb-0.5">
+              <TaskFollowUpContext parentTitle={task.followUpParent.title} />
+            </div>
+          )}
           <div className="flex min-w-0 items-center gap-2">
             {isPinned && (
               <FaThumbtack
@@ -2745,26 +3044,28 @@ function TaskRow({
           </div>
         </div>
         <div className="flex items-center gap-0.5 opacity-80 transition-opacity group-hover/task-row:opacity-100 group-focus-within/task-row:opacity-100">
+          {!task.followUpParent && (
+            <IconButton
+              label={t(isPinned ? 'task.unpinFor' : 'task.pinFor', {
+                title: task.title,
+              })}
+              title={t(isPinned ? 'task.unpin' : 'task.pin')}
+              size="sm"
+              variant={isPinned ? 'primary' : 'secondary'}
+              onClick={() => void updatePinned()}
+              disabled={saving || selectionMode}
+              className="!rounded-full"
+            >
+              <FaThumbtack />
+            </IconButton>
+          )}
           <IconButton
-            label={t(isPinned ? 'task.unpinFor' : 'task.pinFor', {
-              title: task.title,
-            })}
-            title={t(isPinned ? 'task.unpin' : 'task.pin')}
-            size="sm"
-            variant={isPinned ? 'primary' : 'secondary'}
-            onClick={() => void updatePinned()}
-            disabled={saving}
-            className="!rounded-full"
-          >
-            <FaThumbtack />
-          </IconButton>
-          <IconButton
-            label={`Edit ${task.title}`}
+            label={t('task.editFor', { title: task.title })}
             title={t('common.edit')}
             size="sm"
             variant="secondary"
             onClick={() => onEdit(task)}
-            disabled={saving}
+            disabled={saving || selectionMode}
             className="!rounded-full"
           >
             <FaEdit />
@@ -2778,13 +3079,15 @@ function TaskRow({
     <>
       {isMobile ? (
         <MobileSwipeActionRow
-          disabled={saving || isCompleting}
+          disabled={saving || isCompleting || selectionMode}
           onComplete={
-            isCompleted
+            selectionMode || isCompleted
               ? undefined
               : () => void updateStatus(TASK_STATUSES.COMPLETED)
           }
-          onArchive={() => setShowArchiveConfirm(true)}
+          onArchive={() => {
+            if (!selectionMode) setShowArchiveConfirm(true);
+          }}
         >
           {row}
         </MobileSwipeActionRow>

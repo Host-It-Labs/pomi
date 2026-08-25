@@ -26,7 +26,7 @@ class WatchSerializationTest {
               },
               "assistant":{"assistantEnabled":true,"speechCaptureEnabled":true,"aiTaskCaptureEnabled":false,"usageBudgetRemainingUsd":1.5},
               "timerControls":{"canStartOrResume":false,"canPause":true,"canAddFiveMinutes":true,"canReset":true,"canSkip":true,"canStartLongBreak":true,"requiresIntentionSelection":false,"intentionRequireSelection":true,"intentionMultiSelect":true,"advancedSkip":true,"sessionsEnabled":true},
-              "tasks":[{"id":"task-1","title":"Ship","priority":"urgent","dueDate":null,"dueTime":"10:00","intentionTitle":"Focus","intentionEmoji":"F","subIntentionSlug":"code","subIntentionTitle":"Code","subIntentionEmoji":"C","isFocused":true,"isLinkedToTimer":true,"isOverdue":false}],
+              "tasks":[{"id":"task-1","title":"Ship","priority":"urgent","dueDate":null,"dueTime":"10:00","intentionTitle":"Focus","intentionEmoji":"F","subIntentionSlug":"code","subIntentionTitle":"Code","subIntentionEmoji":"C","followUpParent":{"id":"parent-1","title":"Launch"},"isFocused":true,"isLinkedToTimer":true,"isOverdue":false}],
               "totalVisibleTasks":1,"totalActiveTasks":2
             }"""
         ).toWatchStatus()
@@ -39,6 +39,7 @@ class WatchSerializationTest {
         assertTrue(status.assistant.canRecord)
         assertEquals("work", status.tasks.single().timerType)
         assertEquals("F Focus / C Code", status.tasks.single().intentionLabel())
+        assertEquals("↳ Launch", status.tasks.single().followUpContextLabel())
         assertEquals("Urgent", status.tasks.single().priorityLabel())
         assertEquals(2, status.totalActiveTasks)
     }

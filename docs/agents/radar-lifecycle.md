@@ -2,18 +2,25 @@
 
 ## Bot-only GitHub writes
 
-Every Radar-related GitHub write must run as `Pomi Radar[bot]`. Run each
-`git commit`, `git push`, and mutating `gh` or lifecycle command through:
+Every Radar-related GitHub interaction must run as `Pomi Radar[bot]`. Run every
+GitHub-facing `git` command, every `git commit`, and every `gh` or lifecycle
+command through:
 
 ```bash
 node scripts/github-app-auth.mjs exec -- <command> [args...]
 ```
 
-The helper fails closed when App authentication is unavailable and supplies the
-bot Git identity and short-lived token only to that child command. Never fall
-back to the user's `gh` token for issues, comments, branches, pushes, or pull
-requests. `POMI_RADAR_SOURCE_GITHUB_TOKEN` is reserved for read-only migration
-access to `NeoHuncho/pomi-private`.
+For local scheduled-agent work, copy `config/pomi-automation.example.env` to
+`config/pomi-automation.env`. The helper loads that profile automatically; do
+not put scheduled Radar credentials in `.env.local` or use a personal GitHub
+token as a fallback.
+
+The helper fails closed when App authentication is unavailable, isolates Git
+from stored personal credentials, and supplies the bot Git identity and
+short-lived token only to that child command. Never fall back to the user's Git
+or `gh` identity for fetches, issues, comments, commits, branches, pushes, pull
+requests, or reviews. `POMI_RADAR_SOURCE_GITHUB_TOKEN` is reserved for read-only
+migration access to `NeoHuncho/pomi-private`.
 
 GitHub issues and comments are authoritative for Radar Features, Bugs, Sentry
 problems, Security proposals, and Performance proposals. The website is an

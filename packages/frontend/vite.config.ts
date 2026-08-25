@@ -5,7 +5,7 @@ import { DEFAULT_PORTS, parsePortNumber } from '../../scripts/dev-ports.mjs';
 import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
-  const envDir = path.resolve(__dirname, '../..');
+  const envDir = path.resolve(import.meta.dirname, '../..');
   const env = mode === 'test' ? {} : loadEnv(mode, envDir);
   const host = process.env.TAURI_DEV_HOST || env.VITE_HOST;
   const frontendPort = parsePortNumber(
@@ -26,24 +26,33 @@ export default defineConfig(({ mode }) => {
     build: {
       rollupOptions: {
         output: {
-          manualChunks: {
-            react: ['react', 'react-dom'],
-            vendor: [
-              'framer-motion',
-              'clsx',
-              'react-icons',
-              'zustand',
-              'socket.io-client',
-              'uuid',
-              '@sentry/react',
-            ],
+          manualChunks(id) {
+            if (
+              id.includes('/node_modules/react/') ||
+              id.includes('/node_modules/react-dom/')
+            ) {
+              return 'react';
+            }
+            if (
+              [
+                'framer-motion',
+                'clsx',
+                'react-icons',
+                'zustand',
+                'socket.io-client',
+                'uuid',
+                '@sentry/react',
+              ].some(dependency => id.includes(`/node_modules/${dependency}/`))
+            ) {
+              return 'vendor';
+            }
           },
         },
       },
     },
     resolve: {
       alias: {
-        '@pomi/shared': path.resolve(__dirname, '../shared'),
+        '@pomi/shared': path.resolve(import.meta.dirname, '../shared'),
       },
     },
     server: {

@@ -146,7 +146,7 @@ export function AssistantLauncher() {
       typeof MediaRecorder === 'undefined'
     ) {
       setStage('error');
-      setMessage('Microphone unavailable.');
+      setMessage(t('assistant.microphoneUnavailable'));
       return;
     }
 
@@ -240,10 +240,10 @@ export function AssistantLauncher() {
       }
       console.error('Failed to start Assistant recording:', error);
       setStage('error');
-      setMessage('Microphone blocked.');
+      setMessage(t('assistant.microphoneBlocked'));
       recordingStartedAtRef.current = null;
     }
-  }, []);
+  }, [t]);
 
   const closeAssistantResult = async (resultCompletion: Promise<void>) => {
     await Promise.all([wait(3000), resultCompletion]);
@@ -256,7 +256,7 @@ export function AssistantLauncher() {
     try {
       const firstChunk = chunks[0];
       if (!firstChunk) {
-        setMessage('No speech detected.');
+        setMessage(t('feedback.noSpeech'));
         setStage('result');
         void loadStatus();
         await closeAssistantResult(Promise.resolve());
@@ -326,13 +326,16 @@ export function AssistantLauncher() {
       }
       if (response.status !== 200) {
         setStage('error');
-        setMessage('Assistant failed.');
+        setMessage(t('assistant.failed'));
         return;
       }
 
       setMessage(response.body.message);
       setStage('result');
-      showToastFromStore(response.body.message || 'Assistant done.', 'success');
+      showToastFromStore(
+        response.body.message || t('assistant.completed'),
+        'success'
+      );
       const audioFinished =
         response.body.spokenAudioBase64 && response.body.spokenAudioMimeType
           ? playAssistantAudio(
@@ -344,7 +347,7 @@ export function AssistantLauncher() {
     } catch (error) {
       console.error('Failed to submit Assistant recording:', error);
       setStage('error');
-      setMessage('Assistant failed.');
+      setMessage(t('assistant.failed'));
     }
   };
 

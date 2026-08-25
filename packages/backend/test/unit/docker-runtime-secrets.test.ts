@@ -15,6 +15,8 @@ describe('backend Docker secret boundary', () => {
     expect(dockerIgnore).toMatch(/^\*\*\/\.env$/m);
     expect(dockerIgnore).toMatch(/^\*\*\/\.env\.\*$/m);
     expect(dockerIgnore).toMatch(/^!\*\*\/\.env\.example$/m);
+    expect(dockerIgnore).toMatch(/^config\/pomi-\*\.env$/m);
+    expect(dockerIgnore).toMatch(/^!config\/pomi-\*\.example\.env$/m);
     expect(dockerIgnore).toMatch(/^\*\*\/\*\.key$/m);
     expect(dockerIgnore).toMatch(/^\*\*\/\*\.pem$/m);
   });
@@ -30,6 +32,18 @@ describe('backend Docker secret boundary', () => {
     );
     expect(compose).toContain(
       'GITHUB_FEEDBACK_REPOSITORY: ${GITHUB_FEEDBACK_REPOSITORY:-}'
+    );
+    expect(compose).toContain(
+      'GITHUB_FEEDBACK_APP_PRIVATE_KEY: ${GITHUB_FEEDBACK_APP_PRIVATE_KEY:-}'
+    );
+    expect(compose).not.toContain('pomi-feedback-github-app.pem');
+    expect(compose).not.toContain('GITHUB_FEEDBACK_TOKEN');
+    const productionEnvironment = repositoryFile(
+      'packages/backend/.env.production.example'
+    );
+    expect(productionEnvironment).toContain('GITHUB_FEEDBACK_APP_PRIVATE_KEY=');
+    expect(productionEnvironment).not.toContain(
+      'GITHUB_FEEDBACK_APP_PRIVATE_KEY_FILE'
     );
   });
 
@@ -48,10 +62,45 @@ describe('backend Docker secret boundary', () => {
     expect(compose).toContain('tauri://localhost');
     expect(compose).not.toContain('DATABASE_URL: postgres://${');
     expect(compose).not.toContain('REDIS_URL: redis://:${');
-    expect(compose).toContain('pgdata17:/var/lib/postgresql/data');
+    expect(compose).toContain('image: postgres:18-alpine');
+    expect(compose).toContain('pgdata18:/var/lib/postgresql');
+    expect(compose).toContain('image: redis:8-alpine');
     expect(compose).toContain('--requirepass');
 
     const redisService = compose.slice(compose.indexOf('\n  redis:'));
     expect(redisService).not.toMatch(/\n\s+ports:/);
+  });
+
+  it('keeps production Redis private with an authenticated administration path', () => {
+    const compose = repositoryFile('packages/backend/docker-compose.yml');
+    const securityGuide = repositoryFile('docs/self-hosting-security.md');
+    const redisService = compose
+      .split('\n  redis:\n')[1]
+      .split('\nvolumes:\n')[0];
+
+    expect(redisService).not.toContain('ports:');
+    expect(securityGuide).toContain(
+      'docker compose -f packages/backend/docker-compose.yml exec redis redis-cli'
+    );
+  });
+
+  it('documents the PostgreSQL and Redis major-upgrade boundaries', () => {
+    const selfHostingGuide = repositoryFile('docs/self-hosting.md');
+
+    expect(selfHostingGuide).toContain('pg_dump --format=custom');
+    expect(selfHostingGuide).toContain('pg_restore --exit-on-error');
+    expect(selfHostingGuide).toContain('Redis 8 can read Redis 7');
+    expect(selfHostingGuide).toContain('Do not downgrade');
+  });
+
+  it('sets explicit production authentication capacity defaults', () => {
+    const compose = repositoryFile('packages/backend/docker-compose.yml');
+
+    expect(compose).toContain(
+      'AUTH_ATTEMPT_IDENTITY_LIMIT: ${AUTH_ATTEMPT_IDENTITY_LIMIT:-10}'
+    );
+    expect(compose).toContain(
+      'AUTH_REGISTRATION_GLOBAL_LIMIT: ${AUTH_REGISTRATION_GLOBAL_LIMIT:-200}'
+    );
   });
 });

@@ -4,11 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck disable=SC1091
 . "$ROOT_DIR/scripts/local-env.sh"
-pomi_load_local_environment
+pomi_load_release_environment
 
 : "${GHCR_IMAGE:=ghcr.io/host-it-labs/pomi-backend}"
-: "${GHCR_USERNAME:?Set GHCR_USERNAME in .env.local}"
-: "${GHCR_TOKEN:?Set GHCR_TOKEN in .env.local}"
+: "${GHCR_USERNAME:?Set GHCR_USERNAME in config/pomi-release.env}"
+: "${GHCR_TOKEN:?Set GHCR_TOKEN in config/pomi-release.env}"
 
 tag="${1:-latest}"
 printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin

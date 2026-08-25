@@ -1,6 +1,7 @@
 import type { AssistantStatus } from '@pomi/shared';
 import { create } from 'zustand';
 import { apiClient } from '../utils/apiClient';
+import { translateCurrent } from '../i18n';
 import { useAuthStoreBase } from './authStore';
 import { createSelectors } from './createSelectors';
 
@@ -31,13 +32,13 @@ const useAssistantStoreBase = create<AssistantStore>((set, get) => ({
       }
       set({
         isLoading: false,
-        error: 'Failed to load Assistant status.',
+        error: translateCurrent('assistant.statusLoadFailed'),
       });
     } catch (error) {
       console.error('Failed to load Assistant status:', error);
       set({
         isLoading: false,
-        error: 'Failed to load Assistant status.',
+        error: translateCurrent('assistant.statusLoadFailed'),
       });
     }
   },

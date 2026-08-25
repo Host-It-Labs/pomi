@@ -8,6 +8,8 @@ import { Socket, io } from 'socket.io-client';
 import { showToastFromStore } from '../components/toast/ToastContext';
 import { useAuthStore } from '../stores/authStore';
 import { getDebugLag } from '../stores/debugStore';
+import { translateCurrent } from '../i18n';
+import { registerBackendConnectionRecovery } from './backendConnectionRecovery';
 import { getBackendSocketOrigin } from './backendUrl';
 import { isMobile } from './osUtils';
 import {
@@ -349,6 +351,10 @@ export const forceReconnect = (skipIfConnected = false): Socket | null => {
   return getOrCreateSocket();
 };
 
+registerBackendConnectionRecovery(() => {
+  forceReconnect(false);
+});
+
 /**
  * Resolve after the timer socket has published a fresh authoritative state.
  * Gateway actions are completed over HTTP, while the existing timer store is
@@ -408,9 +414,10 @@ export const waitForAuthoritativeTimer = async (
       const message =
         data && typeof data === 'object' && 'message' in data
           ? String(
-              (data as { message?: unknown }).message ?? 'Timer action failed.'
+              (data as { message?: unknown }).message ??
+                translateCurrent('timer.actionFailed')
             )
-          : 'Timer action failed.';
+          : translateCurrent('timer.actionFailed');
       const error = new Error(message) as TimerActionError;
       error.reportedByTimerSocket = true;
       reject(error);
@@ -456,19 +463,19 @@ const USER_ACTION_SOCKET_EVENTS: Set<string> = new Set([
   SOCKET_EVENTS.CLEAR_TIMER_HISTORY,
 ]);
 
-const USER_ACTION_LABEL_BY_EVENT: Record<string, string> = {
-  [SOCKET_EVENTS.CREATE_OR_RESUME_TIMER]: 'Start timer',
-  [SOCKET_EVENTS.REMOVE_FOCUSED_TASK]: 'Remove focused task',
-  [SOCKET_EVENTS.PAUSE_TIMER]: 'Pause timer',
-  [SOCKET_EVENTS.RESET_TIMER]: 'Reset timer',
-  [SOCKET_EVENTS.SKIP_TIMER]: 'Skip timer',
-  [SOCKET_EVENTS.ADD_FIVE_MINUTES_TIMER]: 'Add 5 minutes',
-  [SOCKET_EVENTS.UNDO_TIMER_ACTION]: 'Undo timer action',
-  [SOCKET_EVENTS.REDO_TIMER_ACTION]: 'Redo timer action',
-  [SOCKET_EVENTS.STACK_TIMER]: 'Stack timer',
-  [SOCKET_EVENTS.SET_SESSION_POSITION]: 'Set session position',
-  [SOCKET_EVENTS.RESOLVE_TIMER_EXTENSION]: 'Resolve timer extension',
-  [SOCKET_EVENTS.CLEAR_TIMER_HISTORY]: 'Clear timer history',
+const USER_ACTION_LABEL_KEY_BY_EVENT: Record<string, string> = {
+  [SOCKET_EVENTS.CREATE_OR_RESUME_TIMER]: 'timer.startAction',
+  [SOCKET_EVENTS.REMOVE_FOCUSED_TASK]: 'timer.removeFocusedTask',
+  [SOCKET_EVENTS.PAUSE_TIMER]: 'timer.pause',
+  [SOCKET_EVENTS.RESET_TIMER]: 'timer.reset',
+  [SOCKET_EVENTS.SKIP_TIMER]: 'timer.skipTimer',
+  [SOCKET_EVENTS.ADD_FIVE_MINUTES_TIMER]: 'timer.addFiveMinutesAction',
+  [SOCKET_EVENTS.UNDO_TIMER_ACTION]: 'timer.undoAction',
+  [SOCKET_EVENTS.REDO_TIMER_ACTION]: 'timer.redoAction',
+  [SOCKET_EVENTS.STACK_TIMER]: 'timer.stackAction',
+  [SOCKET_EVENTS.SET_SESSION_POSITION]: 'timer.setSessionPosition',
+  [SOCKET_EVENTS.RESOLVE_TIMER_EXTENSION]: 'timer.resolveExtension',
+  [SOCKET_EVENTS.CLEAR_TIMER_HISTORY]: 'timer.clearHistory',
 };
 
 export const emitSocketEventDirect = (eventName: string, data?: unknown) => {
@@ -545,13 +552,17 @@ export const emitSocketEvent = (eventName: string, data?: unknown) => {
       .getState()
       .enqueue({
         kind: eventName,
-        label: USER_ACTION_LABEL_BY_EVENT[eventName] ?? 'Timer action',
+        label: translateCurrent(
+          USER_ACTION_LABEL_KEY_BY_EVENT[eventName] ?? 'timer.action'
+        ),
         payload: data,
         reconcile: waitForAuthoritativeTimer,
       })
       .catch(error => {
         const message =
-          error instanceof Error ? error.message : 'Timer action failed.';
+          error instanceof Error
+            ? error.message
+            : translateCurrent('timer.actionFailed');
         if (!isTimerErrorReported(error)) {
           showToastFromStore(message, 'error');
         }

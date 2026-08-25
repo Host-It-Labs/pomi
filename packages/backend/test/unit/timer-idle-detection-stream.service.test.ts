@@ -46,6 +46,27 @@ describe('TimerIdleDetectionStreamService', () => {
     expect(evalCommand).not.toHaveBeenCalled();
   });
 
+  it('contains transient idle-check failures as retryable warnings', () => {
+    const harness = createService(vi.fn(), vi.fn());
+    const logger = (
+      harness.service as unknown as {
+        logger: {
+          error: ReturnType<typeof vi.fn>;
+          warn: ReturnType<typeof vi.fn>;
+        };
+      }
+    ).logger;
+
+    internals(harness.service).reportIterationFailure(
+      Object.assign(new Error('redis unavailable'), { code: 'ECONNRESET' })
+    );
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Timer idle Stream dependency unavailable; retrying (Error (ECONNRESET))'
+    );
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
   function createService(
     evalCommand: ReturnType<typeof vi.fn>,
     persistIdleDetectionEffects: ReturnType<typeof vi.fn>
@@ -73,6 +94,7 @@ describe('TimerIdleDetectionStreamService', () => {
   function internals(service: TimerIdleDetectionStreamService) {
     return service as unknown as {
       processEntry(entry: [string, string[]]): Promise<void>;
+      reportIterationFailure(error: unknown): void;
     };
   }
 

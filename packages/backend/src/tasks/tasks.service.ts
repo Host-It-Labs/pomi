@@ -14,6 +14,7 @@ import {
   TIMER_TYPES,
   TaskImportSkippedTask,
   TaskEventLog,
+  TaskFollowUpDefinition,
   TaskCreationSource,
   TaskImportSource,
   TaskPriority,
@@ -121,6 +122,7 @@ type CreateTaskInput = {
   recurrenceInterval?: number | null;
   recurrenceAnchorMode?: TaskRecurrenceAnchorMode;
   followUpTaskId?: string | null;
+  followUpDefinition?: TaskFollowUpDefinition | null;
   followUpDelayDays?: number | null;
   vacationEligible?: boolean;
   importSource?: TaskImportSource;
@@ -149,11 +151,11 @@ export class TasksService {
   ) {}
 
   async getActiveTasks(userId: string, status?: TaskStatus) {
-    return this.tasksRepository.find({
+    const tasks = await this.tasksRepository.find({
       where: {
         userId,
         status: status ?? TASK_STATUSES.ACTIVE,
-        itemKind: 'task',
+        itemKind: In(['task', 'followUp']),
       },
       order: {
         dueDate: 'ASC',
@@ -161,6 +163,34 @@ export class TasksService {
         createdAt: 'ASC',
       },
     });
+    await this.attachFollowUpParents(userId, tasks, this.tasksRepository);
+    return tasks;
+  }
+
+  private async attachFollowUpParents(
+    userId: string,
+    tasks: TaskEntity[],
+    taskRepository: Repository<TaskEntity>
+  ) {
+    for (const task of tasks) task.followUpParent = null;
+    const sourceIds = [
+      ...new Set(
+        tasks.map(task => task.followUpSourceTaskId).filter(Boolean) as string[]
+      ),
+    ];
+    if (sourceIds.length === 0) return;
+    const parents = await taskRepository.find({
+      where: { id: In(sourceIds), userId, itemKind: In(['task', 'listItem']) },
+    });
+    const parentById = new Map(parents.map(parent => [parent.id, parent]));
+    for (const task of tasks) {
+      const parent = task.followUpSourceTaskId
+        ? parentById.get(task.followUpSourceTaskId)
+        : null;
+      task.followUpParent = parent
+        ? { id: parent.id, title: parent.title }
+        : null;
+    }
   }
 
   async hasImportedTasks(userId: string) {
@@ -305,7 +335,9 @@ export class TasksService {
       )
       .where('task."userId" = :userId', { userId })
       .andWhere('task.status = :status', { status: TASK_STATUSES.ACTIVE })
-      .andWhere('task.itemKind = :itemKind', { itemKind: 'task' })
+      .andWhere('task.itemKind IN (:...itemKinds)', {
+        itemKinds: ['task', 'followUp'],
+      })
       .setParameters({ now, timeZone })
       .getRawOne<Record<string, string>>();
 
@@ -382,7 +414,11 @@ export class TasksService {
         }
 
         const task = await taskRepository.findOne({
-          where: { id: event.taskId, userId, itemKind: 'task' },
+          where: {
+            id: event.taskId,
+            userId,
+            itemKind: In(['task', 'followUp']),
+          },
         });
         if (!task) {
           throw new NotFoundException('Task not found');
@@ -393,7 +429,7 @@ export class TasksService {
             userId,
             followUpSourceTaskId: task.id,
             status: TASK_STATUSES.ACTIVE,
-            itemKind: 'task',
+            itemKind: 'followUp',
           },
         });
         if (generatedFollowUp && generatedFollowUp.id !== task.id) {
@@ -425,6 +461,7 @@ export class TasksService {
         return saved;
       }
     );
+    await this.attachFollowUpParents(userId, [savedTask], this.tasksRepository);
     this.realtimeEvents.emitTasksUpdate(userId);
     return savedTask;
   }
@@ -656,27 +693,12 @@ export class TasksService {
       return {};
     }
 
-    const intentionsByType = await Promise.all(
-      TIMER_TYPE_VALUES.filter(type => wantedByType.has(type)).map(
-        async type => ({
-          type,
-          intentions: await this.intentionsService.getAllIntentions(
-            userId,
-            type,
-            undefined
-          ),
-        })
-      )
-    );
-    return Object.fromEntries(
-      intentionsByType.flatMap(({ type, intentions }) =>
-        intentions
-          .filter(intention => wantedByType.get(type)?.has(intention.slug))
-          .map(intention => [
-            `${type}:${intention.slug}`,
-            `${intention.emoji} ${intention.title}`,
-          ])
-      )
+    return this.intentionsService.getIntentionLabelsByTypeAndSlug(
+      userId,
+      TIMER_TYPE_VALUES.filter(type => wantedByType.has(type)).map(type => ({
+        type,
+        slugs: Array.from(wantedByType.get(type) ?? []),
+      }))
     );
   }
 
@@ -864,6 +886,7 @@ export class TasksService {
       recurrenceInterval,
       recurrenceAnchorMode,
       followUpTaskId,
+      followUpDefinition,
       followUpDelayDays,
       vacationEligible,
       importSource,
@@ -895,8 +918,8 @@ export class TasksService {
     this.validateFractionalRecurrence(parsedRecurrence, recurrenceInterval);
     const followUp = await this.validateFollowUpConfiguration(
       userId,
-      null,
       followUpTaskId,
+      followUpDefinition,
       followUpDelayDays
     );
 
@@ -921,7 +944,8 @@ export class TasksService {
       recurrenceInterval: recurrenceInterval ?? null,
       recurrenceSequenceIndex: 0,
       recurrenceAnchorMode: recurrenceAnchorMode ?? 'planned',
-      followUpTaskId: followUp.taskId,
+      followUpTaskId: null,
+      followUpDefinition: followUp.definition,
       followUpDelayDays: followUp.delayDays,
       followUpSourceTaskId: null,
       vacationEligible:
@@ -1275,7 +1299,7 @@ export class TasksService {
           importSourceTaskId: In(uniqueSourceIds),
           itemKind: 'task',
         },
-        select: ['importSourceTaskId'],
+        select: { importSourceTaskId: true },
       })
       .then(
         records =>
@@ -1586,6 +1610,7 @@ export class TasksService {
       expectedDueDate?: string | null;
       expectedDueTime?: string | null;
       followUpTaskId?: string | null;
+      followUpDefinition?: TaskFollowUpDefinition | null;
       followUpDelayDays?: number | null;
       vacationEligible?: boolean;
     }
@@ -1611,11 +1636,26 @@ export class TasksService {
     }
 
     const task = await this.tasksRepository.findOne({
-      where: { id, userId, itemKind: 'task' },
+      where: { id, userId, itemKind: In(['task', 'followUp']) },
     });
 
     if (!task) {
       throw new NotFoundException('Task not found');
+    }
+
+    if (
+      task.followUpSourceTaskId &&
+      (updates.pinned === true ||
+        (updates.manualOrder !== undefined && updates.manualOrder !== null) ||
+        updates.manualOrderOverride === true ||
+        (updates.recurrenceRule !== undefined &&
+          updates.recurrenceRule !== null) ||
+        (updates.recurrenceInterval !== undefined &&
+          updates.recurrenceInterval !== null))
+    ) {
+      throw new BadRequestException(
+        'Contextual follow-up Tasks cannot be pinned, reordered, or recurring'
+      );
     }
 
     const previousStatus = task.status;
@@ -1694,26 +1734,34 @@ export class TasksService {
     }
     if (
       updates.followUpTaskId !== undefined ||
+      updates.followUpDefinition !== undefined ||
       updates.followUpDelayDays !== undefined
     ) {
-      if (task.followUpSourceTaskId && updates.followUpTaskId) {
+      if (
+        task.followUpSourceTaskId &&
+        (updates.followUpTaskId || updates.followUpDefinition)
+      ) {
         throw new BadRequestException(
           'Generated follow-up Tasks cannot trigger another follow-up'
         );
       }
       const followUp = await this.validateFollowUpConfiguration(
         userId,
-        task.id,
         updates.followUpTaskId !== undefined
           ? updates.followUpTaskId
           : task.followUpTaskId,
+        updates.followUpDefinition !== undefined
+          ? updates.followUpDefinition
+          : task.followUpDefinition,
         updates.followUpDelayDays !== undefined
           ? updates.followUpDelayDays
-          : updates.followUpTaskId === null
+          : updates.followUpTaskId === null ||
+              updates.followUpDefinition === null
             ? null
             : task.followUpDelayDays
       );
-      task.followUpTaskId = followUp.taskId;
+      task.followUpTaskId = null;
+      task.followUpDefinition = followUp.definition;
       task.followUpDelayDays = followUp.delayDays;
     }
     this.validateRecurrenceAnchor(task.recurrenceRule, task.dueDate);
@@ -1821,6 +1869,7 @@ export class TasksService {
       await this.timerService.removeFocusedTask(userId, savedTask.id);
     }
 
+    await this.attachFollowUpParents(userId, [savedTask], this.tasksRepository);
     this.realtimeEvents.emitTasksUpdate(userId);
     return savedTask;
   }
@@ -1836,7 +1885,7 @@ export class TasksService {
         const taskRepository = manager.getRepository(TaskEntity);
         const eventRepository = manager.getRepository(TaskEventEntity);
         const task = await taskRepository.findOne({
-          where: { id, userId, itemKind: 'task' },
+          where: { id, userId, itemKind: In(['task', 'followUp']) },
           lock: { mode: 'pessimistic_write' },
         });
 
@@ -1887,7 +1936,7 @@ export class TasksService {
             userId,
             followUpSourceTaskId: task.id,
             status: TASK_STATUSES.ACTIVE,
-            itemKind: 'task',
+            itemKind: 'followUp',
           },
         });
         for (const generatedTask of activeGeneratedTasks) {
@@ -1928,6 +1977,11 @@ export class TasksService {
     for (const focusedTaskId of completion.focusedTaskIds) {
       await this.timerService.removeFocusedTask(userId, focusedTaskId);
     }
+    await this.attachFollowUpParents(
+      userId,
+      [completion.task],
+      this.tasksRepository
+    );
     this.realtimeEvents.emitTasksUpdate(userId);
     return completion.task;
   }
@@ -1940,24 +1994,14 @@ export class TasksService {
     eventRepository: Repository<TaskEventEntity>
   ) {
     if (
-      !sourceTask.followUpTaskId ||
+      !sourceTask.followUpDefinition ||
       sourceTask.followUpDelayDays === null ||
       sourceTask.followUpDelayDays === undefined
     ) {
       return null;
     }
 
-    const template = await taskRepository.findOne({
-      where: {
-        id: sourceTask.followUpTaskId,
-        userId,
-        status: TASK_STATUSES.ACTIVE,
-        itemKind: 'task',
-      },
-    });
-    if (!template || template.followUpTaskId || template.followUpSourceTaskId) {
-      return null;
-    }
+    const definition = sourceTask.followUpDefinition;
 
     const preferences = await this.preferencesService.getPreferences(userId);
     const completionDate = this.formatDateInTimeZone(
@@ -1966,37 +2010,38 @@ export class TasksService {
     );
     const followUp = taskRepository.create({
       userId,
-      title: template.title,
-      description: template.description,
-      sourceTranscript: template.sourceTranscript,
-      creationSource: template.creationSource,
+      title: definition.title,
+      description: definition.description,
+      sourceTranscript: null,
+      creationSource: TASK_CREATION_SOURCES.MANUAL,
       importSource: null,
       importSourceTaskId: null,
       dueDate: this.addDaysToDateString(
         completionDate,
         sourceTask.followUpDelayDays
       ),
-      dueTime: template.dueTime,
+      dueTime: definition.dueTime,
       manualOrder: null,
       manualOrderOverride: false,
       lastReminderKey: null,
-      priority: template.priority,
+      priority: definition.priority,
       status: TASK_STATUSES.ACTIVE,
-      timerType: template.timerType,
+      timerType: definition.timerType,
       pinnedAt: null,
-      intentionSlug: template.intentionSlug,
-      subIntentionSlug: template.subIntentionSlug,
+      intentionSlug: definition.intentionSlug,
+      subIntentionSlug: definition.subIntentionSlug,
       recurrenceRule: null,
       recurrenceInterval: null,
       recurrenceSequenceIndex: 0,
       recurrenceAnchorMode: 'planned',
       followUpTaskId: null,
+      followUpDefinition: null,
       followUpDelayDays: null,
       followUpSourceTaskId: sourceTask.id,
-      itemKind: 'task',
+      itemKind: 'followUp',
       listId: null,
       taskRestoreState: null,
-      vacationEligible: template.vacationEligible,
+      vacationEligible: definition.vacationEligible,
       lastVacationRunId: null,
       lastVacationShiftedOn: null,
     });
@@ -2048,22 +2093,23 @@ export class TasksService {
 
   private async validateFollowUpConfiguration(
     userId: string,
-    sourceTaskId: string | null,
     followUpTaskId: string | null | undefined,
+    followUpDefinition: TaskFollowUpDefinition | null | undefined,
     followUpDelayDays: number | null | undefined
   ) {
     const normalizedTaskId = this.normalizeOptionalSlug(followUpTaskId);
-    if (!normalizedTaskId) {
+    if (normalizedTaskId) {
+      throw new BadRequestException(
+        'Follow-up Tasks must be configured inside their parent Task'
+      );
+    }
+    if (!followUpDefinition) {
       if (followUpDelayDays !== undefined && followUpDelayDays !== null) {
         throw new BadRequestException(
-          'Follow-up delay requires a linked follow-up Task'
+          'Follow-up delay requires a follow-up definition'
         );
       }
-      return { taskId: null, delayDays: null };
-    }
-
-    if (sourceTaskId && normalizedTaskId === sourceTaskId) {
-      throw new BadRequestException('A Task cannot follow itself');
+      return { definition: null, delayDays: null };
     }
 
     if (
@@ -2078,28 +2124,26 @@ export class TasksService {
       );
     }
 
-    const target = await this.tasksRepository.findOne({
-      where: {
-        id: normalizedTaskId,
-        userId,
-        itemKind: 'task',
+    const timerType = followUpDefinition.timerType ?? TIMER_TYPES.WORK;
+    const link = await this.resolveTaskLink(
+      userId,
+      timerType,
+      followUpDefinition.intentionSlug,
+      followUpDefinition.subIntentionSlug
+    );
+    return {
+      definition: {
+        title: this.requireTitle(followUpDefinition.title),
+        description: this.normalizeOptionalText(followUpDefinition.description),
+        dueTime: this.resolveDueTime(followUpDefinition.dueTime),
+        priority: followUpDefinition.priority ?? TASK_PRIORITIES.NORMAL,
+        timerType,
+        intentionSlug: link.intentionSlug,
+        subIntentionSlug: link.subIntentionSlug,
+        vacationEligible: followUpDefinition.vacationEligible === true,
       },
-    });
-    if (!target) {
-      throw new NotFoundException('Follow-up Task not found');
-    }
-    if (target.status !== TASK_STATUSES.ACTIVE) {
-      throw new BadRequestException(
-        'Only an active Task can be used as a follow-up template'
-      );
-    }
-    if (target.followUpTaskId || target.followUpSourceTaskId) {
-      throw new BadRequestException(
-        'Follow-up Tasks cannot be chained or generated Tasks'
-      );
-    }
-
-    return { taskId: normalizedTaskId, delayDays: followUpDelayDays };
+      delayDays: followUpDelayDays,
+    };
   }
 
   private requireTitle(title: string) {

@@ -219,6 +219,14 @@ class TasksActivity : WatchActivity() {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_VERTICAL
             }
+            task.followUpContextLabel()?.let { contextLabel ->
+                textColumn.addView(TextView(this@TasksActivity).apply {
+                    text = contextLabel
+                    watchText(8f, WatchColors.Work)
+                    gravity = Gravity.START
+                    maxLines = 1
+                })
+            }
             textColumn.addView(TextView(this@TasksActivity).apply {
                 text = task.title
                 watchText(12f, WatchColors.Text, Typeface.BOLD)

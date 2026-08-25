@@ -10,6 +10,7 @@ import { DataSource } from 'typeorm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { configureHttpApp } from '../../src/configure-app';
 import { REDIS_CLIENT } from '../../src/redis/redis.constants';
+import { clearAuthRateLimitKeys } from './auth-rate-limit-cleanup';
 
 const require = createRequire(import.meta.url);
 const { AppModule } = require('../../dist/src/app.module.js');
@@ -45,11 +46,13 @@ describe.runIf(hasInfrastructure)('Watch HTTP integration', () => {
     await app.init();
     dataSource = app.get(DataSource);
     redis = app.get(REDIS_CLIENT);
+    await clearAuthRateLimitKeys(redis);
     await cleanWatchUsers(dataSource, redis);
   });
 
   afterAll(async () => {
     if (dataSource && redis) await cleanWatchUsers(dataSource, redis);
+    if (redis) await clearAuthRateLimitKeys(redis);
     if (app) await app.close();
   });
 
@@ -289,6 +292,39 @@ describe.runIf(hasInfrastructure)('Watch HTTP integration', () => {
       task.id
     );
     expect(result.totalVisibleTasks).toBe(1);
+  });
+
+  it('carries contextual follow-up parent labels to Watch', async () => {
+    const auth = await createSession('follow_up_parent');
+    await updatePreferences(auth, { tasksExtension: true });
+    const parent = await createTask(auth, 'Prepare Watch launch', {
+      followUpDefinition: {
+        title: 'Send Watch launch recap',
+        description: null,
+        dueTime: null,
+        priority: 'normal',
+        timerType: 'work',
+        intentionSlug: null,
+        subIntentionSlug: null,
+        vacationEligible: false,
+      },
+      followUpDelayDays: 0,
+    });
+
+    const completed = await submitAction(auth, randomUUID(), {
+      kind: 'tasks',
+      operation: 'complete',
+      taskId: parent.id,
+    });
+    expect(completed.status).toBe('succeeded');
+
+    const result = await status(auth, '?taskMode=general');
+    expect(result.tasks).toEqual([
+      expect.objectContaining({
+        title: 'Send Watch launch recap',
+        followUpParent: { id: parent.id, title: parent.title },
+      }),
+    ]);
   });
 
   it('keeps timer-linked Tasks ahead of manual General anchors', async () => {

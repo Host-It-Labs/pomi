@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react';
 import { FaArchive, FaCheck } from 'react-icons/fa';
+import { useI18n } from '../../i18n';
 
 const ACTION_THRESHOLD = 72;
 const MAX_OFFSET = 112;
@@ -27,6 +28,7 @@ export function MobileSwipeActionRow({
   onArchive: () => void;
   className?: string;
 }) {
+  const { t } = useI18n();
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [settling, setSettling] = useState(false);
@@ -201,10 +203,10 @@ export function MobileSwipeActionRow({
                 transform: `scale(${0.75 + progress * 0.25})`,
               }}
             />
-            Complete
+            {t('common.complete')}
           </div>
           <div className="flex h-full w-28 items-center justify-end gap-2 bg-amber-600/90 pr-4 text-xs font-semibold text-white">
-            Archive
+            {t('common.archive')}
             <FaArchive
               style={{
                 opacity: 0.35 + progress * 0.65,

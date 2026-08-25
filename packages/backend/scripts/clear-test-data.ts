@@ -18,6 +18,7 @@ const TIMER_KEY_SUFFIXES = [
 ];
 
 const TIMER_KEY_PATTERNS = TIMER_KEY_SUFFIXES.map(suffix => `user:*:${suffix}`);
+const AUTH_RATE_LIMIT_KEY_PATTERN = 'pomi:auth-limits:*';
 const REDIS_BATCH_SIZE = 500;
 const DB_BATCH_SIZE = 500;
 
@@ -127,25 +128,27 @@ async function getTestUserIds(): Promise<string[]> {
   return users.map(user => user.id);
 }
 
-async function clearRedisTimerState(testUserIds: string[]): Promise<number> {
-  const redis = new Redis(getRedisUrl());
+async function clearRedisTimerState(
+  redis: Redis,
+  testUserIds: string[]
+): Promise<number> {
+  const redisTimerUserIds = await scanTimerUserIds(redis);
+  const existingUserIds = await getExistingUserIds([...redisTimerUserIds]);
+  const userIdsToClear = new Set(testUserIds);
 
-  try {
-    const redisTimerUserIds = await scanTimerUserIds(redis);
-    const existingUserIds = await getExistingUserIds([...redisTimerUserIds]);
-    const userIdsToClear = new Set(testUserIds);
-
-    for (const userId of redisTimerUserIds) {
-      if (!existingUserIds.has(userId)) {
-        userIdsToClear.add(userId);
-      }
+  for (const userId of redisTimerUserIds) {
+    if (!existingUserIds.has(userId)) {
+      userIdsToClear.add(userId);
     }
-
-    const keysToDelete = [...userIdsToClear].flatMap(getTimerKeysForUser);
-    return await deleteRedisKeys(redis, keysToDelete);
-  } finally {
-    redis.disconnect();
   }
+
+  const keysToDelete = [...userIdsToClear].flatMap(getTimerKeysForUser);
+  return await deleteRedisKeys(redis, keysToDelete);
+}
+
+async function clearRedisAuthRateLimitState(redis: Redis): Promise<number> {
+  const keys = await scanKeys(redis, AUTH_RATE_LIMIT_KEY_PATTERN);
+  return await deleteRedisKeys(redis, keys);
 }
 
 async function clearDatabaseTestData(testUserIds: string[]): Promise<void> {
@@ -171,14 +174,23 @@ async function clearTestData(): Promise<void> {
   await dataSource.initialize();
 
   const testUserIds = await getTestUserIds();
-  const deletedRedisKeys = await clearRedisTimerState(testUserIds);
+  const redis = new Redis(getRedisUrl());
+  let deletedRedisTimerKeys = 0;
+  let deletedRedisAuthRateLimitKeys = 0;
+  try {
+    deletedRedisTimerKeys = await clearRedisTimerState(redis, testUserIds);
+    deletedRedisAuthRateLimitKeys = await clearRedisAuthRateLimitState(redis);
+  } finally {
+    redis.disconnect();
+  }
   await clearDatabaseTestData(testUserIds);
 
   process.stdout.write(
     [
       'Cleared test data',
       `- users: ${testUserIds.length}`,
-      `- redis timer keys: ${deletedRedisKeys}`,
+      `- redis timer keys: ${deletedRedisTimerKeys}`,
+      `- redis auth-limit keys: ${deletedRedisAuthRateLimitKeys}`,
     ].join('\n') + '\n'
   );
 }

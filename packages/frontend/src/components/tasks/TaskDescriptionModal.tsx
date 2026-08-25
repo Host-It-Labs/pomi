@@ -39,7 +39,7 @@ export function TaskDescriptionButton({
   return (
     <button
       type="button"
-      aria-label={`Read description for ${task.title}`}
+      aria-label={t('description.readFor', { title: task.title })}
       title={t('description.read')}
       onClick={() => onOpen(task)}
       className="group/task-description relative shrink-0 overflow-visible rounded px-0.5 text-[11px] leading-none opacity-75 transition hover:opacity-100"

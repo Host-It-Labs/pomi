@@ -7,13 +7,11 @@ export type TaskRecurrenceAnchorMode = 'planned' | 'completion';
 export type TaskCreationSource = 'manual' | 'assistant' | 'voice';
 export type TaskDefaultDueDateMode = 'off' | 'tomorrow' | 'week' | 'custom';
 export type TaskSortMode = 'default' | 'created-desc' | 'created-asc';
+export type TaskPageViewMode = 'list' | 'calendar';
 export type AssistantDebugLogKind = 'taskCapture' | 'voiceCommand';
 export type AssistantDebugLogSource = 'typed' | 'dictation' | 'assistantVoice';
 export type AssistantDebugLogStatus =
-  | 'dictated'
-  | 'succeeded'
-  | 'fallback'
-  | 'failed';
+  'dictated' | 'succeeded' | 'fallback' | 'failed';
 export type TaskLifecycleEventType = 'created' | 'completed' | 'archived';
 export type AssistantUsageBudgetPeriod = 'daily' | 'monthly';
 export type AssistantVoiceAction =
@@ -250,11 +248,7 @@ export interface TaskStatisticsSummary {
 }
 
 export type TaskStatisticsFilter =
-  | 'created'
-  | 'completed'
-  | 'overdue'
-  | 'onTime'
-  | 'archived';
+  'created' | 'completed' | 'overdue' | 'onTime' | 'archived';
 
 export interface TaskEventLog {
   id: string;
@@ -402,12 +396,30 @@ export interface Task {
   recurrenceInterval: number | null;
   recurrenceAnchorMode: TaskRecurrenceAnchorMode;
   followUpTaskId: string | null;
+  followUpDefinition?: TaskFollowUpDefinition | null;
   followUpDelayDays: number | null;
   followUpSourceTaskId: string | null;
+  followUpParent?: TaskFollowUpParent | null;
   itemKind: 'task';
   vacationEligible: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TaskFollowUpDefinition {
+  title: string;
+  description: string | null;
+  dueTime: string | null;
+  priority: TaskPriority;
+  timerType: TimerTypes;
+  intentionSlug: string | null;
+  subIntentionSlug: string | null;
+  vacationEligible: boolean;
+}
+
+export interface TaskFollowUpParent {
+  id: string;
+  title: string;
 }
 
 export interface List {
@@ -554,10 +566,7 @@ export interface AssistantDebugProcessedOutput {
 }
 
 export type AssistantDebugModelCallStage =
-  | 'transcription'
-  | 'initial'
-  | 'repair'
-  | 'review';
+  'transcription' | 'initial' | 'repair' | 'review';
 
 export interface AssistantDebugModelCallAttempt {
   request: Record<string, unknown>;
@@ -662,6 +671,7 @@ export interface WatchTaskSummary {
   intentionEmoji: string | null;
   subIntentionTitle: string | null;
   subIntentionEmoji: string | null;
+  followUpParent: TaskFollowUpParent | null;
   isFocused: boolean;
   isLinkedToTimer: boolean;
   isOverdue: boolean;

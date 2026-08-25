@@ -248,3 +248,135 @@ describe('StatisticsService period aggregates', () => {
     });
   });
 });
+
+describe('StatisticsService first statistics log', () => {
+  it('uses the shared first-log result for summary values and comparison flags', async () => {
+    const periods = {
+      today: { count: 2, duration: 120 },
+      yesterday: { count: 1, duration: 60 },
+      week: { count: 2, duration: 120 },
+      previousWeek: { count: 1, duration: 60 },
+      month: { count: 2, duration: 120 },
+      previousMonth: { count: 1, duration: 60 },
+      year: { count: 2, duration: 120 },
+      previousYear: { count: 1, duration: 60 },
+    };
+    const service = new StatisticsService(
+      {} as never,
+      {
+        getSubIntentionCountsByParentIds: vi.fn(async () => ({})),
+      } as never
+    );
+    const dependencies = service as unknown as {
+      getPeriodAggregates: () => Promise<typeof periods>;
+      getHeatmapData: () => Promise<
+        { date: string; count: number; duration: number }[]
+      >;
+      getFirstStatisticsLog: () => Promise<{
+        date: string | null;
+        completedAt: number | null;
+      }>;
+      getAvailableIntentionSlugs: () => Promise<string[]>;
+    };
+    vi.spyOn(dependencies, 'getPeriodAggregates').mockResolvedValue(periods);
+    vi.spyOn(dependencies, 'getHeatmapData').mockResolvedValue([]);
+    const firstLog = vi
+      .spyOn(dependencies, 'getFirstStatisticsLog')
+      .mockResolvedValue({ date: '1970-01-01', completedAt: 0 });
+    vi.spyOn(dependencies, 'getAvailableIntentionSlugs').mockResolvedValue([]);
+
+    await expect(
+      service.getStatisticsSummary('user-1', 'focus', 'work', 'writing')
+    ).resolves.toMatchObject({
+      firstLogDate: '1970-01-01',
+      today: { change: 100, durationChange: 100 },
+      week: { change: 100, durationChange: 100 },
+      month: { change: 100, durationChange: 100 },
+      year: { change: 100, durationChange: 100 },
+    });
+    expect(firstLog).toHaveBeenCalledOnce();
+    expect(firstLog).toHaveBeenCalledWith('user-1', 'work', 'focus', 'writing');
+  });
+
+  it('returns the first date and timestamp from one filtered query', async () => {
+    const queryBuilder = {
+      select: vi.fn().mockReturnThis(),
+      addSelect: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getRawOne: vi.fn(async () => ({
+        minDate: '2026-01-02',
+        minCompletedAt: '1767312000000',
+      })),
+    };
+    const repository = {
+      createQueryBuilder: vi.fn(() => queryBuilder),
+    };
+    const service = new StatisticsService(repository as never, {} as never);
+    const serviceWithFirstLog = service as unknown as {
+      getFirstStatisticsLog: (
+        userId: string,
+        sessionType?: IntentionType,
+        intention?: string,
+        subIntention?: string
+      ) => Promise<{ date: string | null; completedAt: number | null }>;
+    };
+
+    await expect(
+      serviceWithFirstLog.getFirstStatisticsLog(
+        'user-1',
+        'work',
+        'focus',
+        'writing'
+      )
+    ).resolves.toEqual({
+      date: '2026-01-02',
+      completedAt: 1_767_312_000_000,
+    });
+
+    expect(repository.createQueryBuilder).toHaveBeenCalledOnce();
+    expect(queryBuilder.select).toHaveBeenCalledWith(
+      'MIN(statistic.date)',
+      'minDate'
+    );
+    expect(queryBuilder.addSelect).toHaveBeenCalledWith(
+      'MIN(statistic.completedAt)',
+      'minCompletedAt'
+    );
+    expect(queryBuilder.getRawOne).toHaveBeenCalledOnce();
+    expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+      ':intention = ANY(statistic.intentions)',
+      { intention: 'focus' }
+    );
+    expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+      `statistic."subIntentions" ->> :subIntentionParent = :subIntention`,
+      { subIntentionParent: 'focus', subIntention: 'writing' }
+    );
+  });
+
+  it('preserves missing-history nulls', async () => {
+    const queryBuilder = {
+      select: vi.fn().mockReturnThis(),
+      addSelect: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getRawOne: vi.fn(async () => ({
+        minDate: null,
+        minCompletedAt: null,
+      })),
+    };
+    const service = new StatisticsService(
+      { createQueryBuilder: vi.fn(() => queryBuilder) } as never,
+      {} as never
+    );
+    const serviceWithFirstLog = service as unknown as {
+      getFirstStatisticsLog: (
+        userId: string
+      ) => Promise<{ date: string | null; completedAt: number | null }>;
+    };
+
+    await expect(
+      serviceWithFirstLog.getFirstStatisticsLog('user-without-history')
+    ).resolves.toEqual({ date: null, completedAt: null });
+  });
+});

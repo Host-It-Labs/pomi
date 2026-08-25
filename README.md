@@ -7,12 +7,17 @@ and a Wear OS companion.
 
 ## Local development
 
-Requirements: Node.js 24, pnpm 9.15.5, and Docker with Compose.
+Requirements: Node.js 26, pnpm 11.23.0, and Docker with Compose. Node 26 no
+longer bundles Corepack, so install the current Corepack release once before
+activating pnpm:
 
 ```bash
-corepack enable
+npm install --global corepack@0.35.0
+corepack enable pnpm
+corepack install --global pnpm@11.23.0
 pnpm install --frozen-lockfile
 cp .env.example .env.local
+chmod 600 .env.local
 pnpm docker:dev:detached
 pnpm dev:migrate
 pnpm dev:frontend
@@ -47,10 +52,11 @@ and optional integrations.
 
 ## Optional services
 
-All editable local variables live in the ignored root `.env.local`. File-shaped
-credentials live in ignored `config/secrets/` and are referenced by path from
-that file. Sentry, OpenRouter, GitHub feedback, Firebase, and APNs remain
-disabled unless their credentials are supplied. See [the local setup guide](docs/local-setup.md).
+Development variables live in the ignored root `.env.local`. Scheduled Radar
+automation uses the separate ignored `config/pomi-automation.env`, and local
+release commands use `config/pomi-release.env`. File-shaped credentials live in
+ignored `config/secrets/`. Sentry, OpenRouter, GitHub feedback, Firebase, and
+APNs remain disabled unless their credentials are supplied. See [the local setup guide](docs/local-setup.md).
 
 ## Contributing and security
 

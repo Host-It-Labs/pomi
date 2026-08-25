@@ -33,7 +33,7 @@ describe('public release workflow', () => {
       'refs:[{repository:$repository,commit:$commit}]'
     );
     expect(workflow).toContain('dateReleased');
-    expect(workflow).toContain('actions/create-github-app-token@v2');
+    expect(workflow).toContain('actions/create-github-app-token@v3');
     expect(workflow).toContain('POMI_RADAR_APP_PRIVATE_KEY');
     expect(workflow).toContain('scripts/radar-lifecycle.mjs release');
   });
@@ -69,10 +69,22 @@ describe('public release workflow', () => {
     ]);
 
     for (const script of [amd64Script, arm64Script]) {
-      expect(script).toContain('node:24-bookworm');
+      expect(script).toContain('node:26-bookworm');
       expect(script).toContain(
         '--mount type=volume,destination=/workspace/node_modules'
       );
+      for (const variable of [
+        'VITE_BACKEND_URL',
+        'VITE_USE_HTTPS',
+        'VITE_RENDER_SYSTEM_TRAY_ICON',
+        'VITE_DEBUG_PANEL_ENABLED',
+        'VITE_PROD',
+        'VITE_ANDROID_BACKEND_URL',
+        'VITE_SENTRY_DSN',
+        'VITE_SENTRY_RELEASE',
+      ]) {
+        expect(script).toContain(variable);
+      }
       expect(script).not.toContain('pomi_0.1.0');
     }
     expect(amd64Script).toContain('target/linux-amd64');
@@ -80,5 +92,16 @@ describe('public release workflow', () => {
     expect(dockerScript).toContain('--output type=cacheonly');
     expect(dockerScript).toContain('--builder "$POMI_DOCKER_BUILDER"');
     expect(dockerScript).not.toContain('--push');
+  });
+
+  it('uses the release profile and unsigned mode for local macOS builds', async () => {
+    const packageJson = await readFile(
+      new URL('../../../../package.json', import.meta.url),
+      'utf8'
+    );
+
+    expect(packageJson).toContain('build:macos');
+    expect(packageJson).toContain('--profile release');
+    expect(packageJson).toContain('--no-sign');
   });
 });

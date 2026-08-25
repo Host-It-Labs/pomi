@@ -106,6 +106,7 @@ export default defineConfig({
         },
         test: {
           name: 'frontend-unit',
+          execArgv: ['--no-experimental-webstorage'],
           environment: 'jsdom',
           include: [
             'packages/frontend/src/**/*.test.ts',

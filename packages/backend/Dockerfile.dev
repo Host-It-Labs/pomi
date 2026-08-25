@@ -1,17 +1,19 @@
-FROM node:24-alpine
+FROM node:26-alpine
 
 WORKDIR /app
 
 # Copy workspace configuration files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
 
 # Copy package.json files from all workspaces
 COPY packages/backend/package.json ./packages/backend/
 COPY packages/shared/package.json ./packages/shared/
 
 # Install dependencies using pnpm workspaces
-RUN corepack enable
-RUN corepack prepare pnpm@9.15.5 --activate
+RUN npm install --global corepack@0.35.0
+RUN corepack enable pnpm
+RUN corepack install --global pnpm@11.23.0
 RUN pnpm install --frozen-lockfile
 
 # Copy shared package source to build it

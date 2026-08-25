@@ -29,10 +29,19 @@ describe('AuthService account language', () => {
       {
         getPreferences,
       } as never,
-      { isSelfHosted: vi.fn(() => false) } as never
+      { isSelfHosted: vi.fn(() => false) } as never,
+      {
+        assertAuthenticationAllowed: vi.fn(),
+        assertRegistrationAllowed: vi.fn(),
+      } as never
     );
 
-    const result = await service.authenticateUser('new-user', 'password', 'fr');
+    const result = await service.authenticateUser(
+      'new-user',
+      'password',
+      '127.0.0.1',
+      'fr'
+    );
 
     expect(getPreferences).toHaveBeenCalledWith('user-1', 'fr');
     expect(result).toMatchObject({
@@ -60,12 +69,17 @@ describe('AuthService account language', () => {
       } as never,
       { sign: vi.fn(() => 'token') } as never,
       { getPreferences } as never,
-      { isSelfHosted: vi.fn(() => false) } as never
+      { isSelfHosted: vi.fn(() => false) } as never,
+      {
+        assertAuthenticationAllowed: vi.fn(),
+        assertRegistrationAllowed: vi.fn(),
+      } as never
     );
 
     const result = await service.authenticateUser(
       'existing-user',
       'password',
+      '127.0.0.1',
       'fr'
     );
 

@@ -44,7 +44,7 @@ function createService(tasks: TaskRecord[], preferences = createPreferences()) {
       tasks.filter(
         task =>
           task.status === TASK_STATUSES.ACTIVE &&
-          task.itemKind === 'task' &&
+          ['task', 'followUp'].includes(task.itemKind) &&
           task.dueDate
       ),
   };
@@ -76,6 +76,45 @@ function createService(tasks: TaskRecord[], preferences = createPreferences()) {
 }
 
 describe('TaskNotificationService', () => {
+  it('skips a scan cleanly when migrations or storage are unavailable', async () => {
+    const service = new TaskNotificationService(
+      {
+        createQueryBuilder: () => {
+          const query = {
+            where: () => query,
+            andWhere: () => query,
+            getMany: async () => {
+              throw new Error('relation "tasks" does not exist');
+            },
+          };
+          return query;
+        },
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never
+    );
+    const warnings: string[] = [];
+    Object.assign(service, {
+      logger: { warn: (message: string) => warnings.push(message) },
+    });
+
+    await expect(service.scanDueTasks()).resolves.toBeUndefined();
+    expect(warnings).toEqual([
+      'Task reminder scan skipped while storage is unavailable',
+    ]);
+  });
+
+  it('sends reminders for contextual follow-ups', async () => {
+    const { service, sent } = createService([
+      createTask({ itemKind: 'followUp', priority: TASK_PRIORITIES.HIGH }),
+    ]);
+
+    await service.scanDueTasks(new Date('2026-06-17T09:00:00.000Z'));
+
+    expect(sent).toHaveLength(1);
+  });
+
   it('sends one normal reminder when a selected Task priority becomes due', async () => {
     const tasks = [createTask({ priority: TASK_PRIORITIES.HIGH })];
     const first = createService(tasks);

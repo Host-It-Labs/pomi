@@ -99,6 +99,9 @@ const textExtensions = new Set([
   '.yml',
   '.yaml',
 ]);
+const reviewedTextFiles = new Set([
+  'patches/@anatine__zod-openapi@1.14.2.patch',
+]);
 
 const failures = [];
 for (const relativePath of trackedFiles) {
@@ -116,7 +119,7 @@ for (const relativePath of trackedFiles) {
 
   const extension = path.extname(relativePath).toLowerCase();
   if (binaryExtensions.has(extension)) continue;
-  if (!textExtensions.has(extension)) {
+  if (!textExtensions.has(extension) && !reviewedTextFiles.has(relativePath)) {
     failures.push(
       `${relativePath}: unreviewed file type ${extension || '(none)'}`
     );

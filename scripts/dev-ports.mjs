@@ -1,8 +1,11 @@
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { resolveContainedPath, resolveSafeStateFile } from './path-safety.mjs';
 
 export const DEFAULT_PORTS = Object.freeze({
   backend: 3000,
@@ -12,14 +15,20 @@ export const DEFAULT_PORTS = Object.freeze({
   frontendHmr: 1421,
 });
 
+const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
+const worktreeStateDirectory = path.join(repoRoot, '.pomi');
 const defaultDevPortsDirectory = path.join(
   process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'),
   'pomi'
 );
 
-export const DEV_PORTS_FILE =
-  process.env.POMI_DEV_PORTS_FILE ||
-  path.join(defaultDevPortsDirectory, 'dev-ports.env');
+export const DEV_PORTS_FILE = resolveSafeStateFile({
+  candidate:
+    process.env.POMI_DEV_PORTS_FILE ||
+    path.join(defaultDevPortsDirectory, 'dev-ports.env'),
+  allowedRoots: [defaultDevPortsDirectory, worktreeStateDirectory, os.tmpdir()],
+  label: 'Pomi dev ports file',
+});
 
 const devPortsDirectory = path.dirname(DEV_PORTS_FILE);
 
@@ -38,10 +47,18 @@ export const parsePortNumber = (value, fallback) => {
 };
 
 export const readDevPorts = () => {
+  // codeql[js/path-injection] -- The configured state file is canonicalized into an approved Pomi or temporary state root.
   if (!fs.existsSync(DEV_PORTS_FILE)) {
     return {};
   }
 
+  // codeql[js/path-injection] -- The configured state file is contained in an approved root and checked again before reading.
+  const metadata = fs.lstatSync(DEV_PORTS_FILE);
+  if (metadata.isSymbolicLink() || !metadata.isFile()) {
+    throw new Error('Pomi dev ports file must remain a regular file');
+  }
+
+  // codeql[js/path-injection] -- Symlinks are rejected immediately before reading the contained state file.
   const content = fs.readFileSync(DEV_PORTS_FILE, 'utf8');
 
   return content.split(/\r?\n/).reduce((ports, line) => {
@@ -70,6 +87,7 @@ export const readDevPorts = () => {
 };
 
 export const writeDevPorts = nextPorts => {
+  // codeql[js/path-injection] -- The directory is derived from a state file contained in an approved root.
   fs.mkdirSync(devPortsDirectory, { recursive: true, mode: 0o700 });
 
   const mergedPorts = {
@@ -84,11 +102,26 @@ export const writeDevPorts = nextPorts => {
     .map(([key, value]) => `${key}=${value}`)
     .join('\n');
 
-  fs.writeFileSync(DEV_PORTS_FILE, `${content}\n`, {
-    encoding: 'utf8',
-    mode: 0o600,
+  const temporaryFile = resolveContainedPath({
+    root: devPortsDirectory,
+    relativePath: `.dev-ports-${process.pid}-${randomUUID()}.tmp`,
+    label: 'Temporary dev ports file',
   });
-  fs.chmodSync(DEV_PORTS_FILE, 0o600);
+  try {
+    // codeql[js/path-injection] -- The new private file is canonicalized into the approved state directory.
+    fs.writeFileSync(temporaryFile, `${content}\n`, {
+      encoding: 'utf8',
+      flag: 'wx',
+      mode: 0o600,
+    });
+    // codeql[js/path-injection] -- Both files are contained in the approved state directory; rename avoids following a destination symlink.
+    fs.renameSync(temporaryFile, DEV_PORTS_FILE);
+    // codeql[js/path-injection] -- The destination remains canonicalized into the approved state directory after atomic replacement.
+    fs.chmodSync(DEV_PORTS_FILE, 0o600);
+  } finally {
+    // codeql[js/path-injection] -- The private temporary file is canonicalized into the approved state directory.
+    fs.rmSync(temporaryFile, { force: true });
+  }
 
   return mergedPorts;
 };
@@ -96,13 +129,12 @@ export const writeDevPorts = nextPorts => {
 export const getBackendBaseUrl = backendPort =>
   `http://localhost:${backendPort}`;
 
-export const getAndroidBackendUrl = backendPort =>
-  `10.0.2.2:${backendPort}`;
+export const getAndroidBackendUrl = backendPort => `10.0.2.2:${backendPort}`;
 
 export const getFrontendBaseUrl = frontendPort =>
   `http://localhost:${frontendPort}`;
 
-export const getViteBackendUrl = backendPort => `localhost:${backendPort}`;
+export const getViteBackendUrl = backendPort => getBackendBaseUrl(backendPort);
 
 const isPortInUseByLsof = port => {
   try {

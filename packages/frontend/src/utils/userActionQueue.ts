@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/react';
 import { useAuthStore } from '../stores/authStore';
 import { createSelectors } from '../stores/createSelectors';
 import { getDebugLag } from '../stores/debugStore';
+import { translateCurrent } from '../i18n';
 import { getBackendOrigin } from './backendUrl';
 import { forceReconnect, registerSocketEventHandler } from './socketManager';
 
@@ -197,7 +198,7 @@ function lifecycleFromResponse(
     id: String(candidate.actionId ?? defaults.id ?? ''),
     status,
     kind: String(action?.kind ?? defaults.kind ?? 'unknown'),
-    label: String(defaults.label ?? 'Action'),
+    label: String(defaults.label ?? translateCurrent('actionQueue.action')),
     payload: action ?? defaults.payload,
     result: candidate.result,
     error:
@@ -451,7 +452,7 @@ async function submitItem(item: QueueItem) {
       error:
         error instanceof Error
           ? error.message
-          : 'Unable to reach server. Retrying connection.',
+          : translateCurrent('actionQueue.serverRetry'),
     });
     return;
   }
@@ -469,7 +470,9 @@ async function submitItem(item: QueueItem) {
       item.submitFailures += 1;
       blockNetworkAndRetry(item, 'submit');
       updateItem(item, {
-        error: `Unable to submit action (${receipt.status}). Retrying connection.`,
+        error: translateCurrent('actionQueue.submitCodeRetry', {
+          status: receipt.status,
+        }),
       });
       return;
     }
@@ -521,7 +524,7 @@ async function pollItem(item: QueueItem) {
         error:
           error instanceof Error
             ? error.message
-            : 'Unable to check action status. Retrying connection.',
+            : translateCurrent('actionQueue.statusRetry'),
       });
       return;
     }
@@ -530,7 +533,9 @@ async function pollItem(item: QueueItem) {
         item.pollFailures += 1;
         blockNetworkAndRetry(item, 'poll');
         updateItem(item, {
-          error: `Unable to check action status (${response.status}). Retrying connection.`,
+          error: translateCurrent('actionQueue.statusCodeRetry', {
+            status: response.status,
+          }),
         });
         return;
       }
@@ -538,7 +543,9 @@ async function pollItem(item: QueueItem) {
       item.terminalReceivedAtMs = performance.now();
       terminalFailure(
         item,
-        `Unable to check action status (${response.status}).`
+        translateCurrent('actionQueue.statusCodeFailed', {
+          status: response.status,
+        })
       );
       return;
     }
@@ -576,7 +583,7 @@ async function settleTerminalItem(item: QueueItem) {
         item,
         error instanceof Error
           ? error.message
-          : 'Unable to refresh confirmed state.'
+          : translateCurrent('actionQueue.refreshFailed')
       );
       return;
     }
@@ -610,7 +617,7 @@ async function cancelItem(item: QueueItem) {
       error:
         error instanceof Error
           ? error.message
-          : 'Unable to cancel action. Retrying connection.',
+          : translateCurrent('actionQueue.cancelRetry'),
     });
   }
 }
@@ -627,7 +634,9 @@ async function runUserMutation<T>(
     successStatus: options.successStatus,
   });
   if (lifecycle.status !== 'succeeded') {
-    throw new Error(lifecycle.error ?? 'Action failed.');
+    throw new Error(
+      lifecycle.error ?? translateCurrent('actionQueue.actionFailed')
+    );
   }
   const result = lifecycle.result;
   if (result && typeof result === 'object' && 'body' in result) {

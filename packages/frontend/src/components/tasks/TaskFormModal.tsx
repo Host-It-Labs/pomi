@@ -3,6 +3,7 @@ import type {
   List,
   Preferences,
   Task,
+  TaskFollowUpDefinition,
   TaskPriority,
   TaskRecurrenceAnchorMode,
   Timer,
@@ -82,6 +83,7 @@ type TaskFormPayload = {
   recurrenceInterval?: number | null;
   recurrenceAnchorMode?: TaskRecurrenceAnchorMode;
   followUpTaskId?: string | null;
+  followUpDefinition?: TaskFollowUpDefinition | null;
   followUpDelayDays?: number | null;
   vacationEligible?: boolean;
 };
@@ -93,7 +95,6 @@ type TaskFormUpdatePayload = Partial<TaskFormPayload> & {
 interface TaskFormModalProps {
   isOpen: boolean;
   task: Task | null;
-  activeTasks?: Task[];
   intentions: Intention[];
   lists?: List[];
   preferences: Preferences | null | undefined;
@@ -123,7 +124,6 @@ interface TaskFormModalProps {
 export function TaskFormModal({
   isOpen,
   task,
-  activeTasks,
   intentions,
   lists,
   preferences,
@@ -140,7 +140,7 @@ export function TaskFormModal({
   onConvertToListItem,
 }: TaskFormModalProps) {
   const { t } = useI18n();
-  const availableLists = lists ?? [];
+  const availableLists = task?.followUpSourceTaskId ? [] : (lists ?? []);
   const currentTimerType = timer?.type;
   const currentTimerFocusedTaskCount = timer?.focusedTaskIds?.length ?? 0;
   const currentTimerIntention = timer?.intention ?? '';
@@ -167,7 +167,20 @@ export function TaskFormModal({
   const [recurrenceAnchorMode, setRecurrenceAnchorMode] =
     useState<TaskRecurrenceAnchorMode>('planned');
   const [recurrenceTouched, setRecurrenceTouched] = useState(false);
-  const [followUpTaskId, setFollowUpTaskId] = useState('');
+  const [followUpEnabled, setFollowUpEnabled] = useState(false);
+  const [followUpTitle, setFollowUpTitle] = useState('');
+  const [followUpDescription, setFollowUpDescription] = useState('');
+  const [followUpDueTime, setFollowUpDueTime] = useState('');
+  const [followUpPriority, setFollowUpPriority] = useState<TaskPriority>(
+    TASK_PRIORITIES.NORMAL
+  );
+  const [followUpTimerType, setFollowUpTimerType] = useState<TimerTypes>(
+    TIMER_TYPES.WORK
+  );
+  const [followUpIntentionSlug, setFollowUpIntentionSlug] = useState('');
+  const [followUpSubIntentionSlug, setFollowUpSubIntentionSlug] = useState('');
+  const [followUpVacationEligible, setFollowUpVacationEligible] =
+    useState(false);
   const [followUpDelayDays, setFollowUpDelayDays] = useState('');
   const [vacationEligible, setVacationEligible] = useState(false);
   const [vacationEligibleTouched, setVacationEligibleTouched] = useState(false);
@@ -226,18 +239,39 @@ export function TaskFormModal({
         ),
     [eligibleIntentions, intentions, timerType]
   );
-  const followUpTaskOptions = useMemo(() => {
-    const availableTasks = activeTasks ?? [];
-    const selectedId = task?.followUpTaskId;
-    return availableTasks.filter(
-      candidate =>
-        candidate.status === 'active' &&
-        candidate.itemKind === 'task' &&
-        candidate.id !== task?.id &&
-        (candidate.id === selectedId ||
-          (!candidate.followUpTaskId && !candidate.followUpSourceTaskId))
-    );
-  }, [activeTasks, task?.followUpTaskId, task?.id]);
+  const eligibleFollowUpIntentions = useMemo(
+    () =>
+      intentions.filter(
+        intention =>
+          intention.type === followUpTimerType &&
+          !intention.parentIntentionId &&
+          intention.allowsTasks !== false
+      ),
+    [followUpTimerType, intentions]
+  );
+  const followUpSubIntentions = useMemo(
+    () =>
+      intentions.filter(
+        intention =>
+          intention.type === followUpTimerType &&
+          intention.parentIntention?.slug === followUpIntentionSlug &&
+          intention.allowsTasks !== false
+      ),
+    [followUpIntentionSlug, followUpTimerType, intentions]
+  );
+  useEffect(() => {
+    if (followUpSubIntentions.length === 0) {
+      if (followUpSubIntentionSlug) setFollowUpSubIntentionSlug('');
+      return;
+    }
+    if (
+      !followUpSubIntentions.some(
+        intention => intention.slug === followUpSubIntentionSlug
+      )
+    ) {
+      setFollowUpSubIntentionSlug(followUpSubIntentions[0].slug);
+    }
+  }, [followUpSubIntentionSlug, followUpSubIntentions]);
   const selectedList =
     availableLists.find(list => list.id === selectedListId) ?? null;
   const isListDestination = selectedList !== null;
@@ -282,7 +316,16 @@ export function TaskFormModal({
       setRecurrenceUnit(recurrence.unit);
       setRecurrenceAnchorMode(task.recurrenceAnchorMode);
       setRecurrenceTouched(false);
-      setFollowUpTaskId(task.followUpTaskId ?? '');
+      const followUp = task.followUpDefinition;
+      setFollowUpEnabled(Boolean(followUp));
+      setFollowUpTitle(followUp?.title ?? '');
+      setFollowUpDescription(followUp?.description ?? '');
+      setFollowUpDueTime(followUp?.dueTime ?? '');
+      setFollowUpPriority(followUp?.priority ?? TASK_PRIORITIES.NORMAL);
+      setFollowUpTimerType(followUp?.timerType ?? task.timerType);
+      setFollowUpIntentionSlug(followUp?.intentionSlug ?? '');
+      setFollowUpSubIntentionSlug(followUp?.subIntentionSlug ?? '');
+      setFollowUpVacationEligible(followUp?.vacationEligible ?? false);
       setFollowUpDelayDays(
         task.followUpDelayDays === null || task.followUpDelayDays === undefined
           ? ''
@@ -305,7 +348,15 @@ export function TaskFormModal({
           recurrenceUnit: recurrence.unit,
           recurrenceAnchorMode: task.recurrenceAnchorMode,
           recurrenceTouched: false,
-          followUpTaskId: task.followUpTaskId ?? '',
+          followUpEnabled: Boolean(followUp),
+          followUpTitle: followUp?.title ?? '',
+          followUpDescription: followUp?.description ?? '',
+          followUpDueTime: followUp?.dueTime ?? '',
+          followUpPriority: followUp?.priority ?? TASK_PRIORITIES.NORMAL,
+          followUpTimerType: followUp?.timerType ?? task.timerType,
+          followUpIntentionSlug: followUp?.intentionSlug ?? '',
+          followUpSubIntentionSlug: followUp?.subIntentionSlug ?? '',
+          followUpVacationEligible: followUp?.vacationEligible ?? false,
           followUpDelayDays:
             task.followUpDelayDays === null ||
             task.followUpDelayDays === undefined
@@ -363,7 +414,15 @@ export function TaskFormModal({
     setRecurrenceUnit('DAILY');
     setRecurrenceAnchorMode('planned');
     setRecurrenceTouched(false);
-    setFollowUpTaskId('');
+    setFollowUpEnabled(false);
+    setFollowUpTitle('');
+    setFollowUpDescription('');
+    setFollowUpDueTime('');
+    setFollowUpPriority(TASK_PRIORITIES.NORMAL);
+    setFollowUpTimerType(nextTimerType);
+    setFollowUpIntentionSlug('');
+    setFollowUpSubIntentionSlug('');
+    setFollowUpVacationEligible(false);
     setFollowUpDelayDays('');
     const inheritedVacationCoverage =
       intentions.find(
@@ -387,7 +446,15 @@ export function TaskFormModal({
         recurrenceUnit: 'DAILY',
         recurrenceAnchorMode: 'planned',
         recurrenceTouched: false,
-        followUpTaskId: '',
+        followUpEnabled: false,
+        followUpTitle: '',
+        followUpDescription: '',
+        followUpDueTime: '',
+        followUpPriority: TASK_PRIORITIES.NORMAL,
+        followUpTimerType: nextTimerType,
+        followUpIntentionSlug: '',
+        followUpSubIntentionSlug: '',
+        followUpVacationEligible: false,
         followUpDelayDays: '',
         selectedListId: '',
         vacationEligible: inheritedVacationCoverage,
@@ -464,13 +531,28 @@ export function TaskFormModal({
       });
       return;
     }
-    const normalizedFollowUpTaskId =
-      task?.followUpSourceTaskId || !followUpTaskId ? null : followUpTaskId;
-    const normalizedFollowUpDelayDays = normalizedFollowUpTaskId
+    const normalizedFollowUpDefinition =
+      task?.followUpSourceTaskId || !followUpEnabled
+        ? null
+        : {
+            title: followUpTitle.trim(),
+            description: followUpDescription.trim() || null,
+            dueTime: followUpDueTime || null,
+            priority: followUpPriority,
+            timerType: followUpTimerType,
+            intentionSlug: followUpIntentionSlug || null,
+            subIntentionSlug: followUpSubIntentionSlug || null,
+            vacationEligible: followUpVacationEligible,
+          };
+    if (normalizedFollowUpDefinition && !normalizedFollowUpDefinition.title) {
+      showToastFromStore(t('task.followUpTitleRequired'), 'error');
+      return;
+    }
+    const normalizedFollowUpDelayDays = normalizedFollowUpDefinition
       ? Number(followUpDelayDays || '0')
       : null;
     if (
-      normalizedFollowUpTaskId &&
+      normalizedFollowUpDefinition &&
       (normalizedFollowUpDelayDays === null ||
         !Number.isInteger(normalizedFollowUpDelayDays) ||
         normalizedFollowUpDelayDays < 0 ||
@@ -494,7 +576,8 @@ export function TaskFormModal({
       recurrenceRule: recurrence.rule,
       recurrenceInterval: recurrence.interval,
       recurrenceAnchorMode,
-      followUpTaskId: normalizedFollowUpTaskId,
+      followUpTaskId: null,
+      followUpDefinition: normalizedFollowUpDefinition,
       followUpDelayDays: normalizedFollowUpDelayDays,
       vacationEligible,
     };
@@ -544,7 +627,15 @@ export function TaskFormModal({
     recurrenceUnit,
     recurrenceAnchorMode,
     recurrenceTouched,
-    followUpTaskId,
+    followUpEnabled,
+    followUpTitle,
+    followUpDescription,
+    followUpDueTime,
+    followUpPriority,
+    followUpTimerType,
+    followUpIntentionSlug,
+    followUpSubIntentionSlug,
+    followUpVacationEligible,
     followUpDelayDays,
     selectedListId,
     vacationEligible,
@@ -588,7 +679,7 @@ export function TaskFormModal({
           task ? (
             <button
               type="button"
-              aria-label={`Archive ${task.title}`}
+              aria-label={t('task.archiveFor', { title: task.title })}
               title={t('common.archive')}
               onClick={() => setShowArchiveConfirm(true)}
               disabled={saving || archiving}
@@ -842,7 +933,7 @@ export function TaskFormModal({
                 </label>
               </section>
 
-              {!isListDestination && (
+              {!isListDestination && !task?.followUpSourceTaskId && (
                 <section className="space-y-3 rounded-xl border border-slate-800/75 bg-slate-950/20 p-3">
                   <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
                     {t('task.repeat')}
@@ -878,60 +969,197 @@ export function TaskFormModal({
                   <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
                     {t('task.afterCompletion')}
                   </h3>
-                  <Field
-                    label={t('task.followUp')}
-                    help={t('task.followUpHelp')}
-                  >
-                    <select
-                      aria-label={t('task.followUp')}
-                      value={followUpTaskId}
+                  <div className="relative flex items-center justify-between gap-3 rounded-lg border border-slate-800/70 bg-slate-900/35 px-3 py-2">
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-1 text-sm font-medium text-slate-100">
+                        <label htmlFor="task-follow-up-enabled">
+                          {t('task.followUpEnabled')}
+                        </label>
+                        <HelpButton
+                          label={t('task.followUpEnabled')}
+                          help={t('task.followUpHelp')}
+                        />
+                      </span>
+                    </span>
+                    <input
+                      id="task-follow-up-enabled"
+                      aria-label={t('task.followUpEnabled')}
+                      type="checkbox"
+                      checked={followUpEnabled}
                       disabled={saving}
-                      className={selectClassName}
                       onChange={event => {
-                        const nextTaskId = event.target.value;
-                        setFollowUpTaskId(nextTaskId);
-                        if (nextTaskId && !followUpDelayDays) {
+                        const enabled = event.target.checked;
+                        setFollowUpEnabled(enabled);
+                        if (enabled && !followUpDelayDays) {
                           setFollowUpDelayDays('0');
+                          setFollowUpTimerType(timerType);
+                          setFollowUpPriority(priority);
+                          setFollowUpIntentionSlug(intentionSlug);
+                          setFollowUpSubIntentionSlug(subIntentionSlug);
+                          setFollowUpVacationEligible(vacationEligible);
                         }
-                        if (!nextTaskId) setFollowUpDelayDays('');
                       }}
-                    >
-                      <option value="">{t('common.noFollowUp')}</option>
-                      {followUpTaskOptions.length > 0 && (
-                        <optgroup label={t('task.activeTasks')}>
-                          {followUpTaskOptions.map(option => (
-                            <option key={option.id} value={option.id}>
-                              {option.title}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
-                  </Field>
-                  {followUpTaskId && (
-                    <Field
-                      label={t('task.followUpDueAfter')}
-                      help={t('task.followUpDueAfterHelp')}
-                    >
-                      <div className="flex items-center gap-2">
+                      className="h-4 w-4 shrink-0 accent-indigo-500"
+                    />
+                  </div>
+                  {followUpEnabled && (
+                    <div className="space-y-3 border-l-2 border-indigo-500/40 pl-3">
+                      <Field label={t('common.title')}>
                         <Input
-                          aria-label={t('task.followUpDelay')}
-                          type="number"
-                          min={0}
-                          max={TASK_FOLLOW_UP_DELAY_MAX_DAYS}
-                          step={1}
-                          value={followUpDelayDays}
+                          aria-label={t('task.followUpTitle')}
+                          value={followUpTitle}
                           disabled={saving}
                           onChange={event =>
-                            setFollowUpDelayDays(event.target.value)
+                            setFollowUpTitle(event.target.value)
                           }
-                          className="max-w-32"
                         />
-                        <span className="text-xs text-slate-400">
-                          {t('common.days')}
-                        </span>
+                      </Field>
+                      <Field label={t('common.description')}>
+                        <textarea
+                          aria-label={t('task.followUpDescription')}
+                          value={followUpDescription}
+                          disabled={saving}
+                          onChange={event =>
+                            setFollowUpDescription(event.target.value)
+                          }
+                          rows={2}
+                          className="w-full resize-y rounded border border-slate-700/40 bg-slate-800/40 px-3 py-2 text-sm text-white outline-none focus:border-indigo-400/70 disabled:opacity-50"
+                        />
+                      </Field>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field
+                          label={t('task.followUpDueAfter')}
+                          help={t('task.followUpDueAfterHelp')}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Input
+                              aria-label={t('task.followUpDelay')}
+                              type="number"
+                              min={0}
+                              max={TASK_FOLLOW_UP_DELAY_MAX_DAYS}
+                              step={1}
+                              value={followUpDelayDays}
+                              disabled={saving}
+                              onChange={event =>
+                                setFollowUpDelayDays(event.target.value)
+                              }
+                            />
+                            <span className="text-xs text-slate-400">
+                              {t('common.days')}
+                            </span>
+                          </div>
+                        </Field>
+                        <Field label={t('common.dueTime')}>
+                          <Input
+                            aria-label={t('task.followUpDueTime')}
+                            type="time"
+                            value={followUpDueTime}
+                            disabled={saving}
+                            onChange={event =>
+                              setFollowUpDueTime(event.target.value)
+                            }
+                          />
+                        </Field>
                       </div>
-                    </Field>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label={t('task.priority')}>
+                          <select
+                            aria-label={t('task.followUpPriority')}
+                            value={followUpPriority}
+                            disabled={saving}
+                            className={selectClassName}
+                            onChange={event =>
+                              setFollowUpPriority(
+                                event.target.value as TaskPriority
+                              )
+                            }
+                          >
+                            {TASK_PRIORITY_OPTIONS.map(option => (
+                              <option key={option.value} value={option.value}>
+                                {t(`common.${option.value}`)}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field label={t('task.timerType')}>
+                          <select
+                            aria-label={t('task.followUpTimerType')}
+                            value={followUpTimerType}
+                            disabled={saving}
+                            className={selectClassName}
+                            onChange={event => {
+                              setFollowUpTimerType(
+                                event.target.value as TimerTypes
+                              );
+                              setFollowUpIntentionSlug('');
+                              setFollowUpSubIntentionSlug('');
+                            }}
+                          >
+                            <option value={TIMER_TYPES.WORK}>
+                              {t('common.work')}
+                            </option>
+                            <option value={TIMER_TYPES.BREAK}>
+                              {t('common.break')}
+                            </option>
+                            <option value={TIMER_TYPES.LONG_BREAK}>
+                              {t('common.longBreak')}
+                            </option>
+                          </select>
+                        </Field>
+                      </div>
+                      <Field label={t('intention.intentions')}>
+                        <div className="grid grid-cols-2 gap-3">
+                          <select
+                            aria-label={t('task.followUpIntention')}
+                            value={followUpIntentionSlug}
+                            disabled={saving}
+                            className={selectClassName}
+                            onChange={event => {
+                              setFollowUpIntentionSlug(event.target.value);
+                              setFollowUpSubIntentionSlug('');
+                            }}
+                          >
+                            <option value="">{t('task.general')}</option>
+                            {eligibleFollowUpIntentions.map(option => (
+                              <option key={option.id} value={option.slug}>
+                                {option.emoji} {option.title}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            aria-label={t('task.followUpSubIntention')}
+                            value={followUpSubIntentionSlug}
+                            disabled={saving || !followUpIntentionSlug}
+                            className={selectClassName}
+                            onChange={event =>
+                              setFollowUpSubIntentionSlug(event.target.value)
+                            }
+                          >
+                            {followUpSubIntentions.length === 0 && (
+                              <option value="">{t('common.none')}</option>
+                            )}
+                            {followUpSubIntentions.map(option => (
+                              <option key={option.id} value={option.slug}>
+                                {option.emoji} {option.title}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </Field>
+                      <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-800/70 px-3 py-2 text-xs text-slate-300">
+                        <span>{t('task.vacationCoverage')}</span>
+                        <input
+                          aria-label={t('task.followUpVacationCoverage')}
+                          type="checkbox"
+                          checked={followUpVacationEligible}
+                          disabled={saving}
+                          onChange={event =>
+                            setFollowUpVacationEligible(event.target.checked)
+                          }
+                          className="h-4 w-4 accent-indigo-500"
+                        />
+                      </label>
+                    </div>
                   )}
                 </section>
               )}
@@ -1027,7 +1255,15 @@ function serializeTaskFormState(state: {
   recurrenceUnit: TaskRecurrenceUnit;
   recurrenceAnchorMode: TaskRecurrenceAnchorMode;
   recurrenceTouched: boolean;
-  followUpTaskId: string;
+  followUpEnabled: boolean;
+  followUpTitle: string;
+  followUpDescription: string;
+  followUpDueTime: string;
+  followUpPriority: TaskPriority;
+  followUpTimerType: TimerTypes;
+  followUpIntentionSlug: string;
+  followUpSubIntentionSlug: string;
+  followUpVacationEligible: boolean;
   followUpDelayDays: string;
   selectedListId: string;
   vacationEligible: boolean;
@@ -1047,23 +1283,11 @@ function Field({
   error?: string;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
-
   return (
     <div className="relative space-y-1">
       <div className="flex items-center gap-1 text-xs font-medium text-slate-300">
         <span>{label}</span>
-        {help && (
-          <button
-            type="button"
-            onClick={() => setOpen(value => !value)}
-            className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-600 text-[10px] text-slate-400 hover:border-indigo-500/60 hover:text-indigo-200"
-            aria-label={`${label} help`}
-            title={`${label} help`}
-          >
-            ?
-          </button>
-        )}
+        {help && <HelpButton label={label} help={help} />}
       </div>
       {children}
       {error && (
@@ -1075,7 +1299,31 @@ function Field({
           {error}
         </p>
       )}
-      {open && help && (
+    </div>
+  );
+}
+
+function HelpButton({ label, help }: { label: string; help: string }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const isOpen = open;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          const nextOpen = !isOpen;
+          setOpen(nextOpen);
+        }}
+        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-600 text-[10px] text-slate-400 hover:border-indigo-500/60 hover:text-indigo-200"
+        aria-label={t('common.helpFor', { label })}
+        title={t('common.helpFor', { label })}
+        aria-expanded={isOpen}
+      >
+        ?
+      </button>
+      {isOpen && (
         <p
           role="note"
           className="absolute left-0 top-6 z-30 w-64 rounded-md border border-slate-700/70 bg-slate-950/95 px-3 py-2 text-xs leading-5 text-slate-300 shadow-xl shadow-black/30 backdrop-blur-sm"
@@ -1083,6 +1331,6 @@ function Field({
           {help}
         </p>
       )}
-    </div>
+    </>
   );
 }

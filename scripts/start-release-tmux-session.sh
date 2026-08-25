@@ -20,6 +20,10 @@ SESSION_NAME="${POMI_RELEASE_TMUX_SESSION:-pomi-release}"
 
 cd "$ROOT_DIR"
 
+# shellcheck disable=SC1091
+. "$ROOT_DIR/scripts/local-env.sh"
+pomi_load_release_environment
+
 if ! command -v tmux >/dev/null 2>&1; then
   echo "[pomi] tmux is required for separated release terminals." >&2
   echo "[pomi] run without tmux with: pnpm run release:all:parallel" >&2

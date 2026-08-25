@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { parseAndroidStringResources } from './xml-resource-text.mjs';
 
 const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const frontendRoot = path.join(repoRoot, 'packages', 'frontend', 'src');
@@ -40,6 +41,18 @@ function isAllowedUiLiteral(value) {
   const text = value.trim();
   if (!text || !/[A-Za-z]/.test(text)) return true;
   if (/^&[A-Za-z0-9#]+;$/.test(text)) return true;
+  if (/^[a-z][a-z0-9-]*(?:\.[A-Za-z0-9_-]+)+$/.test(text)) return true;
+  if (/^(?:\d+x|[a-z][a-z0-9]*(?:[-:/][a-z0-9.[\]]+)+)$/.test(text)) {
+    return true;
+  }
+  if (/^(?:(?:\(Shift\))?[A-Z]|⇧[A-Z])$/.test(text)) return true;
+  if (/^[A-Z][A-Z0-9_]+$/.test(text)) return true;
+  if (
+    text.includes(' ') &&
+    text.split(/\s+/).every(token => /[-:[\]]/.test(token))
+  ) {
+    return true;
+  }
 
   // These values are product/technology names or keyboard notation, not copy
   // that should be translated in the interface.
@@ -78,13 +91,21 @@ function scanFrontendUi() {
   );
 
   const propPattern =
-    /\b(?:aria-label|aria-description|title|label|description|placeholder|loadingText|message|help|alt)=(["'])(.*?)\1/g;
+    /\b(?:aria-label|aria-description|title|label|description|placeholder|loadingText|message|help|alt|text|tooltip|[A-Za-z][A-Za-z0-9]*(?:Label|Description|Placeholder|Message|Help|Text))=(["'])(.*?)\1/g;
   const textNodePattern =
-    /<([A-Za-z][\w.]*)\b[^>]*>\s*([^<{\n]*[A-Za-z][^<{\n]*?)\s*<\/\1>/g;
+    /<([A-Za-z][\w.]*)\b(?:[^>]|=>)*>\s*([^<{\n]*[A-Za-z][^<{\n]*?)\s*<\/\1>/g;
+  const rawTextPattern =
+    /<[A-Za-z][\w.]*\b(?:[^>]|=>)*>\s*([-A-Za-z0-9 ,.?!'’/+]+)\s*</g;
   const objectPropPattern =
-    /\b(?:ariaLabel|ariaDescription|title|label|description|placeholder|loadingText|message|help|alt)\s*:\s*(["'])(.*?)\1/g;
+    /\b(?:ariaLabel|ariaDescription|title|label|description|placeholder|loadingText|message|help|alt|text|tooltip|[A-Za-z][A-Za-z0-9]*(?:Label|Description|Placeholder|Message|Help|Text))\s*:\s*(["'])(.*?)\1/g;
   const userMessageCallPattern =
-    /\b(?:showToast(?:FromStore)?|(?:set[A-Z][A-Za-z0-9]*(?:Error|Message))|window\.(?:confirm|alert)|new\s+Error)\s*\(\s*(["'])(.*?)\1/g;
+    /\b(?:showToast(?:FromStore)?|set(?:Error|Message)|(?:set[A-Z][A-Za-z0-9]*(?:Error|Message))|getApiErrorMessage|window\.(?:confirm|alert)|new\s+Error)\s*\(\s*(["'])(.*?)\1/g;
+  const conditionalTextPattern =
+    />\s*\{\s*[^{}\n]+?\?\s*(["'])([^"'\n]*[A-Za-z][^"'\n]*?)\1\s*:\s*(["'])([^"'\n]*[A-Za-z][^"'\n]*?)\3\s*\}\s*</g;
+  const conditionalPropPattern =
+    /\b(?:aria-label|aria-description|title|label|description|placeholder|loadingText|message|help|alt|text|tooltip|[A-Za-z][A-Za-z0-9]*(?:Label|Description|Placeholder|Message|Help|Text))\s*(?:=|:)\s*\{?[^?{};]{0,180}\?\s*(["'`])([^"'`\n]*[A-Za-z][^"'`\n]*?)\1\s*:\s*(["'`])([^"'`\n]*[A-Za-z][^"'`\n]*?)\3/g;
+  const templatePropPattern =
+    /\b(?:aria-label|aria-description|title|label|description|placeholder|loadingText|message|help|alt|text|tooltip|[A-Za-z][A-Za-z0-9]*(?:Label|Description|Placeholder|Message|Help|Text))\s*=\s*\{\s*`([A-Z][^`\n]*?)`\s*\}/g;
 
   for (const filePath of files) {
     const source = fs.readFileSync(filePath, 'utf8');
@@ -109,12 +130,76 @@ function scanFrontendUi() {
         match[2]
       );
     }
+    for (const match of source.matchAll(conditionalTextPattern)) {
+      addUiLiteralError(
+        filePath,
+        lineNumber(source, match.index ?? 0),
+        match[2]
+      );
+      addUiLiteralError(
+        filePath,
+        lineNumber(source, match.index ?? 0),
+        match[4]
+      );
+    }
+    for (const match of source.matchAll(conditionalPropPattern)) {
+      addUiLiteralError(
+        filePath,
+        lineNumber(source, match.index ?? 0),
+        match[2]
+      );
+      addUiLiteralError(
+        filePath,
+        lineNumber(source, match.index ?? 0),
+        match[4]
+      );
+    }
+    for (const match of source.matchAll(templatePropPattern)) {
+      addUiLiteralError(
+        filePath,
+        lineNumber(source, match.index ?? 0),
+        match[1]
+      );
+    }
     for (const match of source.matchAll(textNodePattern)) {
       addUiLiteralError(
         filePath,
         lineNumber(source, match.index ?? 0),
         match[2]
       );
+    }
+    for (const match of source.matchAll(rawTextPattern)) {
+      addUiLiteralError(
+        filePath,
+        lineNumber(source, match.index ?? 0),
+        match[1]
+      );
+    }
+  }
+}
+
+function scanFrontendStateMessages() {
+  const files = walk(
+    frontendRoot,
+    filePath =>
+      /\.(ts|tsx|js|jsx)$/.test(filePath) &&
+      !/\.test\.(ts|tsx|js|jsx)$/.test(filePath) &&
+      !filePath.includes(`${path.sep}i18n${path.sep}`)
+  );
+  const statePropPattern = /\b(?:error|label|message)\s*:\s*(["'])(.*?)\1/g;
+  const fallbackPattern =
+    /\b(?:error|message|label|loadingText|placeholder|title)\b[^;\n]{0,80}(?:\?\?|\|\|)\s*(["'])(.*?)\1/g;
+
+  for (const filePath of files) {
+    const source = fs.readFileSync(filePath, 'utf8');
+    for (const pattern of [statePropPattern, fallbackPattern]) {
+      for (const match of source.matchAll(pattern)) {
+        addUiLiteralError(
+          filePath,
+          lineNumber(source, match.index ?? 0),
+          match[2]
+        );
+      }
     }
   }
 }
@@ -125,14 +210,9 @@ function readWearResources(directory) {
     filePath => path.basename(filePath) === 'strings.xml'
   );
   const resources = new Map();
-  const resourcePattern =
-    /<(?:string|plurals)\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/(?:string|plurals)>/g;
   for (const filePath of files) {
-    const values = new Map();
     const source = fs.readFileSync(filePath, 'utf8');
-    for (const match of source.matchAll(resourcePattern)) {
-      values.set(match[1], match[2].replace(/<[^>]+>/g, '').trim());
-    }
+    const values = parseAndroidStringResources(source, filePath);
     resources.set(path.basename(path.dirname(filePath)), { filePath, values });
   }
   return resources;
@@ -197,6 +277,7 @@ function scanWearResources() {
 }
 
 scanFrontendUi();
+scanFrontendStateMessages();
 scanWearResources();
 
 if (errors.length > 0) {

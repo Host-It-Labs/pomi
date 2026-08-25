@@ -6,7 +6,6 @@
     "types": ["node"],
     "module": "ESNext",
     "skipLibCheck": true,
-    "baseUrl": ".",
     "paths": {
       "@pomi/shared/*": ["../shared/*"]
     },

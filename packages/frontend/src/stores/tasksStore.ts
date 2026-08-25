@@ -1,12 +1,14 @@
 import {
   Task,
   TaskPriority,
+  TaskFollowUpDefinition,
   TaskRecurrenceAnchorMode,
   TaskStatus,
   TimerTypes,
 } from '@pomi/shared';
 import { create } from 'zustand';
 import { showToastFromStore } from '../components/toast/ToastContext';
+import { translateCurrent } from '../i18n';
 import { apiClient } from '../utils/apiClient';
 import {
   getTaskOrderingClock,
@@ -33,6 +35,7 @@ type TaskCreateInput = {
   recurrenceInterval?: number | null;
   recurrenceAnchorMode?: TaskRecurrenceAnchorMode;
   followUpTaskId?: string | null;
+  followUpDefinition?: TaskFollowUpDefinition | null;
   followUpDelayDays?: number | null;
   vacationEligible?: boolean;
 };
@@ -57,6 +60,7 @@ type TaskUpdateInput = {
   expectedDueDate?: string | null;
   expectedDueTime?: string | null;
   followUpTaskId?: string | null;
+  followUpDefinition?: TaskFollowUpDefinition | null;
   followUpDelayDays?: number | null;
   vacationEligible?: boolean;
 };
@@ -184,11 +188,11 @@ const useTasksStoreBase = create<TasksStore>((set, get) => ({
           });
           return;
         }
-        set({ isLoading: false, error: 'Failed to load tasks.' });
+        set({ isLoading: false, error: translateCurrent('task.loadFailed') });
       } catch (error) {
         if (requestId !== loadRequestId) return;
         console.error('Failed to load tasks:', error);
-        set({ isLoading: false, error: 'Failed to load tasks.' });
+        set({ isLoading: false, error: translateCurrent('task.loadFailed') });
       }
     })();
     loadTasksPromise = currentPromise;
@@ -243,7 +247,7 @@ const useTasksStoreBase = create<TasksStore>((set, get) => ({
       };
       const result = await submitUserMutation({
         kind: 'tasks',
-        label: 'Create task',
+        label: translateCurrent('task.create'),
         payload: { operation: 'create', ...body },
       });
       const response = normalizeMutationResponse<Task>(result, 201);
@@ -261,12 +265,12 @@ const useTasksStoreBase = create<TasksStore>((set, get) => ({
         }));
         return true;
       }
-      set({ error: 'Failed to create task.' });
+      set({ error: translateCurrent('task.creationFailed') });
       return false;
     } catch (error) {
       console.error('Failed to create task:', error);
       await get().loadTasks();
-      set({ error: 'Failed to create task.' });
+      set({ error: translateCurrent('task.creationFailed') });
       return false;
     }
   },
@@ -305,7 +309,7 @@ const useTasksStoreBase = create<TasksStore>((set, get) => ({
           : updates;
       const result = await submitUserMutation({
         kind: 'tasks',
-        label: 'Update task',
+        label: translateCurrent('task.updateAction'),
         payload: { operation: 'update', taskId: id, ...actionUpdates },
       });
       const response = normalizeMutationResponse<Task>(result, 200);
@@ -339,24 +343,24 @@ const useTasksStoreBase = create<TasksStore>((set, get) => ({
       if (taskMutationVersions.get(id) !== mutationVersion) return false;
       await get().loadTasks();
       set(state => ({
-        error: 'Failed to update task.',
+        error: translateCurrent('task.updateFailed'),
         completingTaskIds: state.completingTaskIds.filter(
           taskId => taskId !== id
         ),
       }));
-      showToastFromStore('Task update failed.', 'error');
+      showToastFromStore(translateCurrent('task.updateFailed'), 'error');
       return false;
     } catch (error) {
       if (taskMutationVersions.get(id) !== mutationVersion) return false;
       console.error('Failed to update task:', error);
       await get().loadTasks();
       set(state => ({
-        error: 'Failed to update task.',
+        error: translateCurrent('task.updateFailed'),
         completingTaskIds: state.completingTaskIds.filter(
           taskId => taskId !== id
         ),
       }));
-      showToastFromStore('Task update failed.', 'error');
+      showToastFromStore(translateCurrent('task.updateFailed'), 'error');
       return false;
     }
   },
@@ -364,7 +368,7 @@ const useTasksStoreBase = create<TasksStore>((set, get) => ({
     try {
       const result = await submitUserMutation({
         kind: 'tasks',
-        label: 'Reorder tasks',
+        label: translateCurrent('task.reorderAction'),
         payload: { operation: 'reorder', reorder: updates },
         reconcile: () => get().loadTasks(),
       });
@@ -385,14 +389,14 @@ const useTasksStoreBase = create<TasksStore>((set, get) => ({
       }
 
       await get().loadTasks();
-      set({ error: 'Failed to reorder tasks.' });
-      showToastFromStore('Task reorder failed.', 'error');
+      set({ error: translateCurrent('task.reorderFailed') });
+      showToastFromStore(translateCurrent('task.reorderFailed'), 'error');
       return false;
     } catch (error) {
       console.error('Failed to reorder tasks:', error);
       await get().loadTasks();
-      set({ error: 'Failed to reorder tasks.' });
-      showToastFromStore('Task reorder failed.', 'error');
+      set({ error: translateCurrent('task.reorderFailed') });
+      showToastFromStore(translateCurrent('task.reorderFailed'), 'error');
       return false;
     }
   },
@@ -465,13 +469,15 @@ async function applyTaskSnapshot(
       : { status: 'archived' };
     const result = await submitUserMutation({
       kind: 'tasks',
-      label: snapshot ? 'Undo task change' : 'Archive task',
+      label: snapshot
+        ? translateCurrent('task.undoChange')
+        : translateCurrent('task.archiveAction'),
       payload: { operation: 'update', taskId: target.id, ...body },
     });
     const response = normalizeMutationResponse<Task>(result, 200);
     if (response.status !== 200) {
       await useTasksStoreBase.getState().loadTasks();
-      showToastFromStore('Task history update failed.', 'error');
+      showToastFromStore(translateCurrent('task.historyUpdateFailed'), 'error');
       return false;
     }
 
@@ -489,7 +495,7 @@ async function applyTaskSnapshot(
   } catch (error) {
     console.error('Failed to apply task history:', error);
     await useTasksStoreBase.getState().loadTasks();
-    showToastFromStore('Task history update failed.', 'error');
+    showToastFromStore(translateCurrent('task.historyUpdateFailed'), 'error');
     return false;
   }
 }
@@ -512,6 +518,7 @@ function getTaskUpdatePayload(task: Task): Omit<TaskUpdateInput, 'id'> {
     recurrenceInterval: task.recurrenceInterval,
     recurrenceAnchorMode: task.recurrenceAnchorMode,
     followUpTaskId: task.followUpTaskId,
+    followUpDefinition: task.followUpDefinition,
     followUpDelayDays: task.followUpDelayDays,
     vacationEligible: task.vacationEligible,
   };
