@@ -88,7 +88,7 @@ test('2. enables Intentions, selects a Parent and Sub-intention, then records a 
     .click();
   await page.locator('input[type="text"]').first().fill('🧭');
   await page.locator('input[type="text"]').nth(1).fill(parentTitle);
-  await page.getByRole('button', { name: 'Create' }).click();
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
   const editParent = page
     .getByRole('button', { name: `Edit ${parentTitle}`, exact: true })
     .first();
@@ -106,7 +106,9 @@ test('2. enables Intentions, selects a Parent and Sub-intention, then records a 
   const childDialog = page.getByRole('dialog', { name: 'New Intention' });
   await childDialog.locator('input[type="text"]').first().fill('🗺️');
   await childDialog.locator('input[type="text"]').nth(1).fill(childTitle);
-  await childDialog.getByRole('button', { name: 'Create' }).click();
+  await childDialog
+    .getByRole('button', { name: 'Create', exact: true })
+    .click();
   await expect(childDialog).not.toBeVisible({ timeout: 10_000 });
   const intentions = await fetchIntentions(page, 'work');
   const intentionRows = intentions.flatMap(intention => [
@@ -304,7 +306,9 @@ test('5. enables Tasks, creates and edits through the shared editor, and reloads
   const createDialog = page.getByRole('dialog', { name: 'Add task' });
   await createDialog.getByLabel('Task title').fill(original);
   await createDialog.getByLabel('Task due date').fill(tomorrow());
-  await createDialog.getByRole('button', { name: 'Create' }).click();
+  await createDialog
+    .getByRole('button', { name: 'Create', exact: true })
+    .click();
   await expect(taskRow(page, original)).toBeVisible();
 
   await taskRow(page, original)
