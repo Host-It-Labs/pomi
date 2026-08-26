@@ -5,6 +5,7 @@ permissions:
 
 on:
   push:
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -14,6 +15,7 @@ concurrency:
 jobs:
   typescript:
     name: TypeScript
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -104,6 +106,7 @@ jobs:
 
   wear:
     name: Wear
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -136,6 +139,7 @@ jobs:
 
   rust:
     name: Rust
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -171,7 +175,7 @@ jobs:
 
   tests:
     name: tests
-    if: ${{ always() && !cancelled() }}
+    if: ${{ always() && !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository) }}
     needs:
       - typescript
       - wear

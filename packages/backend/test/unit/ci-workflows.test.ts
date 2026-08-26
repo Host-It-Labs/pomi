@@ -8,7 +8,7 @@ const workflowPaths = [
 ];
 
 describe('continuous integration workflows', () => {
-  it('runs automatic CI from branch pushes without duplicating pull-request workflows', async () => {
+  it('runs branch pushes once while retaining fork pull-request coverage', async () => {
     const workflows = await Promise.all(
       workflowPaths.map(path =>
         readFile(new URL(path, import.meta.url), 'utf8')
@@ -17,7 +17,10 @@ describe('continuous integration workflows', () => {
 
     for (const workflow of workflows) {
       expect(workflow).toContain('\n  push:');
-      expect(workflow).not.toContain('\n  pull_request:');
+      expect(workflow).toContain('\n  pull_request:');
+      expect(workflow).toContain(
+        "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository"
+      );
       expect(workflow).toMatch(
         /\n\s{2}group: [^\n]*-\$\{\{ github\.event_name \}\}-\$\{\{ github\.repository \}\}-\$\{\{ github\.ref_name \}\}/
       );
@@ -30,6 +33,8 @@ describe('continuous integration workflows', () => {
       'utf8'
     );
 
-    expect(workflow).toContain('if: ${{ always() && !cancelled() }}');
+    expect(workflow).toContain(
+      "if: ${{ always() && !cancelled() && (github.event_name != 'pull_request' ||"
+    );
   });
 });
