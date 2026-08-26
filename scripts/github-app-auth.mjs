@@ -28,6 +28,13 @@ function encode(value) {
   return Buffer.from(JSON.stringify(value)).toString('base64url');
 }
 
+function normalizePrivateKey(value) {
+  const trimmed = String(value).trim();
+  return trimmed.includes('\\n') && !trimmed.includes('\n')
+    ? trimmed.replaceAll('\\n', '\n')
+    : trimmed;
+}
+
 export function createAppJwt({ appId, privateKey, now = Date.now() }) {
   const timestamp = Math.floor(now / 1000);
   const header = encode({ alg: 'RS256', typ: 'JWT' });
@@ -72,11 +79,17 @@ export function readGitHubAppConfiguration(environment = process.env) {
   const appId = environment.POMI_RADAR_GITHUB_APP_ID?.trim();
   const installationId =
     environment.POMI_RADAR_GITHUB_APP_INSTALLATION_ID?.trim();
+  const configuredPrivateKey =
+    environment.POMI_RADAR_GITHUB_APP_PRIVATE_KEY?.trim();
   const configuredPrivateKeyPath =
     environment.POMI_RADAR_GITHUB_APP_PRIVATE_KEY_PATH?.trim();
-  if (!appId || !installationId || !configuredPrivateKeyPath) {
+  if (
+    !appId ||
+    !installationId ||
+    (!configuredPrivateKey && !configuredPrivateKeyPath)
+  ) {
     throw new Error(
-      'GitHub App configuration is incomplete in config/pomi-automation.env (App ID, installation ID, and private-key path are required).'
+      'GitHub App configuration is incomplete in config/pomi-automation.env (App ID, installation ID, and private-key value or path are required).'
     );
   }
   if (!/^\d+$/.test(appId) || !/^\d+$/.test(installationId)) {
@@ -86,6 +99,7 @@ export function readGitHubAppConfiguration(environment = process.env) {
     throw new Error('GitHub App configuration does not identify Pomi Radar.');
   }
   if (
+    !configuredPrivateKey &&
     configuredPrivateKeyPath !== 'config/secrets/pomi-radar.private-key.pem'
   ) {
     throw new Error(
@@ -95,8 +109,10 @@ export function readGitHubAppConfiguration(environment = process.env) {
   return {
     appId,
     installationId,
-    privateKeyPath: PRIVATE_KEY_PATH,
-    privateKey: readFileSync(PRIVATE_KEY_PATH, 'utf8'),
+    ...(configuredPrivateKey ? {} : { privateKeyPath: PRIVATE_KEY_PATH }),
+    privateKey: configuredPrivateKey
+      ? normalizePrivateKey(configuredPrivateKey)
+      : readFileSync(PRIVATE_KEY_PATH, 'utf8'),
   };
 }
 

@@ -52,6 +52,21 @@ test('rejects a different GitHub App before authentication', () => {
   );
 });
 
+test('accepts an inline PEM private key with escaped line breaks', () => {
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+  });
+  const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
+  const config = readGitHubAppConfiguration({
+    POMI_RADAR_GITHUB_APP_ID: '4675891',
+    POMI_RADAR_GITHUB_APP_INSTALLATION_ID: '155743206',
+    POMI_RADAR_GITHUB_APP_PRIVATE_KEY: pem.replaceAll('\n', '\\n'),
+  });
+
+  assert.equal(config.privateKey, pem);
+  assert.equal(config.privateKeyPath, undefined);
+});
+
 test('isolates Git commands from stored personal GitHub credentials', () => {
   const environment = appAuthenticatedEnvironment(
     {

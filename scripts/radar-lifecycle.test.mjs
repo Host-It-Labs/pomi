@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   acknowledgeAgentPass,
   classifyMatch,
+  consolidationMerged,
   dailyFeatureSlotPlan,
   deduplicationPlan,
   enrichIssue,
@@ -30,13 +31,16 @@ import {
 function consolidationEvent(overrides = {}) {
   return {
     pull_request: {
+      number: 99,
       user: { login: 'pomi-radar[bot]' },
       base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
       head: {
         ref: 'radar/consolidation-test',
         repo: { full_name: 'Host-It-Labs/pomi' },
       },
-      body: '<!-- pomi-radar-consolidation:v1 {"issues":[33]} -->',
+      body: '<!-- pomi-radar-consolidation:v1 {"issues":[33],"sourcePrs":[44]} -->',
+      merge_commit_sha: 'a'.repeat(40),
+      merged: true,
       ...overrides,
     },
   };
@@ -137,6 +141,94 @@ test('consolidation manifests require bot authorship and eligible Radar issues',
         }),
       ]),
     /not an eligible in-review Radar issue/
+  );
+});
+
+test('merged consolidations close contained source PRs and retry idempotently', async () => {
+  const event = consolidationEvent({
+    body: marker('pomi-radar-consolidation:v1', {
+      version: 1,
+      issues: [33],
+      sourcePrs: [44, 45],
+    }),
+  });
+  const sourcePulls = [44, 45].map((number, index) => ({
+    number,
+    state: 'open',
+    base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+    head: {
+      sha: String.fromCharCode(98 + index).repeat(40),
+      repo: { full_name: 'Host-It-Labs/pomi' },
+    },
+  }));
+  await withFakeConsolidationGithub(
+    {
+      event,
+      issue: {
+        number: 33,
+        state: 'open',
+        body: marker('pomi-radar:v1', { version: 1 }),
+        labels: [{ name: 'radar:feature' }, { name: 'radar:in-review' }],
+      },
+      sourcePulls,
+    },
+    async (state, currentEvent) => {
+      const first = await consolidationMerged(currentEvent);
+      assert.deepEqual(first.updated, [33]);
+      assert.deepEqual(first.sourcePullRequests, {
+        closed: [44, 45],
+        alreadyClosed: [],
+      });
+      assert.equal(state.pulls.get(44).state, 'closed');
+      assert.equal(state.pulls.get(45).state, 'closed');
+
+      const second = await consolidationMerged(currentEvent);
+      assert.deepEqual(second.sourcePullRequests, {
+        closed: [],
+        alreadyClosed: [44, 45],
+      });
+      assert.equal(state.comments.get(44).length, 1);
+      assert.equal(state.comments.get(45).length, 1);
+      assert.equal(state.comments.get(33).length, 1);
+      assert.deepEqual(
+        state.issues.get(33).labels.map(label => label.name),
+        ['radar:feature', 'radar:ready-for-release']
+      );
+    }
+  );
+});
+
+test('merged consolidations refuse to close a source outside merge ancestry', async () => {
+  const event = consolidationEvent();
+  const sourcePull = {
+    number: 44,
+    state: 'open',
+    base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+    head: {
+      sha: 'b'.repeat(40),
+      repo: { full_name: 'Host-It-Labs/pomi' },
+    },
+  };
+  await withFakeConsolidationGithub(
+    {
+      event,
+      issue: {
+        number: 33,
+        state: 'open',
+        body: marker('pomi-radar:v1', { version: 1 }),
+        labels: [{ name: 'radar:feature' }, { name: 'radar:in-review' }],
+      },
+      sourcePulls: [sourcePull],
+      comparisonStatus: 'diverged',
+    },
+    async (state, currentEvent) => {
+      await assert.rejects(
+        consolidationMerged(currentEvent),
+        /not contained in consolidation PR/
+      );
+      assert.equal(state.pulls.get(44).state, 'open');
+      assert.equal(state.comments.get(44).length, 0);
+    }
   );
 });
 
@@ -302,6 +394,75 @@ async function withFakeGithubIssues(initialIssues, run, options = {}) {
   };
   try {
     await run(state);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousToken === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = previousToken;
+  }
+}
+
+async function withFakeConsolidationGithub(
+  { event, issue, sourcePulls, comparisonStatus = 'ahead' },
+  run
+) {
+  const previousFetch = globalThis.fetch;
+  const previousToken = process.env.GITHUB_TOKEN;
+  const issues = new Map([[issue.number, globalThis.structuredClone(issue)]]);
+  const pulls = new Map(
+    sourcePulls.map(sourcePull => [
+      sourcePull.number,
+      globalThis.structuredClone(sourcePull),
+    ])
+  );
+  const comments = new Map(
+    [issue.number, ...sourcePulls.map(sourcePull => sourcePull.number)].map(
+      number => [number, []]
+    )
+  );
+  const state = { issues, pulls, comments, patches: [] };
+  process.env.GITHUB_TOKEN = 'test-token';
+  globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(String(input));
+    const method = init.method ?? 'GET';
+    const match = url.pathname.match(/\/(issues|pulls)\/(\d+)(\/comments)?$/);
+    if (match) {
+      const resource = match[1];
+      const number = Number(match[2]);
+      const collection = resource === 'issues' ? issues : pulls;
+      if (match[3] && method === 'GET')
+        return globalThis.Response.json(comments.get(number) ?? []);
+      if (match[3] && method === 'POST') {
+        const values = comments.get(number) ?? [];
+        const comment = { id: values.length + 1, ...JSON.parse(init.body) };
+        values.push(comment);
+        comments.set(number, values);
+        return globalThis.Response.json(comment);
+      }
+      if (method === 'GET')
+        return globalThis.Response.json(collection.get(number));
+      if (method === 'PATCH') {
+        const changes = JSON.parse(init.body);
+        const normalized = {
+          ...changes,
+          ...(changes.labels
+            ? { labels: changes.labels.map(name => ({ name })) }
+            : {}),
+        };
+        const value = { ...collection.get(number), ...normalized };
+        collection.set(number, value);
+        state.patches.push({ resource, number, changes });
+        return globalThis.Response.json(value);
+      }
+    }
+    if (url.pathname.includes('/compare/'))
+      return globalThis.Response.json({ status: comparisonStatus });
+    return globalThis.Response.json(
+      { message: `Unexpected ${method} ${url.pathname}` },
+      { status: 500 }
+    );
+  };
+  try {
+    await run(state, event);
   } finally {
     globalThis.fetch = previousFetch;
     if (previousToken === undefined) delete process.env.GITHUB_TOKEN;
