@@ -95,6 +95,13 @@ function array(value) {
   return Array.isArray(value) ? value.filter(Boolean).map(String) : [];
 }
 
+function radarBotLogin() {
+  return (
+    process.env.POMI_GITHUB_APP_BOT_LOGIN?.trim() ||
+    EXPECTED_GITHUB_APP_BOT_LOGIN
+  );
+}
+
 function immutableIds(item) {
   return new Set(
     [
@@ -1184,9 +1191,7 @@ export async function reconcileDuplicate(input) {
 
 export function validateConsolidationManifest(event, issues) {
   const pull = event.pull_request;
-  const expectedBot =
-    process.env.POMI_GITHUB_APP_BOT_LOGIN || 'pomi-radar[bot]';
-  if (pull?.user?.login !== expectedBot) {
+  if (pull?.user?.login !== radarBotLogin()) {
     throw new Error(
       'Radar consolidation PR must be authored by the Radar bot.'
     );
@@ -1202,14 +1207,23 @@ export function validateConsolidationManifest(event, issues) {
   }
   const manifest = readMarker(pull.body, CONTRACT.consolidationMarker);
   const issueNumbers = [...new Set(array(manifest?.issues).map(Number))];
+  const sourcePrNumbers = [...new Set(array(manifest?.sourcePrs).map(Number))];
   if (
     !manifest ||
     !issueNumbers.length ||
+    !sourcePrNumbers.length ||
     issueNumbers.length > 100 ||
-    issueNumbers.some(number => !Number.isSafeInteger(number) || number <= 0)
+    sourcePrNumbers.length > 100 ||
+    issueNumbers.some(number => !Number.isSafeInteger(number) || number <= 0) ||
+    sourcePrNumbers.some(number => !Number.isSafeInteger(number) || number <= 0)
   ) {
     throw new Error(
-      'Radar consolidation manifest contains invalid issue numbers.'
+      'Radar consolidation manifest contains invalid issue or source PR numbers.'
+    );
+  }
+  if (sourcePrNumbers.includes(Number(pull.number))) {
+    throw new Error(
+      'Radar consolidation manifest cannot include the consolidation PR itself.'
     );
   }
   for (const issue of issues) {
@@ -1217,6 +1231,11 @@ export function validateConsolidationManifest(event, issues) {
     const lifecycle = metadata.labels.filter(label =>
       CONTRACT.lifecycle.includes(label)
     );
+    const retryingReadyIssue =
+      lifecycle.length === 1 &&
+      lifecycle[0] === 'radar:ready-for-release' &&
+      Number(metadata.consolidationPullRequest) === Number(pull.number) &&
+      metadata.consolidationMergeSha === pull.merge_commit_sha;
     if (
       issue.pull_request ||
       metadata.state !== 'open' ||
@@ -1224,14 +1243,127 @@ export function validateConsolidationManifest(event, issues) {
       !isManagedRadarIssue(metadata) ||
       metadata.labels.includes('duplicate') ||
       lifecycle.length !== 1 ||
-      lifecycle[0] !== 'radar:in-review'
+      (!['radar:in-review'].includes(lifecycle[0]) && !retryingReadyIssue)
     ) {
       throw new Error(
         `Issue #${metadata.number} is not an eligible in-review Radar issue.`
       );
     }
   }
-  return { issueNumbers };
+  return { issueNumbers, sourcePrNumbers };
+}
+
+async function validateConsolidationSourcePulls(
+  sourcePulls,
+  sourcePrNumbers,
+  consolidationIssueNumbers,
+  consolidationNumber,
+  mergeSha
+) {
+  const sourceByNumber = new Map(
+    sourcePulls.map(sourcePull => [Number(sourcePull.number), sourcePull])
+  );
+  const representedIssueNumbers = new Set();
+  for (const sourcePrNumber of sourcePrNumbers) {
+    const sourcePull = sourceByNumber.get(sourcePrNumber);
+    if (!sourcePull) {
+      throw new Error(
+        `Source PR #${sourcePrNumber} from the consolidation manifest was not found.`
+      );
+    }
+    if (sourcePull.user?.login !== radarBotLogin()) {
+      throw new Error(
+        `Source PR #${sourcePrNumber} must be authored by the Radar bot.`
+      );
+    }
+    if (
+      sourcePull.base?.ref !== 'main' ||
+      sourcePull.base?.repo?.full_name !== repo() ||
+      sourcePull.head?.repo?.full_name !== repo()
+    ) {
+      throw new Error(
+        `Source PR #${sourcePrNumber} must stay within ${repo()} and target its main branch.`
+      );
+    }
+    const sourceMarker = readMarker(sourcePull.body, 'pomi-radar-source:v1');
+    const rawIssueNumbers = Array.isArray(sourceMarker?.issues)
+      ? sourceMarker.issues
+      : [];
+    const sourceIssueNumbers = [...new Set(rawIssueNumbers.map(Number))];
+    if (
+      sourceMarker?.version !== 1 ||
+      !sourceIssueNumbers.length ||
+      sourceIssueNumbers.length !== rawIssueNumbers.length ||
+      sourceIssueNumbers.some(
+        number => !Number.isSafeInteger(number) || number <= 0
+      )
+    ) {
+      throw new Error(
+        `Source PR #${sourcePrNumber} must contain a valid Radar source marker.`
+      );
+    }
+    if (
+      sourceIssueNumbers.some(
+        issueNumber => !consolidationIssueNumbers.includes(issueNumber)
+      )
+    ) {
+      throw new Error(
+        `Source PR #${sourcePrNumber} does not represent the consolidation issue set.`
+      );
+    }
+    for (const issueNumber of sourceIssueNumbers)
+      representedIssueNumbers.add(issueNumber);
+    if (!/^[0-9a-f]{40}$/.test(String(sourcePull.head?.sha))) {
+      throw new Error(
+        `Source PR #${sourcePrNumber} does not expose a valid head commit.`
+      );
+    }
+    const comparison = await github(
+      `/compare/${sourcePull.head.sha}...${mergeSha}`,
+      {}
+    );
+    if (!['ahead', 'identical'].includes(comparison?.status)) {
+      throw new Error(
+        `Source PR #${sourcePrNumber} is not contained in consolidation PR #${consolidationNumber}.`
+      );
+    }
+  }
+  const missingIssueNumbers = consolidationIssueNumbers.filter(
+    issueNumber => !representedIssueNumbers.has(issueNumber)
+  );
+  if (missingIssueNumbers.length) {
+    throw new Error(
+      `Source PRs do not represent consolidation issues: ${missingIssueNumbers.join(', ')}.`
+    );
+  }
+  return sourceByNumber;
+}
+
+async function closeConsolidationSourcePulls(
+  sourcePulls,
+  consolidationPull,
+  mergeSha
+) {
+  const closed = [];
+  const alreadyClosed = [];
+  for (const sourcePull of sourcePulls) {
+    const sourcePrNumber = Number(sourcePull.number);
+    await addCommentOnce(
+      sourcePrNumber,
+      `Closed because it was included in merged consolidation PR #${consolidationPull.number} at merge commit \`${mergeSha}\`.`,
+      `consolidation:${consolidationPull.number}:${mergeSha}:source-pr:${sourcePrNumber}`
+    );
+    if (sourcePull.state !== 'open') {
+      alreadyClosed.push(sourcePrNumber);
+      continue;
+    }
+    await github(`/pulls/${sourcePrNumber}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ state: 'closed' }),
+    });
+    closed.push(sourcePrNumber);
+  }
+  return { closed, alreadyClosed };
 }
 
 export async function consolidationMerged(event) {
@@ -1242,14 +1374,34 @@ export async function consolidationMerged(event) {
   const requestedNumbers = [
     ...new Set(array(untrustedManifest.issues).map(Number)),
   ];
-  const issues = await Promise.all(
-    requestedNumbers.map(issueNumber => github(`/issues/${issueNumber}`, {}))
-  );
-  const { issueNumbers } = validateConsolidationManifest(event, issues);
   const mergeSha = pull.merge_commit_sha;
   if (!/^[0-9a-f]{40}$/.test(String(mergeSha))) {
     throw new Error('Radar consolidation merge commit is invalid.');
   }
+  const issues = await Promise.all(
+    requestedNumbers.map(issueNumber => github(`/issues/${issueNumber}`, {}))
+  );
+  const { issueNumbers, sourcePrNumbers } = validateConsolidationManifest(
+    event,
+    issues
+  );
+  const sourcePulls = await Promise.all(
+    sourcePrNumbers.map(sourcePrNumber =>
+      github(`/pulls/${sourcePrNumber}`, {})
+    )
+  );
+  await validateConsolidationSourcePulls(
+    sourcePulls,
+    sourcePrNumbers,
+    issueNumbers,
+    pull.number,
+    mergeSha
+  );
+  const sourcePullRequests = await closeConsolidationSourcePulls(
+    sourcePulls,
+    pull,
+    mergeSha
+  );
   for (const issueNumber of issueNumbers) {
     await addCommentOnce(
       issueNumber,
@@ -1267,7 +1419,23 @@ export async function consolidationMerged(event) {
       undefined
     );
   }
-  return { updated: issueNumbers, mergeSha };
+  return { updated: issueNumbers, sourcePullRequests, mergeSha };
+}
+
+export async function reconcileConsolidation(pullRequestNumber) {
+  const number = Number(pullRequestNumber);
+  if (!Number.isSafeInteger(number) || number <= 0) {
+    throw new Error(
+      'A positive consolidation pull request number is required.'
+    );
+  }
+  const pull = await github(`/pulls/${number}`, {});
+  if (pull.state !== 'closed' || !pull.merged_at) {
+    return { skipped: 'pull-request-not-merged', pullRequest: number };
+  }
+  return consolidationMerged({
+    pull_request: { ...pull, merged: true },
+  });
 }
 
 async function commitIncluded(mergeSha, releaseSha) {
@@ -1444,6 +1612,17 @@ async function main() {
     const event = JSON.parse(await readFile(0, 'utf8'));
     process.stdout.write(
       `${JSON.stringify(await consolidationMerged(event), null, 2)}\n`
+    );
+    return;
+  }
+  if (command === 'consolidation-reconcile') {
+    const input = JSON.parse(await readFile(0, 'utf8'));
+    process.stdout.write(
+      `${JSON.stringify(
+        await reconcileConsolidation(input.pullRequestNumber),
+        null,
+        2
+      )}\n`
     );
     return;
   }

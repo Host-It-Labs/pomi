@@ -38,14 +38,30 @@ describe('public release workflow', () => {
     expect(workflow).toContain('scripts/radar-lifecycle.mjs release');
   });
 
-  it('gates image publication on successful application builds', async () => {
+  it('builds each backend architecture natively before publishing one manifest', async () => {
     const workflow = await readFile(
       new URL('../../../../.github/workflows/release.yml', import.meta.url),
       'utf8'
     );
 
     expect(workflow).toMatch(
-      /docker-backend:\n[\s\S]*?needs: \[sentry-release, build-macos, build-android-wear\]/
+      /docker-backend-amd64:\n[\s\S]*?needs: \[sentry-release, build-macos, build-android-wear\]/
+    );
+    expect(workflow).toMatch(
+      /docker-backend-amd64:[\s\S]*?platforms: linux\/amd64/
+    );
+    expect(workflow).toMatch(
+      /docker-backend-arm64:\n[\s\S]*?runs-on: ubuntu-24\.04-arm/
+    );
+    expect(workflow).toMatch(
+      /docker-backend-arm64:[\s\S]*?platforms: linux\/arm64/
+    );
+    expect(workflow).toContain('docker buildx imagetools create');
+    expect(workflow).toContain('--tag "$IMAGE:${RELEASE_TAG}"');
+    expect(workflow).toContain('--tag "$IMAGE:latest"');
+    expect(workflow).not.toContain('platforms: linux/amd64,linux/arm64');
+    expect(workflow).toMatch(
+      /finalize-sentry-release:[\s\S]*?needs: \[docker-backend-manifest, build-macos, build-android-wear\]/
     );
   });
 

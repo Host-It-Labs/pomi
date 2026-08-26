@@ -43,6 +43,11 @@ merge updates, and production-release closure.
 - A consolidation merge moves included canonical issues to
   `radar:ready-for-release`. Only a successful, non-prerelease production job
   closes included issues as `radar:released` and resolves mapped Sentry groups.
+- The consolidation manifest must list every source PR in `sourcePrs`. After a
+  consolidation merge, the trusted lifecycle verifies that each listed source
+  head is contained in the merge commit, comments on it once, and closes it.
+  Source PRs remain open while the consolidation PR is open. The
+  `consolidation-reconcile` command repairs a missed post-merge event.
 
 ## Radar presentation contract
 

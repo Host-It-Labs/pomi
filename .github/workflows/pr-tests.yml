@@ -4,11 +4,12 @@ permissions:
   contents: read
 
 on:
+  push:
   pull_request:
   workflow_dispatch:
 
 concurrency:
-  group: pr-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: pr-tests-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -171,7 +172,7 @@ jobs:
 
   tests:
     name: tests
-    if: always()
+    if: ${{ always() && !cancelled() }}
     needs:
       - typescript
       - wear

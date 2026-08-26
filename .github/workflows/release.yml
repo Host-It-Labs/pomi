@@ -88,8 +88,8 @@ jobs:
           register_release "$FRONTEND_SENTRY_RELEASE" "$SENTRY_FRONTEND_PROJECT"
           register_release "$BACKEND_SENTRY_RELEASE" "$SENTRY_BACKEND_PROJECT"
 
-  docker-backend:
-    name: Build backend image
+  docker-backend-amd64:
+    name: Build backend image (amd64)
     needs: [sentry-release, build-macos, build-android-wear]
     runs-on: ubuntu-latest
     environment: release
@@ -113,18 +113,83 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and publish backend image
+      - name: Build and publish amd64 backend image
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ./packages/backend/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: ${{ github.event_name == 'release' }}
           build-args: |
             SENTRY_RELEASE=${{ env.BACKEND_SENTRY_RELEASE }}
-          tags: |
-            ghcr.io/host-it-labs/pomi-backend:latest
-            ghcr.io/host-it-labs/pomi-backend:${{ env.RELEASE_TAG }}
+          tags: ghcr.io/host-it-labs/pomi-backend:${{ env.RELEASE_TAG }}-amd64
+
+  docker-backend-arm64:
+    name: Build backend image (arm64)
+    needs: [sentry-release, build-macos, build-android-wear]
+    runs-on: ubuntu-24.04-arm
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        if: ${{ github.event_name == 'release' }}
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish arm64 backend image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./packages/backend/Dockerfile
+          platforms: linux/arm64
+          push: ${{ github.event_name == 'release' }}
+          build-args: |
+            SENTRY_RELEASE=${{ env.BACKEND_SENTRY_RELEASE }}
+          tags: ghcr.io/host-it-labs/pomi-backend:${{ env.RELEASE_TAG }}-arm64
+
+  docker-backend-manifest:
+    name: Publish backend image manifest
+    if: ${{ github.event_name == 'release' }}
+    needs: [docker-backend-amd64, docker-backend-arm64]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish multi-architecture backend tags
+        env:
+          IMAGE: ghcr.io/host-it-labs/pomi-backend
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --tag "$IMAGE:${RELEASE_TAG}" \
+            --tag "$IMAGE:latest" \
+            "$IMAGE:${RELEASE_TAG}-amd64" \
+            "$IMAGE:${RELEASE_TAG}-arm64"
 
   build-macos:
     name: Build ARM64 macOS app
@@ -323,8 +388,8 @@ jobs:
 
   finalize-sentry-release:
     name: Finalize Sentry releases
-    if: ${{ always() && github.event_name == 'release' && needs.docker-backend.result == 'success' && needs.build-macos.result == 'success' && needs.build-android-wear.result == 'success' }}
-    needs: [docker-backend, build-macos, build-android-wear]
+    if: ${{ always() && github.event_name == 'release' && needs.docker-backend-manifest.result == 'success' && needs.build-macos.result == 'success' && needs.build-android-wear.result == 'success' }}
+    needs: [docker-backend-manifest, build-macos, build-android-wear]
     runs-on: ubuntu-latest
     environment: release
     steps:

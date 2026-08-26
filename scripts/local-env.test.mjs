@@ -14,16 +14,27 @@ import {
   resolveRepositoryPath,
 } from './local-env.mjs';
 
-test('parses comments, exports, quotes, and embedded equals signs', () => {
+test('parses comments, exports, optional quotes, embedded equals signs, and PEM blocks', () => {
   assert.deepEqual(
     parseEnvironmentFile(`
 # comment
 PLAIN=value
 export QUOTED="hello world"
 TOKEN=part=two
+UNQUOTED_PEM=-----BEGIN PRIVATE KEY-----
+base64-line
+-----END PRIVATE KEY-----
+AFTER_PEM=value
 INVALID LINE
 `),
-    { PLAIN: 'value', QUOTED: 'hello world', TOKEN: 'part=two' }
+    {
+      PLAIN: 'value',
+      QUOTED: 'hello world',
+      TOKEN: 'part=two',
+      UNQUOTED_PEM:
+        '-----BEGIN PRIVATE KEY-----\nbase64-line\n-----END PRIVATE KEY-----',
+      AFTER_PEM: 'value',
+    }
   );
 });
 
