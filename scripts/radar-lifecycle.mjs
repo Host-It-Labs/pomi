@@ -1281,7 +1281,6 @@ async function validateConsolidationSourcePulls(
         `Source PR #${sourcePrNumber} from the consolidation manifest was not found.`
       );
     }
-    if (allowLegacy && sourcePull.state !== 'open') continue;
     if (!allowLegacy && sourcePull.user?.login !== radarBotLogin()) {
       throw new Error(
         `Source PR #${sourcePrNumber} must be authored by the Radar bot.`
@@ -1297,6 +1296,9 @@ async function validateConsolidationSourcePulls(
       );
     }
     const sourceMarker = readMarker(sourcePull.body, 'pomi-radar-source:v1');
+    const hasSourceMarker = String(sourcePull.body ?? '').includes(
+      'pomi-radar-source:v1'
+    );
     const rawIssueNumbers = Array.isArray(sourceMarker?.issues)
       ? sourceMarker.issues
       : [];
@@ -1308,7 +1310,7 @@ async function validateConsolidationSourcePulls(
       sourceIssueNumbers.every(
         number => Number.isSafeInteger(number) && number > 0
       );
-    if ((!allowLegacy || sourceMarker) && !hasValidSourceMarker) {
+    if ((!allowLegacy || hasSourceMarker) && !hasValidSourceMarker) {
       throw new Error(
         `Source PR #${sourcePrNumber} must contain a valid Radar source marker.`
       );
@@ -1325,6 +1327,7 @@ async function validateConsolidationSourcePulls(
     }
     for (const issueNumber of sourceIssueNumbers)
       representedIssueNumbers.add(issueNumber);
+    if (allowLegacy && sourcePull.state !== 'open') continue;
     if (!/^[0-9a-f]{40}$/.test(String(sourcePull.head?.sha))) {
       throw new Error(
         `Source PR #${sourcePrNumber} does not expose a valid head commit.`
@@ -1480,12 +1483,39 @@ export async function reconcileConsolidation(pullRequestNumber) {
   if (pull.state !== 'closed' || !pull.merged_at) {
     return { skipped: 'pull-request-not-merged', pullRequest: number };
   }
-  return consolidationMerged(
-    {
-      pull_request: { ...pull, merged: true },
-    },
-    { allowLegacy: true }
-  );
+  const event = { pull_request: { ...pull, merged: true } };
+  try {
+    return await consolidationMerged(event);
+  } catch (strictError) {
+    const reviewedHeadSha = pull.head?.sha;
+    if (!/^[0-9a-f]{40}$/.test(String(reviewedHeadSha))) throw strictError;
+    const [mergeTreeSha, reviewedHeadTreeSha] = await Promise.all([
+      commitTreeSha(pull.merge_commit_sha),
+      commitTreeSha(reviewedHeadSha),
+    ]);
+    if (mergeTreeSha !== reviewedHeadTreeSha) throw strictError;
+    return consolidationMerged(event, { allowLegacy: true });
+  }
+}
+
+async function validatePublishedRelease(releaseTag) {
+  const tag = String(releaseTag ?? '').trim();
+  if (!tag || tag.length > 255 || /[\u0000-\u001f\u007f]/.test(tag)) {
+    throw new Error(
+      'RELEASE_TAG must identify an existing published, non-prerelease GitHub Release.'
+    );
+  }
+  const release = await github(`/releases/tags/${encodeURIComponent(tag)}`, {});
+  if (
+    release?.tag_name !== tag ||
+    release.draft === true ||
+    release.prerelease === true
+  ) {
+    throw new Error(
+      `Release tag ${tag} must identify an existing published, non-prerelease GitHub Release.`
+    );
+  }
+  return tag;
 }
 
 async function commitIncluded(mergeSha, releaseSha) {
@@ -1520,6 +1550,7 @@ export async function releaseReadyIssues({
   releaseUrl,
   releaseSha,
 }) {
+  const verifiedReleaseTag = await validatePublishedRelease(releaseTag);
   const issues = await paginate(
     '/issues?state=open&labels=radar%3Aready-for-release'
   );
@@ -1532,10 +1563,14 @@ export async function releaseReadyIssues({
       await resolveSentryGroup(groupId);
     await addCommentOnce(
       issue.number,
-      `Released in [${releaseTag}](${releaseUrl}).`,
-      `release:${releaseTag}:issue:${issue.number}`
+      `Released in [${verifiedReleaseTag}](${releaseUrl}).`,
+      `release:${verifiedReleaseTag}:issue:${issue.number}`
     );
-    await updateIssueData(issue.number, { releaseTag, releaseUrl, releaseSha });
+    await updateIssueData(issue.number, {
+      releaseTag: verifiedReleaseTag,
+      releaseUrl,
+      releaseSha,
+    });
     await setIssueLifecycle(
       issue.number,
       'radar:released',
