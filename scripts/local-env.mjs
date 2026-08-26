@@ -15,6 +15,9 @@ export const environmentFiles = Object.freeze({
 
 export const defaultLocalEnvironmentFile = environmentFiles.local;
 
+const PEM_BEGIN = /^-----BEGIN [A-Z0-9 ]+-----$/;
+const PEM_END = /^-----END [A-Z0-9 ]+-----$/;
+
 function unquote(value) {
   if (value.length >= 2) {
     const first = value[0];
@@ -28,7 +31,9 @@ function unquote(value) {
 
 export function parseEnvironmentFile(contents) {
   const values = {};
-  for (const rawLine of contents.split(/\r?\n/)) {
+  const lines = contents.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
     const line = rawLine.trim();
     if (!line || line.startsWith('#')) continue;
     const separator = line.indexOf('=');
@@ -38,7 +43,20 @@ export function parseEnvironmentFile(contents) {
       .replace(/^export\s+/, '')
       .trim();
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
-    values[key] = unquote(line.slice(separator + 1).trim());
+    let value = unquote(line.slice(separator + 1).trim());
+    if (PEM_BEGIN.test(value)) {
+      const pemLines = [value];
+      for (let pemIndex = index + 1; pemIndex < lines.length; pemIndex += 1) {
+        const pemLine = lines[pemIndex].trim();
+        pemLines.push(pemLine);
+        if (PEM_END.test(pemLine)) {
+          value = pemLines.join('\n');
+          index = pemIndex;
+          break;
+        }
+      }
+    }
+    values[key] = value;
   }
   return values;
 }

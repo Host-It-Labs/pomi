@@ -23,8 +23,10 @@ Use `config/pomi-automation.env` only for scheduled Radar automation. It holds
 the Pomi Radar GitHub App settings, the read-only source-repository token, and
 the Sentry values needed by the scheduled agent. `scripts/github-app-auth.mjs`
 loads this profile automatically and fails closed if the App cannot
-authenticate. Set `POMI_RADAR_GITHUB_APP_PRIVATE_KEY` to the PEM value with
-literal `\n` line breaks; the older
+authenticate. Paste the PEM directly after
+`POMI_RADAR_GITHUB_APP_PRIVATE_KEY=` without quotes; multiline PEM blocks are
+supported. A one-line value with literal `\n` line breaks is also accepted when
+the environment system requires it. The older
 `POMI_RADAR_GITHUB_APP_PRIVATE_KEY_PATH` remains available as a local-file
 fallback.
 
