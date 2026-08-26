@@ -54,6 +54,8 @@ merge updates, and production-release closure.
   source PRs are still counted while containment and closure are skipped.
 - Release closure first verifies that `RELEASE_TAG` identifies an existing,
   published, non-prerelease GitHub Release before changing Radar issues.
+  Historical recovery runs the current lifecycle code while deriving the
+  release commit from that verified tag.
 
 ## Radar presentation contract
 
