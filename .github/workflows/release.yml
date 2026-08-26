@@ -527,5 +527,5 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
           RELEASE_URL: https://github.com/${{ github.repository }}/releases/tag/${{ inputs.release_tag }}
         run: |
-          export RELEASE_SHA="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          export RELEASE_SHA="$(git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}")"
           node scripts/radar-lifecycle.mjs release

@@ -48,10 +48,12 @@ merge updates, and production-release closure.
   head is contained in the merge commit, comments on it once, and closes it.
   Source PRs remain open while the consolidation PR is open. The
   `consolidation-reconcile` command first retries the strict post-merge path.
-  Only when that path fails for a historical squash merge does it require the
-  final merge tree to equal the reviewed consolidation head and verify still-
-  open source heads against that reviewed head; markers on already-closed
-  source PRs are still counted while containment and closure are skipped.
+  Only when that path fails for a historical, non-bot, multi-commit squash
+  shape does it require the one-parent merge to be one commit ahead of the
+  base, require the final merge tree to equal the reviewed consolidation head,
+  and verify still-open source heads against that reviewed head; markers on
+  already-closed source PRs are still counted while containment and closure
+  are skipped.
 - Release closure first verifies that `RELEASE_TAG` identifies an existing,
   published, non-prerelease GitHub Release before changing Radar issues.
   Historical recovery runs the current lifecycle code while deriving the
