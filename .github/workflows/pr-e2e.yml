@@ -5,7 +5,6 @@ permissions:
 
 on:
   push:
-  pull_request:
   workflow_dispatch:
     inputs:
       acceptance_timing:
@@ -15,7 +14,7 @@ on:
         type: boolean
 
 concurrency:
-  group: pr-e2e-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  group: pr-e2e-${{ github.workflow }}-${{ github.event_name }}-${{ github.repository }}-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
