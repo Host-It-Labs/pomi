@@ -95,6 +95,13 @@ function array(value) {
   return Array.isArray(value) ? value.filter(Boolean).map(String) : [];
 }
 
+function radarBotLogin() {
+  return (
+    process.env.POMI_GITHUB_APP_BOT_LOGIN?.trim() ||
+    EXPECTED_GITHUB_APP_BOT_LOGIN
+  );
+}
+
 function immutableIds(item) {
   return new Set(
     [
@@ -1184,9 +1191,7 @@ export async function reconcileDuplicate(input) {
 
 export function validateConsolidationManifest(event, issues) {
   const pull = event.pull_request;
-  const expectedBot =
-    process.env.POMI_GITHUB_APP_BOT_LOGIN || 'pomi-radar[bot]';
-  if (pull?.user?.login !== expectedBot) {
+  if (pull?.user?.login !== radarBotLogin()) {
     throw new Error(
       'Radar consolidation PR must be authored by the Radar bot.'
     );
@@ -1251,12 +1256,14 @@ export function validateConsolidationManifest(event, issues) {
 async function validateConsolidationSourcePulls(
   sourcePulls,
   sourcePrNumbers,
+  consolidationIssueNumbers,
   consolidationNumber,
   mergeSha
 ) {
   const sourceByNumber = new Map(
     sourcePulls.map(sourcePull => [Number(sourcePull.number), sourcePull])
   );
+  const representedIssueNumbers = new Set();
   for (const sourcePrNumber of sourcePrNumbers) {
     const sourcePull = sourceByNumber.get(sourcePrNumber);
     if (!sourcePull) {
@@ -1264,14 +1271,48 @@ async function validateConsolidationSourcePulls(
         `Source PR #${sourcePrNumber} from the consolidation manifest was not found.`
       );
     }
-    if (
-      sourcePull.base?.ref !== 'main' ||
-      sourcePull.base?.repo?.full_name !== repo()
-    ) {
+    if (sourcePull.user?.login !== radarBotLogin()) {
       throw new Error(
-        `Source PR #${sourcePrNumber} does not target ${repo()}:main.`
+        `Source PR #${sourcePrNumber} must be authored by the Radar bot.`
       );
     }
+    if (
+      sourcePull.base?.ref !== 'main' ||
+      sourcePull.base?.repo?.full_name !== repo() ||
+      sourcePull.head?.repo?.full_name !== repo()
+    ) {
+      throw new Error(
+        `Source PR #${sourcePrNumber} must stay within ${repo()} and target its main branch.`
+      );
+    }
+    const sourceMarker = readMarker(sourcePull.body, 'pomi-radar-source:v1');
+    const rawIssueNumbers = Array.isArray(sourceMarker?.issues)
+      ? sourceMarker.issues
+      : [];
+    const sourceIssueNumbers = [...new Set(rawIssueNumbers.map(Number))];
+    if (
+      sourceMarker?.version !== 1 ||
+      !sourceIssueNumbers.length ||
+      sourceIssueNumbers.length !== rawIssueNumbers.length ||
+      sourceIssueNumbers.some(
+        number => !Number.isSafeInteger(number) || number <= 0
+      )
+    ) {
+      throw new Error(
+        `Source PR #${sourcePrNumber} must contain a valid Radar source marker.`
+      );
+    }
+    if (
+      sourceIssueNumbers.some(
+        issueNumber => !consolidationIssueNumbers.includes(issueNumber)
+      )
+    ) {
+      throw new Error(
+        `Source PR #${sourcePrNumber} does not represent the consolidation issue set.`
+      );
+    }
+    for (const issueNumber of sourceIssueNumbers)
+      representedIssueNumbers.add(issueNumber);
     if (!/^[0-9a-f]{40}$/.test(String(sourcePull.head?.sha))) {
       throw new Error(
         `Source PR #${sourcePrNumber} does not expose a valid head commit.`
@@ -1287,6 +1328,14 @@ async function validateConsolidationSourcePulls(
       );
     }
   }
+  const missingIssueNumbers = consolidationIssueNumbers.filter(
+    issueNumber => !representedIssueNumbers.has(issueNumber)
+  );
+  if (missingIssueNumbers.length) {
+    throw new Error(
+      `Source PRs do not represent consolidation issues: ${missingIssueNumbers.join(', ')}.`
+    );
+  }
   return sourceByNumber;
 }
 
@@ -1299,15 +1348,15 @@ async function closeConsolidationSourcePulls(
   const alreadyClosed = [];
   for (const sourcePull of sourcePulls) {
     const sourcePrNumber = Number(sourcePull.number);
-    if (sourcePull.state !== 'open') {
-      alreadyClosed.push(sourcePrNumber);
-      continue;
-    }
     await addCommentOnce(
       sourcePrNumber,
       `Closed because it was included in merged consolidation PR #${consolidationPull.number} at merge commit \`${mergeSha}\`.`,
       `consolidation:${consolidationPull.number}:${mergeSha}:source-pr:${sourcePrNumber}`
     );
+    if (sourcePull.state !== 'open') {
+      alreadyClosed.push(sourcePrNumber);
+      continue;
+    }
     await github(`/pulls/${sourcePrNumber}`, {
       method: 'PATCH',
       body: JSON.stringify({ state: 'closed' }),
@@ -1344,6 +1393,7 @@ export async function consolidationMerged(event) {
   await validateConsolidationSourcePulls(
     sourcePulls,
     sourcePrNumbers,
+    issueNumbers,
     pull.number,
     mergeSha
   );
