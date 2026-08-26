@@ -500,15 +500,16 @@ jobs:
       contents: read
       issues: write
     steps:
-      - name: Check out released source
+      - name: Check out current lifecycle source
         uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.release_tag }}
+          ref: ${{ github.sha }}
+          fetch-depth: 0
 
       - name: Verify release tag
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
-        run: git rev-parse --verify "${RELEASE_TAG}^{commit}" >/dev/null
+        run: git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}" >/dev/null
 
       - name: Mint Pomi Radar bot token
         id: radar-token
@@ -526,5 +527,5 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
           RELEASE_URL: https://github.com/${{ github.repository }}/releases/tag/${{ inputs.release_tag }}
         run: |
-          export RELEASE_SHA="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          export RELEASE_SHA="$(git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}")"
           node scripts/radar-lifecycle.mjs release

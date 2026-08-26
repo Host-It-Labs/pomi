@@ -335,6 +335,70 @@ test('reconciliation keeps the strict path for normal non-squash merges', async 
   );
 });
 
+test('reconciliation limits the relaxed path to historical squash-shaped merges', async () => {
+  const event = consolidationEvent({
+    user: { login: 'NeoHuncho' },
+    state: 'closed',
+    merged_at: '2026-08-25T20:40:08Z',
+    commits: 2,
+    base: {
+      ref: 'main',
+      sha: 'f'.repeat(40),
+      repo: { full_name: 'Host-It-Labs/pomi' },
+    },
+    head: {
+      ref: 'radar/consolidation-test',
+      repo: { full_name: 'Host-It-Labs/pomi' },
+      sha: 'b'.repeat(40),
+    },
+  });
+  const sourcePulls = [
+    {
+      number: 44,
+      state: 'open',
+      user: { login: 'contributor' },
+      body: marker('pomi-radar-source:v1', {
+        version: 1,
+        track: 'feature',
+        issues: [33],
+      }),
+      base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+      head: {
+        sha: 'c'.repeat(40),
+        repo: { full_name: 'Host-It-Labs/pomi' },
+      },
+    },
+  ];
+  await withFakeConsolidationGithub(
+    {
+      event,
+      issue: {
+        number: 33,
+        state: 'open',
+        body: marker('pomi-radar:v1', { version: 1 }),
+        labels: [{ name: 'radar:feature' }, { name: 'radar:accepted' }],
+      },
+      sourcePulls,
+      comparisonStatus: 'ahead',
+      comparisonAheadBy: 1,
+      commitTreeSha: 'e'.repeat(40),
+      commitParents: ['d'.repeat(40)],
+    },
+    async state => {
+      const result = await reconcileConsolidation(99);
+      assert.deepEqual(result.sourcePullRequests, {
+        closed: [44],
+        alreadyClosed: [],
+      });
+      assert.equal(state.pulls.get(44).state, 'closed');
+      assert.deepEqual(
+        state.issues.get(33).labels.map(label => label.name),
+        ['radar:feature', 'radar:ready-for-release']
+      );
+    }
+  );
+});
+
 test('lifecycle JSON commands read standard input with the Node runtime', () => {
   const result = spawnSync(
     process.execPath,
@@ -837,7 +901,15 @@ async function withFakeGithubIssues(initialIssues, run, options = {}) {
 }
 
 async function withFakeConsolidationGithub(
-  { event, issue, sourcePulls, comparisonStatus, commitTreeSha },
+  {
+    event,
+    issue,
+    sourcePulls,
+    comparisonStatus,
+    comparisonAheadBy,
+    commitTreeSha,
+    commitParents,
+  },
   run
 ) {
   const previousFetch = globalThis.fetch;
@@ -893,9 +965,13 @@ async function withFakeConsolidationGithub(
     if (url.pathname.match(/\/commits\/[0-9a-f]+$/))
       return globalThis.Response.json({
         commit: { tree: { sha: commitTreeSha } },
+        parents: (commitParents ?? []).map(sha => ({ sha })),
       });
     if (url.pathname.includes('/compare/'))
-      return globalThis.Response.json({ status: comparisonStatus });
+      return globalThis.Response.json({
+        status: comparisonStatus,
+        ahead_by: comparisonAheadBy,
+      });
     return globalThis.Response.json(
       { message: `Unexpected ${method} ${url.pathname}` },
       { status: 500 }

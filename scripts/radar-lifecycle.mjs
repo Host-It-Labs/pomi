@@ -1393,6 +1393,33 @@ async function commitTreeSha(commitSha) {
   return treeSha;
 }
 
+async function isHistoricalSquashConsolidation(pull) {
+  if (pull.user?.login === radarBotLogin()) return false;
+  const commitCount = Number(pull.commits);
+  if (!Number.isSafeInteger(commitCount) || commitCount <= 1) return false;
+  const mergeSha = pull.merge_commit_sha;
+  const reviewedHeadSha = pull.head?.sha;
+  const baseSha = pull.base?.sha;
+  if (
+    !/^[0-9a-f]{40}$/.test(String(mergeSha)) ||
+    !/^[0-9a-f]{40}$/.test(String(reviewedHeadSha)) ||
+    !/^[0-9a-f]{40}$/.test(String(baseSha)) ||
+    mergeSha === reviewedHeadSha
+  ) {
+    return false;
+  }
+  const [mergeCommit, comparison] = await Promise.all([
+    github(`/commits/${mergeSha}`, {}),
+    github(`/compare/${baseSha}...${mergeSha}`, {}),
+  ]);
+  return (
+    Array.isArray(mergeCommit?.parents) &&
+    mergeCommit.parents.length === 1 &&
+    comparison?.status === 'ahead' &&
+    comparison.ahead_by === 1
+  );
+}
+
 export async function consolidationMerged(event, options) {
   const pull = event.pull_request;
   const allowLegacy = options?.allowLegacy === true;
@@ -1487,13 +1514,7 @@ export async function reconcileConsolidation(pullRequestNumber) {
   try {
     return await consolidationMerged(event);
   } catch (strictError) {
-    const reviewedHeadSha = pull.head?.sha;
-    if (!/^[0-9a-f]{40}$/.test(String(reviewedHeadSha))) throw strictError;
-    const [mergeTreeSha, reviewedHeadTreeSha] = await Promise.all([
-      commitTreeSha(pull.merge_commit_sha),
-      commitTreeSha(reviewedHeadSha),
-    ]);
-    if (mergeTreeSha !== reviewedHeadTreeSha) throw strictError;
+    if (!(await isHistoricalSquashConsolidation(pull))) throw strictError;
     return consolidationMerged(event, { allowLegacy: true });
   }
 }

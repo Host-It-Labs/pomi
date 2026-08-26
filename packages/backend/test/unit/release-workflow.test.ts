@@ -41,6 +41,12 @@ describe('public release workflow', () => {
     );
     expect(workflow).toContain('radar_only:');
     expect(workflow).toContain('release-radar-issues-recovery:');
+    expect(workflow).toContain('ref: ${{ github.sha }}');
+    expect(workflow).toContain('fetch-depth: 0');
+    expect(workflow).toContain('refs/tags/${RELEASE_TAG}^{commit}');
+    expect(workflow).toContain(
+      'export RELEASE_SHA="$(git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}")"'
+    );
     expect(workflow).toContain('export RELEASE_SHA=');
   });
 
