@@ -1500,7 +1500,11 @@ export async function reconcileConsolidation(pullRequestNumber) {
 
 async function validatePublishedRelease(releaseTag) {
   const tag = String(releaseTag ?? '').trim();
-  if (!tag || tag.length > 255 || /[\u0000-\u001f\u007f]/.test(tag)) {
+  const hasControlCharacter = [...tag].some(character => {
+    const code = character.codePointAt(0);
+    return code <= 0x1f || code === 0x7f;
+  });
+  if (!tag || tag.length > 255 || hasControlCharacter) {
     throw new Error(
       'RELEASE_TAG must identify an existing published, non-prerelease GitHub Release.'
     );
