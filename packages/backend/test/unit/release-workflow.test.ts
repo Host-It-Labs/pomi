@@ -36,6 +36,12 @@ describe('public release workflow', () => {
     expect(workflow).toContain('actions/create-github-app-token@v3');
     expect(workflow).toContain('POMI_RADAR_APP_PRIVATE_KEY');
     expect(workflow).toContain('scripts/radar-lifecycle.mjs release');
+    expect(workflow).toMatch(
+      /release-radar-issues:[\s\S]*?permissions:\n\s+contents: read\n\s+issues: write/
+    );
+    expect(workflow).toContain('radar_only:');
+    expect(workflow).toContain('release-radar-issues-recovery:');
+    expect(workflow).toContain('export RELEASE_SHA=');
   });
 
   it('builds each backend architecture natively before publishing one manifest', async () => {

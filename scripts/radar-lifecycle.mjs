@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import process from 'node:process';
@@ -14,6 +13,10 @@ const ROOT = new URL('../', import.meta.url);
 const CONTRACT = JSON.parse(
   readFileSync(new URL('config/radar-lifecycle.json', ROOT), 'utf8')
 );
+
+function readJsonStdin() {
+  return JSON.parse(readFileSync(0, 'utf8'));
+}
 
 const STOP_WORDS = new Set([
   'a',
@@ -1189,9 +1192,10 @@ export async function reconcileDuplicate(input) {
   return { canonicalIssueNumber, duplicateIssueNumber, eventId: eventBase };
 }
 
-export function validateConsolidationManifest(event, issues) {
+export function validateConsolidationManifest(event, issues, options) {
   const pull = event.pull_request;
-  if (pull?.user?.login !== radarBotLogin()) {
+  const allowLegacy = options?.allowLegacy === true;
+  if (!allowLegacy && pull?.user?.login !== radarBotLogin()) {
     throw new Error(
       'Radar consolidation PR must be authored by the Radar bot.'
     );
@@ -1236,6 +1240,9 @@ export function validateConsolidationManifest(event, issues) {
       lifecycle[0] === 'radar:ready-for-release' &&
       Number(metadata.consolidationPullRequest) === Number(pull.number) &&
       metadata.consolidationMergeSha === pull.merge_commit_sha;
+    const eligibleLifecycle = allowLegacy
+      ? ['radar:in-review', 'radar:accepted', 'radar:in-progress']
+      : ['radar:in-review'];
     if (
       issue.pull_request ||
       metadata.state !== 'open' ||
@@ -1243,7 +1250,7 @@ export function validateConsolidationManifest(event, issues) {
       !isManagedRadarIssue(metadata) ||
       metadata.labels.includes('duplicate') ||
       lifecycle.length !== 1 ||
-      (!['radar:in-review'].includes(lifecycle[0]) && !retryingReadyIssue)
+      (!eligibleLifecycle.includes(lifecycle[0]) && !retryingReadyIssue)
     ) {
       throw new Error(
         `Issue #${metadata.number} is not an eligible in-review Radar issue.`
@@ -1258,8 +1265,11 @@ async function validateConsolidationSourcePulls(
   sourcePrNumbers,
   consolidationIssueNumbers,
   consolidationNumber,
-  mergeSha
+  mergeSha,
+  options
 ) {
+  const allowLegacy = options?.allowLegacy === true;
+  const containmentSha = options?.containmentSha ?? mergeSha;
   const sourceByNumber = new Map(
     sourcePulls.map(sourcePull => [Number(sourcePull.number), sourcePull])
   );
@@ -1271,7 +1281,8 @@ async function validateConsolidationSourcePulls(
         `Source PR #${sourcePrNumber} from the consolidation manifest was not found.`
       );
     }
-    if (sourcePull.user?.login !== radarBotLogin()) {
+    if (allowLegacy && sourcePull.state !== 'open') continue;
+    if (!allowLegacy && sourcePull.user?.login !== radarBotLogin()) {
       throw new Error(
         `Source PR #${sourcePrNumber} must be authored by the Radar bot.`
       );
@@ -1290,19 +1301,20 @@ async function validateConsolidationSourcePulls(
       ? sourceMarker.issues
       : [];
     const sourceIssueNumbers = [...new Set(rawIssueNumbers.map(Number))];
-    if (
-      sourceMarker?.version !== 1 ||
-      !sourceIssueNumbers.length ||
-      sourceIssueNumbers.length !== rawIssueNumbers.length ||
-      sourceIssueNumbers.some(
-        number => !Number.isSafeInteger(number) || number <= 0
-      )
-    ) {
+    const hasValidSourceMarker =
+      sourceMarker?.version === 1 &&
+      sourceIssueNumbers.length > 0 &&
+      sourceIssueNumbers.length === rawIssueNumbers.length &&
+      sourceIssueNumbers.every(
+        number => Number.isSafeInteger(number) && number > 0
+      );
+    if ((!allowLegacy || sourceMarker) && !hasValidSourceMarker) {
       throw new Error(
         `Source PR #${sourcePrNumber} must contain a valid Radar source marker.`
       );
     }
     if (
+      hasValidSourceMarker &&
       sourceIssueNumbers.some(
         issueNumber => !consolidationIssueNumbers.includes(issueNumber)
       )
@@ -1319,7 +1331,7 @@ async function validateConsolidationSourcePulls(
       );
     }
     const comparison = await github(
-      `/compare/${sourcePull.head.sha}...${mergeSha}`,
+      `/compare/${sourcePull.head.sha}...${containmentSha}`,
       {}
     );
     if (!['ahead', 'identical'].includes(comparison?.status)) {
@@ -1342,21 +1354,24 @@ async function validateConsolidationSourcePulls(
 async function closeConsolidationSourcePulls(
   sourcePulls,
   consolidationPull,
-  mergeSha
+  mergeSha,
+  options
 ) {
+  const auditAlreadyClosed = options?.auditAlreadyClosed !== false;
   const closed = [];
   const alreadyClosed = [];
   for (const sourcePull of sourcePulls) {
     const sourcePrNumber = Number(sourcePull.number);
+    if (sourcePull.state !== 'open') {
+      alreadyClosed.push(sourcePrNumber);
+      if (!auditAlreadyClosed) continue;
+    }
     await addCommentOnce(
       sourcePrNumber,
       `Closed because it was included in merged consolidation PR #${consolidationPull.number} at merge commit \`${mergeSha}\`.`,
       `consolidation:${consolidationPull.number}:${mergeSha}:source-pr:${sourcePrNumber}`
     );
-    if (sourcePull.state !== 'open') {
-      alreadyClosed.push(sourcePrNumber);
-      continue;
-    }
+    if (sourcePull.state !== 'open') continue;
     await github(`/pulls/${sourcePrNumber}`, {
       method: 'PATCH',
       body: JSON.stringify({ state: 'closed' }),
@@ -1366,8 +1381,18 @@ async function closeConsolidationSourcePulls(
   return { closed, alreadyClosed };
 }
 
-export async function consolidationMerged(event) {
+async function commitTreeSha(commitSha) {
+  const commit = await github(`/commits/${commitSha}`, {});
+  const treeSha = commit?.commit?.tree?.sha;
+  if (!/^[0-9a-f]{40}$/.test(String(treeSha))) {
+    throw new Error(`Commit ${commitSha} does not expose a valid tree.`);
+  }
+  return treeSha;
+}
+
+export async function consolidationMerged(event, options) {
   const pull = event.pull_request;
+  const allowLegacy = options?.allowLegacy === true;
   if (!pull?.merged) return { skipped: 'pull-request-not-merged' };
   const untrustedManifest = readMarker(pull.body, CONTRACT.consolidationMarker);
   if (!untrustedManifest) return { skipped: 'not-a-radar-consolidation' };
@@ -1383,24 +1408,46 @@ export async function consolidationMerged(event) {
   );
   const { issueNumbers, sourcePrNumbers } = validateConsolidationManifest(
     event,
-    issues
+    issues,
+    options
   );
   const sourcePulls = await Promise.all(
     sourcePrNumbers.map(sourcePrNumber =>
       github(`/pulls/${sourcePrNumber}`, {})
     )
   );
+  let containmentSha = mergeSha;
+  if (allowLegacy) {
+    const reviewedHeadSha = pull.head?.sha;
+    if (!/^[0-9a-f]{40}$/.test(String(reviewedHeadSha))) {
+      throw new Error(
+        'Legacy Radar consolidation does not expose a valid reviewed head.'
+      );
+    }
+    const [mergeTreeSha, reviewedHeadTreeSha] = await Promise.all([
+      commitTreeSha(mergeSha),
+      commitTreeSha(reviewedHeadSha),
+    ]);
+    if (mergeTreeSha !== reviewedHeadTreeSha) {
+      throw new Error(
+        'Legacy Radar consolidation merge does not preserve the reviewed tree.'
+      );
+    }
+    containmentSha = reviewedHeadSha;
+  }
   await validateConsolidationSourcePulls(
     sourcePulls,
     sourcePrNumbers,
     issueNumbers,
     pull.number,
-    mergeSha
+    mergeSha,
+    { ...options, containmentSha }
   );
   const sourcePullRequests = await closeConsolidationSourcePulls(
     sourcePulls,
     pull,
-    mergeSha
+    mergeSha,
+    allowLegacy ? { auditAlreadyClosed: false } : undefined
   );
   for (const issueNumber of issueNumbers) {
     await addCommentOnce(
@@ -1433,9 +1480,12 @@ export async function reconcileConsolidation(pullRequestNumber) {
   if (pull.state !== 'closed' || !pull.merged_at) {
     return { skipped: 'pull-request-not-merged', pullRequest: number };
   }
-  return consolidationMerged({
-    pull_request: { ...pull, merged: true },
-  });
+  return consolidationMerged(
+    {
+      pull_request: { ...pull, merged: true },
+    },
+    { allowLegacy: true }
+  );
 }
 
 async function commitIncluded(mergeSha, releaseSha) {
@@ -1588,35 +1638,35 @@ async function main() {
     return;
   }
   if (command === 'enrich') {
-    const input = JSON.parse(await readFile(0, 'utf8'));
+    const input = readJsonStdin();
     process.stdout.write(
       `${JSON.stringify(await enrichIssue(input), null, 2)}\n`
     );
     return;
   }
   if (command === 'acknowledge') {
-    const input = JSON.parse(await readFile(0, 'utf8'));
+    const input = readJsonStdin();
     process.stdout.write(
       `${JSON.stringify(await acknowledgeAgentPass(input), null, 2)}\n`
     );
     return;
   }
   if (command === 'deduplicate') {
-    const input = JSON.parse(await readFile(0, 'utf8'));
+    const input = readJsonStdin();
     process.stdout.write(
       `${JSON.stringify(await reconcileDuplicate(input), null, 2)}\n`
     );
     return;
   }
   if (command === 'consolidation-merged') {
-    const event = JSON.parse(await readFile(0, 'utf8'));
+    const event = readJsonStdin();
     process.stdout.write(
       `${JSON.stringify(await consolidationMerged(event), null, 2)}\n`
     );
     return;
   }
   if (command === 'consolidation-reconcile') {
-    const input = JSON.parse(await readFile(0, 'utf8'));
+    const input = readJsonStdin();
     process.stdout.write(
       `${JSON.stringify(
         await reconcileConsolidation(input.pullRequestNumber),

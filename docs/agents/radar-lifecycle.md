@@ -47,7 +47,10 @@ merge updates, and production-release closure.
   consolidation merge, the trusted lifecycle verifies that each listed source
   head is contained in the merge commit, comments on it once, and closes it.
   Source PRs remain open while the consolidation PR is open. The
-  `consolidation-reconcile` command repairs a missed post-merge event.
+  `consolidation-reconcile` command repairs a missed post-merge event. For a
+  historical squash merge, it additionally requires the final merge tree to
+  equal the reviewed consolidation head and verifies still-open source heads
+  against that reviewed head; already-closed source PRs are left untouched.
 
 ## Radar presentation contract
 
