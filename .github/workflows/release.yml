@@ -9,6 +9,11 @@ on:
         description: Tag used for a non-publishing release build
         required: true
         type: string
+      radar_only:
+        description: Recover Radar issue closure for an existing published release
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -30,6 +35,7 @@ env:
 jobs:
   sentry-release:
     name: Register Sentry releases
+    if: ${{ github.event_name == 'release' || inputs.radar_only != true }}
     runs-on: ubuntu-latest
     environment: release
     steps:
@@ -90,6 +96,7 @@ jobs:
 
   docker-backend-amd64:
     name: Build backend image (amd64)
+    if: ${{ github.event_name == 'release' || inputs.radar_only != true }}
     needs: [sentry-release, build-macos, build-android-wear]
     runs-on: ubuntu-latest
     environment: release
@@ -126,6 +133,7 @@ jobs:
 
   docker-backend-arm64:
     name: Build backend image (arm64)
+    if: ${{ github.event_name == 'release' || inputs.radar_only != true }}
     needs: [sentry-release, build-macos, build-android-wear]
     runs-on: ubuntu-24.04-arm
     environment: release
@@ -193,6 +201,7 @@ jobs:
 
   build-macos:
     name: Build ARM64 macOS app
+    if: ${{ github.event_name == 'release' || inputs.radar_only != true }}
     needs: sentry-release
     runs-on: macos-latest
     environment: release
@@ -266,6 +275,7 @@ jobs:
 
   build-android-wear:
     name: Build Android and Wear OS apps
+    if: ${{ github.event_name == 'release' || inputs.radar_only != true }}
     needs: sentry-release
     runs-on: ubuntu-latest
     environment: release
@@ -456,7 +466,7 @@ jobs:
     environment: release
     permissions:
       contents: read
-      issues: read
+      issues: write
     steps:
       - name: Check out released source
         uses: actions/checkout@v7
@@ -480,3 +490,41 @@ jobs:
           RELEASE_URL: ${{ github.event.release.html_url }}
           RELEASE_SHA: ${{ github.sha }}
         run: node scripts/radar-lifecycle.mjs release
+
+  release-radar-issues-recovery:
+    name: Recover Radar issue release closure
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.radar_only == true }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out released source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_tag }}
+
+      - name: Verify release tag
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: git rev-parse --verify "${RELEASE_TAG}^{commit}" >/dev/null
+
+      - name: Mint Pomi Radar bot token
+        id: radar-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.POMI_RADAR_APP_ID }}
+          private-key: ${{ secrets.POMI_RADAR_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: pomi
+
+      - name: Close included canonical issues and resolve Sentry groups
+        env:
+          GITHUB_TOKEN: ${{ steps.radar-token.outputs.token }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_URL: https://github.com/${{ github.repository }}/releases/tag/${{ inputs.release_tag }}
+        run: |
+          export RELEASE_SHA="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          node scripts/radar-lifecycle.mjs release

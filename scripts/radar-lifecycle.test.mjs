@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import {
   acknowledgeAgentPass,
@@ -19,6 +21,8 @@ import {
   readableTitleProblems,
   readMarker,
   reconcileDuplicate,
+  reconcileConsolidation,
+  releaseReadyIssues,
   resolveSentryGroup,
   selectActionableIssues,
   selectEnrichmentIssues,
@@ -142,6 +146,210 @@ test('consolidation manifests require bot authorship and eligible Radar issues',
       ]),
     /not an eligible in-review Radar issue/
   );
+});
+
+test('legacy squash consolidations require a reviewed tree and close only contained open sources', async () => {
+  const reviewedHeadSha = 'b'.repeat(40);
+  const event = consolidationEvent({
+    user: { login: 'NeoHuncho' },
+    head: {
+      ref: 'radar/consolidation-test',
+      repo: { full_name: 'Host-It-Labs/pomi' },
+      sha: reviewedHeadSha,
+    },
+    body: marker('pomi-radar-consolidation:v1', {
+      version: 1,
+      issues: [33],
+      sourcePrs: [44, 45],
+    }),
+  });
+  const sourcePulls = [
+    {
+      number: 44,
+      state: 'open',
+      user: { login: 'contributor' },
+      body: marker('pomi-radar-source:v1', {
+        version: 1,
+        track: 'feature',
+        issues: [33],
+      }),
+      base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+      head: {
+        sha: 'c'.repeat(40),
+        repo: { full_name: 'Host-It-Labs/pomi' },
+      },
+    },
+    {
+      number: 45,
+      state: 'open',
+      user: { login: 'contributor' },
+      body: 'Explicitly listed maintenance source',
+      base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+      head: {
+        sha: 'd'.repeat(40),
+        repo: { full_name: 'Host-It-Labs/pomi' },
+      },
+    },
+  ];
+  await withFakeConsolidationGithub(
+    {
+      event,
+      issue: {
+        number: 33,
+        state: 'open',
+        body: marker('pomi-radar:v1', { version: 1 }),
+        labels: [{ name: 'radar:feature' }, { name: 'radar:accepted' }],
+      },
+      sourcePulls,
+      comparisonStatus: 'ahead',
+      commitTreeSha: 'e'.repeat(40),
+    },
+    async (state, currentEvent) => {
+      const result = await consolidationMerged(currentEvent, {
+        allowLegacy: true,
+      });
+      assert.deepEqual(result.sourcePullRequests, {
+        closed: [44, 45],
+        alreadyClosed: [],
+      });
+      assert.equal(state.pulls.get(44).state, 'closed');
+      assert.equal(state.pulls.get(45).state, 'closed');
+      assert.deepEqual(
+        state.issues.get(33).labels.map(label => label.name),
+        ['radar:feature', 'radar:ready-for-release']
+      );
+    }
+  );
+});
+
+test('legacy reconciliation counts issues from already-closed marked sources', async () => {
+  const event = consolidationEvent({
+    user: { login: 'NeoHuncho' },
+    head: {
+      ref: 'radar/consolidation-test',
+      repo: { full_name: 'Host-It-Labs/pomi' },
+      sha: 'b'.repeat(40),
+    },
+    body: marker('pomi-radar-consolidation:v1', {
+      version: 1,
+      issues: [33],
+      sourcePrs: [44],
+    }),
+  });
+  const sourcePulls = [
+    {
+      number: 44,
+      state: 'closed',
+      user: { login: 'contributor' },
+      body: marker('pomi-radar-source:v1', {
+        version: 1,
+        track: 'feature',
+        issues: [33],
+      }),
+      base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+      head: {
+        sha: 'c'.repeat(40),
+        repo: { full_name: 'Host-It-Labs/pomi' },
+      },
+    },
+  ];
+  await withFakeConsolidationGithub(
+    {
+      event,
+      issue: {
+        number: 33,
+        state: 'open',
+        body: marker('pomi-radar:v1', { version: 1 }),
+        labels: [{ name: 'radar:feature' }, { name: 'radar:accepted' }],
+      },
+      sourcePulls,
+      comparisonStatus: 'diverged',
+      commitTreeSha: 'e'.repeat(40),
+    },
+    async (state, currentEvent) => {
+      const result = await consolidationMerged(currentEvent, {
+        allowLegacy: true,
+      });
+      assert.deepEqual(result.sourcePullRequests, {
+        closed: [],
+        alreadyClosed: [44],
+      });
+      assert.equal(state.comments.get(44).length, 0);
+      assert.deepEqual(
+        state.issues.get(33).labels.map(label => label.name),
+        ['radar:feature', 'radar:ready-for-release']
+      );
+    }
+  );
+});
+
+test('reconciliation keeps the strict path for normal non-squash merges', async () => {
+  const event = consolidationEvent({
+    state: 'closed',
+    merged_at: '2026-08-25T20:40:08Z',
+    head: {
+      ref: 'radar/consolidation-test',
+      repo: { full_name: 'Host-It-Labs/pomi' },
+      sha: 'b'.repeat(40),
+    },
+  });
+  const sourcePulls = [
+    {
+      number: 44,
+      state: 'open',
+      user: { login: 'pomi-radar[bot]' },
+      body: marker('pomi-radar-source:v1', {
+        version: 1,
+        track: 'feature',
+        issues: [33],
+      }),
+      base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+      head: {
+        sha: 'c'.repeat(40),
+        repo: { full_name: 'Host-It-Labs/pomi' },
+      },
+    },
+  ];
+  await withFakeConsolidationGithub(
+    {
+      event,
+      issue: {
+        number: 33,
+        state: 'open',
+        body: marker('pomi-radar:v1', { version: 1 }),
+        labels: [{ name: 'radar:feature' }, { name: 'radar:in-review' }],
+      },
+      sourcePulls,
+      comparisonStatus: 'ahead',
+    },
+    async (state, currentEvent) => {
+      const result = await reconcileConsolidation(99);
+      assert.deepEqual(result.sourcePullRequests, {
+        closed: [44],
+        alreadyClosed: [],
+      });
+      assert.equal(state.pulls.get(44).state, 'closed');
+      assert.equal(state.comments.get(44).length, 1);
+      assert.equal(currentEvent.pull_request.number, 99);
+    }
+  );
+});
+
+test('lifecycle JSON commands read standard input with the Node runtime', () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      fileURLToPath(new URL('./radar-lifecycle.mjs', import.meta.url)),
+      'consolidation-reconcile',
+    ],
+    {
+      input: '{"pullRequestNumber":0}\n',
+      encoding: 'utf8',
+    }
+  );
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /positive consolidation pull request number/);
+  assert.doesNotMatch(result.stderr, /path.*number.*0/);
 });
 
 test('merged consolidations close contained source PRs and retry idempotently', async () => {
@@ -411,6 +619,82 @@ test('unexpected Sentry resolution failures remain fatal', async () => {
   }
 });
 
+test('release closure verifies the published release before reading Radar issues', async () => {
+  const previousFetch = globalThis.fetch;
+  const previousToken = process.env.GITHUB_TOKEN;
+  const requests = [];
+  process.env.GITHUB_TOKEN = 'test-token';
+  globalThis.fetch = async input => {
+    const url = new URL(String(input));
+    requests.push(url.pathname);
+    if (url.pathname.endsWith('/releases/tags/0.1.1'))
+      return globalThis.Response.json({
+        tag_name: '0.1.1',
+        draft: false,
+        prerelease: false,
+      });
+    if (url.pathname.endsWith('/issues')) return globalThis.Response.json([]);
+    return globalThis.Response.json(
+      { message: 'unexpected request' },
+      { status: 500 }
+    );
+  };
+  try {
+    assert.deepEqual(
+      await releaseReadyIssues({
+        releaseTag: '0.1.1',
+        releaseUrl: 'https://github.com/Host-It-Labs/pomi/releases/tag/0.1.1',
+        releaseSha: 'a'.repeat(40),
+      }),
+      { released: [] }
+    );
+    assert.deepEqual(requests, [
+      '/repos/Host-It-Labs/pomi/releases/tags/0.1.1',
+      '/repos/Host-It-Labs/pomi/issues',
+    ]);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousToken === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = previousToken;
+  }
+});
+
+test('release closure refuses prereleases before mutating Radar issues', async () => {
+  const previousFetch = globalThis.fetch;
+  const previousToken = process.env.GITHUB_TOKEN;
+  let issueRequestCount = 0;
+  process.env.GITHUB_TOKEN = 'test-token';
+  globalThis.fetch = async input => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith('/releases/tags/0.1.2'))
+      return globalThis.Response.json({
+        tag_name: '0.1.2',
+        draft: false,
+        prerelease: true,
+      });
+    if (url.pathname.endsWith('/issues')) issueRequestCount += 1;
+    return globalThis.Response.json(
+      { message: 'unexpected request' },
+      { status: 500 }
+    );
+  };
+  try {
+    await assert.rejects(
+      releaseReadyIssues({
+        releaseTag: '0.1.2',
+        releaseUrl: 'https://github.com/Host-It-Labs/pomi/releases/tag/0.1.2',
+        releaseSha: 'a'.repeat(40),
+      }),
+      /published, non-prerelease GitHub Release/
+    );
+    assert.equal(issueRequestCount, 0);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousToken === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = previousToken;
+  }
+});
+
 const report = {
   number: 20,
   createdAt: '2026-08-07T08:00:00Z',
@@ -553,18 +837,19 @@ async function withFakeGithubIssues(initialIssues, run, options = {}) {
 }
 
 async function withFakeConsolidationGithub(
-  { event, issue, sourcePulls, comparisonStatus },
+  { event, issue, sourcePulls, comparisonStatus, commitTreeSha },
   run
 ) {
   const previousFetch = globalThis.fetch;
   const previousToken = process.env.GITHUB_TOKEN;
   const issues = new Map([[issue.number, globalThis.structuredClone(issue)]]);
-  const pulls = new Map(
-    sourcePulls.map(sourcePull => [
+  const pulls = new Map([
+    [event.pull_request.number, globalThis.structuredClone(event.pull_request)],
+    ...sourcePulls.map(sourcePull => [
       sourcePull.number,
       globalThis.structuredClone(sourcePull),
-    ])
-  );
+    ]),
+  ]);
   const comments = new Map(
     [issue.number, ...sourcePulls.map(sourcePull => sourcePull.number)].map(
       number => [number, []]
@@ -605,6 +890,10 @@ async function withFakeConsolidationGithub(
         return globalThis.Response.json(value);
       }
     }
+    if (url.pathname.match(/\/commits\/[0-9a-f]+$/))
+      return globalThis.Response.json({
+        commit: { tree: { sha: commitTreeSha } },
+      });
     if (url.pathname.includes('/compare/'))
       return globalThis.Response.json({ status: comparisonStatus });
     return globalThis.Response.json(
