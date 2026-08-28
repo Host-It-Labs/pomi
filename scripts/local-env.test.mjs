@@ -38,6 +38,40 @@ INVALID LINE
   );
 });
 
+test('parses quoted and wrapper-free private-key blocks without consuming the next variable', () => {
+  assert.deepEqual(
+    parseEnvironmentFile(`
+POMI_RADAR_GITHUB_APP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----
+MII=
+-----END PRIVATE KEY-----"
+GITHUB_FEEDBACK_APP_PRIVATE_KEY=base64-line
+second-base64-line
+AFTER_PEM=value
+`),
+    {
+      POMI_RADAR_GITHUB_APP_PRIVATE_KEY:
+        '-----BEGIN PRIVATE KEY-----\nMII=\n-----END PRIVATE KEY-----',
+      GITHUB_FEEDBACK_APP_PRIVATE_KEY: 'base64-line\nsecond-base64-line',
+      AFTER_PEM: 'value',
+    }
+  );
+});
+
+test('gives an empty environment assignment precedence over wrapper-free key data', () => {
+  assert.deepEqual(
+    parseEnvironmentFile(`
+POMI_RADAR_GITHUB_APP_PRIVATE_KEY=QUJD
+CI=
+NEXT=value
+`),
+    {
+      POMI_RADAR_GITHUB_APP_PRIVATE_KEY: 'QUJD',
+      CI: '',
+      NEXT: 'value',
+    }
+  );
+});
+
 test('existing process values take precedence over local values', () => {
   const environment = { NODE_ENV: 'test' };
   const loaded = mergeEnvironment(environment, {

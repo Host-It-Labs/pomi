@@ -6,6 +6,7 @@ import {
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { createPrivateKeyForSigning } from './github-app-private-key';
 
 type InstallationToken = {
   token?: string;
@@ -152,6 +153,8 @@ export class GitHubAppTokenService {
     const signer = createSign('RSA-SHA256');
     signer.update(unsigned);
     signer.end();
-    return `${unsigned}.${signer.sign(privateKey).toString('base64url')}`;
+    return `${unsigned}.${signer
+      .sign(createPrivateKeyForSigning(privateKey))
+      .toString('base64url')}`;
   }
 }

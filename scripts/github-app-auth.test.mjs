@@ -52,19 +52,61 @@ test('rejects a different GitHub App before authentication', () => {
   );
 });
 
-test('accepts an inline PEM private key with escaped line breaks', () => {
-  const { privateKey } = generateKeyPairSync('rsa', {
+test('accepts inline private keys in supported deployment formats', () => {
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', {
     modulusLength: 2048,
   });
   const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
-  const config = readGitHubAppConfiguration({
-    POMI_RADAR_GITHUB_APP_ID: '4675891',
-    POMI_RADAR_GITHUB_APP_INSTALLATION_ID: '155743206',
-    POMI_RADAR_GITHUB_APP_PRIVATE_KEY: pem.replaceAll('\n', '\\n'),
-  });
+  const formats = [
+    ['PEM newlines', pem],
+    ['literal newline escapes', pem.replaceAll('\n', '\\n')],
+    ['literal CRLF escapes', pem.replaceAll('\n', '\\r\\n')],
+    ['one-line PEM', pem.replaceAll('\n', '')],
+    ['double-quoted PEM', `"${pem}"`],
+    ['single-quoted PEM', `'${pem}'`],
+    [
+      'PEM without the end wrapper',
+      pem.replace(/-----END PRIVATE KEY-----\n?$/, ''),
+    ],
+    [
+      'PEM without the begin wrapper',
+      pem.replace(/^-----BEGIN PRIVATE KEY-----\n?/, ''),
+    ],
+    [
+      'PKCS#8 base64 without wrappers',
+      privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64'),
+    ],
+    [
+      'PKCS#1 base64 without wrappers',
+      privateKey.export({ type: 'pkcs1', format: 'der' }).toString('base64'),
+    ],
+  ];
 
-  assert.equal(config.privateKey, pem);
-  assert.equal(config.privateKeyPath, undefined);
+  for (const [format, value] of formats) {
+    const config = readGitHubAppConfiguration({
+      POMI_RADAR_GITHUB_APP_ID: '4675891',
+      POMI_RADAR_GITHUB_APP_INSTALLATION_ID: '155743206',
+      POMI_RADAR_GITHUB_APP_PRIVATE_KEY: value,
+    });
+    const jwt = createAppJwt({
+      appId: config.appId,
+      privateKey: config.privateKey,
+      now: Date.UTC(2026, 7, 22, 12, 0, 0),
+    });
+    const [header, payload, signature] = jwt.split('.');
+    assert.equal(
+      verify(
+        'RSA-SHA256',
+        Buffer.from(`${header}.${payload}`),
+        publicKey,
+        Buffer.from(signature, 'base64url')
+      ),
+      true,
+      format
+    );
+    assert.ok(payload);
+    assert.equal(config.privateKeyPath, undefined);
+  }
 });
 
 test('isolates Git commands from stored personal GitHub credentials', () => {

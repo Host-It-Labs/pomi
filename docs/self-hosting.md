@@ -55,9 +55,13 @@ command needed to compact the
 Firebase JSON and the read-only APNs key-file mount.
 
 Set `GITHUB_FEEDBACK_APP_PRIVATE_KEY` in the private Compose environment file to
-the GitHub App PEM contents. A double-quoted value may use `\n` for line breaks.
-Compose passes the value directly to the backend container, so protect the
-environment file with restrictive filesystem permissions and never commit it.
+the GitHub App private key. The backend accepts PEM newlines, literal `\n` or
+`\r\n` sequences, one-line PEMs, surrounding single or double quotes, and
+base64-encoded PKCS#8 or PKCS#1 RSA key material without PEM wrapper lines.
+For a Portainer environment-variable entry, use the key contents as the value;
+quotes are optional. Compose passes the value directly to the backend container,
+so protect the environment file with restrictive filesystem permissions and
+never commit it.
 
 The container applies TypeORM migrations before startup. Back up PostgreSQL and
 test restores before upgrades. The public Compose stack uses PostgreSQL 18 and
