@@ -37,8 +37,14 @@ function isEnvironmentAssignment(line) {
   return /^(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=/.test(line);
 }
 
-function isBase64Line(line) {
-  return /^[A-Za-z0-9+/]+={0,2}$/.test(line);
+function isPemEndLine(line) {
+  const candidate = line.trim();
+  const withoutQuotes = candidate.replace(/^['"]|['"]$/g, '');
+  return PEM_END.test(candidate) || PEM_END.test(withoutQuotes);
+}
+
+function hasPemEndLine(lines, startIndex) {
+  return lines.slice(startIndex).some(isPemEndLine);
 }
 
 function parsePrivateKeyValue(lines, index, key, rawValue) {
@@ -63,7 +69,8 @@ function parsePrivateKeyValue(lines, index, key, rawValue) {
   for (; nextIndex < lines.length; nextIndex += 1) {
     const candidate = lines[nextIndex].trim();
     if (
-      (isEnvironmentAssignment(candidate) && !isBase64Line(candidate)) ||
+      (isEnvironmentAssignment(candidate) &&
+        !hasPemEndLine(lines, nextIndex)) ||
       candidate.startsWith('#')
     ) {
       break;
