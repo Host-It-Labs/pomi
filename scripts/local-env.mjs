@@ -17,6 +17,10 @@ export const defaultLocalEnvironmentFile = environmentFiles.local;
 
 const PEM_BEGIN = /^-----BEGIN [A-Z0-9 ]+-----$/;
 const PEM_END = /^-----END [A-Z0-9 ]+-----$/;
+const PRIVATE_KEY_ENVIRONMENT_KEYS = new Set([
+  'GITHUB_FEEDBACK_APP_PRIVATE_KEY',
+  'POMI_RADAR_GITHUB_APP_PRIVATE_KEY',
+]);
 
 function unquote(value) {
   if (value.length >= 2) {
@@ -27,6 +31,64 @@ function unquote(value) {
     }
   }
   return value;
+}
+
+function isEnvironmentAssignment(line) {
+  return /^(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=/.test(line);
+}
+
+function isBase64Line(line) {
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(line);
+}
+
+function parsePrivateKeyValue(lines, index, key, rawValue) {
+  const first = rawValue[0];
+  const quote = first === '"' || first === "'" ? first : undefined;
+  const firstLine = quote ? rawValue.slice(1) : rawValue;
+  const closesOnFirstLine = quote && firstLine.endsWith(quote);
+  const valueWithoutQuote = closesOnFirstLine
+    ? firstLine.slice(0, -1).trim()
+    : firstLine;
+  const isPrivateKey = PRIVATE_KEY_ENVIRONMENT_KEYS.has(key);
+  const startsPemBlock = PEM_BEGIN.test(valueWithoutQuote.trim());
+  if (
+    closesOnFirstLine ||
+    (!startsPemBlock && (!isPrivateKey || !valueWithoutQuote.trim()))
+  ) {
+    return { value: unquote(rawValue), nextIndex: index };
+  }
+
+  const valueLines = [valueWithoutQuote.trim()];
+  let nextIndex = index + 1;
+  for (; nextIndex < lines.length; nextIndex += 1) {
+    const candidate = lines[nextIndex].trim();
+    if (
+      (isEnvironmentAssignment(candidate) && !isBase64Line(candidate)) ||
+      candidate.startsWith('#')
+    ) {
+      break;
+    }
+    if (!candidate && !quote) {
+      valueLines.push(candidate);
+      continue;
+    }
+
+    const closesQuote = quote && candidate.endsWith(quote);
+    const candidateValue = closesQuote
+      ? candidate.slice(0, -1).trim()
+      : candidate;
+    valueLines.push(candidateValue);
+    if (closesQuote || PEM_END.test(candidateValue)) {
+      if (quote && PEM_END.test(candidateValue)) {
+        const closingLine = lines[nextIndex + 1]?.trim();
+        if (closingLine === quote) nextIndex += 1;
+      }
+      nextIndex += 1;
+      break;
+    }
+  }
+
+  return { value: valueLines.join('\n'), nextIndex: nextIndex - 1 };
 }
 
 export function parseEnvironmentFile(contents) {
@@ -43,19 +105,10 @@ export function parseEnvironmentFile(contents) {
       .replace(/^export\s+/, '')
       .trim();
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
-    let value = unquote(line.slice(separator + 1).trim());
-    if (PEM_BEGIN.test(value)) {
-      const pemLines = [value];
-      for (let pemIndex = index + 1; pemIndex < lines.length; pemIndex += 1) {
-        const pemLine = lines[pemIndex].trim();
-        pemLines.push(pemLine);
-        if (PEM_END.test(pemLine)) {
-          value = pemLines.join('\n');
-          index = pemIndex;
-          break;
-        }
-      }
-    }
+    const rawValue = line.slice(separator + 1).trim();
+    const parsedValue = parsePrivateKeyValue(lines, index, key, rawValue);
+    const value = parsedValue.value;
+    index = parsedValue.nextIndex;
     values[key] = value;
   }
   return values;

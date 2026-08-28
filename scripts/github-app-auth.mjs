@@ -5,6 +5,10 @@ import { createSign } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadAutomationEnvironment, repositoryRoot } from './local-env.mjs';
+import {
+  createPrivateKeyForSigning,
+  normalizePrivateKey,
+} from './github-app-private-key.mjs';
 
 const API_BASE = 'https://api.github.com';
 const PUBLIC_REPOSITORY = 'Host-It-Labs/pomi';
@@ -28,13 +32,6 @@ function encode(value) {
   return Buffer.from(JSON.stringify(value)).toString('base64url');
 }
 
-function normalizePrivateKey(value) {
-  const trimmed = String(value).trim();
-  return trimmed.includes('\\n') && !trimmed.includes('\n')
-    ? trimmed.replaceAll('\\n', '\n')
-    : trimmed;
-}
-
 export function createAppJwt({ appId, privateKey, now = Date.now() }) {
   const timestamp = Math.floor(now / 1000);
   const header = encode({ alg: 'RS256', typ: 'JWT' });
@@ -47,7 +44,9 @@ export function createAppJwt({ appId, privateKey, now = Date.now() }) {
   const signer = createSign('RSA-SHA256');
   signer.update(unsigned);
   signer.end();
-  return `${unsigned}.${signer.sign(privateKey).toString('base64url')}`;
+  return `${unsigned}.${signer
+    .sign(createPrivateKeyForSigning(privateKey))
+    .toString('base64url')}`;
 }
 
 export async function githubRequest(
