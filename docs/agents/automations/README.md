@@ -18,6 +18,10 @@ its child and hands off through the canonical GitHub issue state. Machine-local
 project IDs and environment-file paths remain in Codex and are intentionally not
 required to restore the prompt text.
 
+Planning parents use `gpt-5.6-sol` with high reasoning. Implementation children
+use `gpt-5.6-luna` with max reasoning. All six schedules remain paused until
+their App and track preflight gates are green.
+
 | Planning parent                        | Implementation child                  | Parent cadence | Child cadence |
 | -------------------------------------- | ------------------------------------- | -------------- | ------------- |
 | `pomi-parent-feature-and-bug-planning` | `pomi-daily-feature-and-bug-requests` | 00:30, 11:30   | 01:30, 12:30  |
