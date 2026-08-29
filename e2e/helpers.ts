@@ -449,7 +449,7 @@ export class TestHelpers {
 
 export const mockUser = {
   username: 'testuser',
-  password: 'testpass123',
+  password: 'testpass1234',
   email: 'test@example.com',
 };
 
