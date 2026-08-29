@@ -169,9 +169,15 @@ export class IntentionsService {
     slugs: string[]
   ): Promise<void> {
     const uniqueSlugs = Array.from(new Set(slugs.filter(Boolean)));
-    await Promise.all(
-      uniqueSlugs.map(slug => this.incrementIntentionUsage(userId, slug))
-    );
+    if (uniqueSlugs.length === 0) return;
+
+    await this.intentionsRepository
+      .createQueryBuilder()
+      .update(Intention)
+      .set({ usageCount: () => '"usageCount" + 1' })
+      .where('"userId" = :userId', { userId })
+      .andWhere('"slug" IN (:...slugs)', { slugs: uniqueSlugs })
+      .execute();
   }
 
   async incrementSubIntentionsUsage(
@@ -202,9 +208,18 @@ export class IntentionsService {
     slugs: string[]
   ): Promise<void> {
     const uniqueSlugs = Array.from(new Set(slugs.filter(Boolean)));
-    await Promise.all(
-      uniqueSlugs.map(slug => this.decrementIntentionUsage(userId, slug))
-    );
+    if (uniqueSlugs.length === 0) return;
+
+    await this.intentionsRepository
+      .createQueryBuilder()
+      .update(Intention)
+      .set({
+        usageCount: () => 'GREATEST(0, "usageCount" - 1)',
+      })
+      .where('"userId" = :userId', { userId })
+      .andWhere('"slug" IN (:...slugs)', { slugs: uniqueSlugs })
+      .andWhere('"usageCount" > 0')
+      .execute();
   }
 
   async decrementSubIntentionsUsage(

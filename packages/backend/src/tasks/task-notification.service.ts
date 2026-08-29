@@ -58,15 +58,39 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    const tasksByUser = new Map<string, TaskEntity[]>();
+    for (const task of tasks) {
+      const userTasks = tasksByUser.get(task.userId);
+      if (userTasks) {
+        userTasks.push(task);
+      } else {
+        tasksByUser.set(task.userId, [task]);
+      }
+    }
+
+    await Promise.all(
+      Array.from(tasksByUser, ([userId, userTasks]) =>
+        this.processUserReminderTasks(userId, userTasks, now)
+      )
+    );
+  }
+
+  private async processUserReminderTasks(
+    userId: string,
+    tasks: TaskEntity[],
+    now: Date
+  ): Promise<void> {
+    let preferences: Awaited<ReturnType<PreferencesService['getPreferences']>>;
+    try {
+      preferences = await this.preferencesService.getPreferences(userId);
+      if (!preferences.tasksExtension || !preferences.notifications) return;
+    } catch {
+      this.logger.warn('Failed to process a task reminder');
+      return;
+    }
+
     for (const task of tasks) {
       try {
-        const preferences = await this.preferencesService.getPreferences(
-          task.userId
-        );
-        if (!preferences.tasksExtension || !preferences.notifications) {
-          continue;
-        }
-
         await this.sendDueReminderIfNeeded(task, now, preferences);
         await this.repeatUrgentReminderIfNeeded(task, now, preferences);
       } catch {

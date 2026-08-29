@@ -1,5 +1,5 @@
 import { TASK_PRIORITIES, TASK_STATUSES } from '@pomi/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TaskNotificationService } from '../../src/tasks/task-notification.service';
 
 type TaskRecord = Record<string, any>;
@@ -34,9 +34,18 @@ function createTask(overrides: Record<string, unknown> = {}): TaskRecord {
   };
 }
 
-function createService(tasks: TaskRecord[], preferences = createPreferences()) {
+function createService(
+  tasks: TaskRecord[],
+  preferences = createPreferences(),
+  getPreferences?: (
+    userId: string
+  ) => Promise<ReturnType<typeof createPreferences>>
+) {
   const sent: TaskRecord[] = [];
   const clientEvents: TaskRecord[] = [];
+  const getPreferencesMock = vi.fn(
+    getPreferences ?? (async (_userId: string) => preferences)
+  );
   const query = {
     where: () => query,
     andWhere: () => query,
@@ -56,7 +65,7 @@ function createService(tasks: TaskRecord[], preferences = createPreferences()) {
         if (task) Object.assign(task, updates);
       },
     } as never,
-    { getPreferences: async () => preferences } as never,
+    { getPreferences: getPreferencesMock } as never,
     {
       sendTaskNotification: async (
         title: string,
@@ -72,10 +81,82 @@ function createService(tasks: TaskRecord[], preferences = createPreferences()) {
       },
     } as never
   );
-  return { service, sent, clientEvents, preferences };
+  return { service, sent, clientEvents, preferences, getPreferencesMock };
 }
 
 describe('TaskNotificationService', () => {
+  it('reads preferences once per user and keeps each user task order isolated', async () => {
+    const tasks = [
+      createTask({
+        id: 'user-1-first',
+        userId: 'user-1',
+        priority: TASK_PRIORITIES.HIGH,
+      }),
+      createTask({
+        id: 'user-2-first',
+        userId: 'user-2',
+        priority: TASK_PRIORITIES.HIGH,
+      }),
+      createTask({
+        id: 'user-1-second',
+        userId: 'user-1',
+        priority: TASK_PRIORITIES.HIGH,
+      }),
+      createTask({
+        id: 'user-2-second',
+        userId: 'user-2',
+        priority: TASK_PRIORITIES.HIGH,
+      }),
+    ];
+    const fixture = createService(
+      tasks,
+      createPreferences({ pushNotifications: false }),
+      async () => createPreferences({ pushNotifications: false })
+    );
+
+    await fixture.service.scanDueTasks(new Date('2026-06-17T09:00:00.000Z'));
+
+    expect(fixture.getPreferencesMock).toHaveBeenCalledTimes(2);
+    expect(fixture.getPreferencesMock).toHaveBeenCalledWith('user-1');
+    expect(fixture.getPreferencesMock).toHaveBeenCalledWith('user-2');
+    expect(
+      fixture.clientEvents
+        .filter(item => item.userId === 'user-1')
+        .map(item => item.task.id)
+    ).toEqual(['user-1-first', 'user-1-second']);
+    expect(
+      fixture.clientEvents
+        .filter(item => item.userId === 'user-2')
+        .map(item => item.task.id)
+    ).toEqual(['user-2-first', 'user-2-second']);
+  });
+
+  it('continues processing other users when one preference read fails', async () => {
+    const fixture = createService(
+      [
+        createTask({ id: 'failed-user-task', userId: 'failed-user' }),
+        createTask({
+          id: 'healthy-user-task',
+          userId: 'healthy-user',
+          priority: TASK_PRIORITIES.HIGH,
+        }),
+      ],
+      createPreferences({ pushNotifications: false }),
+      async userId => {
+        if (userId === 'failed-user')
+          throw new Error('preferences unavailable');
+        return createPreferences({ pushNotifications: false });
+      }
+    );
+
+    await fixture.service.scanDueTasks(new Date('2026-06-17T09:00:00.000Z'));
+
+    expect(fixture.getPreferencesMock).toHaveBeenCalledTimes(2);
+    expect(fixture.clientEvents.map(item => item.task.id)).toEqual([
+      'healthy-user-task',
+    ]);
+  });
+
   it('skips a scan cleanly when migrations or storage are unavailable', async () => {
     const service = new TaskNotificationService(
       {
