@@ -18,6 +18,7 @@
     "radar:accepted",
     "radar:in-progress",
     "radar:in-review",
+    "radar:already-implemented",
     "radar:ready-for-release",
     "radar:blocked",
     "radar:released",
@@ -30,6 +31,7 @@
     "radar:accepted",
     "radar:in-progress",
     "radar:in-review",
+    "radar:already-implemented",
     "radar:ready-for-release",
     "radar:blocked"
   ],
@@ -42,6 +44,7 @@
       "radar:accepted",
       "radar:in-progress",
       "radar:in-review",
+      "radar:already-implemented",
       "radar:blocked"
     ],
     "requiredFields": [
@@ -70,7 +73,12 @@
   },
   "proposalAvailability": {
     "targetVisibleCount": 3,
-    "visibleLifecycle": ["radar:proposed", "radar:needs-user", "radar:blocked"]
+    "visibleLifecycle": [
+      "radar:proposed",
+      "radar:needs-user",
+      "radar:blocked",
+      "radar:already-implemented"
+    ]
   },
   "dailyFeatureAvailability": {
     "targetVisibleCount": 1,
