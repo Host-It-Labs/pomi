@@ -479,6 +479,59 @@ test('merged consolidations close contained source PRs and retry idempotently', 
   );
 });
 
+test('consolidation transitions respect another lifecycle claim for the issue', async () => {
+  const event = consolidationEvent();
+  const sourcePull = {
+    number: 44,
+    state: 'open',
+    user: { login: 'pomi-radar[bot]' },
+    body: marker('pomi-radar-source:v1', {
+      version: 1,
+      track: 'feature',
+      issues: [33],
+    }),
+    base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+    head: {
+      sha: 'b'.repeat(40),
+      repo: { full_name: 'Host-It-Labs/pomi' },
+    },
+  };
+  await withFakeConsolidationGithub(
+    {
+      event,
+      issue: {
+        number: 33,
+        state: 'open',
+        body: marker('pomi-radar:v1', { version: 1 }),
+        labels: [{ name: 'radar:feature' }, { name: 'radar:in-review' }],
+      },
+      sourcePulls: [sourcePull],
+      comparisonStatus: 'ahead',
+      comments: {
+        33: [
+          {
+            id: 1,
+            user: { login: 'pomi-radar[bot]' },
+            body: marker('pomi-radar-event:v1', {
+              id: 'already-implemented:33:pending',
+              expectedRevision: 0,
+              claimScope: 'radar:in-review:',
+            }),
+          },
+        ],
+      },
+    },
+    async (state, currentEvent) => {
+      await assert.rejects(
+        consolidationMerged(currentEvent),
+        /changed while the consolidation lifecycle transition was being recorded/
+      );
+      assert.equal(state.pulls.get(44).state, 'open');
+      assert.equal(state.comments.get(33).length, 1);
+    }
+  );
+});
+
 test('merged consolidations refuse to close a source outside merge ancestry', async () => {
   const event = consolidationEvent();
   const sourcePull = {
@@ -854,6 +907,7 @@ async function withFakeGithubIssues(initialIssues, run, options = {}) {
     failFinalDuplicatePatch: options.failFinalDuplicatePatch === true,
     failFinalAlreadyImplementedPatch:
       options.failFinalAlreadyImplementedPatch === true,
+    failConsolidationPatch: options.failConsolidationPatch === true,
   };
   process.env.GITHUB_TOKEN = 'test-token';
   globalThis.fetch = async (input, init = {}) => {
@@ -869,9 +923,7 @@ async function withFakeGithubIssues(initialIssues, run, options = {}) {
       return globalThis.Response.json(label);
     }
     if (url.pathname.endsWith('/pulls') && method === 'GET')
-      return globalThis.Response.json(
-        [...state.pulls.values()].filter(pull => pull.state === 'open')
-      );
+      return globalThis.Response.json([...state.pulls.values()]);
     const match = url.pathname.match(/\/(issues|pulls)\/(\d+)(\/comments)?$/);
     if (!match)
       return globalThis.Response.json(
@@ -885,7 +937,11 @@ async function withFakeGithubIssues(initialIssues, run, options = {}) {
       return globalThis.Response.json(state.comments.get(issueNumber) ?? []);
     if (match[3] && method === 'POST') {
       const comments = state.comments.get(issueNumber) ?? [];
-      const comment = { id: comments.length + 1, ...JSON.parse(init.body) };
+      const comment = {
+        id: comments.length + 1,
+        user: { login: 'pomi-radar[bot]' },
+        ...JSON.parse(init.body),
+      };
       comments.push(comment);
       state.comments.set(issueNumber, comments);
       const value = collection.get(issueNumber);
@@ -919,6 +975,18 @@ async function withFakeGithubIssues(initialIssues, run, options = {}) {
         state.failFinalAlreadyImplementedPatch = false;
         return globalThis.Response.json(
           { message: 'Injected final already-implemented patch failure' },
+          { status: 500 }
+        );
+      }
+      if (
+        state.failConsolidationPatch &&
+        resource === 'pulls' &&
+        changes.state === 'closed' &&
+        changes.body?.includes('pomi-radar-consolidation:v1')
+      ) {
+        state.failConsolidationPatch = false;
+        return globalThis.Response.json(
+          { message: 'Injected consolidation patch failure' },
           { status: 500 }
         );
       }
@@ -956,6 +1024,7 @@ async function withFakeConsolidationGithub(
     comparisonAheadBy,
     commitTreeSha,
     commitParents,
+    comments: initialComments,
   },
   run
 ) {
@@ -974,6 +1043,8 @@ async function withFakeConsolidationGithub(
       number => [number, []]
     )
   );
+  for (const [number, values] of Object.entries(initialComments ?? {}))
+    comments.set(Number(number), globalThis.structuredClone(values));
   const state = { issues, pulls, comments, patches: [] };
   process.env.GITHUB_TOKEN = 'test-token';
   globalThis.fetch = async (input, init = {}) => {
@@ -988,7 +1059,11 @@ async function withFakeConsolidationGithub(
         return globalThis.Response.json(comments.get(number) ?? []);
       if (match[3] && method === 'POST') {
         const values = comments.get(number) ?? [];
-        const comment = { id: values.length + 1, ...JSON.parse(init.body) };
+        const comment = {
+          id: values.length + 1,
+          user: { login: 'pomi-radar[bot]' },
+          ...JSON.parse(init.body),
+        };
         values.push(comment);
         comments.set(number, values);
         return globalThis.Response.json(comment);
@@ -1258,15 +1333,101 @@ test('already-implemented rejects a competing verification claim for the same is
         54: [
           {
             id: 1,
+            user: { login: 'pomi-radar[bot]' },
             body: marker('pomi-radar-event:v1', {
               id: 'already-implemented:54:other-verification',
               expectedRevision: 123,
+              claimScope: 'radar:in-review:',
             }),
           },
         ],
       },
     }
   );
+});
+
+test('already-implemented ignores verification claims from other authors', async () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    updated_at: '2026-08-29T09:00:00Z',
+    labels: [{ name: 'radar:security' }, { name: 'radar:in-review' }],
+    body: marker('pomi-radar:v1', { version: 1 }),
+  };
+  await withFakeGithubIssues(
+    [issue],
+    async state => {
+      await markAlreadyImplemented({
+        issueNumber: 54,
+        summary: 'The existing protection covers the reported behavior.',
+        evidence: 'The shared request boundary rejects unsafe input.',
+        validation: 'Focused invalid-input tests pass.',
+        gap: 'No material gap found.',
+        verifiedAt: '2026-08-29T10:00:00Z',
+      });
+      assert.equal(state.comments.get(54).length, 2);
+      assert.equal(state.comments.get(54)[0].user.login, 'contributor');
+      assert.equal(state.comments.get(54)[1].user.login, 'pomi-radar[bot]');
+      assert.deepEqual(
+        state.issues.get(54).labels.map(label => label.name),
+        ['radar:security', 'radar:already-implemented']
+      );
+    },
+    {
+      comments: {
+        54: [
+          {
+            id: 1,
+            user: { login: 'contributor' },
+            body: marker('pomi-radar-event:v1', {
+              id: 'already-implemented:54:forged',
+              expectedRevision: 123,
+              claimScope: 'radar:in-review:',
+            }),
+          },
+        ],
+      },
+    }
+  );
+});
+
+test('already-implemented can verify an issue again after reconsideration', async () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    updated_at: '2026-08-29T09:00:00Z',
+    labels: [{ name: 'radar:security' }, { name: 'radar:in-review' }],
+    body: marker('pomi-radar:v1', { version: 1 }),
+  };
+  await withFakeGithubIssues([issue], async state => {
+    await markAlreadyImplemented({
+      issueNumber: 54,
+      summary: 'The existing protection covers the reported behavior.',
+      evidence: 'The shared request boundary rejects unsafe input.',
+      validation: 'Focused invalid-input tests pass.',
+      gap: 'No material gap found.',
+      verifiedAt: '2026-08-29T10:00:00Z',
+    });
+    state.issues.get(54).labels = [
+      { name: 'radar:security' },
+      { name: 'radar:accepted' },
+    ];
+    const result = await markAlreadyImplemented({
+      issueNumber: 54,
+      summary: 'The existing protection still covers the behavior.',
+      evidence: 'The shared request boundary still rejects unsafe input.',
+      validation: 'The focused regression suite still passes.',
+      gap: 'No material gap found.',
+      verifiedAt: '2026-08-29T11:00:00Z',
+    });
+    assert.equal(result.updated, true);
+    assert.equal(
+      readMarker(state.issues.get(54).body, 'pomi-radar:v1')
+        .implementationVerification.summary,
+      'The existing protection still covers the behavior.'
+    );
+    assert.equal(state.comments.get(54).length, 2);
+  });
 });
 
 test('already-implemented detaches grouped source PRs and closes empty ones', async () => {
@@ -1304,8 +1465,8 @@ test('already-implemented detaches grouped source PRs and closes empty ones', as
         detached: [194],
       });
       assert.deepEqual(grouped.consolidationPullRequests, {
-        closed: [],
-        detached: [196],
+        closed: [196],
+        detached: [],
       });
       assert.deepEqual(
         readMarker(state.pulls.get(194).body, 'pomi-radar-source:v1').issues,
@@ -1316,7 +1477,7 @@ test('already-implemented detaches grouped source PRs and closes empty ones', as
         readMarker(state.pulls.get(196).body, 'pomi-radar-consolidation:v1'),
         { version: 1, issues: [55], sourcePrs: [194] }
       );
-      assert.equal(state.pulls.get(196).state, 'open');
+      assert.equal(state.pulls.get(196).state, 'closed');
 
       const empty = await markAlreadyImplemented({
         issueNumber: 78,
@@ -1373,6 +1534,83 @@ test('already-implemented detaches grouped source PRs and closes empty ones', as
             version: 1,
             issues: [78],
             sourcePrs: [195],
+          }),
+        },
+      ],
+    }
+  );
+});
+
+test('already-implemented retries remove a source PR closed before consolidation cleanup', async () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    updated_at: '2026-08-29T09:00:00Z',
+    labels: [{ name: 'radar:security' }, { name: 'radar:in-review' }],
+    body: marker('pomi-radar:v1', { version: 1 }),
+  };
+  const verification = {
+    summary: 'The existing protection covers the reported behavior.',
+    evidence: 'The shared request boundary rejects unsafe input.',
+    validation: 'Focused invalid-input tests pass.',
+    gap: 'No material gap found.',
+    verifiedAt: '2026-08-29T10:00:00Z',
+  };
+  await withFakeGithubIssues(
+    [issue],
+    async state => {
+      await assert.rejects(
+        markAlreadyImplemented({ issueNumber: 54, ...verification }),
+        /GitHub PATCH \/pulls\/196 failed: 500/
+      );
+      assert.equal(state.pulls.get(194).state, 'closed');
+      assert.equal(state.pulls.get(196).state, 'open');
+
+      const result = await markAlreadyImplemented({
+        issueNumber: 54,
+        ...verification,
+      });
+      assert.deepEqual(result.consolidationPullRequests, {
+        closed: [196],
+        detached: [],
+      });
+      assert.deepEqual(
+        readMarker(state.pulls.get(196).body, 'pomi-radar-consolidation:v1'),
+        { version: 1, issues: [55], sourcePrs: [195] }
+      );
+      assert.equal(state.pulls.get(196).state, 'closed');
+    },
+    {
+      failConsolidationPatch: true,
+      pulls: [
+        {
+          number: 194,
+          state: 'open',
+          user: { login: 'pomi-radar[bot]' },
+          body: marker('pomi-radar-source:v1', {
+            version: 1,
+            track: 'security',
+            issues: [54],
+          }),
+        },
+        {
+          number: 195,
+          state: 'open',
+          user: { login: 'pomi-radar[bot]' },
+          body: marker('pomi-radar-source:v1', {
+            version: 1,
+            track: 'security',
+            issues: [55],
+          }),
+        },
+        {
+          number: 196,
+          state: 'open',
+          user: { login: 'pomi-radar[bot]' },
+          body: marker('pomi-radar-consolidation:v1', {
+            version: 1,
+            issues: [54, 55],
+            sourcePrs: [194, 195],
           }),
         },
       ],
