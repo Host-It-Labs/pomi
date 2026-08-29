@@ -832,6 +832,12 @@ async function withFakeGithubIssues(initialIssues, run, options = {}) {
   const previousFetch = globalThis.fetch;
   const previousToken = process.env.GITHUB_TOKEN;
   const sourcePulls = options.pulls ?? [];
+  const comments = new Map(
+    [...initialIssues, ...sourcePulls].map(item => [item.number, []])
+  );
+  for (const [number, values] of Object.entries(options.comments ?? {})) {
+    comments.set(Number(number), globalThis.structuredClone(values));
+  }
   const state = {
     issues: new Map(
       initialIssues.map(issue => [
@@ -843,9 +849,7 @@ async function withFakeGithubIssues(initialIssues, run, options = {}) {
       sourcePulls.map(pull => [pull.number, globalThis.structuredClone(pull)])
     ),
     labels: new Set(options.labels ?? []),
-    comments: new Map(
-      [...initialIssues, ...sourcePulls].map(item => [item.number, []])
-    ),
+    comments,
     patches: [],
     failFinalDuplicatePatch: options.failFinalDuplicatePatch === true,
     failFinalAlreadyImplementedPatch:
@@ -1221,6 +1225,50 @@ test('already-implemented retries reuse their original claim after a final patch
   );
 });
 
+test('already-implemented rejects a competing verification claim for the same issue', async () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    updated_at: '2026-08-29T09:00:00Z',
+    labels: [{ name: 'radar:security' }, { name: 'radar:in-review' }],
+    body: marker('pomi-radar:v1', { version: 1 }),
+  };
+  await withFakeGithubIssues(
+    [issue],
+    async state => {
+      await assert.rejects(
+        markAlreadyImplemented({
+          issueNumber: 54,
+          summary: 'A competing verification is already in progress.',
+          evidence: 'An existing claim comment owns this issue transition.',
+          validation: 'The claim ownership guard was exercised.',
+          gap: 'No material gap found.',
+          verifiedAt: '2026-08-29T10:00:00Z',
+        }),
+        /changed while implementation verification was being recorded/
+      );
+      assert.equal(state.comments.get(54).length, 1);
+      assert.deepEqual(
+        state.issues.get(54).labels.map(label => label.name),
+        ['radar:security', 'radar:in-review']
+      );
+    },
+    {
+      comments: {
+        54: [
+          {
+            id: 1,
+            body: marker('pomi-radar-event:v1', {
+              id: 'already-implemented:54:other-verification',
+              expectedRevision: 123,
+            }),
+          },
+        ],
+      },
+    }
+  );
+});
+
 test('already-implemented detaches grouped source PRs and closes empty ones', async () => {
   const verification = {
     summary: 'The current protection already covers the reported behavior.',
@@ -1255,11 +1303,20 @@ test('already-implemented detaches grouped source PRs and closes empty ones', as
         closed: [],
         detached: [194],
       });
+      assert.deepEqual(grouped.consolidationPullRequests, {
+        closed: [],
+        detached: [196],
+      });
       assert.deepEqual(
         readMarker(state.pulls.get(194).body, 'pomi-radar-source:v1').issues,
         [55]
       );
       assert.equal(state.pulls.get(194).state, 'open');
+      assert.deepEqual(
+        readMarker(state.pulls.get(196).body, 'pomi-radar-consolidation:v1'),
+        { version: 1, issues: [55], sourcePrs: [194] }
+      );
+      assert.equal(state.pulls.get(196).state, 'open');
 
       const empty = await markAlreadyImplemented({
         issueNumber: 78,
@@ -1269,7 +1326,12 @@ test('already-implemented detaches grouped source PRs and closes empty ones', as
         closed: [195],
         detached: [],
       });
+      assert.deepEqual(empty.consolidationPullRequests, {
+        closed: [197],
+        detached: [],
+      });
       assert.equal(state.pulls.get(195).state, 'closed');
+      assert.equal(state.pulls.get(197).state, 'closed');
     },
     {
       pulls: [
@@ -1291,6 +1353,26 @@ test('already-implemented detaches grouped source PRs and closes empty ones', as
             version: 1,
             track: 'performance',
             issues: [78],
+          }),
+        },
+        {
+          number: 196,
+          state: 'open',
+          user: { login: 'pomi-radar[bot]' },
+          body: marker('pomi-radar-consolidation:v1', {
+            version: 1,
+            issues: [54, 55],
+            sourcePrs: [194],
+          }),
+        },
+        {
+          number: 197,
+          state: 'open',
+          user: { login: 'pomi-radar[bot]' },
+          body: marker('pomi-radar-consolidation:v1', {
+            version: 1,
+            issues: [78],
+            sourcePrs: [195],
           }),
         },
       ],
