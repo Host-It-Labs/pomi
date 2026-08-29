@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   acknowledgeAgentPass,
+  alreadyImplementedVerification,
   classifyMatch,
   consolidationMerged,
   dailyFeatureSlotPlan,
@@ -13,6 +14,7 @@ import {
   evidenceDelta,
   issueEnrichmentGaps,
   marker,
+  markAlreadyImplemented,
   nextLifecycleLabels,
   planClarification,
   preflightHasWork,
@@ -1063,6 +1065,82 @@ test('one active lifecycle label replaces any prior lifecycle labels', () => {
     ),
     ['radar:feature', 'radar:accepted']
   );
+});
+
+test('already-implemented verification requires an explicit remaining-gap statement', () => {
+  assert.deepEqual(
+    alreadyImplementedVerification({
+      summary: 'Existing auth checks already cover the reported path.',
+      evidence: 'The shared guard rejects expired sessions before private data loads.',
+      validation: 'Focused expiration and refresh-failure tests pass.',
+      gap: 'No material gap found.',
+      verifiedAt: '2026-08-29T10:00:00Z',
+    }),
+    {
+      outcome: 'already-implemented',
+      summary: 'Existing auth checks already cover the reported path.',
+      evidence: 'The shared guard rejects expired sessions before private data loads.',
+      validation: 'Focused expiration and refresh-failure tests pass.',
+      gap: 'No material gap found.',
+      verifiedAt: '2026-08-29T10:00:00Z',
+    }
+  );
+  assert.throws(
+    () => alreadyImplementedVerification({ summary: 'Covered' }),
+    /evidence, validation, gap, verifiedAt/
+  );
+});
+
+test('already-implemented issues wait for the user without entering the implementation queue', async () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    updated_at: '2026-08-29T09:00:00Z',
+    labels: [{ name: 'radar:security' }, { name: 'radar:in-review' }],
+    body: marker('pomi-radar:v1', { version: 1 }),
+  };
+  await withFakeGithubIssues([issue], async state => {
+    const verification = {
+      summary: 'The current protection already covers the reported behavior.',
+      evidence: 'The shared request boundary rejects the unsafe input.',
+      validation: 'Focused invalid-input tests pass.',
+      gap: 'No material gap found.',
+      verifiedAt: '2026-08-29T10:00:00Z',
+    };
+    const first = await markAlreadyImplemented({ issueNumber: 54, ...verification });
+    assert.equal(first.updated, true);
+    assert.equal(first.duplicate, false);
+    assert.deepEqual(
+      state.issues.get(54).labels.map(label => label.name),
+      ['radar:security', 'radar:already-implemented']
+    );
+    assert.equal(state.issues.get(54).state, 'open');
+    assert.deepEqual(
+      readMarker(state.issues.get(54).body, 'pomi-radar:v1').implementationVerification,
+      { outcome: 'already-implemented', ...verification }
+    );
+    assert.equal(state.comments.get(54).length, 1);
+
+    const second = await markAlreadyImplemented({ issueNumber: 54, ...verification });
+    assert.equal(second.duplicate, true);
+    assert.equal(state.comments.get(54).length, 1);
+  });
+});
+
+test('already-implemented proposals occupy a visible proposal slot but are not agent work', () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    generatedAt: '2026-08-29T10:00:00Z',
+    pendingAgentPass: false,
+    labels: ['radar:security', 'radar:already-implemented'],
+  };
+  assert.deepEqual(selectActionableIssues([issue]), []);
+  assert.deepEqual(proposalSlotPlan([issue]), {
+    visibleProposalCount: 1,
+    visibleProposalIssueNumbers: [54],
+    proposalSlotsNeeded: 2,
+  });
 });
 
 test('clarification round two asks only unlocked questions', () => {

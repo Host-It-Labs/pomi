@@ -399,6 +399,40 @@ export function selectActionableIssues(issues) {
   );
 }
 
+const ALREADY_IMPLEMENTED_LIFECYCLE = 'radar:already-implemented';
+const IMPLEMENTATION_LIFECYCLES = new Set([
+  'radar:accepted',
+  'radar:in-progress',
+  'radar:in-review',
+  ALREADY_IMPLEMENTED_LIFECYCLE,
+]);
+
+function implementationVerification(input) {
+  const verification = {
+    outcome: 'already-implemented',
+    summary: String(input.summary ?? '').trim(),
+    evidence: String(input.evidence ?? '').trim(),
+    validation: String(input.validation ?? '').trim(),
+    gap: String(input.gap ?? '').trim(),
+    verifiedAt: String(input.verifiedAt ?? '').trim(),
+  };
+  const missing = ['summary', 'evidence', 'validation', 'gap', 'verifiedAt']
+    .filter(field => !verification[field]);
+  if (missing.length)
+    throw new Error(
+      `Already-implemented verification requires: ${missing.join(', ')}.`
+    );
+  if (Number.isNaN(Date.parse(verification.verifiedAt)))
+    throw new Error(
+      'Already-implemented verification requires a valid verifiedAt timestamp.'
+    );
+  return verification;
+}
+
+export function alreadyImplementedVerification(input) {
+  return implementationVerification(input);
+}
+
 export function selectEnrichmentIssues(issues) {
   const presentationStates = new Set(
     CONTRACT.presentation.actionRequiredLifecycle
@@ -835,6 +869,37 @@ async function addCommentOnce(issueNumber, body, eventId) {
   return true;
 }
 
+function eventRevision(comment) {
+  const event = readMarker(comment.body, 'pomi-radar-event:v1');
+  if (!event) return null;
+  const encodedRevision = Number(String(event.id).split(':')[1]);
+  return {
+    id: String(event.id),
+    expectedRevision: Number(event.expectedRevision ?? encodedRevision),
+  };
+}
+
+async function claimMutation(issueNumber, body, eventId, expectedRevision) {
+  let issueComments = await paginate(`/issues/${issueNumber}/comments`);
+  let own = issueComments.find(comment => eventRevision(comment)?.id === eventId);
+  if (!own) {
+    own = await github(`/issues/${issueNumber}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({
+        body: `${body || 'Radar lifecycle update requested.'}\n\n${marker(
+          'pomi-radar-event:v1',
+          { id: eventId, expectedRevision }
+        )}`,
+      }),
+    });
+    issueComments = await paginate(`/issues/${issueNumber}/comments`);
+  }
+  const contenders = issueComments
+    .filter(comment => eventRevision(comment)?.expectedRevision === expectedRevision)
+    .sort((left, right) => Number(left.id) - Number(right.id));
+  return contenders[0]?.id === own.id;
+}
+
 async function setIssueLifecycle(issueNumber, lifecycle, state, stateReason) {
   const issue = await github(`/issues/${issueNumber}`, {});
   const labels = nextLifecycleLabels(
@@ -979,6 +1044,81 @@ export async function enrichIssue(input) {
     updated: true,
     eventId: `enrichment:${issueNumber}:${digest}`,
   };
+}
+
+export async function markAlreadyImplemented(input) {
+  const issueNumber = Number(input.issueNumber);
+  if (!Number.isInteger(issueNumber) || issueNumber <= 0)
+    throw new Error('A canonical issueNumber is required.');
+  const verification = implementationVerification(input);
+  const issue = await github(`/issues/${issueNumber}`, {});
+  const labels = issue.labels.map(label => label.name);
+  const current = readMarker(issue.body, CONTRACT.marker) ?? {};
+  const sourceLabels = labels.filter(label => CONTRACT.sources.includes(label));
+  const currentLifecycle = labels.find(label => CONTRACT.lifecycle.includes(label));
+  const digest = createHash('sha256')
+    .update(JSON.stringify(verification))
+    .digest('hex')
+    .slice(0, 12);
+  const eventId = `already-implemented:${issueNumber}:${digest}`;
+  if (!sourceLabels.length || current.duplicateOf || labels.includes('duplicate'))
+    throw new Error(`Issue #${issueNumber} is not an eligible canonical Radar issue.`);
+  if (!['radar:security', 'radar:performance'].some(label => sourceLabels.includes(label)))
+    throw new Error(`Issue #${issueNumber} is not a Security or Performance Radar issue.`);
+  if (currentLifecycle === ALREADY_IMPLEMENTED_LIFECYCLE) {
+    if (
+      JSON.stringify(current.implementationVerification) ===
+      JSON.stringify(verification)
+    ) {
+      return { issueNumber, updated: false, duplicate: true, eventId };
+    }
+    throw new Error(
+      `Issue #${issueNumber} already awaits user confirmation; do not replace its verification.`
+    );
+  }
+  if (!IMPLEMENTATION_LIFECYCLES.has(currentLifecycle))
+    throw new Error(`Issue #${issueNumber} is not in an implementation lifecycle.`);
+  if (current.pendingAgentPass === true)
+    throw new Error(
+      `Issue #${issueNumber} has a pending user decision and must not be changed by implementation.`
+    );
+  const readable = [
+    'Implementation verification found complete existing coverage.',
+    '',
+    `- **Why this is covered:** ${verification.summary}`,
+    `- **Evidence:** ${verification.evidence}`,
+    `- **How it was checked:** ${verification.validation}`,
+    `- **Remaining gap:** ${verification.gap}`,
+  ].join('\n');
+  const expectedRevision = Math.max(
+    current.mutationRevision ?? 0,
+    new Date(issue.updated_at).getTime()
+  );
+  if (!(await claimMutation(issueNumber, readable, eventId, expectedRevision)))
+    throw new Error(
+      `Issue #${issueNumber} changed while implementation verification was being recorded.`
+    );
+  const latest = await github(`/issues/${issueNumber}`, {});
+  const latestData = readMarker(latest.body, CONTRACT.marker) ?? {};
+  if (latestData.lastMutationId !== current.lastMutationId)
+    throw new Error(
+      `Issue #${issueNumber} changed while implementation verification was being recorded.`
+    );
+  const updated = await github(`/issues/${issueNumber}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      body: issueBodyWithData(latest, {
+        implementationVerification: verification,
+        pendingAgentPass: false,
+      }),
+      labels: nextLifecycleLabels(
+        latest.labels.map(label => label.name),
+        ALREADY_IMPLEMENTED_LIFECYCLE
+      ),
+      state: 'open',
+    }),
+  });
+  return { issueNumber, updated: true, duplicate: false, eventId, issue: updated };
 }
 
 export async function acknowledgeAgentPass(input) {
@@ -1724,6 +1864,13 @@ async function main() {
     const input = readJsonStdin();
     process.stdout.write(
       `${JSON.stringify(await enrichIssue(input), null, 2)}\n`
+    );
+    return;
+  }
+  if (command === 'mark-already-implemented') {
+    const input = readJsonStdin();
+    process.stdout.write(
+      `${JSON.stringify(await markAlreadyImplemented(input), null, 2)}\n`
     );
     return;
   }

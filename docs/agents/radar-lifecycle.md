@@ -40,6 +40,14 @@ merge updates, and production-release closure.
 - Use `Related #N` in source and consolidation PRs. Never use a closing keyword.
 - Accept moves to `radar:accepted`; Ask moves to `radar:needs-agent`; Reject
   requires a reason, moves to `radar:rejected`, and closes as not planned.
+- When implementation verification finds complete existing coverage, move the
+  issue to `radar:already-implemented` with concrete evidence and leave it open
+  for user confirmation. Confirming closes it as completed; reconsidering
+  returns it to `radar:accepted` with the user's required reason.
+- The `mark-already-implemented` payload must include `summary`, `evidence`,
+  `validation`, `gap`, and an explicit ISO `verifiedAt`. The Radar presents
+  these as “Why no new implementation is needed”, “Evidence”, “How it was
+  checked”, and “What could still be missing”.
 - A consolidation merge moves included canonical issues to
   `radar:ready-for-release`. Only a successful, non-prerelease production job
   closes included issues as `radar:released` and resolves mapped Sentry groups.
