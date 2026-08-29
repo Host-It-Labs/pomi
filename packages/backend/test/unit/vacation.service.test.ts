@@ -22,7 +22,7 @@ function createRepositories(
   };
   const tasksRepository: RepositoryMock = {
     find: vi.fn().mockResolvedValue(items),
-    count: vi.fn().mockResolvedValue(0),
+    exists: vi.fn().mockResolvedValue(false),
     save: vi.fn(async (value: Record<string, unknown>) => value),
     update: vi.fn(),
     query: vi.fn(async (statement: string, parameters: unknown[]) => {
@@ -177,7 +177,7 @@ describe('VacationService', () => {
     const { vacationRepository, tasksRepository } = createRepositories(state, [
       item,
     ]);
-    tasksRepository.count.mockResolvedValue(1);
+    tasksRepository.exists.mockResolvedValue(true);
     const service = new VacationService(
       vacationRepository as never,
       tasksRepository as never,
@@ -193,7 +193,7 @@ describe('VacationService', () => {
 
     await service.processActiveVacations(new Date('2026-07-29T18:00:00Z'));
 
-    expect(tasksRepository.count).toHaveBeenCalledTimes(1);
+    expect(tasksRepository.exists).toHaveBeenCalledTimes(1);
     expect(tasksRepository.find).toHaveBeenCalledTimes(1);
     expect(item.dueDate).toBe('2026-08-02');
     expect(item.lastVacationRunId).toBe('run-1');
