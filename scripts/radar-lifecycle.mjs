@@ -913,6 +913,11 @@ async function claimMutation(issueNumber, body, eventId, expectedRevision) {
   let own = issueComments.find(
     comment => eventRevision(comment)?.id === eventId
   );
+  const claimPrefix = `already-implemented:${issueNumber}:`;
+  const existingClaim = issueComments.find(comment =>
+    eventRevision(comment)?.id.startsWith(claimPrefix)
+  );
+  if (!own && existingClaim) return false;
   if (!own) {
     own = await github(`/issues/${issueNumber}/comments`, {
       method: 'POST',
@@ -976,29 +981,92 @@ function sourcePullBodyWithIssues(pull, issues) {
   );
 }
 
+function consolidationPullBodyWithManifest(pull, manifest) {
+  const next = marker(CONTRACT.consolidationMarker, manifest);
+  return String(pull.body).replace(
+    /<!--\s*pomi-radar-consolidation:v1\s+\{[^]*?\}\s*-->/,
+    next
+  );
+}
+
 async function detachAlreadyImplementedSourcePulls(issueNumber) {
   const pulls = await paginate('/pulls?state=open&base=main');
-  const candidates = pulls
+  const sourceCandidates = pulls
     .map(pull => {
       const source = readMarker(pull.body, SOURCE_MARKER);
       return { pull, source, issueNumbers: sourcePullIssueNumbers(source) };
     })
     .filter(
-      ({ source, issueNumbers }) =>
-        source?.version === 1 && issueNumbers.includes(issueNumber)
+      ({ source }) =>
+        source?.version === 1 &&
+        Array.isArray(source.issues) &&
+        source.issues.map(Number).includes(issueNumber)
     );
-  const detached = [];
-  const closed = [];
-  for (const { pull, issueNumbers } of candidates) {
+  const consolidationCandidates = pulls
+    .map(pull => {
+      const manifest = readMarker(pull.body, CONTRACT.consolidationMarker);
+      return { pull, manifest };
+    })
+    .filter(
+      ({ manifest }) =>
+        Array.isArray(manifest?.issues) &&
+        manifest.issues.map(Number).includes(issueNumber)
+    );
+  for (const { pull, issueNumbers } of sourceCandidates) {
     if (pull.user?.login !== radarBotLogin()) {
       throw new Error(
         `Source PR #${pull.number} must be authored by the Radar bot before issue #${issueNumber} can be detached.`
       );
     }
+    if (!issueNumbers.length) {
+      throw new Error(
+        `Source PR #${pull.number} has an invalid Radar source marker.`
+      );
+    }
+  }
+  const consolidationData = consolidationCandidates.map(
+    ({ pull, manifest }) => {
+      if (pull.user?.login !== radarBotLogin()) {
+        throw new Error(
+          `Consolidation PR #${pull.number} must be authored by the Radar bot before issue #${issueNumber} can be detached.`
+        );
+      }
+      const issueNumbers = sourcePullIssueNumbers({ issues: manifest.issues });
+      const sourcePrNumbers = sourcePullIssueNumbers({
+        issues: manifest.sourcePrs,
+      });
+      if (!issueNumbers.length || !sourcePrNumbers.length) {
+        throw new Error(
+          `Consolidation PR #${pull.number} has an invalid Radar consolidation marker.`
+        );
+      }
+      return { pull, manifest, issueNumbers, sourcePrNumbers };
+    }
+  );
+  const detached = [];
+  const closed = [];
+  const sourcePrsToClose = new Set();
+  for (const { pull, issueNumbers } of sourceCandidates) {
     const sourcePrNumber = Number(pull.number);
     if (!Number.isSafeInteger(sourcePrNumber) || sourcePrNumber <= 0) {
       throw new Error('Radar source PR number is invalid.');
     }
+    if (issueNumbers.length === 1) sourcePrsToClose.add(sourcePrNumber);
+  }
+  for (const { pull, issueNumbers, sourcePrNumbers } of consolidationData) {
+    const consolidationNumber = Number(pull.number);
+    const remainingIssues = issueNumbers.filter(value => value !== issueNumber);
+    const remainingSourcePrs = sourcePrNumbers.filter(
+      value => !sourcePrsToClose.has(value)
+    );
+    if (remainingIssues.length && !remainingSourcePrs.length) {
+      throw new Error(
+        `Consolidation PR #${consolidationNumber} has remaining issues but no remaining source PRs after detaching issue #${issueNumber}.`
+      );
+    }
+  }
+  for (const { pull, issueNumbers } of sourceCandidates) {
+    const sourcePrNumber = Number(pull.number);
     const eventId = `already-implemented:${issueNumber}:source-pr:${sourcePrNumber}`;
     if (issueNumbers.length === 1) {
       await addCommentOnce(
@@ -1027,7 +1095,64 @@ async function detachAlreadyImplementedSourcePulls(issueNumber) {
     });
     detached.push(sourcePrNumber);
   }
-  return { closed, detached };
+  const consolidationDetached = [];
+  const consolidationClosed = [];
+  const closedSourcePrs = new Set(closed);
+  for (const {
+    pull,
+    manifest,
+    issueNumbers,
+    sourcePrNumbers,
+  } of consolidationData) {
+    const consolidationNumber = Number(pull.number);
+    if (
+      !Number.isSafeInteger(consolidationNumber) ||
+      consolidationNumber <= 0
+    ) {
+      throw new Error('Radar consolidation PR number is invalid.');
+    }
+    const remainingIssues = issueNumbers.filter(value => value !== issueNumber);
+    const remainingSourcePrs = sourcePrNumbers.filter(
+      value => !closedSourcePrs.has(value)
+    );
+    const eventId = `already-implemented:${issueNumber}:consolidation:${consolidationNumber}`;
+    if (!remainingIssues.length) {
+      await addCommentOnce(
+        consolidationNumber,
+        `Closed because issue #${issueNumber} was verified as already implemented and this consolidation has no remaining Radar issues.`,
+        eventId
+      );
+      await github(`/pulls/${consolidationNumber}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ state: 'closed' }),
+      });
+      consolidationClosed.push(consolidationNumber);
+      continue;
+    }
+    await addCommentOnce(
+      consolidationNumber,
+      `Issue #${issueNumber} was verified as already implemented and detached from this consolidation. The remaining Radar issues stay in its manifest: ${remainingIssues.map(value => `#${value}`).join(', ')}.`,
+      eventId
+    );
+    await github(`/pulls/${consolidationNumber}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        body: consolidationPullBodyWithManifest(pull, {
+          ...manifest,
+          issues: remainingIssues,
+          sourcePrs: remainingSourcePrs,
+        }),
+      }),
+    });
+    consolidationDetached.push(consolidationNumber);
+  }
+  return {
+    sourcePullRequests: { closed, detached },
+    consolidationPullRequests: {
+      closed: consolidationClosed,
+      detached: consolidationDetached,
+    },
+  };
 }
 
 async function setIssueLifecycle(issueNumber, lifecycle, state, stateReason) {
@@ -1251,7 +1376,7 @@ export async function markAlreadyImplemented(input) {
     throw new Error(
       `Issue #${issueNumber} changed while implementation verification was being recorded.`
     );
-  const sourcePullRequests =
+  const detachedPullRequests =
     await detachAlreadyImplementedSourcePulls(issueNumber);
   const finalIssue = await github(`/issues/${issueNumber}`, {});
   const finalData = readMarker(finalIssue.body, CONTRACT.marker) ?? {};
@@ -1278,7 +1403,8 @@ export async function markAlreadyImplemented(input) {
     updated: true,
     duplicate: false,
     eventId,
-    sourcePullRequests,
+    sourcePullRequests: detachedPullRequests.sourcePullRequests,
+    consolidationPullRequests: detachedPullRequests.consolidationPullRequests,
     issue: updated,
   };
 }

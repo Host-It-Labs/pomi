@@ -44,10 +44,11 @@ merge updates, and production-release closure.
   issue to `radar:already-implemented` with concrete evidence and leave it open
   for user confirmation. Confirming closes it as completed; reconsidering
   returns it to `radar:accepted` with the user's required reason.
-- The `mark-already-implemented` payload must include `summary`, `evidence`,
-  `validation`, `gap`, and an explicit ISO `verifiedAt`. The Radar presents
-  these as “Why no new implementation is needed”, “Evidence”, “How it was
-  checked”, and “What could still be missing”. The command provisions its
+- The `mark-already-implemented` payload must include `issueNumber`,
+  `summary`, `evidence`, `validation`, `gap`, and an explicit ISO `verifiedAt`.
+  The Radar presents these as “Why no new implementation is needed”,
+  “Evidence”, “How it was checked”, and “What could still be missing”. The
+  command provisions its
   lifecycle label when needed and detaches the issue from an open source PR;
   a PR containing no remaining issues is closed.
 - A consolidation merge moves included canonical issues to
