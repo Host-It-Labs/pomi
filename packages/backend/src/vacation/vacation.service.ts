@@ -289,11 +289,9 @@ export class VacationService implements OnModuleInit, OnModuleDestroy {
     throughDate: string,
     tasksRepository: Repository<TaskEntity>
   ) {
-    return (
-      (await tasksRepository.count({
-        where: this.getUnprocessedDueDateShiftWhere(state, throughDate),
-      })) > 0
-    );
+    return tasksRepository.exists({
+      where: this.getUnprocessedDueDateShiftWhere(state, throughDate),
+    });
   }
 
   private getUnprocessedDueDateShiftWhere(
