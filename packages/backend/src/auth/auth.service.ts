@@ -10,9 +10,12 @@ import * as bcrypt from 'bcrypt';
 import { PreferencesService } from '../preferences/preferences.service';
 import { SystemService } from '../system/system.service';
 import { UsersService } from '../users/users.service';
+import type { UserEntity } from '../users/users.entity';
 import { AuthAttemptStore } from './auth-attempt.store';
 
 const MIN_REGISTRATION_PASSWORD_LENGTH = 12;
+const DUMMY_PASSWORD_HASH =
+  '$2b$10$RGiLuMQiskoi294uyu4BIeBXLazhtQKBxwBaFXWi3uTlTQYSMT.zW';
 
 @Injectable()
 export class AuthService {
@@ -82,6 +85,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid username or password');
     }
 
+    return await this.loginWithUser(user, password, language);
+  }
+
+  private async loginWithUser(
+    user: UserEntity,
+    password: string,
+    language?: AppLanguage
+  ) {
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) {
       throw new UnauthorizedException('Invalid username or password');
@@ -124,12 +135,19 @@ export class AuthService {
 
     const requestedLanguage = this.normalizeLanguage(language);
     if (!existingUser) {
+      if (!this.hasValidRegistrationPassword(password)) {
+        await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+      }
       this.assertRegistrationPassword(password);
       await this.authAttemptStore.assertRegistrationAllowed(origin);
       return await this.signUp(username, password, requestedLanguage);
     }
     try {
-      return await this.login(username, password, requestedLanguage);
+      return await this.loginWithUser(
+        existingUser,
+        password,
+        requestedLanguage
+      );
     } catch (error) {
       if (
         error instanceof UnauthorizedException &&
