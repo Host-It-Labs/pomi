@@ -152,4 +152,42 @@ describe('new account password policy', () => {
 
     expect(result).toMatchObject({ isNewUser: false, token: 'token' });
   });
+
+  it('does not reveal account existence for failed weak-password attempts', async () => {
+    const passwordHash = await bcrypt.hash('another-password', 4);
+    const createService = (user: object | null) =>
+      new AuthService(
+        { findUserByUsername: vi.fn(async () => user) } as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        {
+          assertAuthenticationAllowed: vi.fn(),
+          assertRegistrationAllowed: vi.fn(),
+        } as never
+      );
+    const captureError = async (service: AuthService) => {
+      try {
+        await service.authenticateUser(
+          'candidate-user',
+          'too-short',
+          '203.0.113.4'
+        );
+      } catch (error) {
+        return error;
+      }
+      throw new Error('Expected authentication to fail');
+    };
+
+    const unknownUserError = await captureError(createService(null));
+    const existingUserError = await captureError(
+      createService({ password: passwordHash })
+    );
+
+    expect(unknownUserError).toBeInstanceOf(BadRequestException);
+    expect(existingUserError).toBeInstanceOf(BadRequestException);
+    expect((existingUserError as BadRequestException).getResponse()).toEqual(
+      (unknownUserError as BadRequestException).getResponse()
+    );
+  });
 });

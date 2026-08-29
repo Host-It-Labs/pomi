@@ -128,19 +128,31 @@ export class AuthService {
       await this.authAttemptStore.assertRegistrationAllowed(origin);
       return await this.signUp(username, password, requestedLanguage);
     }
-    return await this.login(username, password, requestedLanguage);
+    try {
+      return await this.login(username, password, requestedLanguage);
+    } catch (error) {
+      if (
+        error instanceof UnauthorizedException &&
+        !this.hasValidRegistrationPassword(password)
+      ) {
+        this.assertRegistrationPassword(password);
+      }
+      throw error;
+    }
   }
 
   private assertRegistrationPassword(password: string): void {
-    const passwordCharacterCount = [...password].length;
-    if (
-      passwordCharacterCount < MIN_REGISTRATION_PASSWORD_LENGTH ||
-      !/\S/.test(password)
-    ) {
-      throw new BadRequestException(
-        'Password must be at least 12 characters and contain a non-whitespace character'
-      );
-    }
+    if (this.hasValidRegistrationPassword(password)) return;
+    throw new BadRequestException(
+      'Password must be at least 12 characters and contain a non-whitespace character'
+    );
+  }
+
+  private hasValidRegistrationPassword(password: string): boolean {
+    return (
+      [...password].length >= MIN_REGISTRATION_PASSWORD_LENGTH &&
+      /\S/.test(password)
+    );
   }
 
   private normalizeLanguage(language?: AppLanguage): AppLanguage | undefined {
