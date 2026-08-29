@@ -6,6 +6,7 @@ import {
 } from './FeedbackRecorder';
 import { showToastFromStore } from '../toast/ToastContext';
 import { Button } from '../ui/Button';
+import { IconButton } from '../ui/IconButton';
 import { Modal } from '../ui/Modal';
 import { useI18n } from '../../i18n';
 
@@ -38,7 +39,7 @@ export function FeedbackModal({
     recordingStage === 'starting' || recordingStage === 'recording';
 
   const resetAndClose = useCallback(
-    (cancelActiveRecording = true) => {
+    (cancelActiveRecording: boolean) => {
       submissionRequestRef.current += 1;
       voiceStartRequestedRef.current = false;
       pendingVoiceStartRef.current = false;
@@ -67,7 +68,7 @@ export function FeedbackModal({
         await submitFeedbackText(trimmed);
         if (request !== submissionRequestRef.current) return;
         showToastFromStore(t('feedback.sent'), 'success');
-        resetAndClose();
+        resetAndClose(true);
       } catch (submissionError) {
         if (request !== submissionRequestRef.current) return;
         setError(
@@ -91,7 +92,7 @@ export function FeedbackModal({
       return;
     }
     if (previousRecordingStage === 'sending' && recordingStage === 'idle') {
-      resetAndClose();
+      resetAndClose(true);
       return;
     }
     if (voiceStartRequestedRef.current && recordingStage === 'recording') {
@@ -127,7 +128,7 @@ export function FeedbackModal({
       setConfirmClose(true);
       return;
     }
-    resetAndClose();
+    resetAndClose(true);
   };
 
   return (
@@ -136,20 +137,20 @@ export function FeedbackModal({
       onClose={requestClose}
       title={t('feedback.title')}
       headerActions={
-        <button
-          type="button"
-          aria-label={t('feedback.record')}
-          title={t('feedback.record')}
+        <IconButton
+          label={t('feedback.record')}
           onClick={requestVoiceStart}
           disabled={
             recordingStage === 'starting' ||
             recordingStage === 'recording' ||
             recordingStage === 'sending'
           }
-          className="rounded-full p-2 text-slate-400 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          size="sm"
+          variant="secondary"
+          className="bg-transparent text-slate-400 hover:bg-transparent hover:text-white"
         >
           <FaMicrophone size={14} />
-        </button>
+        </IconButton>
       }
       closeOnBackdropClick
       closeOnEscape
@@ -189,7 +190,7 @@ export function FeedbackModal({
                   void startRecording();
                   return;
                 }
-                resetAndClose();
+                resetAndClose(true);
               }}
             >
               {t('common.discard')}

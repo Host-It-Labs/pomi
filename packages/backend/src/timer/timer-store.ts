@@ -198,6 +198,7 @@ local function validTimerPayloadFields(timer)
     and validOptionalStringRecord(timer.subIntentionEmojis)
     and validOptionalSessionEmojiRecord(timer.sessionIntentionEmojis)
     and validOptionalBoolean(timer.isAutoStarted)
+    and validOptionalBoolean(timer.hasConsumedFirstIntentionReset)
     and validOptionalExtensionCandidate(timer.extensionCandidate)
 end
 `;

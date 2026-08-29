@@ -18,8 +18,10 @@ import { AssistantSettingsEntity } from './assistant-settings.entity';
 import { AssistantUsageEntity } from './assistant-usage.entity';
 import { AssistantController } from './assistant.controller';
 import { AssistantCaptureService } from './assistant-capture.service';
+import { AssistantListRoutingService } from './assistant-list-routing.service';
 import { AssistantService } from './assistant.service';
 import { AssistantPreparationStore } from './assistant-task-preparation.store';
+import { AssistantVoiceReadbackService } from './assistant-voice-readback.service';
 
 @Module({
   imports: [
@@ -41,6 +43,8 @@ import { AssistantPreparationStore } from './assistant-task-preparation.store';
   providers: [
     AssistantService,
     AssistantCaptureService,
+    AssistantListRoutingService,
+    AssistantVoiceReadbackService,
     AssistantDebugService,
     AssistantPreparationStore,
     AdminGuard,

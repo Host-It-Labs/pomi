@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const notification = vi.hoisted(() => ({
   checkPermission: vi.fn<() => Promise<boolean>>(),
+  requestPermissionIfNeeded: vi.fn<() => Promise<boolean>>(),
   openMacNotificationSettings: vi.fn<() => Promise<boolean>>(),
 }));
 
@@ -36,6 +37,7 @@ describe('macOS notification settings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     notification.checkPermission.mockResolvedValue(false);
+    notification.requestPermissionIfNeeded.mockResolvedValue(false);
     notification.openMacNotificationSettings.mockResolvedValue(true);
   });
 
@@ -53,6 +55,7 @@ describe('macOS notification settings', () => {
       screen.getByRole('button', { name: 'Open Notification Settings' })
     );
 
+    expect(notification.requestPermissionIfNeeded).toHaveBeenCalledOnce();
     expect(notification.openMacNotificationSettings).toHaveBeenCalledOnce();
   });
 

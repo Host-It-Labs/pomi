@@ -358,6 +358,8 @@ export class TimerContinuationWorkerService
         typeof timer.isExtension !== 'boolean') ||
       (timer.isAutoStarted !== undefined &&
         typeof timer.isAutoStarted !== 'boolean') ||
+      (timer.hasConsumedFirstIntentionReset !== undefined &&
+        typeof timer.hasConsumedFirstIntentionReset !== 'boolean') ||
       !this.isOptionalExtensionCandidate(timer.extensionCandidate) ||
       (timer.extensionNextTimerType !== undefined &&
         !Object.values(TIMER_TYPES).includes(timer.extensionNextTimerType)) ||

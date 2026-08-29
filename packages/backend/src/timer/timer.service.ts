@@ -441,6 +441,7 @@ export class TimerService implements OnModuleInit {
       timer.isAutoStarted === true &&
       (timer.type === TIMER_TYPES.BREAK ||
         timer.type === TIMER_TYPES.LONG_BREAK) &&
+      timer.hasConsumedFirstIntentionReset !== true &&
       previousIntentions.length === 0 &&
       nextIntentions.length > 0 &&
       (timer.type === TIMER_TYPES.BREAK
@@ -456,6 +457,7 @@ export class TimerService implements OnModuleInit {
     timer.startTime = resetTimestamp;
     timer.remainingTime = timer.duration;
     timer.status = TIMER_STATUSES.RUNNING;
+    timer.hasConsumedFirstIntentionReset = true;
   }
 
   private getDefaultTimerDuration(
