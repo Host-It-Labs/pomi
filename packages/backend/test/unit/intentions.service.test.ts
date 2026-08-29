@@ -18,8 +18,30 @@ function createService(options: ServiceOptions) {
   const renamedRuntimeSlugs: unknown[] = [];
   const realtimeUpdates: string[] = [];
   const intentionFindOptions: unknown[] = [];
+  const usageQueries: { method: string; args: unknown[] }[] = [];
   let transactionCalls = 0;
   let monthlyUsageCalls = 0;
+  const usageQuery = {
+    update: (entity: unknown) => {
+      usageQueries.push({ method: 'update', args: [entity] });
+      return usageQuery;
+    },
+    set: (updates: unknown) => {
+      usageQueries.push({ method: 'set', args: [updates] });
+      return usageQuery;
+    },
+    where: (...args: unknown[]) => {
+      usageQueries.push({ method: 'where', args });
+      return usageQuery;
+    },
+    andWhere: (...args: unknown[]) => {
+      usageQueries.push({ method: 'andWhere', args });
+      return usageQuery;
+    },
+    execute: async () => {
+      usageQueries.push({ method: 'execute', args: [] });
+    },
+  };
   const intentionsRepository = {
     create: (entity: Record<string, unknown>) => entity,
     save: async (entity: Record<string, unknown>) => {
@@ -47,6 +69,7 @@ function createService(options: ServiceOptions) {
       deletedIntentions.push(criteria);
     },
     count: async () => 0,
+    createQueryBuilder: () => usageQuery,
     manager: {
       transaction: async (callback: (manager: unknown) => Promise<unknown>) => {
         transactionCalls += 1;
@@ -112,12 +135,81 @@ function createService(options: ServiceOptions) {
     renamedRuntimeSlugs,
     realtimeUpdates,
     intentionFindOptions,
+    usageQueries,
     getTransactionCalls: () => transactionCalls,
     getMonthlyUsageCalls: () => monthlyUsageCalls,
   };
 }
 
 describe('IntentionsService', () => {
+  it('updates unique Intention usage slugs with one set-based statement', async () => {
+    const { service, usageQueries } = createService({});
+
+    await service.incrementIntentionsUsage('user-1', [
+      'focus',
+      'focus',
+      '',
+      'deep-work',
+    ]);
+
+    expect(usageQueries).toEqual([
+      { method: 'update', args: [expect.any(Function)] },
+      {
+        method: 'set',
+        args: [{ usageCount: expect.any(Function) }],
+      },
+      {
+        method: 'where',
+        args: ['"userId" = :userId', { userId: 'user-1' }],
+      },
+      {
+        method: 'andWhere',
+        args: ['"slug" IN (:...slugs)', { slugs: ['focus', 'deep-work'] }],
+      },
+      { method: 'execute', args: [] },
+    ]);
+  });
+
+  it('guards one set-based decrement at zero while preserving cross-type slugs', async () => {
+    const { service, usageQueries } = createService({});
+
+    await service.decrementIntentionsUsage('user-1', [
+      'focus',
+      'focus',
+      'deep-work',
+    ]);
+
+    expect(usageQueries).toEqual([
+      { method: 'update', args: [expect.any(Function)] },
+      {
+        method: 'set',
+        args: [{ usageCount: expect.any(Function) }],
+      },
+      {
+        method: 'where',
+        args: ['"userId" = :userId', { userId: 'user-1' }],
+      },
+      {
+        method: 'andWhere',
+        args: ['"slug" IN (:...slugs)', { slugs: ['focus', 'deep-work'] }],
+      },
+      {
+        method: 'andWhere',
+        args: ['"usageCount" > 0'],
+      },
+      { method: 'execute', args: [] },
+    ]);
+  });
+
+  it('does not issue usage updates for empty slug selections', async () => {
+    const { service, usageQueries } = createService({});
+
+    await service.incrementIntentionsUsage('user-1', ['', '']);
+    await service.decrementIntentionsUsage('user-1', []);
+
+    expect(usageQueries).toEqual([]);
+  });
+
   it('loads assistant metadata without computing monthly usage', async () => {
     const { service, getMonthlyUsageCalls, intentionFindOptions } =
       createService({
