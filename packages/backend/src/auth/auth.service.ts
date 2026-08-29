@@ -12,6 +12,8 @@ import { SystemService } from '../system/system.service';
 import { UsersService } from '../users/users.service';
 import { AuthAttemptStore } from './auth-attempt.store';
 
+const MIN_REGISTRATION_PASSWORD_LENGTH = 12;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -122,10 +124,22 @@ export class AuthService {
 
     const requestedLanguage = this.normalizeLanguage(language);
     if (!existingUser) {
+      this.assertRegistrationPassword(password);
       await this.authAttemptStore.assertRegistrationAllowed(origin);
       return await this.signUp(username, password, requestedLanguage);
     }
     return await this.login(username, password, requestedLanguage);
+  }
+
+  private assertRegistrationPassword(password: string): void {
+    if (
+      password.length < MIN_REGISTRATION_PASSWORD_LENGTH ||
+      !/\S/.test(password)
+    ) {
+      throw new BadRequestException(
+        'Password must be at least 12 characters and contain a non-whitespace character'
+      );
+    }
   }
 
   private normalizeLanguage(language?: AppLanguage): AppLanguage | undefined {

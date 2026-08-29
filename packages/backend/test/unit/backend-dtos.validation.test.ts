@@ -228,6 +228,18 @@ describe('backend scalar and parameter DTO validation', () => {
     });
   });
 
+  it('keeps the password maximum independent from registration minimums', async () => {
+    await expectValid(AuthenticateDto, {
+      username: 'user',
+      password: 'a'.repeat(256),
+    });
+    await expectInvalid(
+      AuthenticateDto,
+      { username: 'user', password: 'a'.repeat(257) },
+      'password'
+    );
+  });
+
   it('accepts supported account languages and rejects unsupported locales', async () => {
     await expectValid(AuthenticateDto, {
       username: 'language-user',
