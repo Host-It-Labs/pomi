@@ -567,6 +567,7 @@ test('merged consolidations refuse to close a source outside merge ancestry', as
         /not contained in consolidation PR/
       );
       assert.equal(state.pulls.get(44).state, 'open');
+      assert.equal(state.comments.get(33).length, 0);
       assert.equal(state.comments.get(44).length, 0);
     }
   );
@@ -1265,6 +1266,43 @@ test('already-implemented issues wait for the user without entering the implemen
   });
 });
 
+test('already-implemented rejects ambiguous source or lifecycle labels', async () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    updated_at: '2026-08-29T09:00:00Z',
+    labels: [
+      { name: 'radar:security' },
+      { name: 'radar:performance' },
+      { name: 'radar:in-review' },
+    ],
+    body: marker('pomi-radar:v1', { version: 1 }),
+  };
+  const verification = {
+    summary: 'The existing protection covers the reported behavior.',
+    evidence: 'The shared request boundary rejects unsafe input.',
+    validation: 'Focused invalid-input tests pass.',
+    gap: 'No material gap found.',
+    verifiedAt: '2026-08-29T10:00:00Z',
+  };
+  await withFakeGithubIssues([issue], async state => {
+    await assert.rejects(
+      markAlreadyImplemented({ issueNumber: 54, ...verification }),
+      /exactly one Radar source label and one lifecycle label/
+    );
+    state.issues.get(54).labels = [
+      { name: 'radar:security' },
+      { name: 'radar:in-review' },
+      { name: 'radar:ready-for-release' },
+    ];
+    await assert.rejects(
+      markAlreadyImplemented({ issueNumber: 54, ...verification }),
+      /exactly one Radar source label and one lifecycle label/
+    );
+    assert.equal(state.comments.get(54).length, 0);
+  });
+});
+
 test('already-implemented retries reuse their original claim after a final patch failure', async () => {
   const issue = {
     number: 54,
@@ -1430,7 +1468,7 @@ test('already-implemented can verify an issue again after reconsideration', asyn
   });
 });
 
-test('already-implemented detaches grouped source PRs and closes empty ones', async () => {
+test('already-implemented closes grouped source PRs and empty consolidations', async () => {
   const verification = {
     summary: 'The current protection already covers the reported behavior.',
     evidence: 'The shared request boundary rejects the unsafe input.',
@@ -1461,8 +1499,8 @@ test('already-implemented detaches grouped source PRs and closes empty ones', as
         ...verification,
       });
       assert.deepEqual(grouped.sourcePullRequests, {
-        closed: [],
-        detached: [194],
+        closed: [194],
+        detached: [],
       });
       assert.deepEqual(grouped.consolidationPullRequests, {
         closed: [196],
@@ -1470,12 +1508,12 @@ test('already-implemented detaches grouped source PRs and closes empty ones', as
       });
       assert.deepEqual(
         readMarker(state.pulls.get(194).body, 'pomi-radar-source:v1').issues,
-        [55]
+        [54, 55]
       );
-      assert.equal(state.pulls.get(194).state, 'open');
+      assert.equal(state.pulls.get(194).state, 'closed');
       assert.deepEqual(
         readMarker(state.pulls.get(196).body, 'pomi-radar-consolidation:v1'),
-        { version: 1, issues: [55], sourcePrs: [194] }
+        { version: 1, issues: [55], sourcePrs: [] }
       );
       assert.equal(state.pulls.get(196).state, 'closed');
 
