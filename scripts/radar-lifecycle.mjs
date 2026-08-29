@@ -8,6 +8,11 @@ import {
   EXPECTED_GITHUB_APP_BOT_LOGIN,
   EXPECTED_GITHUB_APP_ID,
 } from './github-app-auth.mjs';
+import {
+  fetchWithRetry,
+  NETWORK_RETRY_DELAYS_MS,
+  NO_NETWORK_RETRY_DELAYS_MS,
+} from './http-client.mjs';
 
 const ROOT = new URL('../', import.meta.url);
 const CONTRACT = JSON.parse(
@@ -519,17 +524,23 @@ async function github(path, init) {
       'GITHUB_TOKEN from the Pomi Radar GitHub App is required. Run through scripts/github-app-auth.mjs.'
     );
   }
-  const response = await fetch(githubUrl(path), {
-    ...init,
-    headers: {
-      accept: 'application/vnd.github+json',
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
-      'user-agent': 'pomi-radar-lifecycle',
-      'x-github-api-version': '2022-11-28',
-      ...init.headers,
+  const method = (init.method ?? 'GET').toUpperCase();
+  const response = await fetchWithRetry(
+    githubUrl(path),
+    {
+      ...init,
+      headers: {
+        accept: 'application/vnd.github+json',
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        'user-agent': 'pomi-radar-lifecycle',
+        'x-github-api-version': '2022-11-28',
+        ...init.headers,
+      },
     },
-  });
+    fetch,
+    method === 'GET' ? NETWORK_RETRY_DELAYS_MS : NO_NETWORK_RETRY_DELAYS_MS
+  );
   if (!response.ok)
     throw new Error(
       `GitHub ${init.method ?? 'GET'} ${path} failed: ${response.status}`
@@ -573,11 +584,13 @@ async function sentryIssues() {
         per_page: '100',
         ...(cursor ? { cursor } : {}),
       });
-      const response = await fetch(
+      const response = await fetchWithRetry(
         sentryUrl(`/api/0/projects/${org}/${safeProject}/issues/`, query),
         {
           headers: { authorization: `Bearer ${process.env.SENTRY_AUTH_TOKEN}` },
-        }
+        },
+        fetch,
+        NETWORK_RETRY_DELAYS_MS
       );
       if (!response.ok)
         throw new Error(
@@ -1555,14 +1568,19 @@ export async function resolveSentryGroup(groupId) {
       'SENTRY_AUTH_TOKEN is required to resolve mapped Sentry groups.'
     );
   const safeGroupId = sentrySegment(groupId, 'group ID');
-  const response = await fetch(sentryUrl(`/api/0/issues/${safeGroupId}/`), {
-    method: 'PUT',
-    headers: {
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
+  const response = await fetchWithRetry(
+    sentryUrl(`/api/0/issues/${safeGroupId}/`),
+    {
+      method: 'PUT',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ status: 'resolved' }),
     },
-    body: JSON.stringify({ status: 'resolved' }),
-  });
+    fetch,
+    NO_NETWORK_RETRY_DELAYS_MS
+  );
   if (!response.ok && response.status !== 404) {
     throw new Error(
       `Sentry group ${groupId} update failed: ${response.status}`
@@ -1657,14 +1675,19 @@ export async function validateAutomationAuthentication({
       'Radar preflight requires the GitHub App installation to have repository, contents, issues, and pull-request write access.'
     );
   }
-  const response = await fetchImpl(`https://api.github.com/repos/${repo()}`, {
-    headers: {
-      accept: 'application/vnd.github+json',
-      authorization: `Bearer ${token}`,
-      'user-agent': 'pomi-radar-preflight',
-      'x-github-api-version': '2022-11-28',
+  const response = await fetchWithRetry(
+    `https://api.github.com/repos/${repo()}`,
+    {
+      headers: {
+        accept: 'application/vnd.github+json',
+        authorization: `Bearer ${token}`,
+        'user-agent': 'pomi-radar-preflight',
+        'x-github-api-version': '2022-11-28',
+      },
     },
-  });
+    fetchImpl,
+    NETWORK_RETRY_DELAYS_MS
+  );
   const repository = await response.json();
   if (!response.ok || repository.full_name !== repo()) {
     throw new Error(
