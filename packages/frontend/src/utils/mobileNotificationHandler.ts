@@ -1,5 +1,8 @@
 import { Preferences, Timer, TimerTypes } from '@pomi/shared';
-import type { ClientNotificationType } from '@pomi/shared/src/constants';
+import type {
+  ClientNotificationType,
+  NotificationGroup,
+} from '@pomi/shared/src/constants';
 import {
   CLIENT_NOTIFICATION_TYPES,
   TIMER_TYPES,
@@ -25,6 +28,7 @@ export interface MobileNotificationEvent {
   minutesLeft?: number;
   notificationTitle?: string;
   notificationBody?: string;
+  notificationGroup?: NotificationGroup;
 }
 
 class MobileNotificationHandler {

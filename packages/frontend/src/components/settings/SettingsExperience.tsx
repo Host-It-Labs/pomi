@@ -29,6 +29,7 @@ type FeatureControl = {
   enabled: boolean;
   onToggle: () => void;
   unavailable?: boolean;
+  targetId?: string;
 };
 
 export function SettingsSectionFrame({
@@ -67,6 +68,7 @@ export function SettingsSectionFrame({
           <button
             type="button"
             disabled={feature.unavailable}
+            data-setting-id={feature.targetId}
             aria-label={`${feature.enabled ? t('common.disable') : t('common.enable')} ${title}`}
             onClick={feature.onToggle}
             className={clsx(

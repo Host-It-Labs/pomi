@@ -26,6 +26,7 @@ data class PendingWatchAction(
     val assistantDebugLogId: String? = null,
     val intentionSlugs: List<String> = emptyList(),
     val subIntentions: Map<String, String> = emptyMap(),
+    val resetOnFirstIntention: Boolean? = null,
     val accountKey: String? = null
 ) {
     fun withoutAssistantInput(): PendingWatchAction = copy(
@@ -65,13 +66,15 @@ data class PendingWatchAction(
             action: String,
             intentionSlugs: List<String>,
             subIntentions: Map<String, String>,
-            timerType: String?
+            timerType: String?,
+            resetOnFirstIntention: Boolean?
         ) = PendingWatchAction(
             kind = "intentions",
             action = action,
             timerType = timerType,
             intentionSlugs = intentionSlugs,
-            subIntentions = subIntentions
+            subIntentions = subIntentions,
+            resetOnFirstIntention = resetOnFirstIntention
         )
 
         fun completeTask(taskId: String) = PendingWatchAction(

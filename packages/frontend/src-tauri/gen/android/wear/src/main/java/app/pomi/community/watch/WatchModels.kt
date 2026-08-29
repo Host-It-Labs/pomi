@@ -64,8 +64,16 @@ data class WatchTimerControls(
     val intentionRequireSelection: Boolean,
     val intentionMultiSelect: Boolean,
     val advancedSkip: Boolean,
-    val sessionsEnabled: Boolean
-)
+    val sessionsEnabled: Boolean,
+    val resetBreakOnFirstIntention: Boolean,
+    val resetLongBreakOnFirstIntention: Boolean
+) {
+    fun resetOnFirstIntentionFor(timerType: String): Boolean? = when (timerType) {
+        "break" -> resetBreakOnFirstIntention
+        "longBreak" -> resetLongBreakOnFirstIntention
+        else -> null
+    }
+}
 
 data class WatchSubIntentionOption(
     val slug: String,
@@ -167,7 +175,9 @@ fun JSONObject.toWatchStatus(): WatchStatus {
             intentionRequireSelection = controls.optBoolean("intentionRequireSelection"),
             intentionMultiSelect = controls.optBoolean("intentionMultiSelect"),
             advancedSkip = controls.optBoolean("advancedSkip"),
-            sessionsEnabled = controls.optBoolean("sessionsEnabled")
+            sessionsEnabled = controls.optBoolean("sessionsEnabled"),
+            resetBreakOnFirstIntention = controls.optBoolean("resetBreakOnFirstIntention", false),
+            resetLongBreakOnFirstIntention = controls.optBoolean("resetLongBreakOnFirstIntention", false)
         ),
         tasks = getJSONArray("tasks").mapObjects { it.toWatchTask() },
         totalVisibleTasks = optInt("totalVisibleTasks"),

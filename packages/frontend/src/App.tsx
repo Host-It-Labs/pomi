@@ -19,11 +19,7 @@ import { AssistantLauncher } from './components/assistant/AssistantLauncher';
 import { FeedbackRecorder } from './components/feedback/FeedbackRecorder';
 import { Spinner } from './components/ui/Spinner';
 import { environmentVariables } from './config/environmentVariables';
-import {
-  COLLAPSED_HEIGHT,
-  MINIMIZED_TASKS_HEIGHT,
-  WINDOW_WIDTH,
-} from './constants/window';
+import { getMinimizedWindowHeight, WINDOW_WIDTH } from './constants/window';
 import { TIMER_TYPES } from '@pomi/shared/src/constants';
 import { useApp } from './hooks/useApp';
 import { useDevAutoLogin } from './hooks/useDevAutoLogin';
@@ -110,7 +106,7 @@ function App() {
   const previousActiveTabRef = useRef(activeTab);
   const showDebugPanel = canUseDebugPanel(user);
   const [testContextSlug] = useState(getTestContextSlug);
-  const showMinimizedTaskView =
+  const showMinimizedTaskView = Boolean(
     !expanded &&
     !timer?.isExtension &&
     (timer?.type === TIMER_TYPES.WORK ||
@@ -119,7 +115,9 @@ function App() {
         preferences?.tasksDuringBreaks)) &&
     Boolean(
       preferences?.tasksExtension && preferences.tasksShowInMinimizedTimer
-    );
+    )
+  );
+  const minimizedWindowHeight = getMinimizedWindowHeight(showMinimizedTaskView);
 
   const isDevAutoLoginPending = useDevAutoLogin();
   useApp({ pauseBootstrap: isDevAutoLoginPending });
@@ -160,12 +158,9 @@ function App() {
     }
 
     void appWindow.setSize(
-      new LogicalSize(
-        WINDOW_WIDTH,
-        showMinimizedTaskView ? MINIMIZED_TASKS_HEIGHT : COLLAPSED_HEIGHT
-      )
+      new LogicalSize(WINDOW_WIDTH, minimizedWindowHeight)
     );
-  }, [appWindow, expanded, showMinimizedTaskView]);
+  }, [appWindow, expanded, minimizedWindowHeight]);
 
   return (
     <ToastProvider>
@@ -220,10 +215,11 @@ function App() {
                           ? null
                           : 'pt-[env(safe-area-inset-top)]',
                     ]
-                  : showMinimizedTaskView
-                    ? 'h-[270px] overflow-hidden'
-                    : 'h-23.75 overflow-hidden'
+                  : 'overflow-hidden'
               )}
+              style={
+                expanded ? undefined : { height: `${minimizedWindowHeight}px` }
+              }
             >
               {!expanded && <MinimizedTimer />}
               {expanded && activeTab === 'timer' && (

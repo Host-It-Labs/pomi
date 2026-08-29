@@ -50,7 +50,7 @@ describe('buildTimerContinuationPlan', () => {
       completedTimer({ sessionPosition: 4, sessionTotal: 4 }),
       preferences({
         sessionHasLongBreak: true,
-        sessionLongBreakAutoStart: true,
+        autoStartBreak: true,
       })
     );
 
@@ -67,6 +67,39 @@ describe('buildTimerContinuationPlan', () => {
     expect(plan.idleDetection).toBeNull();
   });
 
+  it.each([TIMER_TYPES.BREAK, TIMER_TYPES.LONG_BREAK])(
+    'carries an extension candidate into an auto-started %s',
+    type => {
+      const plan = buildPlan(
+        completedTimer({
+          type: TIMER_TYPES.WORK,
+          ...(type === TIMER_TYPES.LONG_BREAK
+            ? { sessionPosition: 4, sessionTotal: 4 }
+            : {}),
+        }),
+        preferences({
+          autoStartBreak: true,
+          timerExtension: true,
+          sessionHasLongBreak: type === TIMER_TYPES.LONG_BREAK,
+        })
+      );
+
+      expect(plan.nextTimer).toEqual(
+        expect.objectContaining({
+          type,
+          status: TIMER_STATUSES.RUNNING,
+          isAutoStarted: true,
+          extensionCandidate: expect.objectContaining({
+            originalTimerId: 'timer-1',
+            originalDuration: 60_000,
+            extensionNextTimerType: type,
+          }),
+        })
+      );
+      expect(plan.extensionState).toEqual({ kind: 'keep' });
+    }
+  );
+
   it('finishes a stacked final timer without scheduling an extra work position', () => {
     const plan = buildPlan(
       completedTimer({
@@ -77,7 +110,7 @@ describe('buildTimerContinuationPlan', () => {
       }),
       preferences({
         sessionHasLongBreak: true,
-        sessionLongBreakAutoStart: true,
+        autoStartBreak: true,
       })
     );
 
@@ -300,7 +333,8 @@ describe('buildTimerContinuationPlan', () => {
       sessionPomodorosCount: 4,
       sessionHasLongBreak: true,
       sessionLongBreakDuration: 900_000,
-      sessionLongBreakAutoStart: false,
+      resetBreakOnFirstIntention: false,
+      resetLongBreakOnFirstIntention: false,
       timerExtension: false,
       ...overrides,
     } as Preferences;

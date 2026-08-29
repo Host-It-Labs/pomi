@@ -1,4 +1,8 @@
-import { TASK_PRIORITIES, TASK_STATUSES } from '@pomi/shared';
+import {
+  NOTIFICATION_GROUPS,
+  TASK_PRIORITIES,
+  TASK_STATUSES,
+} from '@pomi/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { TaskNotificationService } from '../../src/tasks/task-notification.service';
 
@@ -39,7 +43,8 @@ function createService(
   preferences = createPreferences(),
   getPreferences?: (
     userId: string
-  ) => Promise<ReturnType<typeof createPreferences>>
+  ) => Promise<ReturnType<typeof createPreferences>>,
+  notificationOverrides: Record<string, unknown> = {}
 ) {
   const sent: TaskRecord[] = [];
   const clientEvents: TaskRecord[] = [];
@@ -74,6 +79,7 @@ function createService(
         priority: number,
         tags: string[]
       ) => sent.push({ title, message, userId, priority, tags }),
+      ...notificationOverrides,
     } as never,
     {
       onClientNotification: {
@@ -210,9 +216,42 @@ describe('TaskNotificationService', () => {
       }),
     ]);
     expect(first.clientEvents.map(item => item.type)).toEqual(['taskReminder']);
+    expect(first.clientEvents[0]).toMatchObject({
+      notificationGroup: NOTIFICATION_GROUPS.TASK,
+    });
     expect(restarted.sent).toHaveLength(0);
     expect(restarted.clientEvents).toHaveLength(0);
     expect(tasks[0].lastReminderKey).toBe('task-1:2026-06-17:09:00');
+  });
+
+  it('does not suppress the next due reminder after push delivery fails', async () => {
+    const tasks = [createTask({ priority: TASK_PRIORITIES.HIGH })];
+    const sendTaskNotification = vi.fn(async () => false);
+    const fixture = createService(tasks, createPreferences(), undefined, {
+      sendTaskNotification,
+    });
+
+    await fixture.service.scanDueTasks(new Date('2026-06-17T09:00:00.000Z'));
+    await fixture.service.scanDueTasks(new Date('2026-06-17T09:01:00.000Z'));
+
+    expect(sendTaskNotification).toHaveBeenCalledTimes(2);
+    expect(tasks[0].lastReminderKey).toBeNull();
+    expect(fixture.clientEvents).toHaveLength(0);
+  });
+
+  it('does not advance urgent repeat memory after push delivery fails', async () => {
+    const tasks = [createTask()];
+    const sendTaskNotification = vi.fn(async () => false);
+    const fixture = createService(tasks, createPreferences(), undefined, {
+      sendTaskNotification,
+    });
+
+    await fixture.service.scanDueTasks(new Date('2026-06-17T09:00:00.000Z'));
+    await fixture.service.scanDueTasks(new Date('2026-06-17T09:30:00.000Z'));
+
+    expect(sendTaskNotification).toHaveBeenCalledTimes(2);
+    expect(tasks[0].lastReminderKey).toBeNull();
+    expect(fixture.clientEvents).toHaveLength(0);
   });
 
   it('uses the account language for task reminders', async () => {

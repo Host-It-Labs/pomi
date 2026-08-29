@@ -360,7 +360,8 @@ describe('TimerContinuationWorkerService', () => {
       sessionPomodorosCount: 4,
       sessionHasLongBreak: true,
       sessionLongBreakDuration: 900_000,
-      sessionLongBreakAutoStart: false,
+      resetBreakOnFirstIntention: false,
+      resetLongBreakOnFirstIntention: false,
       timerExtension: false,
     } as Preferences;
   }

@@ -28,6 +28,7 @@ class IntentionsActivity : WatchActivity() {
     private var multiSelectEnabled = false
     private var requireSelection = false
     private var currentTimerType = "work"
+    private var resetOnFirstIntention: Boolean? = null
     private var rootIntentions = emptyList<WatchIntentionOption>()
     private var activeParent: WatchIntentionOption? = null
     private var networkBlocked = false
@@ -167,6 +168,8 @@ class IntentionsActivity : WatchActivity() {
                     isLoading = false
                     rootIntentions = intentions
                     currentTimerType = status.timer?.type ?: "work"
+                    resetOnFirstIntention =
+                        status.timerControls.resetOnFirstIntentionFor(currentTimerType)
                     selectedSlugs = status.timer?.intentions.orEmpty().map { it.slug }.toSet()
                     selectedSubIntentions = status.timer?.intentions.orEmpty()
                         .mapNotNull { intention ->
@@ -382,7 +385,8 @@ class IntentionsActivity : WatchActivity() {
             ),
             selection.slugs,
             selection.subIntentions,
-            currentTimerType
+            currentTimerType,
+            resetOnFirstIntention
         )
         WatchActionCoordinator.enqueue(action)
         finish()

@@ -135,6 +135,13 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
     if (!isAuthenticated) return;
 
     const { forceReconnect, stopLocalCountdown } = useTimerStore.getState();
+    const recoverConnection = (force = false) => {
+      if (useTimerStore.getState().connectionStatus.isReconnecting) {
+        return;
+      }
+
+      forceReconnect(!force);
+    };
     let lastBackgroundTime = 0;
 
     const onVisibility = () => {
@@ -147,9 +154,9 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
           ? Date.now() - lastBackgroundTime
           : 0;
         if (isMobile && timeInBackground > 15000) {
-          forceReconnect(false);
+          recoverConnection(true);
         } else {
-          forceReconnect(true);
+          recoverConnection();
         }
 
         lastBackgroundTime = 0;
@@ -162,7 +169,7 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
     let unlisten: (() => void) | undefined;
     listen('tauri://resumed', () => {
       console.warn('[App] Tauri resumed event, syncing timer');
-      forceReconnect(false);
+      recoverConnection(true);
       void reconcileAndroidForegroundSync(
         useAuthStore.getState().token,
         usePreferencesStore.getState().preferences?.pushNotifications === true
@@ -190,13 +197,13 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
           ? Date.now() - lastBackgroundTime
           : 0;
         if (timeInBackground > 15000) {
-          forceReconnect(false);
+          recoverConnection(true);
         } else {
-          forceReconnect(true);
+          recoverConnection();
         }
         lastBackgroundTime = 0;
       } else {
-        forceReconnect(true);
+        recoverConnection();
       }
     };
     window.addEventListener('focus', onFocus);

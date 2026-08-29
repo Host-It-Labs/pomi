@@ -319,6 +319,9 @@ export class TimerCompletionStreamService
       !this.hasValidPayloadFields(timer) ||
       (timer.isExtension !== undefined &&
         typeof timer.isExtension !== 'boolean') ||
+      (timer.isAutoStarted !== undefined &&
+        typeof timer.isAutoStarted !== 'boolean') ||
+      !this.isOptionalExtensionCandidate(timer.extensionCandidate) ||
       !Object.values(TIMER_TYPES).includes(timer.type) ||
       (timer.extensionNextTimerType !== undefined &&
         !Object.values(TIMER_TYPES).includes(timer.extensionNextTimerType)) ||
@@ -468,6 +471,21 @@ export class TimerCompletionStreamService
             /^[1-9]\d*$/.test(position) &&
             Number.isSafeInteger(Number(position)) &&
             typeof emoji === 'string'
+        ))
+    );
+  }
+
+  private isOptionalExtensionCandidate(value: unknown): boolean {
+    if (value === undefined) return true;
+    if (!this.isRecord(value)) return false;
+    return (
+      this.isNonEmptyString(value.originalTimerId) &&
+      this.isSafePositiveInteger(value.originalDuration) &&
+      (value.maxDuration === undefined ||
+        this.isSafePositiveInteger(value.maxDuration)) &&
+      (value.extensionNextTimerType === undefined ||
+        Object.values(TIMER_TYPES).includes(
+          value.extensionNextTimerType as Timer['type']
         ))
     );
   }

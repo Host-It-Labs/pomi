@@ -6,14 +6,19 @@ import { AssistantCaptureService } from '../../src/assistant/assistant-capture.s
 type RouteListItems = (
   drafts: Array<{
     title: string;
+    dueDate?: string | null;
     dueTime?: string | null;
+    priority?: string;
     description?: string | null;
     recurrenceRule?: string | null;
+    recurrenceInterval?: number | null;
     sourceTranscript?: string | null;
     timerType?: string | null;
+    listId?: string | null;
   }>,
   sourceText: string,
-  lists: Array<{ id: string; title: string }>
+  lists: Array<{ id: string; title: string }>,
+  language?: string | null
 ) => Array<{ title: string; listId?: string | null }>;
 
 const routeListItems = (
@@ -21,6 +26,17 @@ const routeListItems = (
     routeExplicitListItems: RouteListItems;
   }
 ).routeExplicitListItems;
+const routeSelectedListItems = (
+  AssistantCaptureService.prototype as unknown as {
+    routeSelectedListItems: (
+      drafts: Parameters<RouteListItems>[0],
+      sourceText: string,
+      selectedListId: string,
+      lists: Array<{ id: string; title: string }>,
+      language?: string | null
+    ) => ReturnType<RouteListItems>;
+  }
+).routeSelectedListItems;
 
 describe('Assistant explicit List routing', () => {
   const lists = [
@@ -44,17 +60,17 @@ describe('Assistant explicit List routing', () => {
     ]);
   });
 
-  it('keeps ambiguous or mixed requests as Tasks', () => {
+  it('rejects mixed requests after an explicit List target', () => {
     const drafts = [{ title: 'Milk' }, { title: 'Call Mum' }];
 
-    expect(
+    expect(() =>
       routeListItems.call(
         AssistantCaptureService.prototype,
         drafts,
         'Add milk to the Groceries list and call Mum',
         lists
       )
-    ).toBe(drafts);
+    ).toThrow(BadRequestException);
     expect(
       routeListItems.call(
         AssistantCaptureService.prototype,
@@ -106,6 +122,182 @@ describe('Assistant explicit List routing', () => {
     ]);
   });
 
+  it('routes a List target before trailing supported metadata', () => {
+    const drafts = [
+      { title: 'Milk', dueDate: '2026-08-30', priority: 'high' },
+      { title: 'Eggs', dueDate: '2026-08-30', priority: 'high' },
+    ];
+
+    expect(
+      routeListItems.call(
+        AssistantCaptureService.prototype,
+        drafts,
+        'Add milk and eggs to the Groceries list, due tomorrow, high priority',
+        lists
+      )
+    ).toEqual([
+      {
+        title: 'Milk',
+        dueDate: '2026-08-30',
+        priority: 'high',
+        listId: 'groceries-id',
+      },
+      {
+        title: 'Eggs',
+        dueDate: '2026-08-30',
+        priority: 'high',
+        listId: 'groceries-id',
+      },
+    ]);
+  });
+
+  it('rejects mixed unsupported text after a List target', () => {
+    const drafts = [{ title: 'Milk', dueDate: '2026-08-30' }];
+
+    expect(() =>
+      routeListItems.call(
+        AssistantCaptureService.prototype,
+        drafts,
+        'Add milk to the Groceries list due tomorrow and include a note',
+        lists
+      )
+    ).toThrow(
+      'List items support title, due date, priority, and Vacation Coverage only'
+    );
+  });
+
+  it('rejects an explicitly named List that is unavailable', () => {
+    const drafts = [{ title: 'Milk' }];
+
+    expect(() =>
+      routeListItems.call(
+        AssistantCaptureService.prototype,
+        drafts,
+        'Add milk to the Errands list',
+        lists
+      )
+    ).toThrow(
+      'That List is unavailable. Choose an existing List before saving'
+    );
+  });
+
+  it('reports an unavailable explicit List even when extraction returned no drafts', () => {
+    expect(() =>
+      routeListItems.call(
+        AssistantCaptureService.prototype,
+        [],
+        'Add milk to the Errands list',
+        lists
+      )
+    ).toThrow(
+      'That List is unavailable. Choose an existing List before saving'
+    );
+  });
+
+  it('returns localized feedback for unsupported metadata after a List target', () => {
+    const drafts = [{ title: 'Milk', dueTime: '17:00' }];
+
+    expect(() =>
+      routeListItems.call(
+        AssistantCaptureService.prototype,
+        drafts,
+        'Add milk to the Groceries list at 17:00',
+        lists,
+        'fr'
+      )
+    ).toThrow(
+      'Les éléments de liste prennent uniquement en charge le titre, la date d’échéance, la priorité et Vacation Coverage.'
+    );
+  });
+
+  it('prefers the longest exact List name when names overlap', () => {
+    const drafts = [{ title: 'Review the plan' }];
+    const overlappingLists = [
+      { id: 'work-id', title: 'Work' },
+      { id: 'work-projects-id', title: 'Work Projects' },
+    ];
+
+    expect(
+      routeListItems.call(
+        AssistantCaptureService.prototype,
+        drafts,
+        'Add review the plan to Work Projects list tomorrow',
+        overlappingLists
+      )
+    ).toEqual([{ title: 'Review the plan', listId: 'work-projects-id' }]);
+  });
+
+  it('rejects multiple explicit List destinations as ambiguous', () => {
+    const drafts = [{ title: 'Milk' }, { title: 'Bread' }];
+
+    expect(() =>
+      routeListItems.call(
+        AssistantCaptureService.prototype,
+        drafts,
+        'Add milk to the Groceries list and bread to the Packing list',
+        lists
+      )
+    ).toThrow('Choose one List destination before saving');
+  });
+
+  it('rejects a conflicting List destination returned by the parser', () => {
+    const drafts = [{ title: 'Milk', listId: 'packing-id' }];
+
+    expect(() =>
+      routeListItems.call(
+        AssistantCaptureService.prototype,
+        drafts,
+        'Add milk to the Groceries list',
+        lists
+      )
+    ).toThrow('Choose one List destination before saving');
+  });
+
+  it('routes a selected List through the same explicit destination path', () => {
+    const drafts = [{ title: 'Milk', dueDate: '2026-08-30', priority: 'high' }];
+
+    expect(
+      routeSelectedListItems.call(
+        AssistantCaptureService.prototype,
+        drafts,
+        'Add milk due tomorrow, high priority',
+        'groceries-id',
+        lists
+      )
+    ).toEqual([
+      {
+        title: 'Milk',
+        dueDate: '2026-08-30',
+        priority: 'high',
+        listId: 'groceries-id',
+      },
+    ]);
+  });
+
+  it('rejects an over-split selected List quick add instead of creating multiple items', () => {
+    expect(() =>
+      routeSelectedListItems.call(
+        AssistantCaptureService.prototype,
+        [{ title: 'Milk' }, { title: 'Eggs' }],
+        'Add milk and eggs',
+        'groceries-id',
+        lists
+      )
+    ).toThrow('Add one List item at a time');
+  });
+
+  it('rejects a selected List that conflicts with an explicit List mention', () => {
+    expect(() =>
+      routeSelectedListItems.call(
+        AssistantCaptureService.prototype,
+        [{ title: 'Milk' }],
+        'Add milk to the Packing list',
+        'groceries-id',
+        lists
+      )
+    ).toThrow('Choose one List destination before saving');
+  });
+
   it('requires a deterministic exact List name', () => {
     const drafts = [{ title: 'Milk' }];
     const ambiguousLists = [
@@ -113,13 +305,13 @@ describe('Assistant explicit List routing', () => {
       { id: 'two', title: 'Groceries' },
     ];
 
-    expect(
+    expect(() =>
       routeListItems.call(
         AssistantCaptureService.prototype,
         drafts,
         'Add milk to groceries',
         ambiguousLists
       )
-    ).toBe(drafts);
+    ).toThrow('Choose one List destination before saving');
   });
 });

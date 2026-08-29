@@ -21,6 +21,7 @@ import {
   FaSlidersH,
   FaSpinner,
   FaStop,
+  FaTimes,
 } from 'react-icons/fa';
 import { useAssistantStore } from '../../stores/assistantStore';
 import { useTasksStore } from '../../stores/tasksStore';
@@ -57,7 +58,8 @@ type TaskQuickCreateRowProps = {
     TaskQuickCreateDefaults,
     'timerType' | 'intentionSlug' | 'subIntentionSlug'
   >;
-  onOpenAdvanced: (initialTitle: string) => void;
+  onOpenAdvanced?: (initialTitle: string) => void;
+  listId?: string | null;
   onCancel?: () => void;
   onCreated?: () => void;
 };
@@ -75,6 +77,7 @@ export function TaskQuickCreateRow({
   createDefaults,
   assistantDefaults,
   onOpenAdvanced,
+  listId,
   onCancel,
   onCreated,
 }: TaskQuickCreateRowProps) {
@@ -99,6 +102,7 @@ export function TaskQuickCreateRow({
   const rotateRecordingRef = useRef(false);
   const rotationTimerRef = useRef<number | null>(null);
   const recordingRequestIdRef = useRef(0);
+  const submissionGenerationRef = useRef(0);
   const recordingStartedAtRef = useRef<number | null>(null);
   const debugLogIdRef = useRef<string | null>(null);
 
@@ -137,6 +141,8 @@ export function TaskQuickCreateRow({
     return () => {
       cancelRef.current = true;
       recordingRequestIdRef.current += 1;
+      submissionGenerationRef.current += 1;
+      pendingAssistantPreparationRef.current = null;
       if (recorderRef.current && recorderRef.current.state !== 'inactive') {
         recorderRef.current.stop();
       }
@@ -386,10 +392,14 @@ export function TaskQuickCreateRow({
 
     setIsSaving(true);
     setError(null);
+    const submissionGeneration = ++submissionGenerationRef.current;
+    const isCurrentSubmission = () =>
+      submissionGenerationRef.current === submissionGeneration;
     try {
       if (canUseAssistantTasks) {
         const preparationInputKey = JSON.stringify({
           text: title,
+          listId,
           defaults: assistantDefaults,
           debugLogId: debugLogIdRef.current,
         });
@@ -406,10 +416,14 @@ export function TaskQuickCreateRow({
           body: {
             preparationId,
             text: title,
+            listId: listId ?? undefined,
             defaults: assistantDefaults,
             debugLogId: debugLogIdRef.current,
           },
         });
+        if (!isCurrentSubmission()) {
+          return;
+        }
         if (preparation.status !== 202) {
           const body = preparation.body as { message?: string } | null;
           setError(body?.message ?? t('task.preparationFailed'));
@@ -424,9 +438,13 @@ export function TaskQuickCreateRow({
             operation: 'commitPreparedTaskFromText',
             payload: {
               preparationId,
+              ...(listId ? { listId } : {}),
             },
           },
           reconcile: async result => {
+            if (!isCurrentSubmission()) {
+              return;
+            }
             const body =
               result && typeof result === 'object' && 'body' in result
                 ? (result as { body: unknown }).body
@@ -441,6 +459,9 @@ export function TaskQuickCreateRow({
             }
           },
         });
+        if (!isCurrentSubmission()) {
+          return;
+        }
         const response =
           result &&
           typeof result === 'object' &&
@@ -465,22 +486,68 @@ export function TaskQuickCreateRow({
         return;
       }
 
+      if (listId) {
+        await submitUserMutation({
+          kind: 'lists',
+          label: t('common.add'),
+          payload: {
+            operation: 'createItem',
+            listId,
+            title,
+          },
+          reconcile: async () => {
+            requestListRefresh();
+          },
+        });
+        if (!isCurrentSubmission()) {
+          return;
+        }
+        reset();
+        requestListRefresh();
+        showToastFromStore(t('task.created'), 'success');
+        onCreated?.();
+        return;
+      }
+
       const didCreate = await createTask({
         ...createDefaults,
         title,
       });
+      if (!isCurrentSubmission()) {
+        return;
+      }
       if (didCreate) {
         reset();
         showToastFromStore(t('task.created'), 'success');
         onCreated?.();
       }
     } catch (submitError) {
+      if (!isCurrentSubmission()) {
+        return;
+      }
       console.error('Failed to create Task:', submitError);
-      setError(t('task.creationFailed'));
+      setError(
+        submitError instanceof Error && submitError.message.trim()
+          ? submitError.message
+          : t('task.creationFailed')
+      );
     } finally {
-      setIsSaving(false);
+      if (isCurrentSubmission()) {
+        setIsSaving(false);
+      }
     }
   };
+
+  const handleCancel = useCallback(() => {
+    cancelRef.current = true;
+    recordingRequestIdRef.current += 1;
+    submissionGenerationRef.current += 1;
+    pendingAssistantPreparationRef.current = null;
+    setIsSaving(false);
+    stopTaskSpeechRecording();
+    reset();
+    onCancel?.();
+  }, [onCancel, reset, stopTaskSpeechRecording]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Escape') {
@@ -488,11 +555,7 @@ export function TaskQuickCreateRow({
     }
 
     event.preventDefault();
-    cancelRef.current = true;
-    recordingRequestIdRef.current += 1;
-    stopTaskSpeechRecording();
-    reset();
-    onCancel?.();
+    handleCancel();
   };
 
   return (
@@ -500,7 +563,12 @@ export function TaskQuickCreateRow({
       <form
         onSubmit={handleSubmit}
         className={clsx(
-          'grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2',
+          'grid gap-2',
+          onOpenAdvanced && onCancel
+            ? 'grid-cols-[minmax(0,1fr)_auto_auto_auto]'
+            : onOpenAdvanced || onCancel
+              ? 'grid-cols-[minmax(0,1fr)_auto_auto]'
+              : 'grid-cols-[minmax(0,1fr)_auto]',
           compact && 'gap-1.5'
         )}
       >
@@ -553,17 +621,19 @@ export function TaskQuickCreateRow({
             </button>
           )}
         </label>
-        <IconButton
-          type="button"
-          label={t('task.create')}
-          title={t('task.advancedSettings')}
-          size="sm"
-          variant="secondary"
-          onClick={() => onOpenAdvanced(text.trim())}
-          className="h-9 w-9 shrink-0 !p-0"
-        >
-          <FaSlidersH size={10} />
-        </IconButton>
+        {onOpenAdvanced && (
+          <IconButton
+            type="button"
+            label={t('task.create')}
+            title={t('task.advancedSettings')}
+            size="sm"
+            variant="secondary"
+            onClick={() => onOpenAdvanced(text.trim())}
+            className="h-9 w-9 shrink-0 !p-0"
+          >
+            <FaSlidersH size={10} />
+          </IconButton>
+        )}
         <Button
           type="submit"
           size="xs"
@@ -575,6 +645,19 @@ export function TaskQuickCreateRow({
           <FaPlus size={10} />
           {t('common.add')}
         </Button>
+        {onCancel && (
+          <IconButton
+            type="button"
+            label={t('common.cancel')}
+            title={t('common.cancel')}
+            size="sm"
+            variant="secondary"
+            onClick={handleCancel}
+            className="h-9 w-9 shrink-0 !p-0"
+          >
+            <FaTimes size={10} />
+          </IconButton>
+        )}
       </form>
       {error && (
         <Alert variant="error" className="mt-2">

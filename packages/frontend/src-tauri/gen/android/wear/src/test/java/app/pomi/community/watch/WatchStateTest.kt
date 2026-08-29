@@ -151,6 +151,23 @@ class WatchStateTest {
     }
 
     @Test
+    fun intentionSelectionUsesTheMatchingBreakResetPreference() {
+        val controls = watchStatus().timerControls
+
+        assertFalse(controls.resetOnFirstIntentionFor("break") == true)
+        assertFalse(controls.resetOnFirstIntentionFor("longBreak") == true)
+        assertEquals(null, controls.resetOnFirstIntentionFor("work"))
+
+        val shortBreakEnabled = controls.copy(resetBreakOnFirstIntention = true)
+        assertTrue(shortBreakEnabled.resetOnFirstIntentionFor("break") == true)
+        assertFalse(shortBreakEnabled.resetOnFirstIntentionFor("longBreak") == true)
+
+        val longBreakEnabled = controls.copy(resetLongBreakOnFirstIntention = true)
+        assertFalse(longBreakEnabled.resetOnFirstIntentionFor("break") == true)
+        assertTrue(longBreakEnabled.resetOnFirstIntentionFor("longBreak") == true)
+    }
+
+    @Test
     fun intentionSelectionActionHonorsStartMode() {
         assertEquals("startOrResume", WatchIntentionSelectionAction.action(startOnSelect = true))
         assertEquals("setIntentions", WatchIntentionSelectionAction.action(startOnSelect = false))

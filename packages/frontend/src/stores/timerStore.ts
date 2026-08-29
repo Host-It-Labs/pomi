@@ -76,7 +76,8 @@ interface TimerState {
     intention?: string,
     intentions?: string[],
     subIntentions?: Record<string, string>,
-    focusedTaskId?: string
+    focusedTaskId?: string,
+    resetOnFirstIntention?: boolean
   ) => Promise<boolean>;
   removeFocusedTask: (taskId: string) => void;
   startLongBreakTimer: () => void;
@@ -376,7 +377,8 @@ const useTimerStoreBase = create<TimerState>((set, get) => ({
     intention,
     intentions,
     subIntentions,
-    focusedTaskId
+    focusedTaskId,
+    resetOnFirstIntention
   ) => {
     const timer = get().timer;
     const type = inputtedType || getNextTimerType(timer);
@@ -400,6 +402,7 @@ const useTimerStoreBase = create<TimerState>((set, get) => ({
           intentions,
           subIntentions,
           focusedTaskId,
+          resetOnFirstIntention,
         },
         reconcile: async result => {
           await waitForAuthoritativeTimer(result);

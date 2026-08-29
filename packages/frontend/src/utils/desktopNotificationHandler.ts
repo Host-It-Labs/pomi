@@ -4,9 +4,13 @@ import {
   sendNotification,
 } from '@choochmeque/tauri-plugin-notifications-api';
 import { Preferences, Timer, TimerTypes } from '@pomi/shared';
-import type { ClientNotificationType } from '@pomi/shared/src/constants';
+import type {
+  ClientNotificationType,
+  NotificationGroup,
+} from '@pomi/shared/src/constants';
 import {
   CLIENT_NOTIFICATION_TYPES,
+  NOTIFICATION_GROUPS,
   TIMER_TYPES,
 } from '@pomi/shared/src/constants';
 import {
@@ -30,6 +34,7 @@ export interface DesktopNotificationEvent {
   minutesLeft?: number;
   notificationTitle?: string;
   notificationBody?: string;
+  notificationGroup?: NotificationGroup;
 }
 
 class DesktopNotificationHandler {
@@ -134,7 +139,8 @@ class DesktopNotificationHandler {
       await this.showPushNotification(
         title,
         body,
-        this.getPushNotificationSound(preferences, sound)
+        this.getPushNotificationSound(preferences, sound),
+        NOTIFICATION_GROUPS.TIMER
       );
     }
 
@@ -172,7 +178,8 @@ class DesktopNotificationHandler {
         this.getPushNotificationSound(
           preferences,
           NOTIFICATION_SOUNDS.TIMER_WARNING
-        )
+        ),
+        NOTIFICATION_GROUPS.TIMER
       );
     }
 
@@ -216,7 +223,8 @@ class DesktopNotificationHandler {
       await this.showPushNotification(
         title,
         body,
-        this.getPushNotificationSound(preferences, sound)
+        this.getPushNotificationSound(preferences, sound),
+        NOTIFICATION_GROUPS.TIMER
       );
     }
 
@@ -259,7 +267,8 @@ class DesktopNotificationHandler {
       await this.showPushNotification(
         title,
         body,
-        this.getPushNotificationSound(preferences, sound)
+        this.getPushNotificationSound(preferences, sound),
+        NOTIFICATION_GROUPS.TIMER
       );
     }
 
@@ -293,7 +302,8 @@ class DesktopNotificationHandler {
       await this.showPushNotification(
         title,
         body,
-        this.getPushNotificationSound(preferences, sound)
+        this.getPushNotificationSound(preferences, sound),
+        event.notificationGroup ?? NOTIFICATION_GROUPS.TASK
       );
     }
 
@@ -428,7 +438,8 @@ class DesktopNotificationHandler {
   private async showPushNotification(
     title: string,
     body: string,
-    sound: string | undefined
+    sound: string | undefined,
+    group: NotificationGroup
   ): Promise<void> {
     try {
       const permissionGranted = await this.requestPermissionIfNeeded();
@@ -436,6 +447,7 @@ class DesktopNotificationHandler {
         const notification = {
           title,
           body,
+          group,
           ...(sound ? { sound: this.getNativeNotificationSound(sound) } : {}),
         };
         await sendNotification(notification);

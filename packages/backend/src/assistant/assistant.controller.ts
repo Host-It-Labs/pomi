@@ -99,7 +99,8 @@ export class AssistantController {
         req.user.sub,
         body.text,
         body.defaults,
-        body.debugLogId
+        body.debugLogId,
+        body.listId
       );
       return {
         status: 201,
@@ -121,7 +122,8 @@ export class AssistantController {
           body.preparationId,
           body.text,
           body.defaults,
-          body.debugLogId
+          body.debugLogId,
+          body.listId
         );
         return { status: 202, body: result };
       }

@@ -16,6 +16,7 @@ import { hasOpenModal } from '../utils/modalRegistry';
 import { getDisplayedSessionPosition } from '../utils/sessionDisplay';
 import { getSelectedTimerIntentions } from '../utils/timerIntentions';
 import { formatTime } from '../utils/timeUtils';
+import { areMinimizedPickerInsetsEqual } from '../utils/minimizedIntentionsLayout';
 
 export function MinimizedTimer() {
   const timer = useTimerStore.use.timer();
@@ -203,20 +204,46 @@ export function MinimizedTimer() {
             )
           : actionBox.left;
 
-      setPickerInset({
+      const nextPickerInset = {
         left: Math.max(0, Math.ceil(timerBox.right - rootBox.left + 6)),
         right: Math.max(0, Math.ceil(rootBox.right - protectedActionLeft + 6)),
-      });
+      };
+
+      setPickerInset(currentInset =>
+        areMinimizedPickerInsetsEqual(currentInset, nextPickerInset)
+          ? currentInset
+          : nextPickerInset
+      );
     };
 
     updatePickerInset();
-    window.addEventListener('resize', updatePickerInset);
-    const animationFrame = window.requestAnimationFrame(updatePickerInset);
+    let animationFrame: number | null = null;
+    const schedulePickerInsetUpdate = () => {
+      if (animationFrame !== null) {
+        return;
+      }
+
+      animationFrame = window.requestAnimationFrame(() => {
+        animationFrame = null;
+        updatePickerInset();
+      });
+    };
+    window.addEventListener('resize', schedulePickerInsetUpdate);
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(schedulePickerInsetUpdate);
+    [rootRef.current, timerSlotRef.current, actionSlotRef.current].forEach(
+      element => element && resizeObserver?.observe(element)
+    );
     const settleTimeout = window.setTimeout(updatePickerInset, 450);
 
     return () => {
-      window.removeEventListener('resize', updatePickerInset);
-      window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener('resize', schedulePickerInsetUpdate);
+      if (animationFrame !== null) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      resizeObserver?.disconnect();
       window.clearTimeout(settleTimeout);
     };
   }, [
@@ -232,7 +259,7 @@ export function MinimizedTimer() {
     <div
       ref={rootRef}
       className={clsx(
-        'relative flex w-full h-dvh',
+        'relative flex w-full h-full',
         showMinimizedTaskView
           ? 'items-start justify-between pt-[32px]'
           : 'items-center justify-between'

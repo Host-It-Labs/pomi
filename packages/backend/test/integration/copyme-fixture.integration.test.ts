@@ -127,7 +127,8 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
       'keepScreenAwake',
       'notifications',
       'pushNotifications',
-      'sessionLongBreakAutoStart',
+      'resetBreakOnFirstIntention',
+      'resetLongBreakOnFirstIntention',
       'soundNotifications',
       'tasksShowVacationCovered',
     ]) {

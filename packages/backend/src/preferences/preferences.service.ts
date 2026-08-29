@@ -41,7 +41,8 @@ const DEFAULT_PREFERENCES = {
   sessionPomodorosCount: 3,
   sessionHasLongBreak: true,
   sessionLongBreakDuration: 15 * 60 * 1000,
-  sessionLongBreakAutoStart: false,
+  resetBreakOnFirstIntention: false,
+  resetLongBreakOnFirstIntention: false,
   sessionShowLongBreakButton: false,
   sessionShowEta: false,
   sessionStackTimers: false,
@@ -139,13 +140,6 @@ export class PreferencesService {
   ): Promise<Preferences> {
     const preferences = await this.getPreferences(userId);
     const nextUpdates = { ...updates };
-    const nextTimerExtension =
-      nextUpdates.timerExtension ?? preferences.timerExtension;
-
-    if (nextTimerExtension) {
-      nextUpdates.autoStartBreak = false;
-    }
-
     const wasSessionsDisabled = !preferences.sessionsExtension;
     const sessionCountChanged =
       nextUpdates.sessionPomodorosCount !== undefined &&

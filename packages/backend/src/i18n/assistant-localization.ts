@@ -14,6 +14,9 @@ export const ASSISTANT_KEYS = [
   'voiceChunkManifestMismatch',
   'assistantTranscriptionModelRequired',
   'listMetadataUnsupported',
+  'listDestinationAmbiguous',
+  'listDestinationUnavailable',
+  'listQuickAddSingleItem',
   'assistantResponseInvalid',
   'assistantTasksLimitExceeded',
   'assistantSourceEvidenceInvalid',
@@ -28,6 +31,7 @@ export const ASSISTANT_KEYS = [
   'assistantSettingsUnavailable',
   'taskCreated',
   'tasksCreated',
+  'taskReadbackDetails',
   'listItemAdded',
   'listItemsAdded',
   'timerStarted',
@@ -44,8 +48,344 @@ export const ASSISTANT_KEYS = [
 type AssistantKey = (typeof ASSISTANT_KEYS)[number];
 
 type AssistantTemplate =
-  | string
-  | ((values: Record<string, string | number>) => string);
+  string | ((values: Record<string, string | number>) => string);
+
+type TaskReadbackLabels = {
+  dueDate: string;
+  dueTime: string;
+  recurrence: string;
+  priorityPrefix: string;
+  prioritySuffix: string;
+  timerPrefix: string;
+  timerSuffix: string;
+  intention: string;
+  subIntention: string;
+  every: string;
+  from: string;
+  frequencies: Record<string, string>;
+  units: Record<string, string>;
+  anchors: Record<string, string>;
+  priorities: Record<string, string>;
+  timers: Record<string, string>;
+  separator: string;
+};
+
+function readbackValue(value: unknown) {
+  return value === undefined || value === null || value === ''
+    ? ''
+    : String(value);
+}
+
+function joinReadbackParts(...parts: string[]) {
+  return parts.filter(Boolean).join(' ');
+}
+
+function formatTaskReadbackDetails(
+  values: Record<string, string | number>,
+  labels: TaskReadbackLabels
+) {
+  const details: string[] = [];
+  const dueDate = readbackValue(values.dueDate);
+  if (dueDate) details.push(joinReadbackParts(labels.dueDate, dueDate));
+
+  const dueTime = readbackValue(values.dueTime);
+  if (dueTime) details.push(joinReadbackParts(labels.dueTime, dueTime));
+
+  const recurrenceFrequency = readbackValue(values.recurrenceFrequency);
+  if (recurrenceFrequency) {
+    const recurrenceInterval = Number(readbackValue(values.recurrenceInterval));
+    const recurrenceValue =
+      Number.isInteger(recurrenceInterval) && recurrenceInterval > 1
+        ? joinReadbackParts(
+            labels.every,
+            String(recurrenceInterval),
+            labels.units[recurrenceFrequency] ?? recurrenceFrequency
+          )
+        : (labels.frequencies[recurrenceFrequency] ?? recurrenceFrequency);
+    const recurrenceAnchor =
+      labels.anchors[readbackValue(values.recurrenceAnchor)] ?? '';
+    details.push(
+      joinReadbackParts(
+        labels.recurrence,
+        recurrenceValue,
+        recurrenceAnchor ? joinReadbackParts(labels.from, recurrenceAnchor) : ''
+      )
+    );
+  }
+
+  const priority = readbackValue(values.priority);
+  if (priority) {
+    details.push(
+      joinReadbackParts(
+        labels.priorityPrefix,
+        labels.priorities[priority] ?? priority,
+        labels.prioritySuffix
+      )
+    );
+  }
+
+  const timerType = readbackValue(values.timerType);
+  if (timerType) {
+    details.push(
+      joinReadbackParts(
+        labels.timerPrefix,
+        labels.timers[timerType] ?? timerType,
+        labels.timerSuffix
+      )
+    );
+  }
+
+  const intention = readbackValue(values.intention);
+  if (intention) details.push(joinReadbackParts(labels.intention, intention));
+
+  const subIntention = readbackValue(values.subIntention);
+  if (subIntention) {
+    details.push(joinReadbackParts(labels.subIntention, subIntention));
+  }
+
+  return details.join(labels.separator);
+}
+
+const TASK_READBACK_LABELS: Record<AssistantLanguage, TaskReadbackLabels> = {
+  en: {
+    dueDate: 'due',
+    dueTime: 'at',
+    recurrence: 'repeats',
+    priorityPrefix: '',
+    prioritySuffix: 'priority',
+    timerPrefix: '',
+    timerSuffix: 'timer',
+    intention: 'intention',
+    subIntention: 'sub-intention',
+    every: 'every',
+    from: 'from',
+    frequencies: { daily: 'daily', weekly: 'weekly', monthly: 'monthly' },
+    units: { daily: 'days', weekly: 'weeks', monthly: 'months' },
+    anchors: { planned: 'planned date', completion: 'completion' },
+    priorities: {
+      low: 'low',
+      normal: 'normal',
+      high: 'high',
+      urgent: 'urgent',
+    },
+    timers: { work: 'work', break: 'break', longBreak: 'long break' },
+    separator: ', ',
+  },
+  'zh-Hans': {
+    dueDate: '截止',
+    dueTime: '时间',
+    recurrence: '重复',
+    priorityPrefix: '',
+    prioritySuffix: '优先级',
+    timerPrefix: '',
+    timerSuffix: '计时器',
+    intention: '目标',
+    subIntention: '子目标',
+    every: '每',
+    from: '从',
+    frequencies: { daily: '每天', weekly: '每周', monthly: '每月' },
+    units: { daily: '天', weekly: '周', monthly: '月' },
+    anchors: { planned: '计划日期', completion: '完成' },
+    priorities: { low: '低', normal: '普通', high: '高', urgent: '紧急' },
+    timers: { work: '工作', break: '休息', longBreak: '长休息' },
+    separator: '，',
+  },
+  hi: {
+    dueDate: 'नियत',
+    dueTime: 'समय',
+    recurrence: 'दोहराव',
+    priorityPrefix: 'प्राथमिकता',
+    prioritySuffix: '',
+    timerPrefix: '',
+    timerSuffix: 'टाइमर',
+    intention: 'इंटेंशन',
+    subIntention: 'उप-इंटेंशन',
+    every: 'हर',
+    from: 'से',
+    frequencies: { daily: 'दैनिक', weekly: 'साप्ताहिक', monthly: 'मासिक' },
+    units: { daily: 'दिन', weekly: 'हफ्ते', monthly: 'महीने' },
+    anchors: { planned: 'निर्धारित तारीख', completion: 'पूरा होने' },
+    priorities: {
+      low: 'कम',
+      normal: 'सामान्य',
+      high: 'उच्च',
+      urgent: 'अत्यावश्यक',
+    },
+    timers: { work: 'काम', break: 'ब्रेक', longBreak: 'लंबा ब्रेक' },
+    separator: ', ',
+  },
+  es: {
+    dueDate: 'vence',
+    dueTime: 'a las',
+    recurrence: 'repite',
+    priorityPrefix: 'prioridad',
+    prioritySuffix: '',
+    timerPrefix: 'temporizador de',
+    timerSuffix: '',
+    intention: 'intención',
+    subIntention: 'subintención',
+    every: 'cada',
+    from: 'desde',
+    frequencies: { daily: 'diario', weekly: 'semanal', monthly: 'mensual' },
+    units: { daily: 'días', weekly: 'semanas', monthly: 'meses' },
+    anchors: { planned: 'fecha planificada', completion: 'finalización' },
+    priorities: {
+      low: 'baja',
+      normal: 'normal',
+      high: 'alta',
+      urgent: 'urgente',
+    },
+    timers: { work: 'trabajo', break: 'descanso', longBreak: 'descanso largo' },
+    separator: ', ',
+  },
+  ar: {
+    dueDate: 'الاستحقاق',
+    dueTime: 'الساعة',
+    recurrence: 'يتكرر',
+    priorityPrefix: 'أولوية',
+    prioritySuffix: '',
+    timerPrefix: 'مؤقت',
+    timerSuffix: '',
+    intention: 'النية',
+    subIntention: 'النية الفرعية',
+    every: 'كل',
+    from: 'من',
+    frequencies: { daily: 'يوميًا', weekly: 'أسبوعيًا', monthly: 'شهريًا' },
+    units: { daily: 'أيام', weekly: 'أسابيع', monthly: 'أشهر' },
+    anchors: { planned: 'التاريخ المخطط', completion: 'الإكمال' },
+    priorities: {
+      low: 'منخفضة',
+      normal: 'عادية',
+      high: 'عالية',
+      urgent: 'عاجلة',
+    },
+    timers: { work: 'عمل', break: 'استراحة', longBreak: 'استراحة طويلة' },
+    separator: '، ',
+  },
+  fr: {
+    dueDate: 'pour le',
+    dueTime: 'à',
+    recurrence: 'répète',
+    priorityPrefix: 'priorité',
+    prioritySuffix: '',
+    timerPrefix: 'minuteur de',
+    timerSuffix: '',
+    intention: 'intention',
+    subIntention: 'sous-intention',
+    every: 'tous les',
+    from: 'à partir de',
+    frequencies: {
+      daily: 'quotidien',
+      weekly: 'hebdomadaire',
+      monthly: 'mensuel',
+    },
+    units: { daily: 'jours', weekly: 'semaines', monthly: 'mois' },
+    anchors: { planned: 'date planifiée', completion: 'achèvement' },
+    priorities: {
+      low: 'faible',
+      normal: 'normale',
+      high: 'haute',
+      urgent: 'urgente',
+    },
+    timers: { work: 'travail', break: 'pause', longBreak: 'longue pause' },
+    separator: ', ',
+  },
+  bn: {
+    dueDate: 'শেষ তারিখ',
+    dueTime: 'সময়',
+    recurrence: 'পুনরাবৃত্তি',
+    priorityPrefix: 'অগ্রাধিকার',
+    prioritySuffix: '',
+    timerPrefix: '',
+    timerSuffix: 'টাইমার',
+    intention: 'ইচ্ছা',
+    subIntention: 'উপ-ইচ্ছা',
+    every: 'প্রতি',
+    from: 'থেকে',
+    frequencies: { daily: 'দৈনিক', weekly: 'সাপ্তাহিক', monthly: 'মাসিক' },
+    units: { daily: 'দিন', weekly: 'সপ্তাহ', monthly: 'মাস' },
+    anchors: { planned: 'পরিকল্পিত তারিখ', completion: 'সম্পন্ন হওয়া' },
+    priorities: {
+      low: 'কম',
+      normal: 'স্বাভাবিক',
+      high: 'উচ্চ',
+      urgent: 'জরুরি',
+    },
+    timers: { work: 'কাজ', break: 'বিরতি', longBreak: 'দীর্ঘ বিরতি' },
+    separator: ', ',
+  },
+  'pt-BR': {
+    dueDate: 'para',
+    dueTime: 'às',
+    recurrence: 'repete',
+    priorityPrefix: 'prioridade',
+    prioritySuffix: '',
+    timerPrefix: 'temporizador de',
+    timerSuffix: '',
+    intention: 'intenção',
+    subIntention: 'subintenção',
+    every: 'a cada',
+    from: 'a partir de',
+    frequencies: { daily: 'diário', weekly: 'semanal', monthly: 'mensal' },
+    units: { daily: 'dias', weekly: 'semanas', monthly: 'meses' },
+    anchors: { planned: 'data planejada', completion: 'conclusão' },
+    priorities: {
+      low: 'baixa',
+      normal: 'normal',
+      high: 'alta',
+      urgent: 'urgente',
+    },
+    timers: { work: 'trabalho', break: 'pausa', longBreak: 'pausa longa' },
+    separator: ', ',
+  },
+  id: {
+    dueDate: 'jatuh tempo',
+    dueTime: 'pukul',
+    recurrence: 'berulang',
+    priorityPrefix: 'prioritas',
+    prioritySuffix: '',
+    timerPrefix: 'timer',
+    timerSuffix: '',
+    intention: 'niat',
+    subIntention: 'subniat',
+    every: 'setiap',
+    from: 'dari',
+    frequencies: { daily: 'harian', weekly: 'mingguan', monthly: 'bulanan' },
+    units: { daily: 'hari', weekly: 'minggu', monthly: 'bulan' },
+    anchors: { planned: 'tanggal terencana', completion: 'penyelesaian' },
+    priorities: {
+      low: 'rendah',
+      normal: 'normal',
+      high: 'tinggi',
+      urgent: 'mendesak',
+    },
+    timers: {
+      work: 'kerja',
+      break: 'istirahat',
+      longBreak: 'istirahat panjang',
+    },
+    separator: ', ',
+  },
+  ur: {
+    dueDate: 'مقرر',
+    dueTime: 'بجے',
+    recurrence: 'دہرائی',
+    priorityPrefix: 'ترجیح',
+    prioritySuffix: '',
+    timerPrefix: 'ٹائمر',
+    timerSuffix: '',
+    intention: 'نیت',
+    subIntention: 'ذیلی نیت',
+    every: 'ہر',
+    from: 'سے',
+    frequencies: { daily: 'روزانہ', weekly: 'ہفتہ وار', monthly: 'ماہانہ' },
+    units: { daily: 'دن', weekly: 'ہفتے', monthly: 'مہینے' },
+    anchors: { planned: 'منصوبہ بند تاریخ', completion: 'تکمیل' },
+    priorities: { low: 'کم', normal: 'معمول', high: 'زیادہ', urgent: 'فوری' },
+    timers: { work: 'کام', break: 'وقفہ', longBreak: 'طویل وقفہ' },
+    separator: '، ',
+  },
+};
 
 const ENGLISH: Record<AssistantKey, AssistantTemplate> = {
   tasksOff: 'Tasks are off.',
@@ -61,6 +401,10 @@ const ENGLISH: Record<AssistantKey, AssistantTemplate> = {
     'Assistant transcription model is required',
   listMetadataUnsupported:
     'List items support title, due date, priority, and Vacation Coverage only',
+  listDestinationAmbiguous: 'Choose one List destination before saving',
+  listDestinationUnavailable:
+    'That List is unavailable. Choose an existing List before saving',
+  listQuickAddSingleItem: 'Add one List item at a time',
   assistantResponseInvalid: 'Assistant response was not JSON',
   assistantTasksLimitExceeded: values =>
     `Assistant returned more than ${values.count} Tasks`,
@@ -77,6 +421,8 @@ const ENGLISH: Record<AssistantKey, AssistantTemplate> = {
   assistantSettingsUnavailable: 'Assistant settings are unavailable',
   taskCreated: values => `Task created: ${values.title}`,
   tasksCreated: values => `${values.count} Tasks created.`,
+  taskReadbackDetails: values =>
+    formatTaskReadbackDetails(values, TASK_READBACK_LABELS.en),
   listItemAdded: 'Added 1 item to the List.',
   listItemsAdded: values => `Added ${values.count} items to the List.`,
   timerStarted: 'Timer started.',
@@ -105,6 +451,9 @@ export const ASSISTANT_TRANSLATIONS = {
     assistantTranscriptionModelRequired: '需要设置助手转录模型。',
     listMetadataUnsupported:
       '列表项目仅支持标题、截止日期、优先级和 Vacation Coverage。',
+    listDestinationAmbiguous: '保存前请选择一个列表目标。',
+    listDestinationUnavailable: '该列表不可用。请在保存前选择一个现有列表。',
+    listQuickAddSingleItem: '一次只能添加一个列表项目。',
     assistantResponseInvalid: '助手响应不是有效的 JSON。',
     assistantTasksLimitExceeded: values =>
       `助手返回的任务超过 ${values.count} 个。`,
@@ -120,6 +469,8 @@ export const ASSISTANT_TRANSLATIONS = {
     assistantSettingsUnavailable: '助手设置不可用。',
     taskCreated: values => `已创建任务：${values.title}`,
     tasksCreated: values => `已创建 ${values.count} 个任务。`,
+    taskReadbackDetails: values =>
+      formatTaskReadbackDetails(values, TASK_READBACK_LABELS['zh-Hans']),
     listItemAdded: '已向列表添加 1 项。',
     listItemsAdded: values => `已向列表添加 ${values.count} 项。`,
     timerStarted: '计时器已开始。',
@@ -146,6 +497,10 @@ export const ASSISTANT_TRANSLATIONS = {
       'असिस्टेंट ट्रांसक्रिप्शन मॉडल आवश्यक है।',
     listMetadataUnsupported:
       'सूची आइटम केवल शीर्षक, नियत तिथि, प्राथमिकता और Vacation Coverage का समर्थन करते हैं।',
+    listDestinationAmbiguous: 'सहेजने से पहले एक सूची गंतव्य चुनें।',
+    listDestinationUnavailable:
+      'वह सूची उपलब्ध नहीं है। सहेजने से पहले कोई मौजूदा सूची चुनें।',
+    listQuickAddSingleItem: 'एक बार में केवल एक सूची आइटम जोड़ें।',
     assistantResponseInvalid: 'असिस्टेंट का उत्तर मान्य JSON नहीं था।',
     assistantTasksLimitExceeded: values =>
       `असिस्टेंट ने ${values.count} से अधिक कार्य लौटाए।`,
@@ -164,6 +519,8 @@ export const ASSISTANT_TRANSLATIONS = {
     assistantSettingsUnavailable: 'असिस्टेंट सेटिंग उपलब्ध नहीं हैं।',
     taskCreated: values => `कार्य बनाया गया: ${values.title}`,
     tasksCreated: values => `${values.count} कार्य बनाए गए।`,
+    taskReadbackDetails: values =>
+      formatTaskReadbackDetails(values, TASK_READBACK_LABELS.hi),
     listItemAdded: 'सूची में 1 आइटम जोड़ा गया।',
     listItemsAdded: values => `सूची में ${values.count} आइटम जोड़े गए।`,
     timerStarted: 'टाइमर शुरू हो गया।',
@@ -191,6 +548,11 @@ export const ASSISTANT_TRANSLATIONS = {
       'Se requiere el modelo de transcripción del asistente.',
     listMetadataUnsupported:
       'Los elementos de lista solo admiten título, fecha de vencimiento, prioridad y Vacation Coverage.',
+    listDestinationAmbiguous:
+      'Elige un único destino de lista antes de guardar.',
+    listDestinationUnavailable:
+      'Esa lista no está disponible. Elige una lista existente antes de guardar.',
+    listQuickAddSingleItem: 'Añade un solo elemento de lista cada vez.',
     assistantResponseInvalid:
       'La respuesta del asistente no era un JSON válido.',
     assistantTasksLimitExceeded: values =>
@@ -212,6 +574,8 @@ export const ASSISTANT_TRANSLATIONS = {
       'La configuración del asistente no está disponible.',
     taskCreated: values => `Tarea creada: ${values.title}`,
     tasksCreated: values => `Se crearon ${values.count} tareas.`,
+    taskReadbackDetails: values =>
+      formatTaskReadbackDetails(values, TASK_READBACK_LABELS.es),
     listItemAdded: 'Se añadió 1 elemento a la lista.',
     listItemsAdded: values =>
       `Se añadieron ${values.count} elementos a la lista.`,
@@ -240,6 +604,10 @@ export const ASSISTANT_TRANSLATIONS = {
       'نموذج تحويل كلام المساعد إلى نص مطلوب.',
     listMetadataUnsupported:
       'تدعم عناصر القائمة العنوان وتاريخ الاستحقاق والأولوية وVacation Coverage فقط.',
+    listDestinationAmbiguous: 'اختر وجهة قائمة واحدة قبل الحفظ.',
+    listDestinationUnavailable:
+      'هذه القائمة غير متاحة. اختر قائمة موجودة قبل الحفظ.',
+    listQuickAddSingleItem: 'أضف عنصرًا واحدًا إلى القائمة في كل مرة.',
     assistantResponseInvalid: 'لم تكن استجابة المساعد بصيغة JSON صالحة.',
     assistantTasksLimitExceeded: values =>
       `أعاد المساعد أكثر من ${values.count} مهام.`,
@@ -256,6 +624,8 @@ export const ASSISTANT_TRANSLATIONS = {
     assistantSettingsUnavailable: 'إعدادات المساعد غير متاحة.',
     taskCreated: values => `تم إنشاء المهمة: ${values.title}`,
     tasksCreated: values => `تم إنشاء ${values.count} مهام.`,
+    taskReadbackDetails: values =>
+      formatTaskReadbackDetails(values, TASK_READBACK_LABELS.ar),
     listItemAdded: 'تمت إضافة عنصر واحد إلى القائمة.',
     listItemsAdded: values => `تمت إضافة ${values.count} عناصر إلى القائمة.`,
     timerStarted: 'بدأ المؤقت.',
@@ -282,6 +652,11 @@ export const ASSISTANT_TRANSLATIONS = {
       'Le modèle de transcription de l’assistant est requis.',
     listMetadataUnsupported:
       'Les éléments de liste prennent uniquement en charge le titre, la date d’échéance, la priorité et Vacation Coverage.',
+    listDestinationAmbiguous:
+      'Choisissez une seule destination de liste avant l’enregistrement.',
+    listDestinationUnavailable:
+      'Cette liste est indisponible. Choisissez une liste existante avant l’enregistrement.',
+    listQuickAddSingleItem: 'Ajoutez un seul élément de liste à la fois.',
     assistantResponseInvalid:
       'La réponse de l’assistant n’était pas un JSON valide.',
     assistantTasksLimitExceeded: values =>
@@ -303,6 +678,8 @@ export const ASSISTANT_TRANSLATIONS = {
       'Les paramètres de l’assistant sont indisponibles.',
     taskCreated: values => `Tâche créée : ${values.title}`,
     tasksCreated: values => `${values.count} tâches créées.`,
+    taskReadbackDetails: values =>
+      formatTaskReadbackDetails(values, TASK_READBACK_LABELS.fr),
     listItemAdded: '1 élément ajouté à la liste.',
     listItemsAdded: values => `${values.count} éléments ajoutés à la liste.`,
     timerStarted: 'Minuteur démarré.',
@@ -330,6 +707,10 @@ export const ASSISTANT_TRANSLATIONS = {
       'অ্যাসিস্ট্যান্ট ট্রান্সক্রিপশন মডেল প্রয়োজন।',
     listMetadataUnsupported:
       'তালিকার আইটেমে শুধু শিরোনাম, শেষ তারিখ, অগ্রাধিকার এবং Vacation Coverage সমর্থিত।',
+    listDestinationAmbiguous: 'সংরক্ষণ করার আগে একটি তালিকার গন্তব্য বেছে নিন।',
+    listDestinationUnavailable:
+      'এই তালিকাটি উপলভ্য নয়। সংরক্ষণ করার আগে একটি বিদ্যমান তালিকা বেছে নিন।',
+    listQuickAddSingleItem: 'একবারে একটি তালিকা আইটেম যোগ করুন।',
     assistantResponseInvalid: 'অ্যাসিস্ট্যান্টের উত্তর বৈধ JSON ছিল না।',
     assistantTasksLimitExceeded: values =>
       `অ্যাসিস্ট্যান্ট ${values.count}-এর বেশি কাজ ফিরিয়েছে।`,
@@ -348,6 +729,8 @@ export const ASSISTANT_TRANSLATIONS = {
     assistantSettingsUnavailable: 'অ্যাসিস্ট্যান্ট সেটিংস উপলভ্য নয়।',
     taskCreated: values => `কাজ তৈরি হয়েছে: ${values.title}`,
     tasksCreated: values => `${values.count}টি কাজ তৈরি হয়েছে।`,
+    taskReadbackDetails: values =>
+      formatTaskReadbackDetails(values, TASK_READBACK_LABELS.bn),
     listItemAdded: 'তালিকায় ১টি আইটেম যোগ করা হয়েছে।',
     listItemsAdded: values =>
       `তালিকায় ${values.count}টি আইটেম যোগ করা হয়েছে।`,
@@ -376,6 +759,11 @@ export const ASSISTANT_TRANSLATIONS = {
       'O modelo de transcrição do assistente é obrigatório.',
     listMetadataUnsupported:
       'Os itens da lista aceitam apenas título, data de vencimento, prioridade e Vacation Coverage.',
+    listDestinationAmbiguous:
+      'Escolha um único destino de lista antes de salvar.',
+    listDestinationUnavailable:
+      'Essa lista não está disponível. Escolha uma lista existente antes de salvar.',
+    listQuickAddSingleItem: 'Adicione um único item de lista por vez.',
     assistantResponseInvalid:
       'A resposta do assistente não era um JSON válido.',
     assistantTasksLimitExceeded: values =>
@@ -397,6 +785,8 @@ export const ASSISTANT_TRANSLATIONS = {
       'As configurações do assistente estão indisponíveis.',
     taskCreated: values => `Tarefa criada: ${values.title}`,
     tasksCreated: values => `${values.count} tarefas criadas.`,
+    taskReadbackDetails: values =>
+      formatTaskReadbackDetails(values, TASK_READBACK_LABELS['pt-BR']),
     listItemAdded: '1 item adicionado à lista.',
     listItemsAdded: values => `${values.count} itens adicionados à lista.`,
     timerStarted: 'Temporizador iniciado.',
@@ -424,6 +814,10 @@ export const ASSISTANT_TRANSLATIONS = {
       'Model transkripsi asisten wajib diisi.',
     listMetadataUnsupported:
       'Item daftar hanya mendukung judul, tanggal jatuh tempo, prioritas, dan Vacation Coverage.',
+    listDestinationAmbiguous: 'Pilih satu tujuan Daftar sebelum menyimpan.',
+    listDestinationUnavailable:
+      'Daftar itu tidak tersedia. Pilih Daftar yang ada sebelum menyimpan.',
+    listQuickAddSingleItem: 'Tambahkan satu item Daftar setiap kali.',
     assistantResponseInvalid: 'Respons asisten bukan JSON yang valid.',
     assistantTasksLimitExceeded: values =>
       `Asisten mengembalikan lebih dari ${values.count} tugas.`,
@@ -441,6 +835,8 @@ export const ASSISTANT_TRANSLATIONS = {
     assistantSettingsUnavailable: 'Pengaturan asisten tidak tersedia.',
     taskCreated: values => `Tugas dibuat: ${values.title}`,
     tasksCreated: values => `${values.count} tugas dibuat.`,
+    taskReadbackDetails: values =>
+      formatTaskReadbackDetails(values, TASK_READBACK_LABELS.id),
     listItemAdded: '1 item ditambahkan ke Daftar.',
     listItemsAdded: values => `${values.count} item ditambahkan ke Daftar.`,
     timerStarted: 'Timer dimulai.',
@@ -467,6 +863,11 @@ export const ASSISTANT_TRANSLATIONS = {
     assistantTranscriptionModelRequired: 'اسسٹنٹ کا ٹرانسکرپشن ماڈل ضروری ہے۔',
     listMetadataUnsupported:
       'فہرست کی اشیا میں صرف عنوان، مقررہ تاریخ، ترجیح اور Vacation Coverage کی سہولت ہے۔',
+    listDestinationAmbiguous:
+      'محفوظ کرنے سے پہلے فہرست کی ایک منزل منتخب کریں۔',
+    listDestinationUnavailable:
+      'یہ فہرست دستیاب نہیں۔ محفوظ کرنے سے پہلے موجود فہرست منتخب کریں۔',
+    listQuickAddSingleItem: 'ایک وقت میں فہرست کا صرف ایک آئٹم شامل کریں۔',
     assistantResponseInvalid: 'اسسٹنٹ کا جواب درست JSON نہیں تھا۔',
     assistantTasksLimitExceeded: values =>
       `اسسٹنٹ نے ${values.count} سے زیادہ کام واپس کیے۔`,
@@ -483,6 +884,8 @@ export const ASSISTANT_TRANSLATIONS = {
     assistantSettingsUnavailable: 'اسسٹنٹ کی ترتیبات دستیاب نہیں ہیں۔',
     taskCreated: values => `کام بنا دیا گیا: ${values.title}`,
     tasksCreated: values => `${values.count} کام بنا دیے گئے۔`,
+    taskReadbackDetails: values =>
+      formatTaskReadbackDetails(values, TASK_READBACK_LABELS.ur),
     listItemAdded: 'فہرست میں 1 آئٹم شامل کر دیا گیا۔',
     listItemsAdded: values =>
       `فہرست میں ${values.count} آئٹمز شامل کر دیے گئے۔`,

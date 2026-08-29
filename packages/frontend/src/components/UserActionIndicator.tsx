@@ -8,6 +8,7 @@ import {
 } from '../utils/userActionQueue';
 import { useTimerStore } from '../stores/timerStore';
 import { useI18n } from '../i18n';
+import { requestBackendConnectionRecovery } from '../utils/backendConnectionRecovery';
 
 const INDICATOR_DELAY_MS = 1000;
 
@@ -25,12 +26,12 @@ const userActionStatusKey: Record<UserActionStatus, string> = {
 
 interface ActionQueueDetailsProps {
   actions: UserActionLifecycle[];
-  isNetworkBlocked: boolean;
+  canRetryConnection: boolean;
 }
 
 export function ActionQueueDetails({
   actions,
-  isNetworkBlocked,
+  canRetryConnection,
 }: ActionQueueDetailsProps) {
   const { t } = useI18n();
   const canClearHead =
@@ -71,11 +72,14 @@ export function ActionQueueDetails({
         ))}
       </ol>
       <div className="mt-2 flex items-center gap-2">
-        {isNetworkBlocked && (
+        {canRetryConnection && (
           <button
             type="button"
             className="flex-1 rounded bg-amber-600/90 px-2 py-1 text-xs font-medium text-white hover:bg-amber-500"
-            onClick={() => useUserActionQueueBase.getState().retry()}
+            onClick={() => {
+              useUserActionQueueBase.getState().retry();
+              requestBackendConnectionRecovery();
+            }}
           >
             {t('actionQueue.retryConnection')}
           </button>
@@ -150,7 +154,7 @@ export function UserActionIndicator() {
       {detailsOpen && (
         <ActionQueueDetails
           actions={actions}
-          isNetworkBlocked={isNetworkBlocked}
+          canRetryConnection={isNetworkBlocked}
         />
       )}
       <div

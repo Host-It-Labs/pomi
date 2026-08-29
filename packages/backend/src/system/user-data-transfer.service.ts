@@ -331,6 +331,11 @@ export class UserDataTransferService {
     }
 
     const next = this.remapRowWithFreshId(row, userId, ids);
+    if (typeof row.sessionLongBreakAutoStart === 'boolean') {
+      next.autoStartBreak =
+        next.autoStartBreak === true || row.sessionLongBreakAutoStart;
+    }
+    delete next.sessionLongBreakAutoStart;
     if (next.language === null || next.language === undefined) {
       return [next];
     }

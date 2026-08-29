@@ -9,9 +9,10 @@ import * as path from 'node:path';
 import {
   ACCENT_HEX_COLORS,
   ANDROID_NOTIFICATION_CHANNEL_IDS,
+  NOTIFICATION_GROUPS,
   TIMER_TYPES,
 } from '@pomi/shared';
-import type { Timer } from '@pomi/shared';
+import type { NotificationGroup, Timer } from '@pomi/shared';
 
 import { TIMER_NOTIFICATION_PRIORITIES } from 'src/common/constants';
 import { PomiLogger } from '../logging/pomi-logger';
@@ -20,11 +21,14 @@ import { UsersService } from '../users/users.service';
 import { translateNotification } from '../i18n/notification-localization';
 
 interface NotificationSendOptions {
+  group: NotificationGroup;
   priority?: number;
   tags?: string[];
   idempotencyKey?: string;
   requireDelivery?: boolean;
 }
+
+type PushProviderOutcome = 'delivered' | 'invalid-token';
 
 @Injectable()
 export class NotificationService {
@@ -193,6 +197,7 @@ export class NotificationService {
           ? ['coffee', TIMER_TYPES.LONG_BREAK]
           : ['coffee', TIMER_TYPES.BREAK];
     await this.sendNotification(title, message, userId, {
+      group: NOTIFICATION_GROUPS.TIMER,
       priority,
       tags,
       idempotencyKey,
@@ -210,6 +215,7 @@ export class NotificationService {
     const message = translateNotification(language, 'timerEnding', minutesLeft);
 
     await this.sendNotification(title, message, userId, {
+      group: NOTIFICATION_GROUPS.TIMER,
       priority: TIMER_NOTIFICATION_PRIORITIES.warning,
       tags: ['stopwatch', TIMER_TYPES.WORK],
     });
@@ -224,6 +230,7 @@ export class NotificationService {
     const message = translateNotification(language, 'longBreakDetectedBody');
 
     await this.sendNotification(title, message, userId, {
+      group: NOTIFICATION_GROUPS.TIMER,
       priority: TIMER_NOTIFICATION_PRIORITIES.break,
       tags: ['hourglass_flowing_sand', 'longBreakDetected'],
     });
@@ -239,6 +246,7 @@ export class NotificationService {
       translateNotification(language, 'longBreakDetectedBody'),
       userId,
       {
+        group: NOTIFICATION_GROUPS.TIMER,
         priority: TIMER_NOTIFICATION_PRIORITIES.break,
         tags: ['hourglass_flowing_sand', 'longBreakDetected'],
         idempotencyKey,
@@ -256,6 +264,7 @@ export class NotificationService {
     const message = translateNotification(language, 'pausedTimerReminderBody');
 
     await this.sendNotification(title, message, userId, {
+      group: NOTIFICATION_GROUPS.TIMER,
       priority: TIMER_NOTIFICATION_PRIORITIES.warning,
       tags: ['stopwatch', 'workPaused'],
     });
@@ -267,8 +276,9 @@ export class NotificationService {
     userId: string,
     priority: number,
     tags: string[]
-  ): Promise<void> {
-    await this.sendNotification(title, message, userId, {
+  ): Promise<boolean> {
+    return this.sendNotification(title, message, userId, {
+      group: NOTIFICATION_GROUPS.TASK,
       priority,
       tags,
     });
@@ -287,15 +297,16 @@ export class NotificationService {
     message: string,
     userId: string,
     options: NotificationSendOptions
-  ): Promise<void> {
+  ): Promise<boolean> {
     const arePushNotificationsEnabled = this.arePushNotificationsEnabled();
 
     if (arePushNotificationsEnabled || options.requireDelivery) {
-      await this.sendPushNotification(title, message, userId, options);
+      return this.sendPushNotification(title, message, userId, options);
     } else {
       this.logger.debug(
         'No notification provider configured. Skipping notification.'
       );
+      return false;
     }
   }
 
@@ -304,56 +315,87 @@ export class NotificationService {
     message: string,
     userId: string,
     options: NotificationSendOptions
-  ): Promise<void> {
+  ): Promise<boolean> {
+    let user: Awaited<ReturnType<UsersService['findUserById']>>;
     try {
-      const user = await this.usersService.findUserById(userId);
-      if (!user) {
-        this.logger.warn('Push notification skipped: user not found');
-        return;
-      }
-
-      if (options.requireDelivery) {
-        const unavailableProviders = [
-          user.fcmToken && !this.fcmApp ? 'FCM' : null,
-          user.apnToken && !this.apnProvider ? 'APNs' : null,
-        ].filter((provider): provider is string => provider !== null);
-        if (unavailableProviders.length > 0) {
-          throw new Error(
-            `Notification provider unavailable: ${unavailableProviders.join(', ')}`
-          );
-        }
-      }
-
-      if (user.fcmToken && this.fcmApp) {
-        await this.sendFCMNotification(
-          user.fcmToken,
-          title,
-          message,
-          options,
-          userId
-        );
-      }
-
-      if (user.apnToken && this.apnProvider) {
-        await this.sendAPNNotification(
-          user.apnToken,
-          title,
-          message,
-          options,
-          userId
-        );
-      }
-
-      if (!user.fcmToken && !user.apnToken) {
-        this.logger.debug('Push notification skipped: no device token');
-      }
+      user = await this.usersService.findUserById(userId);
     } catch (error) {
       this.logger.error(
-        'Failed to send push notification',
+        'Failed to load push notification recipient',
         error instanceof Error ? error.name : undefined
       );
       if (options.requireDelivery) throw error;
+      return false;
     }
+
+    if (!user) {
+      const error = new Error('Push notification skipped: user not found');
+      this.logger.warn(error.message);
+      if (options.requireDelivery) throw error;
+      return false;
+    }
+
+    if (!user.fcmToken && !user.apnToken) {
+      const error = new Error('Push notification skipped: no device token');
+      this.logger.debug(error.message);
+      if (options.requireDelivery) throw error;
+      return false;
+    }
+
+    let delivered = false;
+    let invalidToken = false;
+    const failures: unknown[] = [];
+
+    if (user.fcmToken) {
+      if (!this.fcmApp) {
+        failures.push(new Error('Notification provider unavailable: FCM'));
+      } else {
+        try {
+          const outcome = await this.sendFCMNotification(
+            user.fcmToken,
+            title,
+            message,
+            options,
+            userId
+          );
+          delivered = outcome === 'delivered' || delivered;
+          invalidToken = outcome === 'invalid-token' || invalidToken;
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+    }
+
+    if (user.apnToken) {
+      if (!this.apnProvider) {
+        failures.push(new Error('Notification provider unavailable: APNs'));
+      } else {
+        try {
+          const outcome = await this.sendAPNNotification(
+            user.apnToken,
+            title,
+            message,
+            options,
+            userId
+          );
+          delivered = outcome === 'delivered' || delivered;
+          invalidToken = outcome === 'invalid-token' || invalidToken;
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+    }
+
+    if (!delivered && failures.length > 0) {
+      if (options.requireDelivery) {
+        throw failures[0] ?? new Error('No push notification was delivered');
+      }
+      return false;
+    }
+    if (options.requireDelivery && !delivered && !invalidToken) {
+      throw new Error('No push notification was delivered');
+    }
+    return delivered || invalidToken;
   }
 
   private async sendFCMNotification(
@@ -362,30 +404,29 @@ export class NotificationService {
     message: string,
     options: NotificationSendOptions,
     userId?: string
-  ): Promise<void> {
+  ): Promise<PushProviderOutcome> {
     try {
       const sound = this.getSoundForNotification(options.tags, 'fcm');
       const channelId = this.getChannelIdForNotification(options.tags);
       const iconColor = this.getIconColorForNotification(options.tags);
+      const notificationTag =
+        options.idempotencyKey ?? options.tags?.[1] ?? 'pomi';
 
       const payload: firebaseMessaging.Message = {
         token,
-        notification: {
-          title,
-          body: message,
-        },
         android: {
           priority: 'high',
-          notification: {
-            icon: 'ic_notification',
-            sound,
-            channelId,
-            color: iconColor,
-            tag: options.idempotencyKey ?? options.tags?.[1] ?? 'pomi',
-          },
         },
         data: {
+          title,
+          body: message,
+          channelId,
+          sound,
+          icon: 'ic_notification',
+          color: iconColor,
+          tag: notificationTag,
           notificationType: options.tags?.[1] || 'general',
+          notificationGroup: options.group,
           timestamp: Date.now().toString(),
           ...(options.idempotencyKey && {
             notificationId: options.idempotencyKey,
@@ -408,6 +449,7 @@ export class NotificationService {
         if (userId) {
           await this.usersService.clearPushToken(userId, 'android');
         }
+        return 'invalid-token';
       } else {
         this.logger.error(
           'Failed to send FCM notification',
@@ -416,6 +458,7 @@ export class NotificationService {
         throw error;
       }
     }
+    return 'delivered';
   }
 
   private async sendAPNNotification(
@@ -424,7 +467,7 @@ export class NotificationService {
     message: string,
     options: NotificationSendOptions,
     userId?: string
-  ): Promise<void> {
+  ): Promise<PushProviderOutcome> {
     try {
       const sound = this.getSoundForNotification(options.tags, 'apn');
       const badge = this.getBadgeForNotification(options.tags);
@@ -441,12 +484,13 @@ export class NotificationService {
         priority:
           options.priority === 5 ? Priority.immediate : Priority.throttled,
         badge,
-        threadId: 'pomi-timer',
+        threadId: options.group,
         ...(options.idempotencyKey && {
           collapseId: options.idempotencyKey,
         }),
         data: {
           notificationType: options.tags?.[1] || 'general',
+          notificationGroup: options.group,
           timestamp: Date.now(),
           ...(options.idempotencyKey && {
             notificationId: options.idempotencyKey,
@@ -472,7 +516,7 @@ export class NotificationService {
         if (userId) {
           await this.usersService.clearPushToken(userId, 'ios');
         }
-        return;
+        return 'invalid-token';
       }
       this.logger.error(
         'Failed to send APNs notification',
@@ -480,6 +524,7 @@ export class NotificationService {
       );
       throw error;
     }
+    return 'delivered';
   }
 
   private getSoundForNotification(

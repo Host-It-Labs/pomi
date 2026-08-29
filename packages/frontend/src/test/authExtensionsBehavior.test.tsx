@@ -308,7 +308,7 @@ describe('feature setup behavior migrated from legacy Playwright documentation',
       pomodorosCount: 3,
       hasLongBreak: true,
       longBreakDuration: 20 * 60 * 1000,
-      longBreakAutoStart: false,
+      autoStartBreak: false,
     });
     expect(onClose).toHaveBeenCalledOnce();
   });

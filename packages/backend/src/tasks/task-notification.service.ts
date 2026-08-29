@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   CLIENT_NOTIFICATION_TYPES,
   ClientNotificationType,
+  NOTIFICATION_GROUPS,
   TASK_PRIORITIES,
   TASK_STATUSES,
   TIMER_STATUSES,
@@ -91,7 +92,12 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
 
     for (const task of tasks) {
       try {
-        await this.sendDueReminderIfNeeded(task, now, preferences);
+        const dueReminderHandled = await this.sendDueReminderIfNeeded(
+          task,
+          now,
+          preferences
+        );
+        if (!dueReminderHandled) continue;
         await this.repeatUrgentReminderIfNeeded(task, now, preferences);
       } catch {
         this.logger.warn('Failed to process a task reminder');
@@ -114,12 +120,12 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
     task: TaskEntity,
     now: Date,
     preferences: Awaited<ReturnType<PreferencesService['getPreferences']>>
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (
       !task.dueDate ||
       !preferences.taskReminderPriorities.includes(task.priority)
     ) {
-      return;
+      return true;
     }
 
     const reminderAt = this.getReminderAt(
@@ -128,17 +134,27 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
       preferences.taskBeforeDueReminderMinutes
     );
     if (now < reminderAt) {
-      return;
+      return true;
     }
 
     const reminderKey = `${task.id}:${task.dueDate}:${task.dueTime ?? DEFAULT_DUE_TIME}`;
     if (task.lastReminderKey === reminderKey) {
-      return;
+      return true;
     }
 
     const priority = task.priority === TASK_PRIORITIES.URGENT ? 5 : 3;
     const tags = ['clipboard', CLIENT_NOTIFICATION_TYPES.TASK_REMINDER];
     const title = translateNotification(preferences.language, 'taskDue');
+    if (preferences.pushNotifications) {
+      const delivered = await this.notificationService.sendTaskNotification(
+        title,
+        task.title,
+        task.userId,
+        priority,
+        tags
+      );
+      if (delivered === false) return false;
+    }
     this.emitClientTaskNotification(
       task,
       CLIENT_NOTIFICATION_TYPES.TASK_REMINDER,
@@ -146,15 +162,6 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
       priority,
       tags
     );
-    if (preferences.pushNotifications) {
-      await this.notificationService.sendTaskNotification(
-        title,
-        task.title,
-        task.userId,
-        priority,
-        tags
-      );
-    }
     task.lastReminderKey = reminderKey;
     if (task.priority === TASK_PRIORITIES.URGENT) {
       this.lastUrgentReminderAt.set(task.id, now.getTime());
@@ -162,6 +169,7 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
     await this.tasksRepository.update(task.id, {
       lastReminderKey: reminderKey,
     });
+    return true;
   }
 
   private async repeatUrgentReminderIfNeeded(
@@ -188,9 +196,19 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    this.lastUrgentReminderAt.set(task.id, now.getTime());
     const tags = ['clipboard', CLIENT_NOTIFICATION_TYPES.TASK_REMINDER];
     const title = translateNotification(preferences.language, 'taskDue');
+    if (preferences.pushNotifications) {
+      const delivered = await this.notificationService.sendTaskNotification(
+        title,
+        task.title,
+        task.userId,
+        5,
+        tags
+      );
+      if (delivered === false) return;
+    }
+    this.lastUrgentReminderAt.set(task.id, now.getTime());
     this.emitClientTaskNotification(
       task,
       CLIENT_NOTIFICATION_TYPES.TASK_REMINDER,
@@ -198,15 +216,6 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
       5,
       tags
     );
-    if (preferences.pushNotifications) {
-      await this.notificationService.sendTaskNotification(
-        title,
-        task.title,
-        task.userId,
-        5,
-        tags
-      );
-    }
   }
 
   private emitClientTaskNotification(
@@ -236,6 +245,7 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
       notificationBody: task.title,
       notificationPriority: priority,
       notificationTags: tags,
+      notificationGroup: NOTIFICATION_GROUPS.TASK,
       task: {
         id: task.id,
         title: task.title,

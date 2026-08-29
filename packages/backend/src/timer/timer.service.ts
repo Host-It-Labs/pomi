@@ -11,6 +11,7 @@ import {
   TIMER_STATUSES,
   TIMER_TYPES,
   Timer,
+  TimerExtensionCandidate,
   TimerExtensionResolutionAction,
   TimerExtensionState,
   TimerSkipLogMode,
@@ -60,6 +61,9 @@ type CreateOrResumeTimerOptions = {
   preserveSessionState?: boolean;
   stackedSessions?: number;
   customDuration?: number;
+  isAutoStarted?: boolean;
+  extensionCandidate?: TimerExtensionCandidate;
+  resetOnFirstIntention?: boolean;
   focusedTaskId?: string;
   focusedTaskIds?: string[];
   expectedVersion?: TimerVersion | null;
@@ -228,8 +232,9 @@ export class TimerService implements OnModuleInit {
       return {
         type: nextType,
         startPaused:
-          timer.status === TIMER_STATUSES.PAUSED ||
-          !preferences.sessionLongBreakAutoStart,
+          timer.status === TIMER_STATUSES.PAUSED || !preferences.autoStartBreak,
+        isAutoStarted:
+          timer.status !== TIMER_STATUSES.PAUSED && preferences.autoStartBreak,
       };
     }
 
@@ -244,6 +249,8 @@ export class TimerService implements OnModuleInit {
       type: nextType,
       startPaused:
         timer.status === TIMER_STATUSES.PAUSED || !preferences.autoStartBreak,
+      isAutoStarted:
+        timer.status !== TIMER_STATUSES.PAUSED && preferences.autoStartBreak,
       stackedSessions: timer.stackedSessions,
     };
   }
@@ -421,6 +428,36 @@ export class TimerService implements OnModuleInit {
     }
   }
 
+  private shouldResetAutoStartedBreakOnFirstIntention(
+    timer: Timer,
+    previousIntentions: string[],
+    nextIntentions: string[],
+    preferences: Awaited<ReturnType<PreferencesService['getPreferences']>>,
+    resetRequested?: boolean
+  ): boolean {
+    return (
+      resetRequested === true &&
+      timer.status === TIMER_STATUSES.RUNNING &&
+      timer.isAutoStarted === true &&
+      (timer.type === TIMER_TYPES.BREAK ||
+        timer.type === TIMER_TYPES.LONG_BREAK) &&
+      previousIntentions.length === 0 &&
+      nextIntentions.length > 0 &&
+      (timer.type === TIMER_TYPES.BREAK
+        ? preferences.resetBreakOnFirstIntention
+        : preferences.resetLongBreakOnFirstIntention)
+    );
+  }
+
+  private resetAutoStartedBreakOnFirstIntention(
+    timer: Timer,
+    resetTimestamp: number
+  ): void {
+    timer.startTime = resetTimestamp;
+    timer.remainingTime = timer.duration;
+    timer.status = TIMER_STATUSES.RUNNING;
+  }
+
   private getDefaultTimerDuration(
     type: TimerTypes,
     preferences: Awaited<ReturnType<PreferencesService['getPreferences']>>,
@@ -537,13 +574,15 @@ export class TimerService implements OnModuleInit {
     userId: string,
     type: TimerTypes,
     intentionSlug: string,
-    subIntentions?: Record<string, string>
+    subIntentions?: Record<string, string>,
+    resetOnFirstIntention?: boolean
   ): Promise<Timer> {
     return this.selectTimerIntentions(
       userId,
       type,
       [intentionSlug],
-      subIntentions
+      subIntentions,
+      resetOnFirstIntention
     );
   }
 
@@ -551,7 +590,8 @@ export class TimerService implements OnModuleInit {
     userId: string,
     type: TimerTypes,
     intentionSlugs: string[],
-    subIntentions?: Record<string, string>
+    subIntentions?: Record<string, string>,
+    resetOnFirstIntention?: boolean
   ): Promise<Timer> {
     const selectedIntentions = Array.from(
       new Set(intentionSlugs.map(slug => slug.trim()).filter(Boolean))
@@ -609,6 +649,16 @@ export class TimerService implements OnModuleInit {
     const timerNotStarted =
       !wasRunning && timer.remainingTime === timer.duration;
     this.refreshRunningTimerRemainingTime(timer);
+    const shouldResetOnFirstIntention =
+      wasRunning &&
+      this.shouldResetAutoStartedBreakOnFirstIntention(
+        timer,
+        previousIntentions,
+        selectedIntentions,
+        preferences,
+        resetOnFirstIntention
+      );
+    const resetTimestamp = shouldResetOnFirstIntention ? Date.now() : null;
 
     if (selectedIntentions.length === 0) {
       this.applySelectedIntentionsToTimer(timer, []);
@@ -657,7 +707,19 @@ export class TimerService implements OnModuleInit {
       }
     }
 
-    await this.commitCurrentTimer(userId, expected, timer);
+    if (resetTimestamp !== null) {
+      this.resetAutoStartedBreakOnFirstIntention(timer, resetTimestamp);
+    }
+
+    await this.commitCurrentTimer(
+      userId,
+      expected,
+      timer,
+      resetTimestamp !== null ? { extensionState: null } : undefined
+    );
+    if (resetTimestamp !== null) {
+      this.timerEvents.emitExtensionStateUpdate(userId, null);
+    }
     this.timerEvents.emitTimerUpdate(userId, timer);
 
     const nextIntentions = this.getTimerIntentions(timer);
@@ -820,12 +882,25 @@ export class TimerService implements OnModuleInit {
     }
 
     const expected = timerVersion(timer);
+    const pauseTimestamp = Date.now();
     timer.status = TIMER_STATUSES.PAUSED;
-    const elapsedTime = Date.now() - timer.startTime;
+    const elapsedTime = pauseTimestamp - timer.startTime;
     timer.remainingTime = Math.max(0, timer.duration - elapsedTime);
     timer.hasNotifiedPausedTimerReminder = false;
 
-    await this.commitCurrentTimer(userId, expected, timer);
+    const extensionState =
+      timer.isAutoStarted === true &&
+      (timer.type === TIMER_TYPES.BREAK ||
+        timer.type === TIMER_TYPES.LONG_BREAK) &&
+      timer.extensionCandidate
+        ? {
+            extensionState: {
+              ...timer.extensionCandidate,
+              startTime: pauseTimestamp,
+            },
+          }
+        : undefined;
+    await this.commitCurrentTimer(userId, expected, timer, extensionState);
     this.timerCountdownService.stopCountdown(userId);
     if (timer.type === TIMER_TYPES.WORK) {
       this.timerIdleService.schedulePausedTimerReminder(userId, timer.id);
@@ -833,6 +908,12 @@ export class TimerService implements OnModuleInit {
       this.timerIdleService.cancelPausedTimerReminder(userId);
     }
 
+    if (extensionState?.extensionState) {
+      this.timerEvents.emitExtensionStateUpdate(
+        userId,
+        extensionState.extensionState
+      );
+    }
     this.timerEvents.emitTimerUpdate(userId, timer);
 
     return timer;
@@ -993,7 +1074,17 @@ export class TimerService implements OnModuleInit {
             return recordHistory(
               await this.createOrResumeTimer(userId, {
                 type: TIMER_TYPES.LONG_BREAK,
-                startPaused: !preferences.sessionLongBreakAutoStart,
+                startPaused:
+                  timer.status === TIMER_STATUSES.PAUSED ||
+                  !preferences.autoStartBreak,
+                isAutoStarted:
+                  timer.status !== TIMER_STATUSES.PAUSED &&
+                  preferences.autoStartBreak,
+                extensionCandidate: this.buildExtensionCandidate(
+                  timer,
+                  preferences,
+                  TIMER_TYPES.LONG_BREAK
+                ),
                 expectedVersion,
                 sessionState: null,
               })
@@ -1030,6 +1121,14 @@ export class TimerService implements OnModuleInit {
               startPaused:
                 timer.status === TIMER_STATUSES.PAUSED ||
                 !preferences.autoStartBreak,
+              isAutoStarted:
+                timer.status !== TIMER_STATUSES.PAUSED &&
+                preferences.autoStartBreak,
+              extensionCandidate: this.buildExtensionCandidate(
+                timer,
+                preferences,
+                TIMER_TYPES.BREAK
+              ),
               stackedSessions: timer.stackedSessions,
               expectedVersion,
               sessionState: nextSessionState,
@@ -1086,6 +1185,18 @@ export class TimerService implements OnModuleInit {
         intentions: nextIntentions,
         subIntentions: nextSubIntentions,
         startPaused: shouldStartPaused,
+        isAutoStarted:
+          nextType === TIMER_TYPES.BREAK &&
+          !shouldStartPaused &&
+          preferences.autoStartBreak,
+        extensionCandidate:
+          nextType === TIMER_TYPES.BREAK
+            ? this.buildExtensionCandidate(
+                timer,
+                preferences,
+                TIMER_TYPES.BREAK
+              )
+            : undefined,
         isResetOrSkip: shouldResetSession,
         stackedSessions:
           nextType === TIMER_TYPES.BREAK ? timer.stackedSessions : undefined,
@@ -1767,6 +1878,36 @@ export class TimerService implements OnModuleInit {
     return undefined;
   }
 
+  private buildExtensionCandidate(
+    timer: Timer,
+    preferences: Awaited<ReturnType<PreferencesService['getPreferences']>>,
+    extensionNextTimerType: TimerTypes
+  ): TimerExtensionCandidate | undefined {
+    if (
+      timer.type !== TIMER_TYPES.WORK ||
+      timer.isExtension ||
+      !preferences.timerExtension
+    ) {
+      return undefined;
+    }
+    return {
+      maxDuration: this.calculateExtensionMaxDuration(preferences),
+      intention: timer.intention,
+      intentionSlugs: timer.intentionSlugs,
+      subIntentions: timer.subIntentions,
+      intentionTitle: timer.intentionTitle,
+      intentionEmoji: timer.intentionEmoji,
+      intentionEmojis: timer.intentionEmojis,
+      subIntention: timer.subIntention,
+      subIntentionEmoji: timer.subIntentionEmoji,
+      subIntentionEmojis: timer.subIntentionEmojis,
+      subIntentionTitle: timer.subIntentionTitle,
+      originalTimerId: timer.id,
+      originalDuration: timer.duration,
+      extensionNextTimerType,
+    };
+  }
+
   async createOrResumeTimer(
     userId: string,
     options: CreateOrResumeTimerOptions
@@ -1898,6 +2039,16 @@ export class TimerService implements OnModuleInit {
           }
         }
 
+        const shouldResetOnFirstIntention =
+          wasRunning &&
+          this.shouldResetAutoStartedBreakOnFirstIntention(
+            existingTimer,
+            existingIntentions,
+            incomingIntentions,
+            preferences,
+            options.resetOnFirstIntention
+          );
+
         if (wasRunning) {
           existingTimer.remainingTime = Math.max(
             0,
@@ -1905,26 +2056,32 @@ export class TimerService implements OnModuleInit {
           );
         }
 
+        if (shouldResetOnFirstIntention) {
+          this.resetAutoStartedBreakOnFirstIntention(existingTimer, Date.now());
+        }
+
         this.addFocusedTaskToTimer(existingTimer, options.focusedTaskId);
 
+        const clearExtensionState =
+          options.type === TIMER_TYPES.WORK || shouldResetOnFirstIntention;
         await this.commitCurrentTimer(
           userId,
           existingVersion,
           existingTimer,
-          options.sessionState !== undefined ||
-            options.type === TIMER_TYPES.WORK
+          options.sessionState !== undefined || clearExtensionState
             ? {
                 ...(options.sessionState !== undefined
                   ? { sessionState: options.sessionState }
                   : {}),
-                ...(options.type === TIMER_TYPES.WORK
-                  ? { extensionState: null }
-                  : {}),
+                ...(clearExtensionState ? { extensionState: null } : {}),
               }
             : undefined
         );
         await this.applyCommittedTimerTransition(userId, options.type);
         this.timerEvents.emitTimerUpdate(userId ?? 'unknown', existingTimer);
+        if (clearExtensionState && options.type !== TIMER_TYPES.WORK) {
+          this.timerEvents.emitExtensionStateUpdate(userId, null);
+        }
         if (
           intentionHistoryBefore?.timer &&
           this.canTimerUseIntentions(existingTimer.type, preferences)
@@ -2135,25 +2292,32 @@ export class TimerService implements OnModuleInit {
         : options.focusedTaskIds?.length
           ? [...options.focusedTaskIds]
           : undefined,
+      ...(options.isAutoStarted && { isAutoStarted: true }),
+      ...(options.extensionCandidate && {
+        extensionCandidate: options.extensionCandidate,
+      }),
     };
 
     const committedSessionState = nextSessionState ?? options.sessionState;
+    const clearExtensionState =
+      options.isResetOrSkip === true || options.type === TIMER_TYPES.WORK;
     await this.commitCurrentTimer(
       userId,
       existingVersion,
       timer,
-      committedSessionState !== undefined || options.type === TIMER_TYPES.WORK
+      committedSessionState !== undefined || clearExtensionState
         ? {
             ...(committedSessionState !== undefined
               ? { sessionState: committedSessionState }
               : {}),
-            ...(options.type === TIMER_TYPES.WORK
-              ? { extensionState: null }
-              : {}),
+            ...(clearExtensionState ? { extensionState: null } : {}),
           }
         : undefined
     );
     await this.applyCommittedTimerTransition(userId, options.type);
+    if (clearExtensionState && options.type !== TIMER_TYPES.WORK) {
+      this.timerEvents.emitExtensionStateUpdate(userId, null);
+    }
 
     this.usersService
       .associateTimerWithUser(userId, timer.id)
@@ -2453,37 +2617,21 @@ export class TimerService implements OnModuleInit {
         return;
       }
 
-      // Start extension state if enabled and break is not auto-starting
-      // Extension timers themselves should not spawn more extensions
-      // Only work timers spawn extensions (not breaks or long breaks)
-      if (
-        timer.type === TIMER_TYPES.WORK &&
-        !timer.isExtension &&
-        userId &&
-        preferences.timerExtension &&
-        !preferences.autoStartBreak
-      ) {
-        const extensionNextTimerType = this.getNextTimerTypeAfterWorkTimer(
-          timer,
-          preferences
-        );
-        const maxDuration = this.calculateExtensionMaxDuration(preferences);
+      const extensionNextTimerType = this.getNextTimerTypeAfterWorkTimer(
+        timer,
+        preferences
+      );
+      const extensionCandidate = this.buildExtensionCandidate(
+        timer,
+        preferences,
+        extensionNextTimerType
+      );
+      // Auto-started breaks carry the candidate until a successful pause.
+      // Manually-started breaks retain the existing completion-time behavior.
+      if (extensionCandidate && userId && !preferences.autoStartBreak) {
         const extensionState: TimerExtensionState = {
+          ...extensionCandidate,
           startTime: Date.now(),
-          maxDuration,
-          intention: timer.intention,
-          intentionSlugs: timer.intentionSlugs,
-          subIntentions: timer.subIntentions,
-          intentionTitle: timer.intentionTitle,
-          intentionEmoji: timer.intentionEmoji,
-          intentionEmojis: timer.intentionEmojis,
-          subIntention: timer.subIntention,
-          subIntentionEmoji: timer.subIntentionEmoji,
-          subIntentionEmojis: timer.subIntentionEmojis,
-          subIntentionTitle: timer.subIntentionTitle,
-          originalTimerId: timer.id,
-          originalDuration: timer.duration,
-          extensionNextTimerType,
         };
         await this.timerStore.setExtensionState(userId, extensionState);
         this.timerEvents.emitExtensionStateUpdate(userId, extensionState);
@@ -2508,7 +2656,9 @@ export class TimerService implements OnModuleInit {
             this.scheduleAutoAdvance(userId ?? 'unknown', 500, () => {
               return this.createOrResumeTimer(userId ?? 'unknown', {
                 type: TIMER_TYPES.LONG_BREAK,
-                startPaused: !preferences.sessionLongBreakAutoStart,
+                startPaused: !preferences.autoStartBreak,
+                isAutoStarted: preferences.autoStartBreak,
+                extensionCandidate,
                 focusedTaskIds: timer.focusedTaskIds,
               });
             });
@@ -2547,6 +2697,8 @@ export class TimerService implements OnModuleInit {
             return this.createOrResumeTimer(userId ?? 'unknown', {
               type: TIMER_TYPES.BREAK,
               startPaused: !preferences.autoStartBreak,
+              isAutoStarted: preferences.autoStartBreak,
+              extensionCandidate,
               stackedSessions: timer.stackedSessions,
               focusedTaskIds: timer.focusedTaskIds,
             });
@@ -2557,6 +2709,8 @@ export class TimerService implements OnModuleInit {
           return this.createOrResumeTimer(userId ?? 'unknown', {
             type: TIMER_TYPES.BREAK,
             startPaused: !preferences.autoStartBreak,
+            isAutoStarted: preferences.autoStartBreak,
+            extensionCandidate,
             stackedSessions: timer.stackedSessions,
             focusedTaskIds: timer.focusedTaskIds,
           });

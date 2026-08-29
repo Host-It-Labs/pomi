@@ -146,7 +146,11 @@ export class UpdatePreferencesDto {
 
   @IsOptional()
   @IsBoolean()
-  sessionLongBreakAutoStart?: boolean;
+  resetBreakOnFirstIntention?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  resetLongBreakOnFirstIntention?: boolean;
 
   @IsOptional()
   @IsBoolean()

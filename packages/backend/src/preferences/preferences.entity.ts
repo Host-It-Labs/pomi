@@ -118,7 +118,10 @@ export class Preferences {
   sessionLongBreakDuration: number;
 
   @Column({ default: false })
-  sessionLongBreakAutoStart: boolean;
+  resetBreakOnFirstIntention: boolean;
+
+  @Column({ default: false })
+  resetLongBreakOnFirstIntention: boolean;
 
   @Column({ default: false })
   sessionShowLongBreakButton: boolean;

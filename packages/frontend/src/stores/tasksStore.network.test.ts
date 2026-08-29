@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   submitUserMutation: vi.fn(),
+  showToast: vi.fn(),
   authListener: undefined as
     | undefined
     | ((
@@ -38,12 +39,13 @@ vi.mock('./uiStore', () => ({
   },
 }));
 vi.mock('../components/toast/ToastContext', () => ({
-  showToastFromStore: vi.fn(),
+  showToastFromStore: mocks.showToast,
 }));
 
 beforeEach(() => {
   mocks.list.mockReset();
   mocks.submitUserMutation.mockReset();
+  mocks.showToast.mockReset();
 });
 
 describe('Tasks store network loading', () => {
@@ -242,5 +244,48 @@ describe('Tasks store network loading', () => {
     );
     expect(mocks.list).not.toHaveBeenCalled();
     expect(useTasksStore.getState().tasks).toContainEqual(updatedTask);
+  });
+
+  it('restores saved task data and reports feedback when an update outcome is unknown', async () => {
+    const originalTask = {
+      id: 'task-update-unknown-outcome',
+      title: 'Before',
+      status: 'active',
+      priority: 'normal',
+      timerType: 'work',
+      dueDate: '2026-08-03',
+      dueTime: '09:30',
+      createdAt: '2026-07-27T12:00:00.000Z',
+    };
+    const savedTask = {
+      ...originalTask,
+      dueDate: '2026-08-12',
+      dueTime: '09:30',
+    };
+    mocks.submitUserMutation.mockRejectedValue(
+      new Error('Action worker stopped before completion')
+    );
+    mocks.list.mockResolvedValue({ status: 200, body: [savedTask] });
+    const { useTasksStore } = await import('./tasksStore');
+    useTasksStore.getState().mergeTasks([originalTask as never]);
+
+    await expect(
+      useTasksStore.getState().updateTask({
+        id: originalTask.id,
+        dueDate: savedTask.dueDate,
+        dueTime: savedTask.dueTime,
+      })
+    ).resolves.toBe(false);
+
+    expect(mocks.list).toHaveBeenCalledWith({
+      query: { status: 'active' },
+    });
+    expect(useTasksStore.getState().tasks).toEqual([savedTask]);
+    expect(useTasksStore.getState().error).toBeTruthy();
+    expect(mocks.showToast).toHaveBeenCalledTimes(1);
+    expect(mocks.showToast).toHaveBeenCalledWith(
+      useTasksStore.getState().error,
+      'error'
+    );
   });
 });

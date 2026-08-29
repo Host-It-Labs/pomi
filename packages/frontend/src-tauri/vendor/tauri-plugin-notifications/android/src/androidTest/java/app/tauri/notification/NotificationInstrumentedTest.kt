@@ -330,6 +330,7 @@ class NotificationInstrumentedTest {
         assertNull(notification.largeIcon)
         assertNull(notification.iconColor)
         assertNull(notification.actionTypeId)
+        assertNull(notification.tag)
         assertNull(notification.group)
         assertNull(notification.inboxLines)
         assertNull(notification.extra)
