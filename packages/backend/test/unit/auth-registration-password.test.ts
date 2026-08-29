@@ -32,6 +32,32 @@ describe('new account password policy', () => {
     expect(createUser).not.toHaveBeenCalled();
   });
 
+  it('counts Unicode code points instead of UTF-16 code units', async () => {
+    const createUser = vi.fn();
+    const service = new AuthService(
+      {
+        findUserByUsername: vi.fn(async () => null),
+        createUser,
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {
+        assertAuthenticationAllowed: vi.fn(),
+        assertRegistrationAllowed: vi.fn(),
+      } as never
+    );
+
+    await expect(
+      service.authenticateUser('new-user', '😀'.repeat(6), '203.0.113.4')
+    ).rejects.toThrow(
+      new BadRequestException(
+        'Password must be at least 12 characters and contain a non-whitespace character'
+      )
+    );
+    expect(createUser).not.toHaveBeenCalled();
+  });
+
   it('rejects whitespace-only passwords even when they meet the length', async () => {
     const service = new AuthService(
       { findUserByUsername: vi.fn(async () => null) } as never,

@@ -132,8 +132,9 @@ export class AuthService {
   }
 
   private assertRegistrationPassword(password: string): void {
+    const passwordCharacterCount = [...password].length;
     if (
-      password.length < MIN_REGISTRATION_PASSWORD_LENGTH ||
+      passwordCharacterCount < MIN_REGISTRATION_PASSWORD_LENGTH ||
       !/\S/.test(password)
     ) {
       throw new BadRequestException(
