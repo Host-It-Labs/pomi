@@ -324,12 +324,12 @@ class TauriNotificationManager(
 
   fun cancel(notifications: List<Int>) {
     for (id in notifications) {
-      dismissVisibleNotification(id)
+      dismissVisibleNotification(id, null)
       storage.deleteNotification(id.toString())
     }
   }
 
-  private fun dismissVisibleNotification(notificationId: Int, tag: String? = null) {
+  private fun dismissVisibleNotification(notificationId: Int, tag: String?) {
     val notificationManager = NotificationManagerCompat.from(
       context
     )

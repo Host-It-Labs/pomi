@@ -321,6 +321,8 @@ export class TimerCompletionStreamService
         typeof timer.isExtension !== 'boolean') ||
       (timer.isAutoStarted !== undefined &&
         typeof timer.isAutoStarted !== 'boolean') ||
+      (timer.hasConsumedFirstIntentionReset !== undefined &&
+        typeof timer.hasConsumedFirstIntentionReset !== 'boolean') ||
       !this.isOptionalExtensionCandidate(timer.extensionCandidate) ||
       !Object.values(TIMER_TYPES).includes(timer.type) ||
       (timer.extensionNextTimerType !== undefined &&

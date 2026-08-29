@@ -204,6 +204,7 @@ describe('TimerService revision conflicts', () => {
       expect.objectContaining({
         startTime: 50_000,
         remainingTime: 300_000,
+        hasConsumedFirstIntentionReset: true,
       }),
       { extensionState: null }
     );
@@ -282,6 +283,14 @@ describe('TimerService revision conflicts', () => {
       undefined,
       true
     );
+    now.mockReturnValue(60_000);
+    await service.selectTimerIntentions(
+      'user-1',
+      TIMER_TYPES.BREAK,
+      [],
+      undefined,
+      true
+    );
     now.mockReturnValue(70_000);
     await service.selectTimerIntention(
       'user-1',
@@ -297,17 +306,25 @@ describe('TimerService revision conflicts', () => {
       startTime: 50_000,
       isAutoStarted: true,
       extensionCandidate: expect.any(Object),
+      hasConsumedFirstIntentionReset: true,
     });
     expect(commitCurrentTimer.mock.calls[1][2]).toMatchObject({
       startTime: 50_000,
       isAutoStarted: true,
       extensionCandidate: expect.any(Object),
+      hasConsumedFirstIntentionReset: true,
     });
     expect(commitCurrentTimer.mock.calls[2][2]).toMatchObject({
+      startTime: 50_000,
+      isAutoStarted: true,
+      hasConsumedFirstIntentionReset: true,
+    });
+    expect(commitCurrentTimer.mock.calls[3][2]).toMatchObject({
       status: TIMER_STATUSES.PAUSED,
       remainingTime: 270_000,
+      hasConsumedFirstIntentionReset: true,
     });
-    expect(commitCurrentTimer.mock.calls[2][3]).toEqual({
+    expect(commitCurrentTimer.mock.calls[3][3]).toEqual({
       extensionState: {
         originalTimerId: 'work-1',
         originalDuration: 1_500_000,

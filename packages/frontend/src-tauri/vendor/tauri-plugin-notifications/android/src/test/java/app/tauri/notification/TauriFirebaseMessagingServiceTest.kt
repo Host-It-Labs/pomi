@@ -40,11 +40,13 @@ class TauriFirebaseMessagingServiceTest {
     assertEquals("#10B981", notification?.iconColor)
     assertEquals("break", notification?.tag)
     assertEquals("pomi-timer", notification?.group)
+    assertEquals("timer-completed:timer-1".hashCode(), notification?.id)
     assertEquals("Timer complete", pushData["title"])
     assertEquals("ic_notification", pushData["icon"])
     assertEquals("#10B981", pushData["color"])
     assertEquals("break", pushData["tag"])
     assertEquals("pomi-timer", pushData["notificationGroup"])
+    assertEquals("timer-completed:timer-1", pushData["notificationId"])
 
     val sourceJson = JSONObject(notification?.sourceJson)
     assertEquals(

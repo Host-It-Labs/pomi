@@ -135,7 +135,7 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
     if (!isAuthenticated) return;
 
     const { forceReconnect, stopLocalCountdown } = useTimerStore.getState();
-    const recoverConnection = (force = false) => {
+    const recoverConnection = (force: boolean) => {
       if (useTimerStore.getState().connectionStatus.isReconnecting) {
         return;
       }
@@ -156,7 +156,7 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
         if (isMobile && timeInBackground > 15000) {
           recoverConnection(true);
         } else {
-          recoverConnection();
+          recoverConnection(false);
         }
 
         lastBackgroundTime = 0;
@@ -199,11 +199,11 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
         if (timeInBackground > 15000) {
           recoverConnection(true);
         } else {
-          recoverConnection();
+          recoverConnection(false);
         }
         lastBackgroundTime = 0;
       } else {
-        recoverConnection();
+        recoverConnection(false);
       }
     };
     window.addEventListener('focus', onFocus);

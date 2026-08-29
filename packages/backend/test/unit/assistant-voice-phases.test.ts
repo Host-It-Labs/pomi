@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { AssistantCaptureService } from '../../src/assistant/assistant-capture.service';
+import { AssistantListRoutingService } from '../../src/assistant/assistant-list-routing.service';
+import { AssistantVoiceReadbackService } from '../../src/assistant/assistant-voice-readback.service';
 
 const modelContent = JSON.stringify({
   tasks: [],
@@ -107,6 +109,8 @@ function createVoiceService(language: 'en' | 'fr') {
     }),
     requireVoiceCommitResult: vi.fn(async () => committed),
   };
+  const assistantListRoutingService = new AssistantListRoutingService();
+  const assistantVoiceReadbackService = new AssistantVoiceReadbackService();
   const service = new AssistantCaptureService(
     assistantService as never,
     {} as never,
@@ -115,7 +119,9 @@ function createVoiceService(language: 'en' | 'fr') {
     intentionsService as never,
     debugService as never,
     preparationStore as never,
-    { list: vi.fn(async () => []) } as never
+    { list: vi.fn(async () => []) } as never,
+    assistantListRoutingService,
+    assistantVoiceReadbackService
   );
   return {
     service,
@@ -124,6 +130,7 @@ function createVoiceService(language: 'en' | 'fr') {
     timerService,
     intentionsService,
     preparationStore,
+    assistantVoiceReadbackService,
   };
 }
 
@@ -161,7 +168,7 @@ function formatVoiceReadback(
   language: 'en' | 'fr'
 ) {
   return (
-    context.service as unknown as VoiceReadbackFormatter
+    context.assistantVoiceReadbackService as unknown as VoiceReadbackFormatter
   ).formatVoiceTasksCreatedMessage(
     tasks,
     drafts,

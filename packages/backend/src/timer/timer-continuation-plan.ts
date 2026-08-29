@@ -299,6 +299,8 @@ function parseTimerContinuationPlanV2(value: unknown): TimerContinuationPlanV2 {
     (nextTimer.status === TIMER_STATUSES.PAUSED && nextTimer.startTime !== 0) ||
     (nextTimer.isAutoStarted !== undefined &&
       typeof nextTimer.isAutoStarted !== 'boolean') ||
+    (nextTimer.hasConsumedFirstIntentionReset !== undefined &&
+      typeof nextTimer.hasConsumedFirstIntentionReset !== 'boolean') ||
     !isExtensionCandidate(nextTimer.extensionCandidate) ||
     typeof value.clearIdleDetected !== 'boolean' ||
     value.clearHistory !== true ||

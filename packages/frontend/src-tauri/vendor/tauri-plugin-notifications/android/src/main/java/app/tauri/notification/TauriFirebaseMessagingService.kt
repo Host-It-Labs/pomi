@@ -14,6 +14,7 @@ private const val ICON_DATA_KEY = "icon"
 private const val COLOR_DATA_KEY = "color"
 private const val LEGACY_ICON_COLOR_DATA_KEY = "iconColor"
 private const val TAG_DATA_KEY = "tag"
+private const val NOTIFICATION_ID_DATA_KEY = "notificationId"
 
 internal object TauriFirebaseMessageMapper {
   fun toPushData(message: RemoteMessage): MutableMap<String, Any> {
@@ -38,7 +39,8 @@ internal object TauriFirebaseMessageMapper {
         SOUND_DATA_KEY,
         ICON_DATA_KEY,
         COLOR_DATA_KEY,
-        TAG_DATA_KEY
+        TAG_DATA_KEY,
+        NOTIFICATION_ID_DATA_KEY
       ).forEach { key ->
         if (!pushData.containsKey(key)) {
           message.data[key]?.let { pushData[key] = it }
@@ -80,7 +82,10 @@ internal object TauriFirebaseMessageMapper {
     }
 
     return Notification().apply {
-      id = System.currentTimeMillis().toInt()
+      id = data[NOTIFICATION_ID_DATA_KEY]
+        ?.takeIf { it.isNotBlank() }
+        ?.hashCode()
+        ?: System.currentTimeMillis().toInt()
       this.title = title ?: ""
       this.body = body
       channelId = notification?.channelId ?: data[CHANNEL_ID_DATA_KEY]

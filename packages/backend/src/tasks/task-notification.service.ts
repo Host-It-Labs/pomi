@@ -146,14 +146,17 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
     const tags = ['clipboard', CLIENT_NOTIFICATION_TYPES.TASK_REMINDER];
     const title = translateNotification(preferences.language, 'taskDue');
     if (preferences.pushNotifications) {
-      const delivered = await this.notificationService.sendTaskNotification(
-        title,
-        task.title,
-        task.userId,
-        priority,
-        tags
-      );
-      if (delivered === false) return false;
+      try {
+        await this.notificationService.sendTaskNotification(
+          title,
+          task.title,
+          task.userId,
+          priority,
+          tags
+        );
+      } catch {
+        this.logger.warn('Task push notification unavailable');
+      }
     }
     this.emitClientTaskNotification(
       task,
@@ -199,14 +202,17 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
     const tags = ['clipboard', CLIENT_NOTIFICATION_TYPES.TASK_REMINDER];
     const title = translateNotification(preferences.language, 'taskDue');
     if (preferences.pushNotifications) {
-      const delivered = await this.notificationService.sendTaskNotification(
-        title,
-        task.title,
-        task.userId,
-        5,
-        tags
-      );
-      if (delivered === false) return;
+      try {
+        await this.notificationService.sendTaskNotification(
+          title,
+          task.title,
+          task.userId,
+          5,
+          tags
+        );
+      } catch {
+        this.logger.warn('Task push notification unavailable');
+      }
     }
     this.lastUrgentReminderAt.set(task.id, now.getTime());
     this.emitClientTaskNotification(

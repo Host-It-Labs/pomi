@@ -89,12 +89,20 @@ export async function focusTaskOnTimer({
     delete nextSubIntentions[task.intentionSlug];
   }
 
+  const resetOnFirstIntention =
+    task.timerType === TIMER_TYPES.BREAK
+      ? preferences?.resetBreakOnFirstIntention === true
+      : task.timerType === TIMER_TYPES.LONG_BREAK
+        ? preferences?.resetLongBreakOnFirstIntention === true
+        : false;
+
   const didFocus = await createOrResumeTimer(
     task.timerType,
     nextIntentions[0],
     nextIntentions,
     nextSubIntentions,
-    task.id
+    task.id,
+    resetOnFirstIntention
   );
   if (!didFocus) return false;
   if (preferences?.tasksAutoSwitchToIntentionMode !== false) {

@@ -61,6 +61,7 @@ export interface Timer {
   originalBreakDuration?: number;
   isExtension?: boolean;
   isAutoStarted?: boolean;
+  hasConsumedFirstIntentionReset?: boolean;
   extensionCandidate?: TimerExtensionCandidate;
   extensionOriginalTimerId?: string;
   extensionBaseDuration?: number;

@@ -263,6 +263,13 @@ export const NotificationsSettings = ({
           <div className="flex justify-center">
             <Button
               onClick={async () => {
+                const granted =
+                  await notificationService.requestPermissionIfNeeded();
+                if (granted) {
+                  setHasGivenPermission(true);
+                  setMacSettingsOpenFailed(false);
+                  return;
+                }
                 const opened =
                   await notificationService.openMacNotificationSettings();
                 setMacSettingsOpenFailed(!opened);

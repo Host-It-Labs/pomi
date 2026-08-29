@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 import { TIMER_TYPES } from '@pomi/shared';
-import { AssistantCaptureService } from '../../src/assistant/assistant-capture.service';
+import { AssistantListRoutingService } from '../../src/assistant/assistant-list-routing.service';
 
 type RouteListItems = (
   drafts: Array<{
@@ -21,13 +21,14 @@ type RouteListItems = (
   language?: string | null
 ) => Array<{ title: string; listId?: string | null }>;
 
+const routingService = new AssistantListRoutingService();
 const routeListItems = (
-  AssistantCaptureService.prototype as unknown as {
+  routingService as unknown as {
     routeExplicitListItems: RouteListItems;
   }
 ).routeExplicitListItems;
 const routeSelectedListItems = (
-  AssistantCaptureService.prototype as unknown as {
+  routingService as unknown as {
     routeSelectedListItems: (
       drafts: Parameters<RouteListItems>[0],
       sourceText: string,
@@ -49,7 +50,7 @@ describe('Assistant explicit List routing', () => {
 
     expect(
       routeListItems.call(
-        AssistantCaptureService.prototype,
+        routingService,
         drafts,
         'Add milk and eggs to the Groceries list',
         lists
@@ -65,7 +66,7 @@ describe('Assistant explicit List routing', () => {
 
     expect(() =>
       routeListItems.call(
-        AssistantCaptureService.prototype,
+        routingService,
         drafts,
         'Add milk to the Groceries list and call Mum',
         lists
@@ -73,7 +74,7 @@ describe('Assistant explicit List routing', () => {
     ).toThrow(BadRequestException);
     expect(
       routeListItems.call(
-        AssistantCaptureService.prototype,
+        routingService,
         drafts,
         'Remember milk and eggs for groceries',
         lists
@@ -92,7 +93,7 @@ describe('Assistant explicit List routing', () => {
       const drafts = [draft];
       expect(() =>
         routeListItems.call(
-          AssistantCaptureService.prototype,
+          routingService,
           drafts,
           'Add milk to the Groceries list',
           lists
@@ -108,7 +109,7 @@ describe('Assistant explicit List routing', () => {
 
     expect(
       routeListItems.call(
-        AssistantCaptureService.prototype,
+        routingService,
         drafts,
         'Put milk into groceries',
         lists
@@ -130,7 +131,7 @@ describe('Assistant explicit List routing', () => {
 
     expect(
       routeListItems.call(
-        AssistantCaptureService.prototype,
+        routingService,
         drafts,
         'Add milk and eggs to the Groceries list, due tomorrow, high priority',
         lists
@@ -156,7 +157,7 @@ describe('Assistant explicit List routing', () => {
 
     expect(() =>
       routeListItems.call(
-        AssistantCaptureService.prototype,
+        routingService,
         drafts,
         'Add milk to the Groceries list due tomorrow and include a note',
         lists
@@ -171,7 +172,7 @@ describe('Assistant explicit List routing', () => {
 
     expect(() =>
       routeListItems.call(
-        AssistantCaptureService.prototype,
+        routingService,
         drafts,
         'Add milk to the Errands list',
         lists
@@ -184,7 +185,7 @@ describe('Assistant explicit List routing', () => {
   it('reports an unavailable explicit List even when extraction returned no drafts', () => {
     expect(() =>
       routeListItems.call(
-        AssistantCaptureService.prototype,
+        routingService,
         [],
         'Add milk to the Errands list',
         lists
@@ -199,7 +200,7 @@ describe('Assistant explicit List routing', () => {
 
     expect(() =>
       routeListItems.call(
-        AssistantCaptureService.prototype,
+        routingService,
         drafts,
         'Add milk to the Groceries list at 17:00',
         lists,
@@ -219,7 +220,7 @@ describe('Assistant explicit List routing', () => {
 
     expect(
       routeListItems.call(
-        AssistantCaptureService.prototype,
+        routingService,
         drafts,
         'Add review the plan to Work Projects list tomorrow',
         overlappingLists
@@ -232,7 +233,7 @@ describe('Assistant explicit List routing', () => {
 
     expect(() =>
       routeListItems.call(
-        AssistantCaptureService.prototype,
+        routingService,
         drafts,
         'Add milk to the Groceries list and bread to the Packing list',
         lists
@@ -245,7 +246,7 @@ describe('Assistant explicit List routing', () => {
 
     expect(() =>
       routeListItems.call(
-        AssistantCaptureService.prototype,
+        routingService,
         drafts,
         'Add milk to the Groceries list',
         lists
@@ -258,7 +259,7 @@ describe('Assistant explicit List routing', () => {
 
     expect(
       routeSelectedListItems.call(
-        AssistantCaptureService.prototype,
+        routingService,
         drafts,
         'Add milk due tomorrow, high priority',
         'groceries-id',
@@ -277,7 +278,7 @@ describe('Assistant explicit List routing', () => {
   it('rejects an over-split selected List quick add instead of creating multiple items', () => {
     expect(() =>
       routeSelectedListItems.call(
-        AssistantCaptureService.prototype,
+        routingService,
         [{ title: 'Milk' }, { title: 'Eggs' }],
         'Add milk and eggs',
         'groceries-id',
@@ -289,7 +290,7 @@ describe('Assistant explicit List routing', () => {
   it('rejects a selected List that conflicts with an explicit List mention', () => {
     expect(() =>
       routeSelectedListItems.call(
-        AssistantCaptureService.prototype,
+        routingService,
         [{ title: 'Milk' }],
         'Add milk to the Packing list',
         'groceries-id',
@@ -307,7 +308,7 @@ describe('Assistant explicit List routing', () => {
 
     expect(() =>
       routeListItems.call(
-        AssistantCaptureService.prototype,
+        routingService,
         drafts,
         'Add milk to groceries',
         ambiguousLists
