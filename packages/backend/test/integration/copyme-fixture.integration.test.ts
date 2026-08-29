@@ -106,8 +106,11 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
     for (const key of [
       'assistantExtension',
       'assistantTaskTranscriptsEnabled',
+      'autoStartBreak',
       'intentionExtension',
       'longBreakToBreakEnabled',
+      'resetBreakOnFirstIntention',
+      'resetLongBreakOnFirstIntention',
       'sessionShowEta',
       'sessionsExtension',
       'tasksExtension',
@@ -122,13 +125,10 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
       assert.equal(preference[key], true, `${key} should be enabled`);
     }
     for (const key of [
-      'autoStartBreak',
       'globalShortcut',
       'keepScreenAwake',
       'notifications',
       'pushNotifications',
-      'resetBreakOnFirstIntention',
-      'resetLongBreakOnFirstIntention',
       'soundNotifications',
       'tasksShowVacationCovered',
     ]) {
