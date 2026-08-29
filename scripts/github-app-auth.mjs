@@ -6,6 +6,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadAutomationEnvironment, repositoryRoot } from './local-env.mjs';
 import {
+  fetchWithRetry,
+  NETWORK_RETRY_DELAYS_MS,
+  NO_NETWORK_RETRY_DELAYS_MS,
+} from './http-client.mjs';
+import {
   createPrivateKeyForSigning,
   normalizePrivateKey,
 } from './github-app-private-key.mjs';
@@ -53,17 +58,25 @@ export async function githubRequest(
   pathname,
   { method = 'GET', token, body, fetchImpl = fetch } = {}
 ) {
-  const response = await fetchImpl(githubUrl(pathname), {
-    method,
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${token}`,
-      'User-Agent': 'pomi-radar',
-      'X-GitHub-Api-Version': '2022-11-28',
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
+  const normalizedMethod = method.toUpperCase();
+  const response = await fetchWithRetry(
+    githubUrl(pathname),
+    {
+      method,
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'User-Agent': 'pomi-radar',
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
     },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+    fetchImpl,
+    normalizedMethod === 'GET'
+      ? NETWORK_RETRY_DELAYS_MS
+      : NO_NETWORK_RETRY_DELAYS_MS
+  );
   const text = await response.text();
   const data = text ? JSON.parse(text) : undefined;
   if (!response.ok) {
