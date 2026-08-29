@@ -22,6 +22,7 @@ function createRepositories(
   };
   const tasksRepository: RepositoryMock = {
     find: vi.fn().mockResolvedValue(items),
+    count: vi.fn().mockResolvedValue(0),
     save: vi.fn(async (value: Record<string, unknown>) => value),
     update: vi.fn(),
     query: vi.fn(async (statement: string, parameters: unknown[]) => {
@@ -151,6 +152,52 @@ describe('VacationService', () => {
     expect(item.dueDate).toBe('2026-08-02');
     expect(item.lastVacationShiftedOn).toBe('2026-07-29');
     expect(tasksRepository.find).toHaveBeenCalledTimes(1);
+  });
+
+  it('processes a new eligible Task after the daily pass', async () => {
+    const state = {
+      userId: 'user-1',
+      active: true,
+      runId: 'run-1',
+      startedOn: '2026-07-28',
+      endsOn: null,
+      lastProcessedOn: '2026-07-29',
+      lastProcessedTimeZone: 'UTC',
+    };
+    const item = {
+      userId: 'user-1',
+      status: 'active',
+      vacationEligible: true,
+      dueDate: '2026-08-01',
+      lastReminderKey: 'old',
+      lastVacationRunId: null,
+      lastVacationShiftedOn: null,
+      updatedAt: new Date('2026-07-29T08:00:00Z'),
+    };
+    const { vacationRepository, tasksRepository } = createRepositories(state, [
+      item,
+    ]);
+    tasksRepository.count.mockResolvedValue(1);
+    const service = new VacationService(
+      vacationRepository as never,
+      tasksRepository as never,
+      {} as never,
+      {} as never,
+      {
+        getPreferences: vi
+          .fn()
+          .mockResolvedValue({ timeZone: 'UTC', vacationExtension: true }),
+      } as never,
+      { emitTasksUpdate: vi.fn() } as never
+    );
+
+    await service.processActiveVacations(new Date('2026-07-29T18:00:00Z'));
+
+    expect(tasksRepository.count).toHaveBeenCalledTimes(1);
+    expect(tasksRepository.find).toHaveBeenCalledTimes(1);
+    expect(item.dueDate).toBe('2026-08-02');
+    expect(item.lastVacationRunId).toBe('run-1');
+    expect(item.lastVacationShiftedOn).toBe('2026-07-29');
   });
 
   it('deactivates on the return date without reloading already processed Tasks', async () => {
@@ -330,5 +377,44 @@ describe('VacationService', () => {
     expect(tasksRepository.find).toHaveBeenCalledTimes(1);
     expect(item.dueDate).toBe('2026-08-03');
     expect(state.lastProcessedTimeZone).toBe('America/New_York');
+  });
+
+  it('coalesces activation requests while vacation is already active', async () => {
+    const state = {
+      userId: 'user-1',
+      active: true,
+      runId: 'run-1',
+      startedOn: '2026-07-28',
+      endsOn: null,
+    };
+    const { vacationRepository, tasksRepository } = createRepositories(state, [
+      {
+        dueDate: '2026-08-01',
+        lastVacationRunId: 'run-1',
+        lastVacationShiftedOn: '2026-07-29',
+      },
+    ]);
+    const service = new VacationService(
+      vacationRepository as never,
+      tasksRepository as never,
+      {} as never,
+      {} as never,
+      {
+        getPreferences: vi
+          .fn()
+          .mockResolvedValue({ timeZone: 'UTC', vacationExtension: true }),
+      } as never,
+      { emitTasksUpdate: vi.fn() } as never
+    );
+
+    const result = await service.activate('user-1');
+
+    expect(result).toMatchObject({
+      active: true,
+      runId: 'run-1',
+      startedOn: '2026-07-28',
+    });
+    expect(vacationRepository.save).not.toHaveBeenCalled();
+    expect(tasksRepository.find).not.toHaveBeenCalled();
   });
 });

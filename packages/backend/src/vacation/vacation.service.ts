@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { TASK_STATUSES } from '@pomi/shared';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, LessThan, Not, Repository } from 'typeorm';
 import { v4 as uuid } from 'uuid';
 import { Intention } from '../intentions/intentions.entity';
 import { ListEntity } from '../lists/lists.entity';
@@ -134,6 +134,9 @@ export class VacationService implements OnModuleInit, OnModuleDestroy {
           where: { userId },
           lock: { mode: 'pessimistic_write' },
         });
+        if (state?.active) {
+          return { state, changed: false };
+        }
         state ??= vacationRepository.create({ userId });
         state.active = true;
         state.runId = uuid();
@@ -213,8 +216,16 @@ export class VacationService implements OnModuleInit, OnModuleDestroy {
       const shouldProcess =
         state.lastProcessedOn !== processingThrough ||
         state.lastProcessedTimeZone !== preferences.timeZone;
+      const shouldRun =
+        shouldProcess ||
+        (state.runId !== null &&
+          (await this.hasUnprocessedDueDateShifts(
+            state,
+            processingThrough,
+            tasksRepository
+          )));
 
-      if (!shouldProcess) {
+      if (!shouldRun) {
         if (state.endsOn && today >= state.endsOn) {
           state.active = false;
           await vacationRepository.save(state);
@@ -244,11 +255,7 @@ export class VacationService implements OnModuleInit, OnModuleDestroy {
   ): Promise<boolean> {
     if (!state.runId || !state.startedOn) return false;
     const items = await tasksRepository.find({
-      where: {
-        userId: state.userId,
-        status: TASK_STATUSES.ACTIVE,
-        vacationEligible: true,
-      },
+      where: this.getUnprocessedDueDateShiftWhere(state, throughDate),
       lock: { mode: 'pessimistic_write' },
     });
     let changed = false;
@@ -275,6 +282,47 @@ export class VacationService implements OnModuleInit, OnModuleDestroy {
       changed = true;
     }
     return changed;
+  }
+
+  private async hasUnprocessedDueDateShifts(
+    state: VacationEntity,
+    throughDate: string,
+    tasksRepository: Repository<TaskEntity>
+  ) {
+    return (
+      (await tasksRepository.count({
+        where: this.getUnprocessedDueDateShiftWhere(state, throughDate),
+      })) > 0
+    );
+  }
+
+  private getUnprocessedDueDateShiftWhere(
+    state: VacationEntity,
+    throughDate: string
+  ) {
+    if (!state.runId) return [];
+    const runId = state.runId;
+    const base = {
+      userId: state.userId,
+      status: TASK_STATUSES.ACTIVE,
+      vacationEligible: true,
+      dueDate: Not(IsNull()),
+    };
+
+    return [
+      { ...base, lastVacationRunId: IsNull() },
+      { ...base, lastVacationRunId: Not(runId) },
+      {
+        ...base,
+        lastVacationRunId: runId,
+        lastVacationShiftedOn: IsNull(),
+      },
+      {
+        ...base,
+        lastVacationRunId: runId,
+        lastVacationShiftedOn: LessThan(throughDate),
+      },
+    ];
   }
 
   private publicState(state: VacationEntity | null) {
