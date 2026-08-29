@@ -49,10 +49,10 @@ merge updates, and production-release closure.
   The Radar presents these as “Why no new implementation is needed”,
   “Evidence”, “How it was checked”, and “What could still be missing”. The
   command provisions its
-  lifecycle label when needed and detaches the issue from an open source PR;
-  a PR containing no remaining issues is closed. Any open consolidation that
-  contains the issue is also closed because its branch may still contain the
-  detached implementation; remaining issues require a fresh consolidation.
+  lifecycle label when needed and closes any open source PR containing the
+  issue because its branch may still contain the detached implementation. Any
+  open consolidation that contains the issue is also closed for the same
+  reason; remaining issues require fresh source and consolidation PRs.
 - A consolidation merge moves included canonical issues to
   `radar:ready-for-release`. Only a successful, non-prerelease production job
   closes included issues as `radar:released` and resolves mapped Sentry groups.
