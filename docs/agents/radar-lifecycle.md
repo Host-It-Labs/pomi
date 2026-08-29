@@ -47,7 +47,9 @@ merge updates, and production-release closure.
 - The `mark-already-implemented` payload must include `summary`, `evidence`,
   `validation`, `gap`, and an explicit ISO `verifiedAt`. The Radar presents
   these as “Why no new implementation is needed”, “Evidence”, “How it was
-  checked”, and “What could still be missing”.
+  checked”, and “What could still be missing”. The command provisions its
+  lifecycle label when needed and detaches the issue from an open source PR;
+  a PR containing no remaining issues is closed.
 - A consolidation merge moves included canonical issues to
   `radar:ready-for-release`. Only a successful, non-prerelease production job
   closes included issues as `radar:released` and resolves mapped Sentry groups.

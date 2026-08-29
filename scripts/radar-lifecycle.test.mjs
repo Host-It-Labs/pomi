@@ -831,6 +831,7 @@ async function withFakeGithub(initialIssue, run) {
 async function withFakeGithubIssues(initialIssues, run, options = {}) {
   const previousFetch = globalThis.fetch;
   const previousToken = process.env.GITHUB_TOKEN;
+  const sourcePulls = options.pulls ?? [];
   const state = {
     issues: new Map(
       initialIssues.map(issue => [
@@ -838,32 +839,61 @@ async function withFakeGithubIssues(initialIssues, run, options = {}) {
         globalThis.structuredClone(issue),
       ])
     ),
-    comments: new Map(initialIssues.map(issue => [issue.number, []])),
+    pulls: new Map(
+      sourcePulls.map(pull => [pull.number, globalThis.structuredClone(pull)])
+    ),
+    labels: new Set(options.labels ?? []),
+    comments: new Map(
+      [...initialIssues, ...sourcePulls].map(item => [item.number, []])
+    ),
     patches: [],
     failFinalDuplicatePatch: options.failFinalDuplicatePatch === true,
+    failFinalAlreadyImplementedPatch:
+      options.failFinalAlreadyImplementedPatch === true,
   };
   process.env.GITHUB_TOKEN = 'test-token';
   globalThis.fetch = async (input, init = {}) => {
     const url = new URL(String(input));
     const method = init.method ?? 'GET';
-    const match = url.pathname.match(/\/issues\/(\d+)(\/comments)?$/);
+    if (url.pathname.endsWith('/labels') && method === 'GET')
+      return globalThis.Response.json(
+        [...state.labels].map(name => ({ name }))
+      );
+    if (url.pathname.endsWith('/labels') && method === 'POST') {
+      const label = JSON.parse(init.body);
+      state.labels.add(label.name);
+      return globalThis.Response.json(label);
+    }
+    if (url.pathname.endsWith('/pulls') && method === 'GET')
+      return globalThis.Response.json(
+        [...state.pulls.values()].filter(pull => pull.state === 'open')
+      );
+    const match = url.pathname.match(/\/(issues|pulls)\/(\d+)(\/comments)?$/);
     if (!match)
       return globalThis.Response.json(
         { message: `Unexpected ${method} ${url.pathname}` },
         { status: 500 }
       );
-    const issueNumber = Number(match[1]);
-    if (match[2] && method === 'GET')
+    const resource = match[1];
+    const issueNumber = Number(match[2]);
+    const collection = resource === 'issues' ? state.issues : state.pulls;
+    if (match[3] && method === 'GET')
       return globalThis.Response.json(state.comments.get(issueNumber) ?? []);
-    if (match[2] && method === 'POST') {
+    if (match[3] && method === 'POST') {
       const comments = state.comments.get(issueNumber) ?? [];
       const comment = { id: comments.length + 1, ...JSON.parse(init.body) };
       comments.push(comment);
       state.comments.set(issueNumber, comments);
+      const value = collection.get(issueNumber);
+      if (value?.updated_at) {
+        value.updated_at = new Date(
+          new Date(value.updated_at).getTime() + 1000
+        ).toISOString();
+      }
       return globalThis.Response.json(comment);
     }
     if (method === 'GET')
-      return globalThis.Response.json(state.issues.get(issueNumber));
+      return globalThis.Response.json(collection.get(issueNumber));
     if (method === 'PATCH') {
       const changes = JSON.parse(init.body);
       if (
@@ -877,16 +907,27 @@ async function withFakeGithubIssues(initialIssues, run, options = {}) {
           { status: 500 }
         );
       }
+      if (
+        state.failFinalAlreadyImplementedPatch &&
+        resource === 'issues' &&
+        changes.labels?.includes('radar:already-implemented')
+      ) {
+        state.failFinalAlreadyImplementedPatch = false;
+        return globalThis.Response.json(
+          { message: 'Injected final already-implemented patch failure' },
+          { status: 500 }
+        );
+      }
       const normalized = {
         ...changes,
         ...(changes.labels
           ? { labels: changes.labels.map(name => ({ name })) }
           : {}),
       };
-      const issue = { ...state.issues.get(issueNumber), ...normalized };
-      state.issues.set(issueNumber, issue);
-      state.patches.push({ issueNumber, changes });
-      return globalThis.Response.json(issue);
+      const value = { ...collection.get(issueNumber), ...normalized };
+      collection.set(issueNumber, value);
+      state.patches.push({ resource, issueNumber, changes });
+      return globalThis.Response.json(value);
     }
     return globalThis.Response.json(
       { message: `Unexpected ${method} ${url.pathname}` },
@@ -1068,20 +1109,21 @@ test('one active lifecycle label replaces any prior lifecycle labels', () => {
 });
 
 test('already-implemented verification requires an explicit remaining-gap statement', () => {
+  const verification = {
+    summary: 'Existing auth checks already cover the reported path.',
+    evidence:
+      'The shared guard rejects expired sessions before private data loads.',
+    validation: 'Focused expiration and refresh-failure tests pass.',
+    gap: 'No material gap found.',
+  };
   assert.deepEqual(
     alreadyImplementedVerification({
-      summary: 'Existing auth checks already cover the reported path.',
-      evidence: 'The shared guard rejects expired sessions before private data loads.',
-      validation: 'Focused expiration and refresh-failure tests pass.',
-      gap: 'No material gap found.',
+      ...verification,
       verifiedAt: '2026-08-29T10:00:00Z',
     }),
     {
       outcome: 'already-implemented',
-      summary: 'Existing auth checks already cover the reported path.',
-      evidence: 'The shared guard rejects expired sessions before private data loads.',
-      validation: 'Focused expiration and refresh-failure tests pass.',
-      gap: 'No material gap found.',
+      ...verification,
       verifiedAt: '2026-08-29T10:00:00Z',
     }
   );
@@ -1089,6 +1131,16 @@ test('already-implemented verification requires an explicit remaining-gap statem
     () => alreadyImplementedVerification({ summary: 'Covered' }),
     /evidence, validation, gap, verifiedAt/
   );
+  for (const verifiedAt of [
+    '08/29/2026',
+    '2026-02-30T10:00:00Z',
+    '2026-08-29T10:00:00+00:00',
+  ]) {
+    assert.throws(
+      () => alreadyImplementedVerification({ ...verification, verifiedAt }),
+      /valid ISO 8601 UTC verifiedAt timestamp/
+    );
+  }
 });
 
 test('already-implemented issues wait for the user without entering the implementation queue', async () => {
@@ -1107,7 +1159,10 @@ test('already-implemented issues wait for the user without entering the implemen
       gap: 'No material gap found.',
       verifiedAt: '2026-08-29T10:00:00Z',
     };
-    const first = await markAlreadyImplemented({ issueNumber: 54, ...verification });
+    const first = await markAlreadyImplemented({
+      issueNumber: 54,
+      ...verification,
+    });
     assert.equal(first.updated, true);
     assert.equal(first.duplicate, false);
     assert.deepEqual(
@@ -1116,15 +1171,131 @@ test('already-implemented issues wait for the user without entering the implemen
     );
     assert.equal(state.issues.get(54).state, 'open');
     assert.deepEqual(
-      readMarker(state.issues.get(54).body, 'pomi-radar:v1').implementationVerification,
+      readMarker(state.issues.get(54).body, 'pomi-radar:v1')
+        .implementationVerification,
       { outcome: 'already-implemented', ...verification }
     );
     assert.equal(state.comments.get(54).length, 1);
 
-    const second = await markAlreadyImplemented({ issueNumber: 54, ...verification });
+    const second = await markAlreadyImplemented({
+      issueNumber: 54,
+      ...verification,
+    });
     assert.equal(second.duplicate, true);
     assert.equal(state.comments.get(54).length, 1);
   });
+});
+
+test('already-implemented retries reuse their original claim after a final patch failure', async () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    updated_at: '2026-08-29T09:00:00Z',
+    labels: [{ name: 'radar:security' }, { name: 'radar:in-review' }],
+    body: marker('pomi-radar:v1', { version: 1 }),
+  };
+  await withFakeGithubIssues(
+    [issue],
+    async state => {
+      const verification = {
+        summary: 'The current protection already covers the reported behavior.',
+        evidence: 'The shared request boundary rejects the unsafe input.',
+        validation: 'Focused invalid-input tests pass.',
+        gap: 'No material gap found.',
+        verifiedAt: '2026-08-29T10:00:00Z',
+      };
+      await assert.rejects(
+        markAlreadyImplemented({ issueNumber: 54, ...verification }),
+        /GitHub PATCH \/issues\/54 failed: 500/
+      );
+      assert.equal(state.comments.get(54).length, 1);
+      await markAlreadyImplemented({ issueNumber: 54, ...verification });
+      assert.equal(state.comments.get(54).length, 1);
+      assert.equal(
+        readMarker(state.issues.get(54).body, 'pomi-radar:v1')
+          .implementationVerification.outcome,
+        'already-implemented'
+      );
+    },
+    { failFinalAlreadyImplementedPatch: true }
+  );
+});
+
+test('already-implemented detaches grouped source PRs and closes empty ones', async () => {
+  const verification = {
+    summary: 'The current protection already covers the reported behavior.',
+    evidence: 'The shared request boundary rejects the unsafe input.',
+    validation: 'Focused invalid-input tests pass.',
+    gap: 'No material gap found.',
+    verifiedAt: '2026-08-29T10:00:00Z',
+  };
+  await withFakeGithubIssues(
+    [
+      {
+        number: 54,
+        state: 'open',
+        updated_at: '2026-08-29T09:00:00Z',
+        labels: [{ name: 'radar:security' }, { name: 'radar:in-review' }],
+        body: marker('pomi-radar:v1', { version: 1 }),
+      },
+      {
+        number: 78,
+        state: 'open',
+        updated_at: '2026-08-29T09:00:00Z',
+        labels: [{ name: 'radar:performance' }, { name: 'radar:in-review' }],
+        body: marker('pomi-radar:v1', { version: 1 }),
+      },
+    ],
+    async state => {
+      const grouped = await markAlreadyImplemented({
+        issueNumber: 54,
+        ...verification,
+      });
+      assert.deepEqual(grouped.sourcePullRequests, {
+        closed: [],
+        detached: [194],
+      });
+      assert.deepEqual(
+        readMarker(state.pulls.get(194).body, 'pomi-radar-source:v1').issues,
+        [55]
+      );
+      assert.equal(state.pulls.get(194).state, 'open');
+
+      const empty = await markAlreadyImplemented({
+        issueNumber: 78,
+        ...verification,
+      });
+      assert.deepEqual(empty.sourcePullRequests, {
+        closed: [195],
+        detached: [],
+      });
+      assert.equal(state.pulls.get(195).state, 'closed');
+    },
+    {
+      pulls: [
+        {
+          number: 194,
+          state: 'open',
+          user: { login: 'pomi-radar[bot]' },
+          body: marker('pomi-radar-source:v1', {
+            version: 1,
+            track: 'security',
+            issues: [54, 55],
+          }),
+        },
+        {
+          number: 195,
+          state: 'open',
+          user: { login: 'pomi-radar[bot]' },
+          body: marker('pomi-radar-source:v1', {
+            version: 1,
+            track: 'performance',
+            issues: [78],
+          }),
+        },
+      ],
+    }
+  );
 });
 
 test('already-implemented proposals occupy a visible proposal slot but are not agent work', () => {
