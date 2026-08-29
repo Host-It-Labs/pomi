@@ -25,7 +25,7 @@ class WatchSerializationTest {
                 "sessionPosition":2,"sessionTotal":4,"stackedSessions":3,"isExtension":true
               },
               "assistant":{"assistantEnabled":true,"speechCaptureEnabled":true,"aiTaskCaptureEnabled":false,"usageBudgetRemainingUsd":1.5},
-              "timerControls":{"canStartOrResume":false,"canPause":true,"canAddFiveMinutes":true,"canReset":true,"canSkip":true,"canStartLongBreak":true,"requiresIntentionSelection":false,"intentionRequireSelection":true,"intentionMultiSelect":true,"advancedSkip":true,"sessionsEnabled":true},
+              "timerControls":{"canStartOrResume":false,"canPause":true,"canAddFiveMinutes":true,"canReset":true,"canSkip":true,"canStartLongBreak":true,"requiresIntentionSelection":false,"intentionRequireSelection":true,"intentionMultiSelect":true,"advancedSkip":true,"sessionsEnabled":true,"resetBreakOnFirstIntention":true,"resetLongBreakOnFirstIntention":false},
               "tasks":[{"id":"task-1","title":"Ship","priority":"urgent","dueDate":null,"dueTime":"10:00","intentionTitle":"Focus","intentionEmoji":"F","subIntentionSlug":"code","subIntentionTitle":"Code","subIntentionEmoji":"C","followUpParent":{"id":"parent-1","title":"Launch"},"isFocused":true,"isLinkedToTimer":true,"isOverdue":false}],
               "totalVisibleTasks":1,"totalActiveTasks":2
             }"""
@@ -37,6 +37,10 @@ class WatchSerializationTest {
         assertEquals("code", status.timer?.intentions?.single()?.subSlug)
         assertEquals(10, status.assistant.recordingMaxMinutes)
         assertTrue(status.assistant.canRecord)
+        assertTrue(status.timerControls.resetBreakOnFirstIntention)
+        assertFalse(status.timerControls.resetLongBreakOnFirstIntention)
+        assertTrue(status.timerControls.resetOnFirstIntentionFor("break") == true)
+        assertFalse(status.timerControls.resetOnFirstIntentionFor("longBreak") == true)
         assertEquals("work", status.tasks.single().timerType)
         assertEquals("F Focus / C Code", status.tasks.single().intentionLabel())
         assertEquals("↳ Launch", status.tasks.single().followUpContextLabel())
@@ -58,6 +62,8 @@ class WatchSerializationTest {
         assertNull(status.assistant.usageBudgetRemainingUsd)
         assertNull(status.assistant.recordingMaxMinutes)
         assertFalse(status.assistant.canRecord)
+        assertFalse(status.timerControls.resetBreakOnFirstIntention)
+        assertFalse(status.timerControls.resetLongBreakOnFirstIntention)
     }
 
     @Test
@@ -99,6 +105,27 @@ class WatchSerializationTest {
         ).toGatewayRequest()
         assertEquals("focus", intentions.getJSONArray("intentions").getString(0))
         assertEquals("code", intentions.getJSONObject("subIntentions").getString("focus"))
+        assertFalse(intentions.has("resetOnFirstIntention"))
+
+        val breakIntentions = PendingWatchAction(
+            id = "break-intentions-command",
+            kind = "intentions",
+            action = "setIntentions",
+            timerType = "break",
+            intentionSlugs = listOf("focus"),
+            resetOnFirstIntention = false
+        ).toGatewayRequest()
+        assertFalse(breakIntentions.getBoolean("resetOnFirstIntention"))
+
+        val longBreakIntentions = PendingWatchAction(
+            id = "long-break-intentions-command",
+            kind = "intentions",
+            action = "setIntentions",
+            timerType = "longBreak",
+            intentionSlugs = listOf("focus"),
+            resetOnFirstIntention = true
+        ).toGatewayRequest()
+        assertTrue(longBreakIntentions.getBoolean("resetOnFirstIntention"))
 
         val startWithIntentions = PendingWatchAction(
             id = "start-intentions-command",

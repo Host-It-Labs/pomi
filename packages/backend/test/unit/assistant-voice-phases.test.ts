@@ -127,6 +127,51 @@ function createVoiceService(language: 'en' | 'fr') {
   };
 }
 
+type VoiceReadbackTask = {
+  title: string;
+  dueDate: string | null;
+  dueTime: string | null;
+  priority: string;
+  timerType: string;
+  intentionSlug: string | null;
+  subIntentionSlug: string | null;
+  recurrenceRule: string | null;
+  recurrenceInterval: number | null;
+  recurrenceAnchorMode: string;
+};
+
+type VoiceReadbackFormatter = {
+  formatVoiceTasksCreatedMessage(
+    tasks: VoiceReadbackTask[],
+    drafts: Array<{ title: string }>,
+    rawTasks: unknown[],
+    sourceText: string,
+    intentions: Array<{ slug: string; title: string }>,
+    language: string
+  ): string;
+};
+
+function formatVoiceReadback(
+  context: ReturnType<typeof createVoiceService>,
+  tasks: VoiceReadbackTask[],
+  drafts: Array<{ title: string }>,
+  rawTasks: unknown[],
+  sourceText: string,
+  intentions: Array<{ slug: string; title: string }>,
+  language: 'en' | 'fr'
+) {
+  return (
+    context.service as unknown as VoiceReadbackFormatter
+  ).formatVoiceTasksCreatedMessage(
+    tasks,
+    drafts,
+    rawTasks,
+    sourceText,
+    intentions,
+    language
+  );
+}
+
 describe('Assistant voice phases', () => {
   it('keeps provider work outside the queued commit and resolves mutable state during commit', async () => {
     const context = createVoiceService('en');
@@ -251,5 +296,128 @@ describe('Assistant voice phases', () => {
     );
 
     expect(result.message).toBe('Minuteur mis en pause.');
+  });
+
+  it('reads back explicit Task metadata in the response language', () => {
+    const context = createVoiceService('fr');
+    const result = formatVoiceReadback(
+      context,
+      [
+        {
+          title: 'Préparer le rapport',
+          dueDate: '2026-07-30',
+          dueTime: '09:00',
+          priority: 'high',
+          timerType: 'break',
+          intentionSlug: 'work',
+          subIntentionSlug: 'email',
+          recurrenceRule: 'RRULE:FREQ=WEEKLY;INTERVAL=2',
+          recurrenceInterval: 2,
+          recurrenceAnchorMode: 'completion',
+        },
+      ],
+      [{ title: 'Préparer le rapport' }],
+      [
+        {
+          title: 'Préparer le rapport',
+          sourceSegments: [
+            'Préparer le rapport demain à 9 h, priorité haute, répéter toutes les 2 semaines à partir de la fin pour Travail intention',
+          ],
+          dueDate: '2026-07-30',
+          dueTime: '09:00',
+          priority: 'high',
+          timerType: 'break',
+          intentionSlug: 'work',
+          subIntentionSlug: 'email',
+          recurrenceRule: 'RRULE:FREQ=WEEKLY;INTERVAL=2',
+          recurrenceInterval: 2,
+          recurrenceAnchorMode: 'completion',
+        },
+      ],
+      'Préparer le rapport demain à 9 h, priorité haute, répéter toutes les 2 semaines à partir de la fin pour Travail intention',
+      [
+        { slug: 'work', title: 'Travail' },
+        { slug: 'email', title: 'Email' },
+      ],
+      'fr'
+    );
+
+    expect(result).toContain('Tâche créée : Préparer le rapport');
+    expect(result).toContain('pour le 2026-07-30');
+    expect(result).toContain('à 09:00');
+    expect(result).toContain('répète');
+    expect(result).toContain('priorité haute');
+    expect(result).toContain('minuteur de pause');
+    expect(result).toContain('intention Travail');
+    expect(result).toContain('sous-intention Email');
+    expect(result).not.toContain('high priority');
+  });
+
+  it('suppresses inherited, inferred, and database-default metadata', () => {
+    const context = createVoiceService('en');
+    const result = formatVoiceReadback(
+      context,
+      [
+        {
+          title: 'Review the release',
+          dueDate: '2026-07-29',
+          dueTime: '10:00',
+          priority: 'normal',
+          timerType: 'work',
+          intentionSlug: 'focus',
+          subIntentionSlug: null,
+          recurrenceRule: 'RRULE:FREQ=DAILY',
+          recurrenceInterval: 1,
+          recurrenceAnchorMode: 'planned',
+        },
+      ],
+      [{ title: 'Review the release' }],
+      [
+        {
+          title: 'Review the release',
+          sourceSegments: ['Review the release'],
+        },
+      ],
+      'Review the release',
+      [{ slug: 'focus', title: 'Focus' }],
+      'en'
+    );
+
+    expect(result).toBe('Task created: Review the release');
+  });
+
+  it('keeps an explicit recurrence while suppressing its invariant due date', () => {
+    const context = createVoiceService('en');
+    const result = formatVoiceReadback(
+      context,
+      [
+        {
+          title: 'Review the release',
+          dueDate: '2026-07-29',
+          dueTime: null,
+          priority: 'normal',
+          timerType: 'work',
+          intentionSlug: null,
+          subIntentionSlug: null,
+          recurrenceRule: 'RRULE:FREQ=WEEKLY',
+          recurrenceInterval: 1,
+          recurrenceAnchorMode: 'planned',
+        },
+      ],
+      [{ title: 'Review the release' }],
+      [
+        {
+          title: 'Review the release',
+          sourceSegments: ['Review the release every week'],
+          recurrenceRule: 'RRULE:FREQ=WEEKLY',
+        },
+      ],
+      'Review the release every week',
+      [],
+      'en'
+    );
+
+    expect(result).toContain('repeats weekly');
+    expect(result).not.toContain('due 2026-07-29');
   });
 });

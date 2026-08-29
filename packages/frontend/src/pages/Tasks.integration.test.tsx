@@ -119,15 +119,6 @@ vi.mock('./taskDefaultSort', () => ({
   useDefaultTaskSort: vi.fn(),
 }));
 
-vi.mock('./taskDefaultView', () => ({
-  useDefaultTaskView: vi.fn(),
-}));
-
-vi.mock('../utils/taskCalendar', async importOriginal => {
-  const actual = await importOriginal<typeof import('../utils/taskCalendar')>();
-  return { ...actual, getTodayDateKey: () => '2026-08-23' };
-});
-
 vi.mock('../utils/osUtils', () => ({
   isTauri: false,
   isAndroid: false,
@@ -219,26 +210,7 @@ beforeEach(() => {
 });
 
 describe('Tasks page interactions', () => {
-  it('keeps task properties visible when bulk selection is enabled', async () => {
-    mocks.tasks = [task({ id: 'task-with-properties', title: 'Task' })];
-
-    render(<Tasks />);
-
-    await screen.findByText('Task');
-    expect(
-      screen.getByTestId('task-inline-properties-task-with-properties')
-    ).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Select multiple Tasks' })
-    );
-
-    expect(
-      screen.getByTestId('task-inline-properties-task-with-properties')
-    ).toBeInTheDocument();
-  });
-
-  it('uses one Calendar button to enter and leave the week view', async () => {
+  it('keeps all dated Tasks and individual actions in the list', async () => {
     mocks.tasks = [
       task({
         id: 'today-task',
@@ -246,95 +218,40 @@ describe('Tasks page interactions', () => {
         dueDate: '2026-08-23',
       }),
       task({
-        id: 'next-task',
-        title: 'Next task',
-        dueDate: '2026-08-22',
-      }),
-    ];
-
-    render(<Tasks />);
-
-    const calendarButton = await screen.findByRole('button', {
-      name: 'Calendar',
-    });
-    expect(calendarButton).toHaveAttribute('aria-pressed', 'false');
-
-    fireEvent.click(calendarButton);
-    expect(calendarButton).toHaveAttribute('aria-pressed', 'true');
-    await waitFor(() =>
-      expect(screen.queryByText('Next task')).not.toBeInTheDocument()
-    );
-
-    fireEvent.click(calendarButton);
-    expect(calendarButton).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByText('Today task')).toBeInTheDocument();
-    expect(screen.getByText('Next task')).toBeInTheDocument();
-  });
-
-  it('limits Calendar bulk selection to the selected date and clears it when the date changes', async () => {
-    mocks.tasks = [
-      task({
-        id: 'today-task',
-        title: 'Today task',
-        dueDate: '2026-08-23',
-        createdAt: '2026-08-23T10:00:00.000Z',
-      }),
-      task({
-        id: 'tomorrow-task',
-        title: 'Next task',
-        dueDate: '2026-08-22',
-        createdAt: '2026-08-23T09:00:00.000Z',
+        id: 'later-task',
+        title: 'Later task',
+        dueDate: '2026-08-30',
       }),
     ];
 
     render(<Tasks />);
 
     await screen.findByText('Today task');
-    fireEvent.click(screen.getByRole('button', { name: 'Calendar' }));
-
-    expect(screen.getByText('Today task')).toBeInTheDocument();
-    await waitFor(() =>
-      expect(screen.queryByText('Next task')).not.toBeInTheDocument()
-    );
-
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Select multiple Tasks' })
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Select visible' }));
-
-    expect(screen.getByText('1 selected')).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'August 22, 2026: 1 item',
-      })
-    );
-
-    await screen.findByText('Next task');
-    await waitFor(() =>
-      expect(screen.queryByText('Today task')).not.toBeInTheDocument()
-    );
-    expect(screen.getByText('0 selected')).toBeInTheDocument();
+    expect(screen.getByText('Later task')).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'Manage selected' })
-    ).toBeDisabled();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Select visible' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Manage selected' }));
-
+      screen.queryByRole('button', { name: 'Calendar' })
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByText('This action applies to 1 selected Tasks.')
+      screen.queryByRole('button', { name: 'Select multiple Tasks' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId('task-inline-properties-today-task')
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    const completeButton = screen.getByRole('button', {
+      name: 'Complete Today task',
+    });
+    expect(completeButton).toBeEnabled();
+    expect(
+      screen.getByRole('button', { name: 'Edit Today task' })
+    ).toBeEnabled();
+    fireEvent.click(completeButton);
 
     await waitFor(() =>
       expect(mocks.updateTask).toHaveBeenCalledWith({
-        id: 'tomorrow-task',
+        id: 'today-task',
         status: 'completed',
       })
-    );
-    expect(mocks.updateTask).not.toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'today-task' })
     );
   });
 

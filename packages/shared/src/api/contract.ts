@@ -165,7 +165,8 @@ const preferencesSchema = z.object({
   sessionPomodorosCount: z.number().int(),
   sessionHasLongBreak: z.boolean(),
   sessionLongBreakDuration: z.number().int(),
-  sessionLongBreakAutoStart: z.boolean(),
+  resetBreakOnFirstIntention: z.boolean(),
+  resetLongBreakOnFirstIntention: z.boolean(),
   sessionShowLongBreakButton: z.boolean(),
   sessionShowEta: z.boolean(),
   sessionStackTimers: z.boolean(),
@@ -697,6 +698,7 @@ const assistantTaskDefaultsSchema = taskCreateSchema.omit({
 
 const assistantTaskFromTextSchema = z.object({
   text: z.string().min(1).max(1_000_000),
+  listId: z.string().uuid().nullable().optional(),
   defaults: assistantTaskDefaultsSchema.optional(),
   debugLogId: z.string().uuid().nullable().optional(),
 });
@@ -957,6 +959,8 @@ const watchStatusSchema = z.object({
     advancedSkip: z.boolean(),
     sessionsEnabled: z.boolean(),
     canStartLongBreak: z.boolean(),
+    resetBreakOnFirstIntention: z.boolean(),
+    resetLongBreakOnFirstIntention: z.boolean(),
   }),
   tasks: z.array(watchTaskSummarySchema),
   totalVisibleTasks: z.number().int(),
@@ -1060,6 +1064,7 @@ const userActionSchema = z
       position: z.number().int().optional(),
       extensionAction: z.enum(['logElapsed', 'addFiveMinutes']).optional(),
       requestedLogMode: z.enum(['none', 'elapsed', 'full']).optional(),
+      resetOnFirstIntention: z.boolean().optional(),
     }),
     z.object({
       kind: z.literal('tasks'),

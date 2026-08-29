@@ -186,6 +186,33 @@ describe('inline Task properties', () => {
         dueDate: '2026-08-12',
       })
     );
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a failed outside due-date update open with its draft intact', async () => {
+    const user = userEvent.setup();
+    const onUpdate = renderProperties(
+      task({}),
+      vi.fn().mockResolvedValue(false)
+    );
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Change due date for Ship release notes',
+      })
+    );
+    const input = screen.getByLabelText('Due date');
+    await user.clear(input);
+    await user.type(input, '2026-08-12');
+    await user.click(document.body);
+
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1));
+    expect(onUpdate).toHaveBeenCalledWith({
+      id: 'task-release',
+      dueDate: '2026-08-12',
+    });
+    expect(screen.getByTestId('task-due-date-popover')).toBeVisible();
+    expect(screen.getByLabelText('Due date')).toHaveValue('2026-08-12');
   });
 
   it('saves the same due-date draft through Apply', async () => {

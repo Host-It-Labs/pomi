@@ -51,6 +51,8 @@ describe('PreferencesService', () => {
         language: 'fr',
         assistantTaskTranscriptsEnabled: false,
         assistantTaskTranscriptMinWords: 15,
+        resetBreakOnFirstIntention: false,
+        resetLongBreakOnFirstIntention: false,
       }
     );
     expect(inserted).toHaveLength(1);
@@ -78,5 +80,31 @@ describe('PreferencesService', () => {
       }
     );
     expect(saved).toHaveLength(1);
+  });
+
+  it('allows auto-start breaks and Timer extension to be enabled together', async () => {
+    const saved: Record<string, unknown>[] = [];
+    const existingPreferences = {
+      userId: 'user-4',
+      autoStartBreak: false,
+      timerExtension: false,
+    };
+    const service = new PreferencesService({
+      findOne: async () => existingPreferences,
+      save: async (entity: Record<string, unknown>) => {
+        saved.push(entity);
+        return entity;
+      },
+    } as never);
+
+    await service.updatePreferences('user-4', {
+      autoStartBreak: true,
+      timerExtension: true,
+    });
+
+    expect(saved[0]).toMatchObject({
+      autoStartBreak: true,
+      timerExtension: true,
+    });
   });
 });

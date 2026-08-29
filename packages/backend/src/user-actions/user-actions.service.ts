@@ -508,10 +508,24 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
               'Assistant preparation ID must match the action ID'
             );
           }
-          return this.assistantCaptureService.commitPreparedTaskFromText(
-            userId,
-            preparationId
-          );
+          const listId = action.payload?.listId;
+          if (
+            listId !== undefined &&
+            listId !== null &&
+            typeof listId !== 'string'
+          ) {
+            throw new BadRequestException('Assistant List ID must be a string');
+          }
+          return listId === undefined
+            ? this.assistantCaptureService.commitPreparedTaskFromText(
+                userId,
+                preparationId
+              )
+            : this.assistantCaptureService.commitPreparedTaskFromText(
+                userId,
+                preparationId,
+                listId
+              );
         }
         if (action.operation === 'createTaskFromText') {
           const payload = action.payload ?? {};
@@ -521,7 +535,8 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
             userId,
             payload.text,
             payload.defaults as never,
-            typeof payload.debugLogId === 'string' ? payload.debugLogId : null
+            typeof payload.debugLogId === 'string' ? payload.debugLogId : null,
+            typeof payload.listId === 'string' ? payload.listId : null
           );
         }
         if (action.operation === 'updateSettings') {
@@ -621,6 +636,7 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           intentions: action.intentions,
           subIntentions: action.subIntentions,
           focusedTaskId: action.focusedTaskId,
+          resetOnFirstIntention: action.resetOnFirstIntention,
         });
       case 'selectIntention':
         if (!action.intention)
@@ -629,7 +645,8 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           userId,
           action.timerType ?? TIMER_TYPES.WORK,
           action.intention,
-          action.subIntentions
+          action.subIntentions,
+          action.resetOnFirstIntention
         );
       case 'setIntentions':
         if (!action.intentions)
@@ -638,7 +655,8 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           userId,
           action.timerType ?? TIMER_TYPES.WORK,
           action.intentions,
-          action.subIntentions
+          action.subIntentions,
+          action.resetOnFirstIntention
         );
       case 'pause':
         return this.timerService.pauseTimer(userId);

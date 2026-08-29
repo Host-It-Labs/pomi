@@ -12,7 +12,8 @@ type FocusTaskOnTimerOptions = {
     intention?: string,
     intentions?: string[],
     subIntentions?: Record<string, string>,
-    focusedTaskId?: string
+    focusedTaskId?: string,
+    resetOnFirstIntention?: boolean
   ) => Promise<boolean>;
   updatePreferenceWithResult: (
     key: keyof Preferences,

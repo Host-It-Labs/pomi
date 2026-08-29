@@ -16,13 +16,13 @@ interface SessionConfigModalProps {
     pomodorosCount: number;
     hasLongBreak: boolean;
     longBreakDuration: number;
-    longBreakAutoStart: boolean;
+    autoStartBreak: boolean;
   }) => void;
   initialValues?: {
     pomodorosCount: number;
     hasLongBreak: boolean;
     longBreakDuration: number;
-    longBreakAutoStart: boolean;
+    autoStartBreak: boolean;
   };
 }
 
@@ -45,8 +45,8 @@ export function SessionConfigModal({
         MILLISECONDS_PER_MINUTE
     )
   );
-  const [longBreakAutoStart, setLongBreakAutoStart] = useState(
-    initialValues?.longBreakAutoStart ?? false
+  const [autoStartBreak, setAutoStartBreak] = useState(
+    initialValues?.autoStartBreak ?? false
   );
   const [error, setError] = useState<string>('');
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
@@ -65,7 +65,7 @@ export function SessionConfigModal({
           MILLISECONDS_PER_MINUTE
       )
     );
-    setLongBreakAutoStart(initialValues?.longBreakAutoStart ?? false);
+    setAutoStartBreak(initialValues?.autoStartBreak ?? false);
     setError('');
   }, [initialValues, isOpen]);
 
@@ -78,13 +78,13 @@ export function SessionConfigModal({
       (initialValues?.longBreakDuration || 15 * MILLISECONDS_PER_MINUTE) /
         MILLISECONDS_PER_MINUTE
     ),
-    longBreakAutoStart: initialValues?.longBreakAutoStart ?? false,
+    autoStartBreak: initialValues?.autoStartBreak ?? false,
   });
   const currentConfigKey = serializeSessionConfig({
     pomodorosCount,
     hasLongBreak,
     longBreakDuration,
-    longBreakAutoStart,
+    autoStartBreak,
   });
   const hasUnsavedChanges = currentConfigKey !== initialConfigKey;
   const requestClose = () => {
@@ -125,7 +125,7 @@ export function SessionConfigModal({
       pomodorosCount: pomodorosNum,
       hasLongBreak,
       longBreakDuration: durationNum * MILLISECONDS_PER_MINUTE,
-      longBreakAutoStart,
+      autoStartBreak,
     });
     onClose();
   };
@@ -188,10 +188,10 @@ export function SessionConfigModal({
           {hasLongBreak && (
             <ToggleField
               id="session-config-long-break-auto-start"
-              checked={longBreakAutoStart}
-              onChange={value => setLongBreakAutoStart(value)}
-              label={t('session.autoStartLongBreak')}
-              description={t('session.autoStartLongBreakDescription')}
+              checked={autoStartBreak}
+              onChange={value => setAutoStartBreak(value)}
+              label={t('timerSettings.autoStartBreaks')}
+              description={t('timerSettings.autoStartBreaksDescription')}
             />
           )}
         </div>
@@ -225,7 +225,7 @@ function serializeSessionConfig(config: {
   pomodorosCount: string;
   hasLongBreak: boolean;
   longBreakDuration: string;
-  longBreakAutoStart: boolean;
+  autoStartBreak: boolean;
 }) {
   return JSON.stringify(config);
 }

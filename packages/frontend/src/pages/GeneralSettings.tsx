@@ -74,14 +74,22 @@ export const GeneralSettings = ({
   return (
     <div className="space-y-4">
       <SettingsControlGroup title={t('settings.essentials')}>
-        <div className="flex items-center justify-between">
+        <div
+          className="flex items-center justify-between"
+          data-setting-id="general-account"
+        >
           <div>
             <h3 className="text-sm text-white font-medium">
               {t('settings.account')}
             </h3>
             <p className="text-xs text-slate-400 mt-1">{user?.username}</p>
           </div>
-          <Button variant="danger" onClick={signOut} className="gap-2">
+          <Button
+            variant="danger"
+            onClick={signOut}
+            className="gap-2"
+            data-setting-id="logout"
+          >
             <FaSignOutAlt />
             <span>{t('common.logOut')}</span>
           </Button>
@@ -121,7 +129,7 @@ export const GeneralSettings = ({
         {(showDebugPanel || isMobile) && <Separator />}
 
         {showDebugPanel && (
-          <div className="flex justify-end">
+          <div className="flex justify-end" data-setting-id="openDebugPanel">
             <Button
               type="button"
               onClick={() => setActiveTab('debug')}
@@ -154,7 +162,10 @@ export const GeneralSettings = ({
       </SettingsControlGroup>
 
       <ExtrasSection sectionId="general">
-        <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-800/60 bg-slate-900/35 p-3">
+        <div
+          className="flex items-center justify-between gap-4 rounded-lg border border-slate-800/60 bg-slate-900/35 p-3"
+          data-setting-id="hiddenTips"
+        >
           <div className="flex items-center gap-2">
             <span className="grid size-7 place-items-center rounded-lg bg-amber-400/10 text-amber-300">
               <FaLightbulb size={12} />
@@ -184,14 +195,16 @@ export const GeneralSettings = ({
       </ExtrasSection>
 
       {adminContent ? (
-        <SettingsControlGroup title={t('settings.admin')}>
-          <div className="space-y-4">
-            <h4 className="text-sm font-medium text-white">
-              {t('settings.aiInfrastructure')}
-            </h4>
-            {adminContent}
-          </div>
-        </SettingsControlGroup>
+        <div data-setting-id="admin">
+          <SettingsControlGroup title={t('settings.admin')}>
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium text-white">
+                {t('settings.aiInfrastructure')}
+              </h4>
+              {adminContent}
+            </div>
+          </SettingsControlGroup>
+        </div>
       ) : null}
     </div>
   );

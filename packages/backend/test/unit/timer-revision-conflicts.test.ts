@@ -24,6 +24,419 @@ const conflict = (timer: Timer) => ({
 });
 
 describe('TimerService revision conflicts', () => {
+  it('arms extension from the atomic pause timestamp for an auto-started break', async () => {
+    const timer = currentTimer({
+      type: TIMER_TYPES.BREAK,
+      status: TIMER_STATUSES.RUNNING,
+      startTime: 10_000,
+      duration: 300_000,
+      remainingTime: 300_000,
+      isAutoStarted: true,
+      extensionCandidate: {
+        originalTimerId: 'work-1',
+        originalDuration: 1_500_000,
+        extensionNextTimerType: TIMER_TYPES.BREAK,
+      },
+    });
+    const replaceCurrentTimer = vi.fn(
+      async (_userId: string, _expected: unknown, nextTimer: Timer) => ({
+        kind: 'updated' as const,
+        timer: { ...nextTimer, scheduleRevision: 'revision-paused' },
+      })
+    );
+    const service = Object.assign(Object.create(TimerService.prototype), {
+      timerStore: {
+        getCurrentTimer: vi.fn(async () => timer),
+        replaceCurrentTimer,
+      },
+      timerCountdownService: {
+        refreshCountdown: vi.fn(),
+        stopCountdown: vi.fn(),
+      },
+      timerIdleService: {
+        cancelPausedTimerReminder: vi.fn(),
+      },
+      timerEvents: {
+        emitTimerUpdate: vi.fn(),
+        emitExtensionStateUpdate: vi.fn(),
+      },
+    }) as TimerService;
+    const now = vi.spyOn(Date, 'now').mockReturnValue(20_000);
+
+    await service.pauseTimer('user-1');
+
+    expect(replaceCurrentTimer).toHaveBeenCalledWith(
+      'user-1',
+      { timerId: 'timer-current', scheduleRevision: 'revision-current' },
+      expect.objectContaining({
+        status: TIMER_STATUSES.PAUSED,
+        remainingTime: 290_000,
+      }),
+      {
+        extensionState: {
+          originalTimerId: 'work-1',
+          originalDuration: 1_500_000,
+          extensionNextTimerType: TIMER_TYPES.BREAK,
+          startTime: 20_000,
+        },
+      }
+    );
+    now.mockRestore();
+  });
+
+  it('does not arm extension when pausing a manually started break', async () => {
+    const timer = currentTimer({
+      type: TIMER_TYPES.BREAK,
+      status: TIMER_STATUSES.RUNNING,
+      startTime: 10_000,
+      duration: 300_000,
+      isAutoStarted: false,
+      extensionCandidate: {
+        originalTimerId: 'work-1',
+        originalDuration: 1_500_000,
+        extensionNextTimerType: TIMER_TYPES.BREAK,
+      },
+    });
+    const replaceCurrentTimer = vi.fn(
+      async (_userId: string, _expected: unknown, nextTimer: Timer) => ({
+        kind: 'updated' as const,
+        timer: { ...nextTimer, scheduleRevision: 'revision-paused' },
+      })
+    );
+    const service = Object.assign(Object.create(TimerService.prototype), {
+      timerStore: {
+        getCurrentTimer: vi.fn(async () => timer),
+        replaceCurrentTimer,
+      },
+      timerCountdownService: {
+        refreshCountdown: vi.fn(),
+        stopCountdown: vi.fn(),
+      },
+      timerIdleService: { cancelPausedTimerReminder: vi.fn() },
+      timerEvents: { emitTimerUpdate: vi.fn() },
+    }) as TimerService;
+
+    await service.pauseTimer('user-1');
+
+    expect(replaceCurrentTimer.mock.calls[0][3]).toBeUndefined();
+  });
+
+  it('resets only the first intention on an eligible running auto-started break', async () => {
+    const timer = currentTimer({
+      type: TIMER_TYPES.BREAK,
+      status: TIMER_STATUSES.RUNNING,
+      startTime: 10_000,
+      duration: 300_000,
+      remainingTime: 250_000,
+      isAutoStarted: true,
+      extensionCandidate: {
+        originalTimerId: 'work-1',
+        originalDuration: 1_500_000,
+        extensionNextTimerType: TIMER_TYPES.BREAK,
+      },
+    });
+    const commitCurrentTimer = vi.fn(
+      async (_userId: string, _expected: unknown, nextTimer: Timer) => nextTimer
+    );
+    const service = Object.assign(Object.create(TimerService.prototype), {
+      timerStore: {
+        getCurrentTimer: vi.fn(async () => timer),
+      },
+      preferencesService: {
+        getPreferences: vi.fn(async () => ({
+          intentionBreakIntentions: true,
+          intentionMultiSelect: false,
+          intentionCustomDurations: false,
+          resetBreakOnFirstIntention: true,
+          resetLongBreakOnFirstIntention: false,
+        })),
+      },
+      intentionsService: {
+        validateSubIntentionSelection: vi.fn(async () => ({
+          focus: { emoji: '🎯', title: 'Focus' },
+        })),
+      },
+      snapshotRuntime: vi.fn(async () => ({
+        timer: { ...timer },
+        sessionState: null,
+        lastCompletionTimestamp: null,
+        idleDetected: false,
+        extensionState: {
+          startTime: 25_000,
+          originalTimerId: 'work-1',
+          originalDuration: 1_500_000,
+          extensionNextTimerType: TIMER_TYPES.BREAK,
+        },
+      })),
+      commitCurrentTimer,
+      timerEvents: {
+        emitTimerUpdate: vi.fn(),
+        emitExtensionStateUpdate: vi.fn(),
+      },
+      buildHistoryEntry: vi.fn(async () => ({})),
+      pushTimerHistory: vi.fn(async () => undefined),
+    }) as TimerService;
+    const now = vi.spyOn(Date, 'now').mockReturnValue(50_000);
+
+    const result = await service.selectTimerIntention(
+      'user-1',
+      TIMER_TYPES.BREAK,
+      'focus',
+      undefined,
+      true
+    );
+
+    expect(result).toMatchObject({
+      startTime: 50_000,
+      remainingTime: 300_000,
+      duration: 300_000,
+      status: TIMER_STATUSES.RUNNING,
+      intention: 'focus',
+      isAutoStarted: true,
+      extensionCandidate: expect.objectContaining({
+        originalTimerId: 'work-1',
+        originalDuration: 1_500_000,
+      }),
+    });
+    expect(commitCurrentTimer).toHaveBeenCalledWith(
+      'user-1',
+      { timerId: 'timer-current', scheduleRevision: 'revision-current' },
+      expect.objectContaining({
+        startTime: 50_000,
+        remainingTime: 300_000,
+      }),
+      { extensionState: null }
+    );
+    expect(
+      service.timerEvents.emitExtensionStateUpdate as ReturnType<typeof vi.fn>
+    ).toHaveBeenCalledWith('user-1', null);
+    now.mockRestore();
+  });
+
+  it('keeps reset provenance and arms extension after a later pause without resetting twice', async () => {
+    let timer = currentTimer({
+      type: TIMER_TYPES.BREAK,
+      status: TIMER_STATUSES.RUNNING,
+      startTime: 10_000,
+      duration: 300_000,
+      remainingTime: 250_000,
+      isAutoStarted: true,
+      extensionCandidate: {
+        originalTimerId: 'work-1',
+        originalDuration: 1_500_000,
+        extensionNextTimerType: TIMER_TYPES.BREAK,
+      },
+    });
+    const commitCurrentTimer = vi.fn(
+      async (_userId: string, _expected: unknown, nextTimer: Timer) => {
+        timer = { ...nextTimer };
+        return timer;
+      }
+    );
+    const emitExtensionStateUpdate = vi.fn();
+    const service = Object.assign(Object.create(TimerService.prototype), {
+      timerStore: {
+        getCurrentTimer: vi.fn(async () => timer),
+      },
+      preferencesService: {
+        getPreferences: vi.fn(async () => ({
+          intentionBreakIntentions: true,
+          intentionMultiSelect: false,
+          intentionCustomDurations: false,
+          resetBreakOnFirstIntention: true,
+          resetLongBreakOnFirstIntention: false,
+        })),
+      },
+      intentionsService: {
+        validateSubIntentionSelection: vi.fn(async () => ({
+          focus: { emoji: '🎯', title: 'Focus' },
+        })),
+      },
+      snapshotRuntime: vi.fn(async () => ({
+        timer: { ...timer },
+        sessionState: null,
+        lastCompletionTimestamp: null,
+        idleDetected: false,
+        extensionState: null,
+      })),
+      commitCurrentTimer,
+      timerCountdownService: {
+        stopCountdown: vi.fn(),
+      },
+      timerIdleService: {
+        cancelPausedTimerReminder: vi.fn(),
+      },
+      timerEvents: {
+        emitTimerUpdate: vi.fn(),
+        emitExtensionStateUpdate,
+      },
+      buildHistoryEntry: vi.fn(async () => ({})),
+      pushTimerHistory: vi.fn(async () => undefined),
+    }) as TimerService;
+    const now = vi.spyOn(Date, 'now').mockReturnValue(50_000);
+
+    await service.selectTimerIntention(
+      'user-1',
+      TIMER_TYPES.BREAK,
+      'focus',
+      undefined,
+      true
+    );
+    now.mockReturnValue(70_000);
+    await service.selectTimerIntention(
+      'user-1',
+      TIMER_TYPES.BREAK,
+      'second',
+      undefined,
+      true
+    );
+    now.mockReturnValue(80_000);
+    await service.pauseTimer('user-1');
+
+    expect(commitCurrentTimer.mock.calls[0][2]).toMatchObject({
+      startTime: 50_000,
+      isAutoStarted: true,
+      extensionCandidate: expect.any(Object),
+    });
+    expect(commitCurrentTimer.mock.calls[1][2]).toMatchObject({
+      startTime: 50_000,
+      isAutoStarted: true,
+      extensionCandidate: expect.any(Object),
+    });
+    expect(commitCurrentTimer.mock.calls[2][2]).toMatchObject({
+      status: TIMER_STATUSES.PAUSED,
+      remainingTime: 270_000,
+    });
+    expect(commitCurrentTimer.mock.calls[2][3]).toEqual({
+      extensionState: {
+        originalTimerId: 'work-1',
+        originalDuration: 1_500_000,
+        extensionNextTimerType: TIMER_TYPES.BREAK,
+        startTime: 80_000,
+      },
+    });
+    expect(emitExtensionStateUpdate).toHaveBeenLastCalledWith('user-1', {
+      originalTimerId: 'work-1',
+      originalDuration: 1_500_000,
+      extensionNextTimerType: TIMER_TYPES.BREAK,
+      startTime: 80_000,
+    });
+    now.mockRestore();
+  });
+
+  it('leaves an ineligible paused break untouched by the reset request', async () => {
+    const timer = currentTimer({
+      type: TIMER_TYPES.BREAK,
+      status: TIMER_STATUSES.PAUSED,
+      remainingTime: 250_000,
+      isAutoStarted: true,
+    });
+    const commitCurrentTimer = vi.fn(
+      async (_userId: string, _expected: unknown, nextTimer: Timer) => nextTimer
+    );
+    const service = Object.assign(Object.create(TimerService.prototype), {
+      timerStore: { getCurrentTimer: vi.fn(async () => timer) },
+      preferencesService: {
+        getPreferences: vi.fn(async () => ({
+          intentionBreakIntentions: true,
+          intentionMultiSelect: false,
+          intentionCustomDurations: false,
+          resetBreakOnFirstIntention: true,
+          resetLongBreakOnFirstIntention: false,
+        })),
+      },
+      intentionsService: {
+        validateSubIntentionSelection: vi.fn(async () => ({
+          focus: { emoji: '🎯', title: 'Focus' },
+        })),
+      },
+      snapshotRuntime: vi.fn(async () => ({
+        timer: { ...timer },
+        sessionState: null,
+        lastCompletionTimestamp: null,
+        idleDetected: false,
+        extensionState: null,
+      })),
+      commitCurrentTimer,
+      timerEvents: { emitTimerUpdate: vi.fn() },
+      buildHistoryEntry: vi.fn(async () => ({})),
+      pushTimerHistory: vi.fn(async () => undefined),
+    }) as TimerService;
+
+    const result = await service.selectTimerIntention(
+      'user-1',
+      TIMER_TYPES.BREAK,
+      'focus',
+      undefined,
+      true
+    );
+
+    expect(result.startTime).toBe(1_000);
+    expect(result.remainingTime).toBe(250_000);
+    expect(commitCurrentTimer).toHaveBeenCalledWith(
+      'user-1',
+      { timerId: 'timer-current', scheduleRevision: 'revision-current' },
+      expect.objectContaining({ startTime: 1_000, remainingTime: 250_000 }),
+      undefined
+    );
+  });
+
+  it('does not publish a first-Intention reset after losing the Timer CAS', async () => {
+    const timer = currentTimer({
+      type: TIMER_TYPES.LONG_BREAK,
+      status: TIMER_STATUSES.RUNNING,
+      isAutoStarted: true,
+      startTime: Date.now() - 50_000,
+      duration: 900_000,
+      remainingTime: 850_000,
+    });
+    const emitTimerUpdate = vi.fn();
+    const buildHistoryEntry = vi.fn();
+    const commitCurrentTimer = vi.fn(async () => {
+      throw new ConflictException('Timer changed while action was processing');
+    });
+    const service = Object.assign(Object.create(TimerService.prototype), {
+      timerStore: { getCurrentTimer: vi.fn(async () => timer) },
+      preferencesService: {
+        getPreferences: vi.fn(async () => ({
+          intentionMultiSelect: false,
+          intentionCustomDurations: false,
+          resetBreakOnFirstIntention: false,
+          resetLongBreakOnFirstIntention: true,
+        })),
+      },
+      intentionsService: {
+        validateSubIntentionSelection: vi.fn(async () => ({
+          focus: { emoji: '🎯', title: 'Focus' },
+        })),
+      },
+      snapshotRuntime: vi.fn(async () => ({
+        timer: { ...timer },
+        sessionState: null,
+        lastCompletionTimestamp: null,
+        idleDetected: false,
+        extensionState: null,
+      })),
+      commitCurrentTimer,
+      timerEvents: { emitTimerUpdate },
+      buildHistoryEntry,
+      pushTimerHistory: vi.fn(),
+    }) as TimerService;
+
+    await expect(
+      service.selectTimerIntention(
+        'user-1',
+        TIMER_TYPES.LONG_BREAK,
+        'focus',
+        undefined,
+        true
+      )
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(commitCurrentTimer).toHaveBeenCalledOnce();
+    expect(emitTimerUpdate).not.toHaveBeenCalled();
+    expect(buildHistoryEntry).not.toHaveBeenCalled();
+  });
+
   it('rearms the one-shot countdown after every successful Timer revision', async () => {
     const timer = currentTimer({ status: TIMER_STATUSES.RUNNING });
     const committed = { ...timer, scheduleRevision: 'revision-next' };
@@ -665,7 +1078,7 @@ describe('TimerService revision conflicts', () => {
         scheduleRevision: stale.scheduleRevision,
       },
       expect.any(Object),
-      undefined
+      { extensionState: null }
     );
     expect(recordCompletedTimer).not.toHaveBeenCalled();
   });
@@ -709,6 +1122,57 @@ describe('TimerService revision conflicts', () => {
       TimerMutationOutcomeUnknownException
     );
     expect(createOrResumeTimer).toHaveBeenCalledOnce();
+  });
+
+  it('preserves auto-start provenance for a non-session skipped Work Timer', async () => {
+    const timer = currentTimer({
+      type: TIMER_TYPES.WORK,
+      status: TIMER_STATUSES.RUNNING,
+      startTime: Date.now() - 60_000,
+    });
+    const nextTimer = currentTimer({
+      id: 'timer-next',
+      type: TIMER_TYPES.BREAK,
+      status: TIMER_STATUSES.RUNNING,
+      startTime: Date.now(),
+    });
+    const createOrResumeTimer = vi.fn(async () => nextTimer);
+    const service = Object.assign(Object.create(TimerService.prototype), {
+      timerStore: { getCurrentTimer: vi.fn(async () => timer) },
+      preferencesService: {
+        getPreferences: vi.fn(async () => ({
+          advancedSkip: true,
+          sessionsExtension: false,
+          intentionExtension: false,
+          intentionRequireSelection: false,
+          autoStartBreak: true,
+          timerExtension: true,
+          breakTimerDuration: 5 * 60_000,
+        })),
+      },
+      statisticsService: { recordCompletedTimer: vi.fn() },
+      snapshotRuntime: vi.fn(async () => ({})),
+      snapshotStatistics: vi.fn(async () => new Map()),
+      createOrResumeTimer,
+      buildHistoryEntry: vi.fn(async () => ({})),
+      pushTimerHistory: vi.fn(async () => undefined),
+    }) as TimerService;
+
+    await service.skipTimer('user-1');
+
+    expect(createOrResumeTimer).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        type: TIMER_TYPES.BREAK,
+        startPaused: false,
+        isAutoStarted: true,
+        extensionCandidate: expect.objectContaining({
+          originalTimerId: timer.id,
+          originalDuration: timer.duration,
+          extensionNextTimerType: TIMER_TYPES.BREAK,
+        }),
+      })
+    );
   });
 
   it('clears session state atomically when resuming the same long break', async () => {

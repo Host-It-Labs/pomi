@@ -489,10 +489,10 @@ describe('Task ordering rules', () => {
       'pinned-other',
       'matching-parent',
       'matching-sub',
-      'unlinked',
     ]);
     expect(view.generalPreviewTasks.map(value => value.id)).toEqual([
       'other-sub',
+      'unlinked',
       'other-intention',
     ]);
   });

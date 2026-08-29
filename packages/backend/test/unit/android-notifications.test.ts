@@ -1,5 +1,6 @@
 import {
   ANDROID_NOTIFICATION_CHANNEL_IDS,
+  NOTIFICATION_GROUPS,
   TIMER_STATUSES,
   TIMER_TYPES,
 } from '@pomi/shared';
@@ -13,11 +14,24 @@ vi.mock('firebase-admin/messaging', () => ({
 }));
 
 type Payload = {
+  notification?: never;
   android: {
     priority: string;
-    notification: { channelId: string; tag?: string };
+    notification?: never;
   };
-  data?: { notificationId?: string };
+  data: {
+    title: string;
+    body: string;
+    channelId: string;
+    sound: string;
+    icon: string;
+    color: string;
+    tag: string;
+    notificationType: string;
+    notificationGroup: string;
+    timestamp: string;
+    notificationId?: string;
+  };
 };
 
 afterEach(() => {
@@ -87,6 +101,23 @@ describe('Android timer notifications', () => {
     expect(fcmPayloads.map(payload => payload.android.priority)).toEqual(
       Array(5).fill('high')
     );
+    expect(
+      fcmPayloads.every(payload => payload.android.notification === undefined)
+    ).toBe(true);
+    expect(fcmPayloads.map(payload => payload.data?.notificationGroup)).toEqual(
+      Array(5).fill(NOTIFICATION_GROUPS.TIMER)
+    );
+    expect(
+      fcmPayloads.every(payload => payload.notification === undefined)
+    ).toBe(true);
+    expect(fcmPayloads.every(payload => payload.data.title)).toBe(true);
+    expect(fcmPayloads.every(payload => payload.data.body)).toBe(true);
+    expect(
+      fcmPayloads.every(payload => payload.data.icon === 'ic_notification')
+    ).toBe(true);
+    expect(fcmPayloads.every(payload => payload.data.color)).toBe(true);
+    expect(fcmPayloads.every(payload => payload.data.sound)).toBe(true);
+    expect(fcmPayloads.every(payload => payload.data.tag)).toBe(true);
   });
 
   it('uses v3 native-sound channel IDs', async () => {
@@ -109,9 +140,7 @@ describe('Android timer notifications', () => {
       );
     }
 
-    const channelIds = fcmPayloads.map(
-      payload => payload.android.notification.channelId
-    );
+    const channelIds = fcmPayloads.map(payload => payload.data.channelId);
     expect(channelIds).toEqual([
       ANDROID_NOTIFICATION_CHANNEL_IDS.WARNINGS,
       ANDROID_NOTIFICATION_CHANNEL_IDS.WORK_COMPLETE,
@@ -132,10 +161,13 @@ describe('Android timer notifications', () => {
       'timer-completed:timer-1'
     );
 
-    expect(fcmPayloads[0].android.notification.tag).toBe(
-      'timer-completed:timer-1'
-    );
+    expect(fcmPayloads[0].android.priority).toBe('high');
+    expect(fcmPayloads[0].android.notification).toBeUndefined();
     expect(fcmPayloads[0].data?.notificationId).toBe('timer-completed:timer-1');
+    expect(fcmPayloads[0].data?.tag).toBe('timer-completed:timer-1');
+    expect(fcmPayloads[0].data?.channelId).toBe(
+      ANDROID_NOTIFICATION_CHANNEL_IDS.WORK_COMPLETE
+    );
   });
 
   it('retries durable delivery while legacy delivery remains best effort', async () => {
@@ -163,6 +195,119 @@ describe('Android timer notifications', () => {
         'timer-completed:timer-1'
       )
     ).rejects.toThrow('provider down');
+  });
+
+  it('attempts APNs after an FCM failure and accepts the fallback delivery', async () => {
+    const fcmSend = vi.fn(async () => {
+      throw new Error('FCM unavailable');
+    });
+    const apnSend = vi.fn(async () => undefined);
+    vi.mocked(getMessaging).mockReturnValue({ send: fcmSend } as never);
+    const service = new NotificationService(
+      { get: (_key: string, fallback: unknown) => fallback } as never,
+      {
+        findUserById: async () => ({
+          fcmToken: 'fcm-token',
+          apnToken: 'apn-token',
+        }),
+        clearPushToken: async () => undefined,
+      } as never
+    );
+    Object.assign(service, {
+      fcmApp: {},
+      apnProvider: { send: apnSend },
+    });
+
+    await expect(
+      service.sendDurableTimerCompletedNotification(
+        createTimer({ type: TIMER_TYPES.WORK }) as never,
+        'user-1',
+        5,
+        false,
+        'timer-completed:timer-1'
+      )
+    ).resolves.toBeUndefined();
+
+    expect(fcmSend).toHaveBeenCalledOnce();
+    expect(apnSend).toHaveBeenCalledOnce();
+  });
+
+  it('clears an invalid FCM token while still attempting APNs', async () => {
+    const clearPushToken = vi.fn(async () => undefined);
+    const fcmSend = vi.fn(async () => {
+      throw Object.assign(new Error('FCM token rejected'), {
+        code: 'messaging/registration-token-not-registered',
+      });
+    });
+    const apnSend = vi.fn(async () => undefined);
+    vi.mocked(getMessaging).mockReturnValue({ send: fcmSend } as never);
+    const service = new NotificationService(
+      { get: (_key: string, fallback: unknown) => fallback } as never,
+      {
+        findUserById: async () => ({
+          fcmToken: 'fcm-token',
+          apnToken: 'apn-token',
+        }),
+        clearPushToken,
+      } as never
+    );
+    Object.assign(service, {
+      fcmApp: {},
+      apnProvider: { send: apnSend },
+    });
+
+    await expect(
+      service.sendDurableTimerCompletedNotification(
+        createTimer({ type: TIMER_TYPES.WORK }) as never,
+        'user-1',
+        5,
+        false,
+        'timer-completed:timer-1'
+      )
+    ).resolves.toBeUndefined();
+
+    expect(clearPushToken).toHaveBeenCalledWith('user-1', 'android');
+    expect(apnSend).toHaveBeenCalledOnce();
+  });
+
+  it('does not treat an invalid FCM token plus an APNs failure as delivery', async () => {
+    const clearPushToken = vi.fn(async () => undefined);
+    const fcmSend = vi.fn(async () => {
+      throw Object.assign(new Error('FCM token rejected'), {
+        code: 'messaging/invalid-registration-token',
+      });
+    });
+    const apnSend = vi.fn(async () => {
+      throw new Error('APNs unavailable');
+    });
+    vi.mocked(getMessaging).mockReturnValue({ send: fcmSend } as never);
+    const service = new NotificationService(
+      { get: (_key: string, fallback: unknown) => fallback } as never,
+      {
+        findUserById: async () => ({
+          fcmToken: 'fcm-token',
+          apnToken: 'apn-token',
+        }),
+        clearPushToken,
+      } as never
+    );
+    Object.assign(service, {
+      fcmApp: {},
+      apnProvider: { send: apnSend },
+    });
+
+    await expect(
+      service.sendDurableTimerCompletedNotification(
+        createTimer({ type: TIMER_TYPES.WORK }) as never,
+        'user-1',
+        5,
+        false,
+        'timer-completed:timer-1'
+      )
+    ).rejects.toThrow('APNs unavailable');
+
+    expect(clearPushToken).toHaveBeenCalledWith('user-1', 'android');
+    expect(apnSend).toHaveBeenCalledOnce();
   });
 
   it('retries durable delivery when the user token has no matching provider', async () => {

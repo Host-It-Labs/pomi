@@ -22,6 +22,7 @@ class Notification {
   var largeIcon: String? = null
   var iconColor: String? = null
   var actionTypeId: String? = null
+  var tag: String? = null
   var group: String? = null
   var inboxLines: List<String>? = null
   var isGroupSummary = false

@@ -326,6 +326,12 @@ export const forceReconnect = (skipIfConnected = false): Socket | null => {
     return null;
   }
 
+  // Focus, visibility, and failed HTTP reads can request recovery together.
+  // Keep the active socket so those requests cannot restart its handshake.
+  if (connectionState.isReconnecting && socket) {
+    return socket;
+  }
+
   if (skipIfConnected && isSocketReady() && !isConnectionStale()) {
     const readySocket = socket as Socket;
     readySocket.emit(SOCKET_EVENTS.GET_CURRENT_TIMER);

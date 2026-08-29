@@ -3,6 +3,7 @@ package app.tauri.notification
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.Application
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
@@ -101,6 +102,23 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
 
   companion object {
     var instance: NotificationPlugin? = null
+    @Volatile
+    private var resumedActivityCount = 0
+
+    fun isAppInForeground(): Boolean = resumedActivityCount > 0
+
+    fun showRemoteNotification(context: Context, notification: Notification) {
+      instance?.showRemoteNotification(context, notification)
+        ?: TauriNotificationManager.showRemoteNotification(context, notification)
+    }
+
+    private fun activityResumed() {
+      resumedActivityCount += 1
+    }
+
+    private fun activityPaused() {
+      resumedActivityCount = (resumedActivityCount - 1).coerceAtLeast(0)
+    }
 
     fun triggerNotification(notification: Notification, source: String = "local") {
       val data = JSObject()
@@ -112,6 +130,7 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
       notification.summary?.let { data.put("summary", it) }
       notification.sound?.let { data.put("sound", it) }
       notification.actionTypeId?.let { data.put("actionTypeId", it) }
+      notification.tag?.let { data.put("tag", it) }
       notification.group?.let { data.put("group", it) }
       notification.channelId?.let { data.put("channelId", it) }
       if (notification.isGroupSummary) data.put("groupSummary", true)
@@ -137,6 +156,18 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
   override fun load(webView: WebView) {
     instance = this
 
+    activity.application.registerActivityLifecycleCallbacks(
+      object : Application.ActivityLifecycleCallbacks {
+        override fun onActivityCreated(activity: Activity, savedInstanceState: android.os.Bundle?) = Unit
+        override fun onActivityStarted(activity: Activity) = Unit
+        override fun onActivityResumed(activity: Activity) = activityResumed()
+        override fun onActivityPaused(activity: Activity) = activityPaused()
+        override fun onActivityStopped(activity: Activity) = Unit
+        override fun onActivitySaveInstanceState(activity: Activity, outState: android.os.Bundle) = Unit
+        override fun onActivityDestroyed(activity: Activity) = Unit
+      }
+    )
+
     super.load(webView)
     this.webView = webView
     notificationStorage = NotificationStorage(activity, jsonMapper())
@@ -156,6 +187,14 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
     val intent = activity.intent
     intent?.let {
       onIntent(it)
+    }
+  }
+
+  private fun showRemoteNotification(context: Context, notification: Notification) {
+    if (::manager.isInitialized) {
+      manager.schedule(notification)
+    } else {
+      TauriNotificationManager.showRemoteNotification(context, notification)
     }
   }
 

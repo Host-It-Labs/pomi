@@ -323,13 +323,21 @@ export function ExpandedIntentionsPicker({
           nextIntentions.includes(parentSlug)
         )
       );
+      const resetOnFirstIntention =
+        nextTimerType === TIMER_TYPES.BREAK
+          ? preferences?.resetBreakOnFirstIntention === true
+          : nextTimerType === TIMER_TYPES.LONG_BREAK
+            ? preferences?.resetLongBreakOnFirstIntention === true
+            : false;
 
       if (!nextIntentions.includes(slug)) {
         createOrResumeTimer(
           nextTimerType,
           nextIntentions[0],
           nextIntentions,
-          nextSubIntentions
+          nextSubIntentions,
+          undefined,
+          resetOnFirstIntention
         );
         return;
       }
@@ -351,7 +359,9 @@ export function ExpandedIntentionsPicker({
         nextTimerType,
         nextIntentions[0],
         nextIntentions,
-        nextSubIntentions
+        nextSubIntentions,
+        undefined,
+        resetOnFirstIntention
       );
     },
     [
@@ -360,6 +370,8 @@ export function ExpandedIntentionsPicker({
       intentionType,
       isDisconnected,
       preferences?.intentionRequireSelection,
+      preferences?.resetBreakOnFirstIntention,
+      preferences?.resetLongBreakOnFirstIntention,
       selectedSubIntentions,
       subIntentionsByParent,
       timer?.type,
@@ -374,15 +386,29 @@ export function ExpandedIntentionsPicker({
         ...subPickerState.subIntentions,
         [subPickerState.parent.slug]: subSlug,
       };
+      const resetOnFirstIntention =
+        subPickerState.timerType === TIMER_TYPES.BREAK
+          ? preferences?.resetBreakOnFirstIntention === true
+          : subPickerState.timerType === TIMER_TYPES.LONG_BREAK
+            ? preferences?.resetLongBreakOnFirstIntention === true
+            : false;
       createOrResumeTimer(
         subPickerState.timerType,
         subPickerState.intentions[0],
         subPickerState.intentions,
-        nextSubIntentions
+        nextSubIntentions,
+        undefined,
+        resetOnFirstIntention
       );
       setSubPickerState(null);
     },
-    [createOrResumeTimer, isDisconnected, subPickerState]
+    [
+      createOrResumeTimer,
+      isDisconnected,
+      preferences?.resetBreakOnFirstIntention,
+      preferences?.resetLongBreakOnFirstIntention,
+      subPickerState,
+    ]
   );
 
   const handleAddIntention = useCallback(() => {

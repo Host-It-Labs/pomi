@@ -966,18 +966,18 @@ export function MinimizedTaskView({
               {t('task.loading')}
             </div>
           )}
-          {!isLoading && displayTasks.length === 0 && (
-            <button
-              type="button"
-              onClick={openTaskCreate}
-              className="rounded-md border border-dashed border-slate-700/55 px-3 text-xs text-slate-400 transition hover:border-indigo-500/60 hover:text-slate-200"
-              style={{ gridRow: `span ${tasksPerPage}` }}
-            >
-              {taskSearchQuery.trim()
-                ? t('task.noMatching')
-                : t('navigation.addTask')}
-            </button>
-          )}
+          {!isLoading &&
+            displayTasks.length === 0 &&
+            generalPreviewTasks.length === 0 && (
+              <div
+                className="rounded-md border border-dashed border-slate-700/55 px-3 text-xs text-slate-400 transition hover:border-indigo-500/60 hover:text-slate-200"
+                style={{ gridRow: `span ${tasksPerPage}` }}
+              >
+                {effectiveTaskSearchQuery.trim()
+                  ? t('task.noMatching')
+                  : t('task.noTasks')}
+              </div>
+            )}
           {!isLoading &&
             visibleRows.map(row => {
               if (row === 'general-preview') {

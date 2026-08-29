@@ -28,6 +28,8 @@ const MAX_DEBUG_BYTES = 64 * 1024 * 1024;
 
 export type PreparedAssistantTaskCapture = {
   normalizedText: string;
+  /** Selected List context carried from preparation into the confirmed commit. */
+  listId?: string | null;
   /** Detected source language for localized assistant confirmations. */
   responseLanguage?: string;
   debugLogId: string | null;
@@ -82,6 +84,7 @@ export type CommittedAssistantVoiceCapture = {
 
 export type AssistantTaskPreparationInput = {
   text: string;
+  listId?: string | null;
   defaults?: AssistantTaskDefaults;
   debugLogId?: string | null;
 };
@@ -102,7 +105,7 @@ export type AssistantVoicePreparationInput =
 
 type TaskCommitPreparation = Pick<
   PreparedAssistantTaskCapture,
-  'taskDrafts' | 'usedFallback' | 'preparationMs' | 'costUsd'
+  'taskDrafts' | 'listId' | 'usedFallback' | 'preparationMs' | 'costUsd'
 >;
 type TaskDebugPreparation = Omit<
   PreparedAssistantTaskCapture,
@@ -144,10 +147,22 @@ const TASK_CODEC: PreparationCodec<
 > = {
   kind: 'task',
   split: prepared => {
-    const { taskDrafts, usedFallback, preparationMs, costUsd, ...debug } =
-      prepared;
+    const {
+      taskDrafts,
+      listId,
+      usedFallback,
+      preparationMs,
+      costUsd,
+      ...debug
+    } = prepared;
     return {
-      commit: { taskDrafts, usedFallback, preparationMs, costUsd },
+      commit: {
+        taskDrafts,
+        ...(listId !== undefined ? { listId } : {}),
+        usedFallback,
+        preparationMs,
+        costUsd,
+      },
       debug,
     };
   },

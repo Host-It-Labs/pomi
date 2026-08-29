@@ -5,6 +5,7 @@ import {
   TIMER_TYPES,
   Timer,
   TimerExtensionState,
+  TimerExtensionCandidate,
   TimerTypes,
 } from '@pomi/shared';
 import type { TimerSessionState, TimerVersion } from './timer-store';
@@ -12,9 +13,7 @@ import type { TimerSessionState, TimerVersion } from './timer-store';
 export const TIMER_CONTINUATION_PLAN_VERSION = 2;
 
 export type TimerStateMutation<T> =
-  | { kind: 'keep' }
-  | { kind: 'clear' }
-  | { kind: 'set'; value: T };
+  { kind: 'keep' } | { kind: 'clear' } | { kind: 'set'; value: T };
 
 interface TimerContinuationPlanBase {
   source: TimerVersion;
@@ -114,6 +113,10 @@ export function buildTimerContinuationPlan(
       transition.focusedTaskIds.length > 0 && {
         focusedTaskIds: [...transition.focusedTaskIds],
       }),
+    ...(transition.isAutoStarted && { isAutoStarted: true }),
+    ...(transition.extensionCandidate && {
+      extensionCandidate: transition.extensionCandidate,
+    }),
   };
 
   const extensionState = resolveExtensionState(
@@ -294,6 +297,9 @@ function parseTimerContinuationPlanV2(value: unknown): TimerContinuationPlanV2 {
     (nextTimer.status === TIMER_STATUSES.RUNNING &&
       nextTimer.startTime !== value.activationAt) ||
     (nextTimer.status === TIMER_STATUSES.PAUSED && nextTimer.startTime !== 0) ||
+    (nextTimer.isAutoStarted !== undefined &&
+      typeof nextTimer.isAutoStarted !== 'boolean') ||
+    !isExtensionCandidate(nextTimer.extensionCandidate) ||
     typeof value.clearIdleDetected !== 'boolean' ||
     value.clearHistory !== true ||
     !isIdleDetection(value.idleDetection) ||
@@ -388,6 +394,23 @@ function isExtensionState(value: unknown): value is TimerExtensionState {
       Object.values(TIMER_TYPES).includes(
         value.extensionNextTimerType as TimerTypes
       ))
+  );
+}
+
+function isExtensionCandidate(
+  value: unknown
+): value is TimerExtensionCandidate | undefined {
+  return (
+    value === undefined ||
+    (isRecord(value) &&
+      isNonEmptyString(value.originalTimerId) &&
+      isSafePositiveInteger(value.originalDuration) &&
+      (value.maxDuration === undefined ||
+        isSafePositiveInteger(value.maxDuration)) &&
+      (value.extensionNextTimerType === undefined ||
+        Object.values(TIMER_TYPES).includes(
+          value.extensionNextTimerType as TimerTypes
+        )))
   );
 }
 
@@ -487,6 +510,8 @@ interface TimerTransition {
   delayMs: number;
   stackedSessions?: number;
   focusedTaskIds?: string[];
+  isAutoStarted?: boolean;
+  extensionCandidate?: TimerExtensionCandidate;
 }
 
 function resolveTransition(
@@ -499,14 +524,11 @@ function resolveTransition(
       return {
         type,
         startPaused:
-          type === TIMER_TYPES.WORK
-            ? true
-            : type === TIMER_TYPES.LONG_BREAK
-              ? !preferences.sessionLongBreakAutoStart
-              : !preferences.autoStartBreak,
+          type === TIMER_TYPES.WORK ? true : !preferences.autoStartBreak,
         delayMs: 500,
         stackedSessions:
           type === TIMER_TYPES.BREAK ? timer.stackedSessions : undefined,
+        isAutoStarted: type !== TIMER_TYPES.WORK && preferences.autoStartBreak,
       };
     }
 
@@ -521,10 +543,20 @@ function resolveTransition(
           ? TIMER_TYPES.LONG_BREAK
           : TIMER_TYPES.WORK,
         startPaused: preferences.sessionHasLongBreak
-          ? !preferences.sessionLongBreakAutoStart
+          ? !preferences.autoStartBreak
           : true,
         delayMs: 500,
         focusedTaskIds: timer.focusedTaskIds,
+        isAutoStarted:
+          preferences.sessionHasLongBreak && preferences.autoStartBreak,
+        extensionCandidate:
+          preferences.sessionHasLongBreak && preferences.autoStartBreak
+            ? buildExtensionCandidate(
+                timer,
+                preferences,
+                TIMER_TYPES.LONG_BREAK
+              )
+            : undefined,
       };
     }
 
@@ -534,6 +566,10 @@ function resolveTransition(
       delayMs: 500,
       stackedSessions: timer.stackedSessions,
       focusedTaskIds: timer.focusedTaskIds,
+      isAutoStarted: preferences.autoStartBreak,
+      extensionCandidate: preferences.autoStartBreak
+        ? buildExtensionCandidate(timer, preferences, TIMER_TYPES.BREAK)
+        : undefined,
     };
   }
 
@@ -642,35 +678,86 @@ function resolveExtensionState(
   if (
     timer.type !== TIMER_TYPES.WORK ||
     timer.isExtension ||
-    !preferences.timerExtension ||
-    preferences.autoStartBreak
+    !preferences.timerExtension
   ) {
     return { kind: 'keep' };
   }
+  if (nextType === TIMER_TYPES.BREAK || nextType === TIMER_TYPES.LONG_BREAK) {
+    if (!resolveBreakAutoStart(preferences, nextType)) {
+      return {
+        kind: 'set',
+        value: buildExtensionState(timer, preferences, completedAt, nextType),
+      };
+    }
+    return { kind: 'keep' };
+  }
+  return { kind: 'keep' };
+}
+
+function resolveBreakAutoStart(
+  preferences: Preferences,
+  type: TimerTypes
+): boolean {
+  return (
+    (type === TIMER_TYPES.BREAK || type === TIMER_TYPES.LONG_BREAK) &&
+    preferences.autoStartBreak
+  );
+}
+
+function buildExtensionCandidate(
+  timer: Timer,
+  preferences: Preferences,
+  extensionNextTimerType: TimerTypes
+): TimerExtensionCandidate | undefined {
+  if (
+    timer.type !== TIMER_TYPES.WORK ||
+    timer.isExtension ||
+    !preferences.timerExtension
+  ) {
+    return undefined;
+  }
   return {
-    kind: 'set',
-    value: {
-      startTime: completedAt,
-      maxDuration:
-        preferences.sessionsExtension &&
-        preferences.sessionHasLongBreak &&
-        preferences.sessionAutoDetectLongBreak
-          ? preferences.sessionLongBreakDuration
-          : undefined,
-      intention: timer.intention,
-      intentionSlugs: timer.intentionSlugs,
-      subIntentions: timer.subIntentions,
-      intentionTitle: timer.intentionTitle,
-      intentionEmoji: timer.intentionEmoji,
-      intentionEmojis: timer.intentionEmojis,
-      subIntention: timer.subIntention,
-      subIntentionEmoji: timer.subIntentionEmoji,
-      subIntentionEmojis: timer.subIntentionEmojis,
-      subIntentionTitle: timer.subIntentionTitle,
-      originalTimerId: timer.id,
-      originalDuration: timer.duration,
-      extensionNextTimerType: nextType,
-    },
+    maxDuration:
+      preferences.sessionsExtension &&
+      preferences.sessionHasLongBreak &&
+      preferences.sessionAutoDetectLongBreak
+        ? preferences.sessionLongBreakDuration
+        : undefined,
+    intention: timer.intention,
+    intentionSlugs: timer.intentionSlugs,
+    subIntentions: timer.subIntentions,
+    intentionTitle: timer.intentionTitle,
+    intentionEmoji: timer.intentionEmoji,
+    intentionEmojis: timer.intentionEmojis,
+    subIntention: timer.subIntention,
+    subIntentionEmoji: timer.subIntentionEmoji,
+    subIntentionEmojis: timer.subIntentionEmojis,
+    subIntentionTitle: timer.subIntentionTitle,
+    originalTimerId: timer.id,
+    originalDuration: timer.duration,
+    extensionNextTimerType,
+  };
+}
+
+function buildExtensionState(
+  timer: Timer,
+  preferences: Preferences,
+  startTime: number,
+  extensionNextTimerType: TimerTypes
+): TimerExtensionState {
+  const candidate = buildExtensionCandidate(
+    timer,
+    preferences,
+    extensionNextTimerType
+  );
+  if (!candidate) {
+    throw new UnprocessableEntityException(
+      'Extension state requires an eligible Work Timer'
+    );
+  }
+  return {
+    ...candidate,
+    startTime,
   };
 }
 

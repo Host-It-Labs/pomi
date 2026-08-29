@@ -20,7 +20,9 @@ fun watchStatus(
         intentionRequireSelection = true,
         intentionMultiSelect = true,
         advancedSkip = false,
-        sessionsEnabled = false
+        sessionsEnabled = false,
+        resetBreakOnFirstIntention = false,
+        resetLongBreakOnFirstIntention = false
     ),
     tasks = emptyList(),
     totalVisibleTasks = 0,

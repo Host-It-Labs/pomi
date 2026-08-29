@@ -43,6 +43,8 @@ describe('UserDataTransferService', () => {
           id: 'source-preferences',
           userId: 'source-user',
           language: 'fr-FR',
+          autoStartBreak: false,
+          sessionLongBreakAutoStart: true,
         },
         intentions: [
           {
@@ -135,6 +137,12 @@ describe('UserDataTransferService', () => {
           currentTimer: {
             userId: 'source-user',
             focusedTaskIds: ['source-task'],
+            isAutoStarted: true,
+            extensionCandidate: {
+              originalTimerId: 'source-timer',
+              originalDuration: 1_500_000,
+              extensionNextTimerType: 'break',
+            },
           },
           sessionState: null,
           lastCompletionTimestamp: null,
@@ -142,7 +150,12 @@ describe('UserDataTransferService', () => {
           undoState: null,
           undoHistory: [],
           redoHistory: [],
-          extensionState: null,
+          extensionState: {
+            startTime: 2_000,
+            originalTimerId: 'source-timer',
+            originalDuration: 1_500_000,
+            extensionNextTimerType: 'break',
+          },
         },
       },
     } as never);
@@ -156,7 +169,9 @@ describe('UserDataTransferService', () => {
     expect(preferences).toMatchObject({
       userId: targetUserId,
       language: 'fr',
+      autoStartBreak: true,
     });
+    expect(preferences).not.toHaveProperty('sessionLongBreakAutoStart');
     expect(preferences?.id).not.toBe('source-preferences');
     expect(parent.id).not.toBe('source-parent');
     expect(child.id).not.toBe('source-child');
@@ -214,6 +229,18 @@ describe('UserDataTransferService', () => {
       currentTimer: {
         userId: targetUserId,
         focusedTaskIds: [task.id],
+        isAutoStarted: true,
+        extensionCandidate: {
+          originalTimerId: 'source-timer',
+          originalDuration: 1_500_000,
+          extensionNextTimerType: 'break',
+        },
+      },
+      extensionState: {
+        startTime: 2_000,
+        originalTimerId: 'source-timer',
+        originalDuration: 1_500_000,
+        extensionNextTimerType: 'break',
       },
     });
   });

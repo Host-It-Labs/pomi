@@ -14,11 +14,7 @@ import type { TaskImportSource } from './constants';
  * worker is applying it. Terminal states are never replayed by a worker.
  */
 export type UserActionLifecycle =
-  | 'accepted'
-  | 'running'
-  | 'succeeded'
-  | 'failed'
-  | 'cancelled';
+  'accepted' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 export interface TimerUserAction {
   kind: 'timer';
@@ -47,6 +43,7 @@ export interface TimerUserAction {
   position?: number;
   extensionAction?: 'logElapsed' | 'addFiveMinutes';
   requestedLogMode?: 'none' | 'elapsed' | 'full';
+  resetOnFirstIntention?: boolean;
 }
 
 export type TaskImportUserActionRow = {
@@ -107,12 +104,7 @@ export interface TasksUserAction {
 export interface IntentionsUserAction {
   kind: 'intentions';
   operation:
-    | 'create'
-    | 'update'
-    | 'delete'
-    | 'archive'
-    | 'unarchive'
-    | 'reparent';
+    'create' | 'update' | 'delete' | 'archive' | 'unarchive' | 'reparent';
   slug?: string;
   title?: string;
   emoji?: string;

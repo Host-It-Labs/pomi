@@ -333,6 +333,11 @@ internal fun PendingWatchAction.toGatewayRequest(): JSONObject {
                 .put("timerType", timerType)
                 .put("intentions", org.json.JSONArray(intentionSlugs))
                 .put("subIntentions", JSONObject(subIntentions))
+                .apply {
+                    if (resetOnFirstIntention != null) {
+                        put("resetOnFirstIntention", resetOnFirstIntention)
+                    }
+                }
         }
         "session" -> {
             return JSONObject()

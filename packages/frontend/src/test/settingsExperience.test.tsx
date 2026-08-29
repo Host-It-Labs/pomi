@@ -112,7 +112,10 @@ vi.mock('../pages/extensions/SessionConfigModal', () => ({
 vi.mock('../pages/GeneralSettings', () => ({
   GeneralSettings: ({ adminContent }: { adminContent?: React.ReactNode }) => (
     <div>
-      General controls
+      <div data-setting-id="general-account">General controls</div>
+      <div data-setting-id="undoAlerts">
+        Undo alerts Show what undo or redo changed.
+      </div>
       {adminContent ? (
         <section>
           <h3>Admin</h3>
@@ -123,7 +126,12 @@ vi.mock('../pages/GeneralSettings', () => ({
   ),
 }));
 vi.mock('../pages/TimerSettings', () => ({
-  TimerSettings: () => <div>Timer controls</div>,
+  TimerSettings: () => (
+    <div data-setting-id="focusLength">
+      <button type="button">Focus length</button>
+      <span>Length of each focus block.</span>
+    </div>
+  ),
 }));
 vi.mock('../pages/NotificationsSettings', () => ({
   NotificationsSettings: () => <div>Notification controls</div>,
@@ -132,13 +140,27 @@ vi.mock('../pages/KeyboardShortcutsSettings', () => ({
   KeyboardShortcutsSettings: () => <div>Shortcut controls</div>,
 }));
 vi.mock('../pages/SessionSettings', () => ({
-  SessionSettings: () => <div>Session controls</div>,
+  SessionSettings: () => (
+    <div data-setting-id="sessionShowEta">
+      <button type="button">Show finish times</button>
+      <span>Show expected finish times in the session view.</span>
+    </div>
+  ),
 }));
 vi.mock('../pages/IntentionSettings', () => ({
-  IntentionSettings: () => <div>Intention controls</div>,
+  IntentionSettings: () => (
+    <div data-setting-id="intentionSubIntentions">
+      <button type="button">Sub-intentions</button>
+      <span>Organize intentions into nested sub-intentions.</span>
+    </div>
+  ),
 }));
 vi.mock('../pages/TaskSettings', () => ({
-  TaskSettings: () => <div>Task controls</div>,
+  TaskSettings: () => (
+    <div data-setting-id="taskImport">
+      <button type="button">Import Tasks</button>
+    </div>
+  ),
 }));
 
 vi.mock('../pages/AssistantSettings', () => ({
@@ -154,11 +176,20 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.user = { id: 'user-1', username: 'member', isAdmin: false } as User;
+  mocks.preferences.sessionsExtension = false;
+  mocks.preferences.intentionExtension = false;
+  mocks.preferences.tasksExtension = false;
+  mocks.preferences.assistantExtension = false;
   window.scrollTo = vi.fn();
   HTMLElement.prototype.scrollTo = vi.fn();
 });
 
 describe('Settings experience', () => {
+  const sectionKeys = () =>
+    Array.from(document.querySelectorAll<HTMLElement>('section[data-section]'))
+      .map(section => section.dataset.section)
+      .filter((key): key is string => Boolean(key));
+
   it('uses the same activation header and hides disabled feature controls', async () => {
     const onToggle = vi.fn();
     const user = userEvent.setup();
@@ -199,5 +230,103 @@ describe('Settings experience', () => {
     expect(within(toolbar).queryByRole('button', { name: 'Admin' })).toBeNull();
     expect(screen.getByTestId('ai-infrastructure')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Admin' })).toBeVisible();
+  });
+
+  it('filters section navigation and content with a trimmed case-insensitive query', async () => {
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    const search = screen.getByRole('searchbox', { name: 'Search' });
+    await user.type(search, '  NOTIFICATIONS  ');
+
+    expect(sectionKeys()).toEqual(['notifications', 'tasks']);
+    const navigation = screen.getByRole('navigation');
+    expect(
+      within(navigation).getByRole('button', { name: 'Notifications' })
+    ).toBeVisible();
+    expect(
+      within(navigation).queryByRole('button', { name: 'General' })
+    ).toBeNull();
+    expect(
+      within(navigation).getByRole('button', { name: 'Tasks' })
+    ).toBeVisible();
+  });
+
+  it('exposes an accessible clear action that restores all visible sections', async () => {
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    const search = screen.getByRole('searchbox', { name: 'Search' });
+    const clear = screen.getByRole('button', { name: 'Clear' });
+    expect(clear).toBeDisabled();
+
+    await user.type(search, 'task');
+    expect(clear).toBeEnabled();
+    clear.focus();
+    await user.keyboard('{Enter}');
+
+    expect(search).toHaveValue('');
+    expect(search).toHaveFocus();
+    expect(sectionKeys()).toHaveLength(6);
+  });
+
+  it('announces an empty search result without rendering section blocks', async () => {
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    await user.type(
+      screen.getByRole('searchbox', { name: 'Search' }),
+      'no such setting'
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'No matching settings sections'
+    );
+    expect(sectionKeys()).toEqual([]);
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeEnabled();
+  });
+
+  it('matches a translated control description and highlights its control', async () => {
+    const user = userEvent.setup();
+    mocks.preferences.intentionExtension = true;
+    render(<Settings />);
+
+    const search = screen.getByRole('searchbox', { name: 'Search' });
+    await user.type(search, 'nested sub-intentions');
+
+    const target = document.querySelector<HTMLElement>(
+      'section[data-section="intentions"]'
+    );
+    expect(target).not.toBeNull();
+    expect(sectionKeys()).toEqual(['intentions']);
+    expect(
+      target?.querySelector('[data-setting-id="intentionSubIntentions"]')
+    ).toHaveAttribute('data-settings-search-match', 'true');
+
+    await user.keyboard('{Enter}');
+
+    expect(
+      target?.querySelector('[data-setting-id="intentionSubIntentions"] button')
+    ).toHaveFocus();
+  });
+
+  it('focuses the activation action when a matching feature is disabled', async () => {
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    const search = screen.getByRole('searchbox', { name: 'Search' });
+    await user.type(search, 'sub-intentions');
+
+    const enableIntentions = screen.getByRole('button', {
+      name: 'Enable Intentions',
+    });
+    expect(enableIntentions).toHaveAttribute(
+      'data-settings-search-match',
+      'true'
+    );
+
+    await user.keyboard('{Enter}');
+
+    expect(enableIntentions).toHaveFocus();
   });
 });

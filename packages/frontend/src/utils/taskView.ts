@@ -118,10 +118,7 @@ export function buildTaskView({
     mode === 'general' || !hasTimerFilter
       ? visibleTasks
       : visibleTasks.filter(
-          task =>
-            pinnedOrder.has(task.id) ||
-            isTaskLinkedToTimer(task, timer) ||
-            !task.intentionSlug
+          task => pinnedOrder.has(task.id) || isTaskLinkedToTimer(task, timer)
         );
 
   const sortMode = mode === 'intention' && hasTimerFilter ? mode : 'general';

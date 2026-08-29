@@ -243,6 +243,15 @@ export const CLIENT_NOTIFICATION_TYPES = {
 export type ClientNotificationType =
   (typeof CLIENT_NOTIFICATION_TYPES)[keyof typeof CLIENT_NOTIFICATION_TYPES];
 
+/** Stable OS-level groups shared by Timer and Task notification delivery. */
+export const NOTIFICATION_GROUPS = {
+  TIMER: 'pomi-timer',
+  TASK: 'pomi-task',
+} as const;
+
+export type NotificationGroup =
+  (typeof NOTIFICATION_GROUPS)[keyof typeof NOTIFICATION_GROUPS];
+
 /**
  * Notification keys shared by backend delivery and client rendering.
  * Platform-specific presentation keys remain local to the relevant client.

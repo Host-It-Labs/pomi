@@ -3,11 +3,13 @@ import {
   registerForPushNotifications,
   requestPermission,
 } from '@choochmeque/tauri-plugin-notifications-api';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { PUSH_PLATFORMS } from '@pomi/shared/src/constants';
 import { Platform } from '@tauri-apps/plugin-os';
 import { apiClient } from './apiClient';
+import { MACOS_NOTIFICATION_SETTINGS_URL } from '../constants/notifications';
 import { translateCurrent } from '../i18n';
-import { isAndroid, isMobile, isTauri } from './osUtils';
+import { isAndroid, isMac, isMobile, isTauri } from './osUtils';
 
 declare global {
   interface Window {
@@ -15,7 +17,7 @@ declare global {
   }
 }
 
-class NotificationService {
+export class NotificationService {
   private hasPermission = false;
   private denialCount = 0;
   private readonly DENIAL_THRESHOLD = 2;
@@ -38,7 +40,7 @@ class NotificationService {
 
   async checkPermission(): Promise<boolean> {
     try {
-      if (!isMobile) {
+      if (!isMobile && !isMac) {
         return false;
       }
       if (!isTauri) {
@@ -53,7 +55,7 @@ class NotificationService {
   }
 
   async requestPermissionIfNeeded(): Promise<boolean> {
-    if (!isMobile) return false;
+    if (!isMobile && !isMac) return false;
     if (this.hasPermission) return true;
     if (!isTauri) {
       this.hasPermission =
@@ -97,6 +99,18 @@ class NotificationService {
       return this.hasPermission;
     } catch (error) {
       console.error('Error requesting notification permission:', error);
+      return false;
+    }
+  }
+
+  async openMacNotificationSettings(): Promise<boolean> {
+    if (!isMac || !isTauri) return false;
+
+    try {
+      await openUrl(MACOS_NOTIFICATION_SETTINGS_URL);
+      return true;
+    } catch (error) {
+      console.error('Error opening macOS notification settings:', error);
       return false;
     }
   }

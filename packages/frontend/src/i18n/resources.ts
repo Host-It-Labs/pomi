@@ -86,13 +86,7 @@ const english: TranslationCatalog = {
   'common.days': 'days',
   'common.day': 'day',
   'common.week': 'week',
-  'common.month': 'month',
-  'common.year': 'year',
   'common.list': 'List',
-  'common.calendar': 'Calendar',
-  'common.item': 'item',
-  'common.items': 'items',
-  'common.undated': 'Undated',
   'common.all': 'All',
   'common.none': 'None',
   'common.off': 'Off',
@@ -154,23 +148,6 @@ const english: TranslationCatalog = {
   'task.pinned': 'Pinned',
   'task.unpinned': 'Unpinned',
   'task.clearPropertyFilters': 'Clear property filters',
-  'task.selectMultiple': 'Select multiple Tasks',
-  'task.exitSelectionMode': 'Exit Task selection',
-  'task.selectedCount': '{{count}} selected',
-  'task.selectVisible': 'Select visible',
-  'task.selectForBulk': 'Select {{title}}',
-  'task.bulkManage': 'Manage selected',
-  'task.bulkScope': 'This action applies to {{count}} selected Tasks.',
-  'task.bulkComplete': 'Complete Tasks',
-  'task.bulkArchive': 'Archive Tasks',
-  'task.bulkPriority': 'Change priority',
-  'task.bulkIntention': 'Change Intention',
-  'task.bulkSameTimerType':
-    'Choose Tasks with the same Timer type to assign an Intention.',
-  'task.bulkConfirm': 'Confirm {{action}} for {{count}} Tasks.',
-  'task.bulkPartialFailure':
-    '{{failed}} of {{total}} Tasks were unchanged. They remain selected for retry.',
-  'task.bulkUpdated': '{{count}} Tasks updated',
   'task.updated': 'Task updated',
   'task.viewUpdated': 'View',
   'task.archivedTasks': 'Archived Tasks',
@@ -379,6 +356,7 @@ const english: TranslationCatalog = {
   'assistant.minimumTranscriptWordsDescription':
     'Tasks with more than this many source words include a collapsed transcript. Default: 15.',
   'settings.title': 'Settings',
+  'settings.noMatchingSections': 'No matching settings sections',
   'task.createFirst': 'Create first Task',
   'task.importFromApp': 'Import from app',
 
@@ -393,6 +371,11 @@ const english: TranslationCatalog = {
     'Minutes between repeated urgent reminders.',
   'notifications.permissionRequired':
     'Accept notifications on your device to view these settings.',
+  'notifications.macPermissionRequired':
+    'Allow notifications in macOS System Settings to receive timer and Task reminders.',
+  'notifications.macSettingsInstructions':
+    'If the button does not open System Settings, go to Notifications > Pomi and allow notifications.',
+  'notifications.openMacSettings': 'Open Notification Settings',
   'notifications.notifications': 'Notifications',
   'notifications.backgroundUsage': 'Enable background usage',
   'notifications.backgroundUsageDescription':
@@ -444,11 +427,6 @@ const english: TranslationCatalog = {
   'task.defaultSort': 'Default Task sort',
   'task.defaultSortAbout':
     'Used when Tasks open without a visit-specific sort choice.',
-  'task.calendar': 'Task calendar',
-  'task.goToToday': 'Go to today',
-  'task.previousCalendarPeriod': 'Previous {{period}}',
-  'task.nextCalendarPeriod': 'Next {{period}}',
-  'task.noTasksForDate': 'No tasks for this date',
   'task.sortDefaultDescription':
     'Overdue by priority, upcoming by due date, undated by priority then newest.',
   'task.daysFromCreation': 'Days from creation',
@@ -735,9 +713,6 @@ const english: TranslationCatalog = {
   'session.longBreakDescription':
     'Take a longer break after completing a session.',
   'session.longBreakDuration': 'Long break duration (minutes)',
-  'session.autoStartLongBreak': 'Auto-start long break',
-  'session.autoStartLongBreakDescription':
-    'Automatically start the long break after completing a session.',
   'session.showLongBreakButton': 'Show long break button',
   'session.showLongBreakButtonDescription':
     'Show a button for starting a long break early.',
@@ -816,13 +791,21 @@ const english: TranslationCatalog = {
   'task.vikunjaExport': 'Vikunja export',
 
   'timerSettings.autoStartBreaks': 'Auto-start breaks',
-  'timerSettings.autoStartBreaksDisabled':
-    'Breaks will not start automatically.',
+  'timerSettings.autoStartBreaksDescription':
+    'Automatically start short and long breaks after work.',
   'timerSettings.breakLength': 'Break length',
   'timerSettings.focusLength': 'Focus length',
   'timerSettings.keepGoing': 'Keep going after a timer',
   'timerSettings.keepGoingDescription':
     'Continue tracking elapsed time after the timer ends.',
+  'timerSettings.resetBreakOnFirstIntention':
+    'Reset short break on first Intention',
+  'timerSettings.resetBreakOnFirstIntentionDescription':
+    'Restart an automatically started short break when its first Intention is selected.',
+  'timerSettings.resetLongBreakOnFirstIntention':
+    'Reset long break on first Intention',
+  'timerSettings.resetLongBreakOnFirstIntentionDescription':
+    'Restart an automatically started long break when its first Intention is selected.',
   'timerSettings.saveTimeWhenSkipping': 'Save time when skipping',
   'timerSettings.saveTimeWhenSkippingDescription':
     'Log elapsed time before skipping a timer.',
@@ -3101,6 +3084,51 @@ Object.assign(generatedTerms.id, {
 });
 Object.assign(generatedTerms.ur, { Assistant: 'اسسٹنٹ', assistant: 'اسسٹنٹ' });
 Object.assign(generatedTerms['zh-Hans'], {
+  calendar: '日历',
+  Undated: '未指定日期',
+  undated: '未指定日期',
+});
+Object.assign(generatedTerms.hi, {
+  calendar: 'कैलेंडर',
+  Undated: 'बिना तारीख',
+  undated: 'बिना तारीख',
+});
+Object.assign(generatedTerms.es, {
+  calendar: 'calendario',
+  Undated: 'Sin fecha',
+  undated: 'sin fecha',
+});
+Object.assign(generatedTerms.ar, {
+  calendar: 'التقويم',
+  Undated: 'بلا تاريخ',
+  undated: 'بلا تاريخ',
+});
+Object.assign(generatedTerms.fr, {
+  calendar: 'calendrier',
+  Undated: 'Sans date',
+  undated: 'sans date',
+});
+Object.assign(generatedTerms.bn, {
+  calendar: 'ক্যালেন্ডার',
+  Undated: 'তারিখহীন',
+  undated: 'তারিখহীন',
+});
+Object.assign(generatedTerms['pt-BR'], {
+  calendar: 'calendário',
+  Undated: 'Sem data',
+  undated: 'sem data',
+});
+Object.assign(generatedTerms.id, {
+  calendar: 'kalender',
+  Undated: 'Tanpa tanggal',
+  undated: 'tanpa tanggal',
+});
+Object.assign(generatedTerms.ur, {
+  calendar: 'کیلنڈر',
+  Undated: 'بغیر تاریخ',
+  undated: 'بغیر تاریخ',
+});
+Object.assign(generatedTerms['zh-Hans'], {
   background: '后台',
   stopped: '已停止',
   discarded: '已丢弃',
@@ -3200,94 +3228,6 @@ Object.assign(generatedTerms.ur, {
   in: 'میں',
 });
 
-const generatedCalendarTerms: Record<string, Record<string, string>> = {
-  'zh-Hans': {
-    calendar: '日历',
-    Calendar: '日历',
-    month: '月',
-    year: '年',
-    Undated: '未指定日期',
-    item: '项',
-    items: '项',
-  },
-  hi: {
-    calendar: 'कैलेंडर',
-    Calendar: 'कैलेंडर',
-    month: 'महीना',
-    year: 'वर्ष',
-    Undated: 'बिना तारीख',
-    item: 'आइटम',
-    items: 'आइटम',
-  },
-  es: {
-    calendar: 'calendario',
-    Calendar: 'Calendario',
-    month: 'mes',
-    year: 'año',
-    Undated: 'Sin fecha',
-    item: 'elemento',
-    items: 'elementos',
-  },
-  ar: {
-    calendar: 'التقويم',
-    Calendar: 'التقويم',
-    month: 'شهر',
-    year: 'سنة',
-    Undated: 'بلا تاريخ',
-    item: 'عنصر',
-    items: 'عناصر',
-  },
-  fr: {
-    calendar: 'calendrier',
-    Calendar: 'Calendrier',
-    month: 'mois',
-    year: 'année',
-    Undated: 'Sans date',
-    item: 'élément',
-    items: 'éléments',
-  },
-  bn: {
-    calendar: 'ক্যালেন্ডার',
-    Calendar: 'ক্যালেন্ডার',
-    month: 'মাস',
-    year: 'বছর',
-    Undated: 'তারিখহীন',
-    item: 'আইটেম',
-    items: 'আইটেম',
-  },
-  'pt-BR': {
-    calendar: 'calendário',
-    Calendar: 'Calendário',
-    month: 'mês',
-    year: 'ano',
-    Undated: 'Sem data',
-    item: 'item',
-    items: 'itens',
-  },
-  id: {
-    calendar: 'kalender',
-    Calendar: 'Kalender',
-    month: 'bulan',
-    year: 'tahun',
-    Undated: 'Tanpa tanggal',
-    item: 'item',
-    items: 'item',
-  },
-  ur: {
-    calendar: 'کیلنڈر',
-    Calendar: 'کیلنڈر',
-    month: 'مہینہ',
-    year: 'سال',
-    Undated: 'بغیر تاریخ',
-    item: 'آئٹم',
-    items: 'آئٹمز',
-  },
-};
-
-for (const [language, terms] of Object.entries(generatedCalendarTerms)) {
-  Object.assign(generatedTerms[language], terms);
-}
-
 /**
  * Exact phrase overrides cover the labels and short descriptions that cannot
  * be translated reliably by independent word replacement. The row order is
@@ -3318,48 +3258,6 @@ type GeneratedPhraseTargets = readonly [
 ];
 
 const generatedPhraseRows: Array<[string, GeneratedPhraseTargets]> = [
-  [
-    'Task calendar',
-    [
-      '任务日历',
-      'कार्य कैलेंडर',
-      'Calendario de tareas',
-      'تقويم المهام',
-      'Calendrier des tâches',
-      'কাজের ক্যালেন্ডার',
-      'Calendário de tarefas',
-      'Kalender tugas',
-      'ٹاسک کیلنڈر',
-    ],
-  ],
-  [
-    'Go to today',
-    [
-      '回到今天',
-      'आज पर जाएँ',
-      'Ir a hoy',
-      'الانتقال إلى اليوم',
-      'Aller à aujourd’hui',
-      'আজকে যান',
-      'Ir para hoje',
-      'Ke hari ini',
-      'آج پر جائیں',
-    ],
-  ],
-  [
-    'No tasks for this date',
-    [
-      '此日期无任务',
-      'इस तारीख के लिए कोई कार्य नहीं',
-      'No hay tareas para esta fecha',
-      'لا توجد مهام لهذا التاريخ',
-      'Aucune tâche pour cette date',
-      'এই তারিখে কোনো কাজ নেই',
-      'Nenhuma tarefa para esta data',
-      'Tidak ada tugas untuk tanggal ini',
-      'اس تاریخ کے لیے کوئی ٹاسک نہیں',
-    ],
-  ],
   [
     'Back to Timer',
     [
@@ -6791,6 +6689,62 @@ const auditedGeneratedPhraseRows: Array<[string, GeneratedPhraseTargets]> = [
       '{{title}} کی تکرار تبدیل کریں',
     ],
   ],
+  [
+    'No matching settings sections',
+    [
+      '没有匹配的设置部分',
+      'कोई मिलान वाली सेटिंग नहीं',
+      'No hay secciones de configuración coincidentes',
+      'لا توجد أقسام إعدادات مطابقة',
+      'Aucune section de paramètres correspondante',
+      'কোনো মিল থাকা সেটিংস বিভাগ নেই',
+      'Nenhuma seção de configurações correspondente',
+      'Tidak ada bagian pengaturan yang cocok',
+      'ترتیبات کا کوئی مماثل سیکشن نہیں',
+    ],
+  ],
+  [
+    'Allow notifications in macOS System Settings to receive timer and Task reminders.',
+    [
+      '请在 macOS 系统设置中允许通知，以接收计时器和任务提醒。',
+      'टाइमर और कार्य रिमाइंडर पाने के लिए macOS सिस्टम सेटिंग्स में सूचनाओं की अनुमति दें।',
+      'Permite las notificaciones en los ajustes del sistema de macOS para recibir recordatorios del temporizador y las tareas.',
+      'اسم المؤقت والمهام التذكيرية، اسمح بالإشعارات في إعدادات نظام macOS.',
+      'Autorisez les notifications dans les réglages système de macOS pour recevoir les rappels du minuteur et des tâches.',
+      'টাইমার ও কাজের রিমাইন্ডার পেতে macOS সিস্টেম সেটিংসে বিজ্ঞপ্তির অনুমতি দিন।',
+      'Permita notificações nos Ajustes do Sistema do macOS para receber lembretes do temporizador e das tarefas.',
+      'Izinkan notifikasi di Pengaturan Sistem macOS untuk menerima pengingat timer dan tugas.',
+      'ٹائمر اور کام کے یاد دہانی پیغامات حاصل کرنے کے لیے macOS سسٹم سیٹنگز میں اطلاعات کی اجازت دیں۔',
+    ],
+  ],
+  [
+    'If the button does not open System Settings, go to Notifications > Pomi and allow notifications.',
+    [
+      '如果按钮没有打开系统设置，请前往“通知”>“Pomi”并允许通知。',
+      'अगर बटन सिस्टम सेटिंग्स नहीं खोलता है, तो सूचनाएं > Pomi पर जाएं और सूचनाओं की अनुमति दें।',
+      'Si el botón no abre los ajustes del sistema, ve a Notificaciones > Pomi y permite las notificaciones.',
+      'إذا لم يفتح الزر إعدادات النظام، فانتقل إلى الإشعارات > Pomi واسمح بالإشعارات.',
+      'Si le bouton n’ouvre pas les réglages système, accédez à Notifications > Pomi et autorisez les notifications.',
+      'বোতামটি সিস্টেম সেটিংস না খুললে, বিজ্ঞপ্তি > Pomi-তে যান এবং বিজ্ঞপ্তির অনুমতি দিন।',
+      'Se o botão não abrir os Ajustes do Sistema, acesse Notificações > Pomi e permita as notificações.',
+      'Jika tombol tidak membuka Pengaturan Sistem, buka Notifikasi > Pomi dan izinkan notifikasi.',
+      'اگر بٹن سسٹم سیٹنگز نہ کھولے تو اطلاعات > Pomi پر جائیں اور اطلاعات کی اجازت دیں۔',
+    ],
+  ],
+  [
+    'Open Notification Settings',
+    [
+      '打开通知设置',
+      'सूचना सेटिंग्स खोलें',
+      'Abrir ajustes de notificaciones',
+      'فتح إعدادات الإشعارات',
+      'Ouvrir les réglages des notifications',
+      'বিজ্ঞপ্তির সেটিংস খুলুন',
+      'Abrir configurações de notificações',
+      'Buka Pengaturan Notifikasi',
+      'اطلاعات کی ترتیبات کھولیں',
+    ],
+  ],
 ];
 
 const generatedPhrases: Record<
@@ -7265,22 +7219,6 @@ Object.assign(translations['zh-Hans'], {
   'task.pinned': '已固定',
   'task.unpinned': '未固定',
   'task.clearPropertyFilters': '清除属性筛选',
-  'task.selectMultiple': '选择多个任务',
-  'task.exitSelectionMode': '退出任务选择',
-  'task.selectedCount': '已选择 {{count}} 个',
-  'task.selectVisible': '选择可见任务',
-  'task.selectForBulk': '选择 {{title}}',
-  'task.bulkManage': '管理所选任务',
-  'task.bulkScope': '此操作将应用于 {{count}} 个所选任务。',
-  'task.bulkComplete': '完成任务',
-  'task.bulkArchive': '归档任务',
-  'task.bulkPriority': '更改优先级',
-  'task.bulkIntention': '更改目标',
-  'task.bulkSameTimerType': '请选择相同计时器类型的任务来分配目标。',
-  'task.bulkConfirm': '确认对 {{count}} 个任务执行“{{action}}”。',
-  'task.bulkPartialFailure':
-    '{{total}} 个任务中有 {{failed}} 个未更改，已保留选择以便重试。',
-  'task.bulkUpdated': '已更新 {{count}} 个任务',
   'task.noIntention': '无目标',
   'task.updated': '任务已更新',
   'task.viewUpdated': '查看',
@@ -7295,23 +7233,6 @@ Object.assign(translations.hi, {
   'task.pinned': 'पिन किया हुआ',
   'task.unpinned': 'पिन नहीं किया हुआ',
   'task.clearPropertyFilters': 'गुण फ़िल्टर साफ़ करें',
-  'task.selectMultiple': 'कई कार्य चुनें',
-  'task.exitSelectionMode': 'कार्य चयन बंद करें',
-  'task.selectedCount': '{{count}} चयनित',
-  'task.selectVisible': 'दिख रहे कार्य चुनें',
-  'task.selectForBulk': '{{title}} चुनें',
-  'task.bulkManage': 'चयनित कार्य प्रबंधित करें',
-  'task.bulkScope': 'यह कार्रवाई {{count}} चयनित कार्यों पर लागू होगी।',
-  'task.bulkComplete': 'कार्य पूरे करें',
-  'task.bulkArchive': 'कार्य संग्रहित करें',
-  'task.bulkPriority': 'प्राथमिकता बदलें',
-  'task.bulkIntention': 'इंटेंशन बदलें',
-  'task.bulkSameTimerType':
-    'इंटेंशन देने के लिए समान टाइमर प्रकार वाले कार्य चुनें।',
-  'task.bulkConfirm': '{{count}} कार्यों के लिए {{action}} की पुष्टि करें।',
-  'task.bulkPartialFailure':
-    '{{total}} में से {{failed}} कार्य नहीं बदले। वे दोबारा प्रयास के लिए चयनित हैं।',
-  'task.bulkUpdated': '{{count}} कार्य अपडेट हुए',
   'task.noIntention': 'कोई इंटेंशन नहीं',
   'task.updated': 'कार्य अपडेट हुआ',
   'task.viewUpdated': 'देखें',
@@ -7326,23 +7247,6 @@ Object.assign(translations.es, {
   'task.pinned': 'Fijada',
   'task.unpinned': 'Sin fijar',
   'task.clearPropertyFilters': 'Borrar filtros de propiedades',
-  'task.selectMultiple': 'Seleccionar varias tareas',
-  'task.exitSelectionMode': 'Salir de la selección',
-  'task.selectedCount': '{{count}} seleccionadas',
-  'task.selectVisible': 'Seleccionar visibles',
-  'task.selectForBulk': 'Seleccionar {{title}}',
-  'task.bulkManage': 'Gestionar seleccionadas',
-  'task.bulkScope': 'Esta acción se aplica a {{count}} tareas seleccionadas.',
-  'task.bulkComplete': 'Completar tareas',
-  'task.bulkArchive': 'Archivar tareas',
-  'task.bulkPriority': 'Cambiar prioridad',
-  'task.bulkIntention': 'Cambiar intención',
-  'task.bulkSameTimerType':
-    'Elige tareas del mismo tipo de temporizador para asignar una intención.',
-  'task.bulkConfirm': 'Confirma {{action}} para {{count}} tareas.',
-  'task.bulkPartialFailure':
-    '{{failed}} de {{total}} tareas no cambiaron y siguen seleccionadas para reintentar.',
-  'task.bulkUpdated': '{{count}} tareas actualizadas',
   'task.noIntention': 'Sin intención',
   'task.updated': 'Tarea actualizada',
   'task.viewUpdated': 'Ver',
@@ -7357,22 +7261,6 @@ Object.assign(translations.ar, {
   'task.pinned': 'مثبتة',
   'task.unpinned': 'غير مثبتة',
   'task.clearPropertyFilters': 'مسح مرشحات الخصائص',
-  'task.selectMultiple': 'تحديد مهام متعددة',
-  'task.exitSelectionMode': 'إنهاء تحديد المهام',
-  'task.selectedCount': 'تم تحديد {{count}}',
-  'task.selectVisible': 'تحديد الظاهر',
-  'task.selectForBulk': 'تحديد {{title}}',
-  'task.bulkManage': 'إدارة المحدد',
-  'task.bulkScope': 'يطبق هذا الإجراء على {{count}} مهام محددة.',
-  'task.bulkComplete': 'إكمال المهام',
-  'task.bulkArchive': 'أرشفة المهام',
-  'task.bulkPriority': 'تغيير الأولوية',
-  'task.bulkIntention': 'تغيير النية',
-  'task.bulkSameTimerType': 'اختر مهام من نوع المؤقت نفسه لتعيين نية.',
-  'task.bulkConfirm': 'أكد {{action}} لعدد {{count}} من المهام.',
-  'task.bulkPartialFailure':
-    'لم تتغير {{failed}} من أصل {{total}} مهام وبقيت محددة لإعادة المحاولة.',
-  'task.bulkUpdated': 'تم تحديث {{count}} مهام',
   'task.noIntention': 'بلا نية',
   'task.updated': 'تم تحديث المهمة',
   'task.viewUpdated': 'عرض',
@@ -7387,23 +7275,6 @@ Object.assign(translations.fr, {
   'task.pinned': 'Épinglée',
   'task.unpinned': 'Non épinglée',
   'task.clearPropertyFilters': 'Effacer les filtres de propriétés',
-  'task.selectMultiple': 'Sélectionner plusieurs tâches',
-  'task.exitSelectionMode': 'Quitter la sélection',
-  'task.selectedCount': '{{count}} sélectionnées',
-  'task.selectVisible': 'Sélectionner les visibles',
-  'task.selectForBulk': 'Sélectionner {{title}}',
-  'task.bulkManage': 'Gérer la sélection',
-  'task.bulkScope': 'Cette action concerne {{count}} tâches sélectionnées.',
-  'task.bulkComplete': 'Terminer les tâches',
-  'task.bulkArchive': 'Archiver les tâches',
-  'task.bulkPriority': 'Modifier la priorité',
-  'task.bulkIntention': 'Modifier l’intention',
-  'task.bulkSameTimerType':
-    'Choisissez des tâches du même type de minuteur pour attribuer une intention.',
-  'task.bulkConfirm': 'Confirmez {{action}} pour {{count}} tâches.',
-  'task.bulkPartialFailure':
-    '{{failed}} tâches sur {{total}} sont inchangées et restent sélectionnées pour réessayer.',
-  'task.bulkUpdated': '{{count}} tâches mises à jour',
   'task.noIntention': 'Sans intention',
   'task.updated': 'Tâche mise à jour',
   'task.viewUpdated': 'Voir',
@@ -7418,22 +7289,6 @@ Object.assign(translations.bn, {
   'task.pinned': 'পিন করা',
   'task.unpinned': 'পিন করা নয়',
   'task.clearPropertyFilters': 'বৈশিষ্ট্য ফিল্টার মুছুন',
-  'task.selectMultiple': 'একাধিক কাজ বেছে নিন',
-  'task.exitSelectionMode': 'কাজ নির্বাচন বন্ধ করুন',
-  'task.selectedCount': '{{count}}টি নির্বাচিত',
-  'task.selectVisible': 'দৃশ্যমান কাজ বেছে নিন',
-  'task.selectForBulk': '{{title}} বেছে নিন',
-  'task.bulkManage': 'নির্বাচিত কাজ পরিচালনা',
-  'task.bulkScope': 'এই কাজটি {{count}}টি নির্বাচিত কাজে প্রযোজ্য।',
-  'task.bulkComplete': 'কাজ সম্পন্ন করুন',
-  'task.bulkArchive': 'কাজ আর্কাইভ করুন',
-  'task.bulkPriority': 'অগ্রাধিকার বদলান',
-  'task.bulkIntention': 'ইনটেনশন বদলান',
-  'task.bulkSameTimerType': 'ইনটেনশন দিতে একই টাইমার ধরনের কাজ বেছে নিন।',
-  'task.bulkConfirm': '{{count}}টি কাজের জন্য {{action}} নিশ্চিত করুন।',
-  'task.bulkPartialFailure':
-    '{{total}}টির মধ্যে {{failed}}টি কাজ বদলায়নি এবং পুনরায় চেষ্টার জন্য নির্বাচিত আছে।',
-  'task.bulkUpdated': '{{count}}টি কাজ আপডেট হয়েছে',
   'task.noIntention': 'কোনো ইনটেনশন নেই',
   'task.updated': 'কাজ আপডেট হয়েছে',
   'task.viewUpdated': 'দেখুন',
@@ -7448,23 +7303,6 @@ Object.assign(translations['pt-BR'], {
   'task.pinned': 'Fixada',
   'task.unpinned': 'Não fixada',
   'task.clearPropertyFilters': 'Limpar filtros de propriedades',
-  'task.selectMultiple': 'Selecionar várias tarefas',
-  'task.exitSelectionMode': 'Sair da seleção',
-  'task.selectedCount': '{{count}} selecionadas',
-  'task.selectVisible': 'Selecionar visíveis',
-  'task.selectForBulk': 'Selecionar {{title}}',
-  'task.bulkManage': 'Gerenciar selecionadas',
-  'task.bulkScope': 'Esta ação se aplica a {{count}} tarefas selecionadas.',
-  'task.bulkComplete': 'Concluir tarefas',
-  'task.bulkArchive': 'Arquivar tarefas',
-  'task.bulkPriority': 'Alterar prioridade',
-  'task.bulkIntention': 'Alterar intenção',
-  'task.bulkSameTimerType':
-    'Escolha tarefas do mesmo tipo de temporizador para atribuir uma intenção.',
-  'task.bulkConfirm': 'Confirme {{action}} para {{count}} tarefas.',
-  'task.bulkPartialFailure':
-    '{{failed}} de {{total}} tarefas não mudaram e seguem selecionadas para tentar novamente.',
-  'task.bulkUpdated': '{{count}} tarefas atualizadas',
   'task.noIntention': 'Sem intenção',
   'task.updated': 'Tarefa atualizada',
   'task.viewUpdated': 'Ver',
@@ -7479,23 +7317,6 @@ Object.assign(translations.id, {
   'task.pinned': 'Disematkan',
   'task.unpinned': 'Tidak disematkan',
   'task.clearPropertyFilters': 'Hapus filter properti',
-  'task.selectMultiple': 'Pilih beberapa tugas',
-  'task.exitSelectionMode': 'Keluar dari pemilihan',
-  'task.selectedCount': '{{count}} dipilih',
-  'task.selectVisible': 'Pilih yang terlihat',
-  'task.selectForBulk': 'Pilih {{title}}',
-  'task.bulkManage': 'Kelola yang dipilih',
-  'task.bulkScope': 'Tindakan ini berlaku untuk {{count}} tugas terpilih.',
-  'task.bulkComplete': 'Selesaikan tugas',
-  'task.bulkArchive': 'Arsipkan tugas',
-  'task.bulkPriority': 'Ubah prioritas',
-  'task.bulkIntention': 'Ubah intensi',
-  'task.bulkSameTimerType':
-    'Pilih tugas dengan jenis timer yang sama untuk menetapkan intensi.',
-  'task.bulkConfirm': 'Konfirmasi {{action}} untuk {{count}} tugas.',
-  'task.bulkPartialFailure':
-    '{{failed}} dari {{total}} tugas tidak berubah dan tetap dipilih untuk dicoba lagi.',
-  'task.bulkUpdated': '{{count}} tugas diperbarui',
   'task.noIntention': 'Tanpa intensi',
   'task.updated': 'Tugas diperbarui',
   'task.viewUpdated': 'Lihat',
@@ -7510,23 +7331,6 @@ Object.assign(translations.ur, {
   'task.pinned': 'پن شدہ',
   'task.unpinned': 'پن نہیں',
   'task.clearPropertyFilters': 'خصوصیات کے فلٹر صاف کریں',
-  'task.selectMultiple': 'متعدد کام منتخب کریں',
-  'task.exitSelectionMode': 'کام کا انتخاب بند کریں',
-  'task.selectedCount': '{{count}} منتخب',
-  'task.selectVisible': 'نظر آنے والے منتخب کریں',
-  'task.selectForBulk': '{{title}} منتخب کریں',
-  'task.bulkManage': 'منتخب کام منظم کریں',
-  'task.bulkScope': 'یہ کارروائی {{count}} منتخب کاموں پر لاگو ہوگی۔',
-  'task.bulkComplete': 'کام مکمل کریں',
-  'task.bulkArchive': 'کام محفوظ کریں',
-  'task.bulkPriority': 'ترجیح بدلیں',
-  'task.bulkIntention': 'نیت بدلیں',
-  'task.bulkSameTimerType':
-    'نیت دینے کے لیے ایک ہی ٹائمر قسم کے کام منتخب کریں۔',
-  'task.bulkConfirm': '{{count}} کاموں کے لیے {{action}} کی تصدیق کریں۔',
-  'task.bulkPartialFailure':
-    '{{total}} میں سے {{failed}} کام نہیں بدلے اور دوبارہ کوشش کے لیے منتخب ہیں۔',
-  'task.bulkUpdated': '{{count}} کام اپ ڈیٹ ہوئے',
   'task.noIntention': 'کوئی نیت نہیں',
   'task.updated': 'کام اپ ڈیٹ ہوا',
   'task.viewUpdated': 'دیکھیں',

@@ -18,7 +18,19 @@ describe('assistant localization', () => {
         expect(template).toBeDefined();
         const rendered =
           typeof template === 'function'
-            ? template({ count: 2, title: 'Task' })
+            ? template({
+                count: 2,
+                title: 'Task',
+                dueDate: '2026-07-30',
+                dueTime: '09:00',
+                recurrenceFrequency: 'weekly',
+                recurrenceInterval: 2,
+                recurrenceAnchor: 'completion',
+                priority: 'high',
+                timerType: 'break',
+                intention: 'Focus',
+                subIntention: 'Email',
+              })
             : template;
         expect(rendered.trim()).not.toBe('');
       }

@@ -7,6 +7,7 @@ const MIN_LEASE_MS = 1_000;
 const MAX_LEASE_MS = 5 * 60_000;
 const MAX_RETRY_DELAY_MS = 24 * 60 * 60_000;
 const MAX_PLAN_VERSION = 1_000;
+export const MAX_DURABLE_COMPLETION_ATTEMPTS = 5;
 
 export type TimerContinuationOutcome = 'applied' | 'superseded' | 'failed';
 
@@ -42,6 +43,24 @@ export class TimerCompletionOutboxService {
     leaseMs: number
   ): Promise<ClaimedCompletionNotification[]> {
     this.requireClaimBounds(limit, leaseMs, 'Notification');
+    await this.dataSource.query(
+      `
+        UPDATE "notification_outbox"
+        SET "status" = 'failed', "processedAt" = now(),
+            "claimedUntil" = NULL, "claimToken" = NULL,
+            "lastError" = COALESCE("lastError", 'Maximum durable completion notification attempts exhausted'),
+            "updatedAt" = now()
+        WHERE "type" IN ('timer-completed', 'long-break-detected')
+          AND "processedAt" IS NULL
+          AND "attempts" >= $1
+          AND (
+            ("status" = 'pending' AND "claimToken" IS NULL AND "claimedUntil" IS NULL)
+            OR
+            ("status" = 'processing' AND "claimToken" IS NOT NULL AND "claimedUntil" < now())
+          )
+      `,
+      [MAX_DURABLE_COMPLETION_ATTEMPTS]
+    );
     const result = await this.dataSource.query(
       `
         WITH candidates AS (
@@ -50,6 +69,7 @@ export class TimerCompletionOutboxService {
           WHERE "type" IN ('timer-completed', 'long-break-detected')
             AND "processedAt" IS NULL
             AND "availableAt" <= now()
+            AND "attempts" < $3
             AND (
               ("status" = 'pending' AND "claimToken" IS NULL AND "claimedUntil" IS NULL)
               OR
@@ -87,7 +107,7 @@ export class TimerCompletionOutboxService {
           outbox."attempts",
           outbox."claimToken"
       `,
-      [limit, leaseMs]
+      [limit, leaseMs, MAX_DURABLE_COMPLETION_ATTEMPTS]
     );
     return this.returnedRows<ClaimedCompletionNotification>(result);
   }

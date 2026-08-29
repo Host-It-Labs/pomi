@@ -104,19 +104,11 @@ export type ScheduledTimerCompletionResult =
   | { kind: 'claimed'; claim: TimerCompletionClaim }
   | {
       kind:
-        | 'lost-leader'
-        | 'legacy'
-        | 'stale'
-        | 'repaired'
-        | 'early'
-        | 'corrupt';
+        'lost-leader' | 'legacy' | 'stale' | 'repaired' | 'early' | 'corrupt';
     };
 
 export type TimerScheduleReconcileResult =
-  | 'scheduled'
-  | 'removed'
-  | 'lost-leader'
-  | 'corrupt';
+  'scheduled' | 'removed' | 'lost-leader' | 'corrupt';
 
 const TIMER_STREAM_PAYLOAD_FIELDS_VALIDATION_LUA = `
 local function jsonContainerKind(value)
@@ -165,6 +157,29 @@ local function validOptionalSessionEmojiRecord(value)
   end
   return true
 end
+local function validOptionalExtensionCandidate(value)
+  if value == nil then return true end
+  if type(value) ~= 'table'
+      or type(value.originalTimerId) ~= 'string'
+      or not string.find(value.originalTimerId, '%S')
+      or type(value.originalDuration) ~= 'number'
+      or value.originalDuration <= 0
+      or value.originalDuration ~= math.floor(value.originalDuration)
+      or (value.maxDuration ~= nil and (
+        type(value.maxDuration) ~= 'number'
+        or value.maxDuration <= 0
+        or value.maxDuration ~= math.floor(value.maxDuration)
+      )) then
+    return false
+  end
+  if value.extensionNextTimerType ~= nil and
+      value.extensionNextTimerType ~= 'work' and
+      value.extensionNextTimerType ~= 'break' and
+      value.extensionNextTimerType ~= 'longBreak' then
+    return false
+  end
+  return true
+end
 local function validTimerPayloadFields(timer)
   return validOptionalBoolean(timer.hasNotifiedBeforeTimeNotification)
     and validOptionalBoolean(timer.hasNotifiedLongBreakDetection)
@@ -182,6 +197,8 @@ local function validTimerPayloadFields(timer)
     and validOptionalStringRecord(timer.intentionEmojis)
     and validOptionalStringRecord(timer.subIntentionEmojis)
     and validOptionalSessionEmojiRecord(timer.sessionIntentionEmojis)
+    and validOptionalBoolean(timer.isAutoStarted)
+    and validOptionalExtensionCandidate(timer.extensionCandidate)
 end
 `;
 

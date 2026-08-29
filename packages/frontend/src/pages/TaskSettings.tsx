@@ -44,6 +44,7 @@ export function TaskSettings({
             variant="secondary"
             onClick={onShowNotificationSettings}
             className="w-full gap-2"
+            data-setting-id="taskNotifications"
           >
             <FaBell size={12} />
             {t('task.notifications')}
@@ -52,7 +53,10 @@ export function TaskSettings({
 
         <Separator />
 
-        <label className="block space-y-2 text-sm text-slate-200">
+        <label
+          className="block space-y-2 text-sm text-slate-200"
+          data-setting-id="taskDefaultDueDate"
+        >
           <span className="font-medium" title={t('task.defaultDueDateAbout')}>
             {t('task.defaultDueDate')}
           </span>
@@ -91,7 +95,10 @@ export function TaskSettings({
           />
         )}
 
-        <label className="block space-y-2 text-sm text-slate-200">
+        <label
+          className="block space-y-2 text-sm text-slate-200"
+          data-setting-id="taskDefaultSort"
+        >
           <span className="font-medium" title={t('task.defaultSortAbout')}>
             {t('task.defaultSort')}
           </span>
@@ -187,6 +194,7 @@ export function TaskSettings({
             variant="secondary"
             className="w-full"
             onClick={() => setVacationSetupOpen(true)}
+            data-setting-id="setVacationCoverage"
           >
             {t('task.setVacationCoverage')}
           </Button>
@@ -209,6 +217,7 @@ export function TaskSettings({
           variant="secondary"
           onClick={() => setIsImportOpen(true)}
           className="w-full gap-2"
+          data-setting-id="taskImport"
         >
           <FaFileImport size={12} />
           {t('task.import')}
