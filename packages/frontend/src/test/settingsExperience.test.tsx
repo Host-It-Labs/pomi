@@ -172,7 +172,7 @@ vi.mock('../pages/AssistantSettings', () => ({
   ),
 }));
 
-import { Settings } from '../pages/Settings';
+import { Settings, settingsSearchMatches } from '../pages/Settings';
 
 afterEach(cleanup);
 
@@ -189,6 +189,12 @@ beforeEach(() => {
 });
 
 describe('Settings experience', () => {
+  it('matches singular and plural search terms in either direction', () => {
+    expect(settingsSearchMatches(['Break timer'], 'breaks')).toBe(true);
+    expect(settingsSearchMatches(['Auto-start breaks'], 'break')).toBe(true);
+    expect(settingsSearchMatches(['Work timer'], 'breaks')).toBe(false);
+  });
+
   const sectionKeys = () =>
     Array.from(document.querySelectorAll<HTMLElement>('section[data-section]'))
       .map(section => section.dataset.section)
@@ -228,6 +234,24 @@ describe('Settings experience', () => {
 
     expect(screen.getByText('Essentials')).toBeVisible();
     expect(screen.getByText('Matching setting')).toBeVisible();
+    expect(screen.getByText('Other setting')).not.toBeVisible();
+  });
+
+  it('keeps an entire compound control visible when its parent target matches', () => {
+    render(
+      <SettingsSearchFilter active targetIds={['auto-start']}>
+        <section data-settings-control-group>
+          <div data-setting-id="auto-start">
+            <div data-setting-id="auto-start-toggle">Auto-start timers</div>
+            <div>Work Break Long break</div>
+          </div>
+          <div data-setting-id="other-setting">Other setting</div>
+        </section>
+      </SettingsSearchFilter>
+    );
+
+    expect(screen.getByText('Auto-start timers')).toBeVisible();
+    expect(screen.getByText('Work Break Long break')).toBeVisible();
     expect(screen.getByText('Other setting')).not.toBeVisible();
   });
 

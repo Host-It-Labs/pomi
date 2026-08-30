@@ -72,6 +72,20 @@ describe('Assistant explicit List routing', () => {
     ).toEqual([{ title: 'Buy milk', listId: 'groceries-id' }]);
   });
 
+  it.each([
+    'Type a task to buy milk into my Groceries list',
+    'Voice request: add buy milk to the list called Groceries',
+  ])('routes common typed and spoken List destination wording: %s', source => {
+    expect(
+      routeListItems.call(
+        routingService,
+        [{ title: 'Buy milk' }],
+        source,
+        lists
+      )
+    ).toEqual([{ title: 'Buy milk', listId: 'groceries-id' }]);
+  });
+
   it('rejects mixed requests after an explicit List target', () => {
     const drafts = [{ title: 'Milk' }, { title: 'Call Mum' }];
 

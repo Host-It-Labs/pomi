@@ -19,6 +19,7 @@ export type IntentionAssignmentOption = {
   value: string;
   title: string;
   emoji: string;
+  assignmentType?: 'intention' | 'list';
   icon?: ReactNode;
   isNew?: boolean;
   isAction?: boolean;
@@ -35,7 +36,8 @@ export type SubIntentionAssignmentOption = {
 export type IntentionAssignmentPickerChange = {
   intentionSlugs: string[];
   subIntentions: Record<string, string>;
-  reason: 'clear' | 'intention' | 'subIntention';
+  listId?: string | null;
+  reason: 'clear' | 'intention' | 'subIntention' | 'list';
 };
 
 export type IntentionAssignmentPickerActionContext = {
@@ -48,6 +50,7 @@ type IntentionAssignmentPickerProps = {
   subIntentionsByParent: Record<string, SubIntentionAssignmentOption[]>;
   selectedIntentions: string[];
   selectedSubIntentions: Record<string, string>;
+  selectedListId?: string | null;
   mode: 'single' | 'multi';
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
@@ -91,6 +94,7 @@ export function IntentionAssignmentPicker({
   subIntentionsByParent,
   selectedIntentions,
   selectedSubIntentions,
+  selectedListId = null,
   mode,
   isOpen,
   onOpenChange,
@@ -166,6 +170,7 @@ export function IntentionAssignmentPicker({
     () => new Set(selectedIntentions),
     [selectedIntentions]
   );
+  const hasSelection = selectedIntentions.length > 0 || Boolean(selectedListId);
   const highlightedOption = filteredOptions[highlightedIndex];
   const activeOptionId = highlightedOption
     ? `${listId}-${normalizeDomId(highlightedOption.value)}`
@@ -235,6 +240,18 @@ export function IntentionAssignmentPicker({
     return () =>
       document.removeEventListener('mousedown', handlePointerDown, true);
   }, [isOpen, onOpenChange]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const previousOverscrollBehavior = document.body.style.overscrollBehavior;
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.overscrollBehavior = previousOverscrollBehavior;
+    };
+  }, [isOpen]);
 
   useLayoutEffect(() => {
     if (!isOpen) {
@@ -386,6 +403,17 @@ export function IntentionAssignmentPicker({
       return;
     }
 
+    if (option.assignmentType === 'list') {
+      onChange({
+        intentionSlugs: [],
+        subIntentions: {},
+        listId: option.value,
+        reason: 'list',
+      });
+      closePicker();
+      return;
+    }
+
     if (mode === 'single') {
       const subIntentions = subIntentionsByParent[option.value] ?? [];
       const nextSubIntentions = selectedSubIntentions[option.value]
@@ -522,6 +550,7 @@ export function IntentionAssignmentPicker({
     options,
     selectedIntentions,
     selectedSubIntentions,
+    selectedListId,
     subIntentionsByParent,
     emptyLabel,
   });
@@ -598,7 +627,7 @@ export function IntentionAssignmentPicker({
               <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 {label}
               </span>
-              {allowClear && selectedIntentions.length > 0 ? (
+              {allowClear && hasSelection ? (
                 <button
                   type="button"
                   onClick={clearSelection}
@@ -632,7 +661,7 @@ export function IntentionAssignmentPicker({
               className="min-h-0 flex-1 overflow-y-auto p-1.5"
               data-intention-picker-scroll
             >
-              {selectedIntentions.length === 0 && noSelectionLabel ? (
+              {!hasSelection && noSelectionLabel ? (
                 <div className="px-2 pb-1 pt-0.5 text-xs text-slate-500">
                   {noSelectionLabel}
                 </div>
@@ -640,7 +669,11 @@ export function IntentionAssignmentPicker({
               <div className="space-y-1">
                 {filteredOptions.map((option, index) => {
                   const isAction = Boolean(option.isAction);
-                  const isSelected = !isAction && selectedSet.has(option.value);
+                  const isSelected =
+                    !isAction &&
+                    (option.assignmentType === 'list'
+                      ? selectedListId === option.value
+                      : selectedSet.has(option.value));
                   const isHighlighted = index === highlightedIndex;
                   const optionAction = !isAction
                     ? renderOptionAction?.(option)
@@ -760,12 +793,9 @@ export function IntentionAssignmentPicker({
                         </div>
                         {showSubIntentions ? (
                           <div
-                            className="grid grid-cols-[48px_minmax(0,1fr)] items-start gap-2 px-2 pb-2"
+                            className="px-2 pb-2 pl-8"
                             onClick={event => event.stopPropagation()}
                           >
-                            <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-                              {t('intention.sub')}
-                            </span>
                             <div
                               className="flex min-w-0 flex-wrap gap-1"
                               data-testid={`work-timer-log-sub-intention-${option.value}`}
@@ -853,15 +883,32 @@ function renderSelectedLabel({
   options,
   selectedIntentions,
   selectedSubIntentions,
+  selectedListId,
   subIntentionsByParent,
   emptyLabel,
 }: {
   options: IntentionAssignmentOption[];
   selectedIntentions: string[];
   selectedSubIntentions: Record<string, string>;
+  selectedListId: string | null;
   subIntentionsByParent: Record<string, SubIntentionAssignmentOption[]>;
   emptyLabel: string;
 }) {
+  if (selectedListId) {
+    const option = options.find(
+      item => item.assignmentType === 'list' && item.value === selectedListId
+    );
+    return (
+      <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+        <span className="flex min-w-0 shrink items-center gap-1 rounded bg-slate-900/80 px-1.5 py-0.5">
+          <span>{option?.emoji ?? '📋'}</span>
+          <span className="min-w-0 truncate">
+            {option?.title ?? emptyLabel}
+          </span>
+        </span>
+      </span>
+    );
+  }
   if (selectedIntentions.length === 0) {
     return <span className="min-w-0 truncate">{emptyLabel}</span>;
   }

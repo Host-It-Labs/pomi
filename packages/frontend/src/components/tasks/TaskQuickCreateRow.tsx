@@ -34,6 +34,7 @@ import { showToastFromStore } from '../toast/ToastContext';
 import { Alert } from '../ui/Alert';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
+import { CompactIconButton } from '../ui/CompactIconButton';
 import { KeyboardShortcut } from '../ui/KeyboardShortcut';
 import { useI18n } from '../../i18n';
 
@@ -650,18 +651,17 @@ export function TaskQuickCreateRow({
           {t('common.add')}
         </Button>
         {onCancel && (
-          <IconButton
+          <CompactIconButton
             type="button"
             label={t('common.cancel')}
             title={t('common.cancel')}
-            size="sm"
             variant="secondary"
             onClick={handleCancel}
-            className="h-9 w-9 shrink-0 !p-0"
+            className="h-9 w-9"
           >
             <FaTimes size={10} />
             <KeyboardShortcut text="N" showModIcon position="topRight" />
-          </IconButton>
+          </CompactIconButton>
         )}
       </form>
       {error && (

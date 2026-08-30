@@ -88,65 +88,71 @@ export const TimerSettings = ({
 
         <Separator />
 
-        <ToggleField
-          id="autoStartBreak"
-          checked={Object.values(autoStartTypes).some(Boolean)}
-          onChange={value =>
-            updatePreferences({
-              autoStartWork: value,
-              autoStartBreak: value,
-              autoStartLongBreak: value,
-            })
-          }
-          label={t('timerSettings.autoStartBreaks')}
-          description={t('timerSettings.autoStartBreaksDescription')}
-        />
-        <TimerTypeBadges
-          values={autoStartTypes}
-          onToggle={type =>
-            updatePreferences({
-              ...(type === TIMER_TYPES.WORK
-                ? { autoStartWork: !autoStartTypes[type] }
-                : type === TIMER_TYPES.BREAK
-                  ? { autoStartBreak: !autoStartTypes[type] }
-                  : { autoStartLongBreak: !autoStartTypes[type] }),
-            })
-          }
-        />
+        <div data-setting-id="autoStartBreak" className="space-y-2">
+          <ToggleField
+            id="autoStartBreak"
+            checked={Object.values(autoStartTypes).some(Boolean)}
+            onChange={value =>
+              updatePreferences({
+                autoStartWork: value,
+                autoStartBreak: value,
+                autoStartLongBreak: value,
+              })
+            }
+            label={t('timerSettings.autoStartBreaks')}
+            description={t('timerSettings.autoStartBreaksDescription')}
+          />
+          <TimerTypeBadges
+            values={autoStartTypes}
+            onToggle={type =>
+              updatePreferences({
+                ...(type === TIMER_TYPES.WORK
+                  ? { autoStartWork: !autoStartTypes[type] }
+                  : type === TIMER_TYPES.BREAK
+                    ? { autoStartBreak: !autoStartTypes[type] }
+                    : { autoStartLongBreak: !autoStartTypes[type] }),
+              })
+            }
+          />
+        </div>
 
         <Separator />
 
-        <ToggleField
-          id="resetBreakOnFirstIntention"
-          checked={Object.values(resetTypes).some(Boolean)}
-          onChange={value =>
-            updatePreferences({
-              resetWorkOnFirstIntention: value,
-              resetBreakOnFirstIntention: value,
-              resetLongBreakOnFirstIntention: value,
-            })
-          }
-          label={t('timerSettings.resetBreakOnFirstIntention')}
-          description={t('timerSettings.resetBreakOnFirstIntentionDescription')}
-        />
-        <TimerTypeBadges
-          values={resetTypes}
-          onToggle={type =>
-            updatePreferences({
-              ...(type === TIMER_TYPES.WORK
-                ? {
-                    resetWorkOnFirstIntention: !resetTypes[type],
-                  }
-                : type === TIMER_TYPES.BREAK
+        <div data-setting-id="resetBreakOnFirstIntention" className="space-y-2">
+          <ToggleField
+            id="resetBreakOnFirstIntention"
+            checked={Object.values(resetTypes).some(Boolean)}
+            onChange={value =>
+              updatePreferences({
+                resetWorkOnFirstIntention: value,
+                resetBreakOnFirstIntention: value,
+                resetLongBreakOnFirstIntention: value,
+              })
+            }
+            label={t('timerSettings.resetBreakOnFirstIntention')}
+            description={t(
+              'timerSettings.resetBreakOnFirstIntentionDescription'
+            )}
+          />
+          <TimerTypeBadges
+            values={resetTypes}
+            onToggle={type =>
+              updatePreferences({
+                ...(type === TIMER_TYPES.WORK
                   ? {
-                      resetBreakOnFirstIntention: !resetTypes[type],
+                      resetWorkOnFirstIntention: !resetTypes[type],
                     }
-                  : {
-                      resetLongBreakOnFirstIntention: !resetTypes[type],
-                    }),
-            })
-          }
-        />
+                  : type === TIMER_TYPES.BREAK
+                    ? {
+                        resetBreakOnFirstIntention: !resetTypes[type],
+                      }
+                    : {
+                        resetLongBreakOnFirstIntention: !resetTypes[type],
+                      }),
+              })
+            }
+          />
+        </div>
       </SettingsControlGroup>
 
       <ExtrasSection sectionId="timer">

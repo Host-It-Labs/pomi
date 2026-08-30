@@ -38,6 +38,10 @@ import {
   type TaskRecurrenceUnit,
 } from './TaskRecurrenceFields';
 import { TaskArchiveConfirmationModal } from './TaskArchiveConfirmationModal';
+import {
+  IntentionAssignmentPicker,
+  type IntentionAssignmentPickerChange,
+} from '../intentions/IntentionAssignmentPicker';
 
 const TASK_PRIORITY_OPTIONS: Array<{ value: TaskPriority }> = [
   { value: TASK_PRIORITIES.LOW },
@@ -162,7 +166,10 @@ export function TaskFormModal({
   onConvertToListItem,
 }: TaskFormModalProps) {
   const { t } = useI18n();
-  const availableLists = task?.followUpSourceTaskId ? [] : (lists ?? []);
+  const availableLists = useMemo(
+    () => (task?.followUpSourceTaskId ? [] : (lists ?? [])),
+    [lists, task?.followUpSourceTaskId]
+  );
   const currentTimerType = timer?.type;
   const currentTimerFocusedTaskCount = timer?.focusedTaskIds?.length ?? 0;
   const currentTimerIntention = timer?.intention ?? '';
@@ -184,6 +191,7 @@ export function TaskFormModal({
   const [intentionSlug, setIntentionSlug] = useState('');
   const [subIntentionSlug, setSubIntentionSlug] = useState('');
   const [selectedListId, setSelectedListId] = useState('');
+  const [isDestinationPickerOpen, setIsDestinationPickerOpen] = useState(false);
   const [recurrenceInterval, setRecurrenceInterval] = useState('');
   const [recurrenceUnit, setRecurrenceUnit] =
     useState<TaskRecurrenceUnit>('DAILY');
@@ -298,15 +306,44 @@ export function TaskFormModal({
   const selectedList =
     availableLists.find(list => list.id === selectedListId) ?? null;
   const isListDestination = selectedList !== null;
-  const destinationValue = selectedListId
-    ? `list:${selectedListId}`
-    : intentionSlug
-      ? `intention:${intentionSlug}:${subIntentionSlug}`
-      : 'general';
+  const destinationOptions = useMemo(
+    () => [
+      ...eligibleIntentions.map(intention => ({
+        value: intention.slug,
+        title: intention.title,
+        emoji: intention.emoji,
+        group: t('intention.intentions'),
+      })),
+      ...availableLists.map(list => ({
+        value: list.id,
+        title: list.title,
+        emoji: list.emoji ?? '📋',
+        assignmentType: 'list' as const,
+        group: t('intention.lists'),
+      })),
+    ],
+    [availableLists, eligibleIntentions, t]
+  );
+
+  const handleDestinationChange = (change: IntentionAssignmentPickerChange) => {
+    if (change.reason === 'list' && change.listId) {
+      setSelectedListId(change.listId);
+      setIntentionSlug('');
+      setSubIntentionSlug('');
+      return;
+    }
+    const nextIntentionSlug = change.intentionSlugs[0] ?? '';
+    setSelectedListId('');
+    setIntentionSlug(nextIntentionSlug);
+    setSubIntentionSlug(
+      nextIntentionSlug ? (change.subIntentions[nextIntentionSlug] ?? '') : ''
+    );
+  };
 
   useEffect(() => {
     if (!isOpen) {
       initializedFormKeyRef.current = null;
+      setIsDestinationPickerOpen(false);
       return;
     }
 
@@ -786,68 +823,33 @@ export function TaskFormModal({
                   label={t('task.intentionOrList')}
                   help={t('task.chooseGeneralIntentionList')}
                 >
-                  <select
-                    aria-label={t('task.intentionOrList')}
-                    data-testid="task-intention-dropdown"
-                    value={destinationValue}
+                  <IntentionAssignmentPicker
+                    label={t('task.intentionOrList')}
+                    showLabel={false}
+                    options={destinationOptions}
+                    subIntentionsByParent={subIntentionsByParent}
+                    selectedIntentions={intentionSlug ? [intentionSlug] : []}
+                    selectedSubIntentions={
+                      intentionSlug && subIntentionSlug
+                        ? { [intentionSlug]: subIntentionSlug }
+                        : {}
+                    }
+                    selectedListId={selectedListId || null}
+                    mode="single"
+                    isOpen={isDestinationPickerOpen}
+                    onOpenChange={setIsDestinationPickerOpen}
+                    onChange={handleDestinationChange}
+                    allowClear
+                    clearLabel={t('task.general')}
+                    emptyLabel={t('task.general')}
+                    noSelectionLabel={t('task.general')}
+                    searchAriaLabel={t('task.intentionOrList')}
+                    searchPlaceholder={t('common.search')}
+                    maxHeight={260}
                     disabled={saving}
-                    className={selectClassName}
-                    onChange={event => {
-                      const value = event.target.value;
-                      if (value.startsWith('list:')) {
-                        setSelectedListId(value.slice('list:'.length));
-                        setIntentionSlug('');
-                        setSubIntentionSlug('');
-                        return;
-                      }
-                      setSelectedListId('');
-                      if (value === 'general') {
-                        setIntentionSlug('');
-                        setSubIntentionSlug('');
-                        return;
-                      }
-                      const [, parentSlug, childSlug = ''] = value.split(':');
-                      setIntentionSlug(parentSlug ?? '');
-                      setSubIntentionSlug(childSlug);
-                    }}
-                  >
-                    <option value="general">{t('task.general')}</option>
-                    {eligibleIntentions.length > 0 && (
-                      <optgroup label={t('intention.intentions')}>
-                        {eligibleIntentions.flatMap(intention => {
-                          const children =
-                            subIntentionsByParent[intention.slug] ?? [];
-                          return children.length > 0
-                            ? children.map(child => (
-                                <option
-                                  key={`${intention.slug}:${child.slug}`}
-                                  value={`intention:${intention.slug}:${child.slug}`}
-                                >
-                                  {intention.emoji} {intention.title} ›{' '}
-                                  {child.emoji} {child.title}
-                                </option>
-                              ))
-                            : [
-                                <option
-                                  key={intention.slug}
-                                  value={`intention:${intention.slug}:`}
-                                >
-                                  {intention.emoji} {intention.title}
-                                </option>,
-                              ];
-                        })}
-                      </optgroup>
-                    )}
-                    {availableLists.length > 0 && (
-                      <optgroup label={t('intention.lists')}>
-                        {availableLists.map(list => (
-                          <option key={list.id} value={`list:${list.id}`}>
-                            {list.emoji ?? '📋'} {list.title}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
+                    triggerClassName="h-[42px] text-sm"
+                    triggerTestId="task-intention-dropdown"
+                  />
                 </Field>
 
                 {!isListDestination && (

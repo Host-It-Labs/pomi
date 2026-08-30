@@ -20,10 +20,11 @@ import {
   FaRobot,
   FaTasks,
 } from 'react-icons/fa';
-import { BackButton } from '../components/BackButton';
+import { CenteredPageHeader } from '../components/CenteredPageHeader';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { IconButton } from '../components/ui/IconButton';
 import { Modal } from '../components/ui/Modal';
 import { NumberField } from '../components/ui/NumberField';
 import { PageContainer } from '../components/ui/PageContainer';
@@ -80,7 +81,37 @@ type SettingsSection = {
 };
 
 function normalizeSettingsSearchText(value: string) {
-  return value.toLowerCase().replace(/\s+/g, ' ').trim();
+  return value
+    .toLocaleLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeSettingsSearchToken(token: string) {
+  return token.length > 3 && token.endsWith('s') ? token.slice(0, -1) : token;
+}
+
+export function settingsSearchMatches(terms: string[], query: string) {
+  const queryTokens = normalizeSettingsSearchText(query)
+    .split(' ')
+    .filter(Boolean)
+    .map(normalizeSettingsSearchToken);
+  if (queryTokens.length === 0) return true;
+
+  const termTokens = normalizeSettingsSearchText(terms.join(' '))
+    .split(' ')
+    .filter(Boolean)
+    .map(normalizeSettingsSearchToken);
+  return queryTokens.every(queryToken =>
+    termTokens.some(
+      termToken =>
+        termToken.includes(queryToken) ||
+        (termToken.length >= 4 && queryToken.includes(termToken))
+    )
+  );
 }
 
 const settingsSearchEntry = (
@@ -830,13 +861,12 @@ export function Settings() {
     }
 
     return sections.flatMap(section => {
-      const sectionNameMatches = normalizeSettingsSearchText(
-        `${section.label} ${section.title}`
-      ).includes(normalizedSearchQuery);
+      const sectionNameMatches = settingsSearchMatches(
+        [section.label, section.title],
+        normalizedSearchQuery
+      );
       const matchingEntries = section.searchEntries.filter(entry =>
-        normalizeSettingsSearchText(entry.terms.join(' ')).includes(
-          normalizedSearchQuery
-        )
+        settingsSearchMatches(entry.terms, normalizedSearchQuery)
       );
       if (!sectionNameMatches && matchingEntries.length === 0) return [];
 
@@ -860,8 +890,8 @@ export function Settings() {
 
   return (
     <PageShell>
-      <PageContainer size="lg" className="pb-28">
-        <div className="space-y-8">
+      <PageContainer size="lg" className={isDesktop ? 'pb-28 pt-6' : 'pb-28'}>
+        <div className="space-y-3">
           {isDesktop && (
             <div
               data-tauri-drag-region
@@ -871,22 +901,21 @@ export function Settings() {
           {isIos && (
             <div className="fixed top-0 left-0 right-0 z-20 h-[env(safe-area-inset-top)] bg-slate-950/95 backdrop-blur supports-backdrop-filter:bg-slate-950/80" />
           )}
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 pb-3 pt-3">
-            <BackButton targetTab="timer" />
-            <h1 className="text-sm font-semibold tracking-tight text-slate-100">
-              {t('settings.title')}
-            </h1>
-            <div className="flex justify-end">
-              <Button
+          <CenteredPageHeader
+            title={t('settings.title')}
+            action={
+              <IconButton
+                label={t('feedback.title')}
+                title={t('feedback.title')}
                 variant="secondary"
                 size="sm"
-                className="gap-2"
+                className="h-8 w-8 !p-0"
                 onClick={() => setShowFeedback(true)}
               >
-                <FaCommentDots size={12} /> {t('feedback.title')}
-              </Button>
-            </div>
-          </div>
+                <FaCommentDots size={12} />
+              </IconButton>
+            }
+          />
           <SettingsStickySearch isDesktop={isDesktop} isIos={isIos}>
             <label htmlFor="settings-search" className="sr-only">
               {t('common.search')}
@@ -919,7 +948,7 @@ export function Settings() {
             </div>
           )}
 
-          <div className="space-y-8">
+          <div className="space-y-8 pt-5">
             {filteredSections.map(section => (
               <section
                 key={section.key}

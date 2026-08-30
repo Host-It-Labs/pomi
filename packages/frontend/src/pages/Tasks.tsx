@@ -1299,12 +1299,14 @@ export function Tasks() {
                 normalizeSearchText(taskSearchQuery).length === 0
               }
               intentions={intentions}
+              lists={lists}
               onEdit={setEditingTask}
               onEditListItem={setEditingListItem}
               onCompleteListItem={completeListItem}
               onArchiveListItem={setArchivingListItem}
               onOpenDescription={setDescriptionTask}
               onUpdate={updateTaskWithPositionFeedback}
+              onConvertToListItem={convertTaskToListItem}
               onReorder={reorderVisibleTasks}
               showTypeBadge={
                 propertyFilters.timerTypes.length !== 1 || isTaskSearchActive
@@ -2256,12 +2258,14 @@ function MixedTaskList({
   orderedUndatedTaskIds,
   canReorder,
   intentions,
+  lists,
   onEdit,
   onEditListItem,
   onCompleteListItem,
   onArchiveListItem,
   onOpenDescription,
   onUpdate,
+  onConvertToListItem,
   onReorder,
   showTypeBadge,
   highlightedTaskId,
@@ -2272,6 +2276,7 @@ function MixedTaskList({
   orderedUndatedTaskIds: string[];
   canReorder: boolean;
   intentions: Intention[];
+  lists: List[];
   onEdit: (task: Task) => void;
   onEditListItem: (item: ListItem) => void;
   onCompleteListItem: (item: ListItem) => Promise<void>;
@@ -2291,6 +2296,16 @@ function MixedTaskList({
     recurrenceInterval?: number | null;
     recurrenceAnchorMode?: Task['recurrenceAnchorMode'];
   }) => Promise<boolean>;
+  onConvertToListItem: (
+    taskId: string,
+    listId: string,
+    item: {
+      title: string;
+      dueDate: string | null;
+      priority: ListItem['priority'];
+      vacationEligible: boolean;
+    }
+  ) => Promise<boolean>;
   onReorder: (
     draggedTaskId: string,
     targetTaskId: string,
@@ -2538,9 +2553,11 @@ function MixedTaskList({
                 task={task}
                 isCompleting={isCompleting}
                 intentions={intentions}
+                lists={lists}
                 onEdit={onEdit}
                 onOpenDescription={onOpenDescription}
                 onUpdate={onUpdate}
+                onConvertToListItem={onConvertToListItem}
                 canReorder={
                   canReorder &&
                   !task.pinnedAt &&
@@ -2568,9 +2585,11 @@ function TaskRow({
   task,
   isCompleting,
   intentions,
+  lists,
   onEdit,
   onOpenDescription,
   onUpdate,
+  onConvertToListItem,
   canReorder,
   isDragging,
   dropPlacement,
@@ -2582,6 +2601,7 @@ function TaskRow({
   task: Task;
   isCompleting: boolean;
   intentions: Intention[];
+  lists: List[];
   onEdit: (task: Task) => void;
   onOpenDescription: (task: Task) => void;
   onUpdate: (task: {
@@ -2598,6 +2618,16 @@ function TaskRow({
     recurrenceInterval?: number | null;
     recurrenceAnchorMode?: Task['recurrenceAnchorMode'];
   }) => Promise<boolean>;
+  onConvertToListItem: (
+    taskId: string,
+    listId: string,
+    item: {
+      title: string;
+      dueDate: string | null;
+      priority: ListItem['priority'];
+      vacationEligible: boolean;
+    }
+  ) => Promise<boolean>;
   canReorder: boolean;
   isDragging: boolean;
   dropPlacement: TaskDropPlacement | null;
@@ -2749,7 +2779,9 @@ function TaskRow({
             <TaskInlineProperties
               task={task}
               intentions={intentions}
+              lists={lists}
               onUpdate={onUpdate}
+              onConvertToListItem={onConvertToListItem}
               onOpenEditor={() => onEdit(task)}
               showIntention
               compact={false}

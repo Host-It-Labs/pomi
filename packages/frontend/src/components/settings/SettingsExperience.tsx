@@ -52,10 +52,17 @@ export function SettingsSearchFilter({
           target.contains(candidate) &&
           visibleIds.has(candidate.dataset.settingId ?? '')
       );
+      const isInsideVisibleTarget = targets.some(
+        candidate =>
+          candidate !== target &&
+          candidate.contains(target) &&
+          visibleIds.has(candidate.dataset.settingId ?? '')
+      );
       target.hidden =
         active &&
         !visibleIds.has(target.dataset.settingId ?? '') &&
-        !containsVisibleTarget;
+        !containsVisibleTarget &&
+        !isInsideVisibleTarget;
     });
 
     root

@@ -85,6 +85,14 @@ const LIST_ROUTE_ARTICLES = [
   'dos',
   'um',
   'uma',
+  'my',
+  'our',
+  'your',
+  'mon',
+  'ma',
+  'mes',
+  'mi',
+  'mis',
   '列表',
   '列表中的',
   'قائمة',
@@ -92,6 +100,17 @@ const LIST_ROUTE_ARTICLES = [
   'তালিকা',
   'daftar',
   'فہرست',
+] as const;
+
+const LIST_ROUTE_NAMING_WORDS = [
+  'called',
+  'named',
+  'nommee',
+  'nomme',
+  'nommée',
+  'nommé',
+  'llamada',
+  'llamado',
 ] as const;
 
 const LIST_ROUTE_MARKERS = [
@@ -293,18 +312,28 @@ export class AssistantListRoutingService {
       ];
       for (const article of articleVariants) {
         for (const marker of markerVariants) {
-          const prefixTokens = [...leadTokens, ...article, ...marker];
-          const prefixStart = titleStart - prefixTokens.length;
-          if (
-            prefixStart < 0 ||
-            !this.tokensMatch(sourceTokens, prefixStart, prefixTokens)
-          ) {
-            continue;
+          const namingVariants = marker.length
+            ? [[], ...LIST_ROUTE_NAMING_WORDS.map(word => [word])]
+            : [[]];
+          for (const naming of namingVariants) {
+            const prefixTokens = [
+              ...leadTokens,
+              ...article,
+              ...marker,
+              ...naming,
+            ];
+            const prefixStart = titleStart - prefixTokens.length;
+            if (
+              prefixStart < 0 ||
+              !this.tokensMatch(sourceTokens, prefixStart, prefixTokens)
+            ) {
+              continue;
+            }
+            return {
+              lead: leadTokens.join(' '),
+              hasMarkerBeforeTitle: marker.length > 0,
+            };
           }
-          return {
-            lead: leadTokens.join(' '),
-            hasMarkerBeforeTitle: marker.length > 0,
-          };
         }
       }
     }

@@ -7,7 +7,6 @@ import {
 import clsx from 'clsx';
 import {
   type TouchEvent,
-  type WheelEvent,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -65,15 +64,12 @@ import {
 } from '../utils/listRefresh';
 import { showToastFromStore } from './toast/ToastContext';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
-import { getWheelPageDirection } from '../utils/pagedGesture';
 
 const TASK_ACTION_BUTTON_BASE_CLASS =
   'group/task-action relative flex items-center justify-center overflow-visible rounded-full border border-slate-700/60 bg-slate-950/40 p-0 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-50';
 const TASK_ACTION_ICON_SIZE = 13;
 const MOBILE_TASK_PEEK_HEIGHT = 28;
 const MOBILE_TASK_GESTURE_THRESHOLD = 36;
-const MOBILE_TASK_WHEEL_THRESHOLD = 18;
-const MOBILE_TASK_WHEEL_LOCK_MS = 280;
 export const MOBILE_TASK_SCROLL_GUTTER_CLASS =
   'app-scrollbar -mr-3 h-full w-[calc(100%+0.75rem)] space-y-1 overflow-y-auto overscroll-contain pr-3';
 interface MinimizedTaskViewProps {
@@ -198,7 +194,6 @@ export function MinimizedTaskView({
   const taskSearchFocusPendingRef = useRef(false);
   const lastTaskSearchFocusRequestRef = useRef(taskSearchFocusRequest);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const lastWheelPageChangeRef = useRef(0);
   const editingTask = tasks.find(task => task.id === editingTaskId);
   const tasksPerPage = Math.min(5, Math.max(1, Math.trunc(visibleRowLimit)));
   const hasTimerIntention =
@@ -609,35 +604,6 @@ export function MinimizedTaskView({
     [pageCount]
   );
 
-  const handleTaskWheel = useCallback(
-    (event: WheelEvent<HTMLDivElement>) => {
-      if (mobileExpandedLayout || pageCount <= 1) {
-        return;
-      }
-
-      const direction = getWheelPageDirection(
-        event.deltaX,
-        event.deltaY,
-        MOBILE_TASK_WHEEL_THRESHOLD
-      );
-      if (direction === null) return;
-      const canMove = direction > 0 ? pageIndex < pageCount - 1 : pageIndex > 0;
-      if (!canMove) {
-        return;
-      }
-
-      event.preventDefault();
-      const now = Date.now();
-      if (now - lastWheelPageChangeRef.current < MOBILE_TASK_WHEEL_LOCK_MS) {
-        return;
-      }
-
-      lastWheelPageChangeRef.current = now;
-      changePage(direction);
-    },
-    [changePage, mobileExpandedLayout, pageCount, pageIndex]
-  );
-
   const handleTaskTouchStart = useCallback(
     (event: TouchEvent<HTMLDivElement>) => {
       if (!mobileExpandedLayout || pageCount <= 1) {
@@ -816,7 +782,6 @@ export function MinimizedTaskView({
         compact ? 'px-2 py-1' : 'px-4 py-2',
         className
       )}
-      onWheel={mobileExpandedLayout ? undefined : handleTaskWheel}
       onTouchStart={mobileExpandedLayout ? handleTaskTouchStart : undefined}
       onTouchEnd={mobileExpandedLayout ? handleTaskTouchEnd : undefined}
     >
@@ -1102,7 +1067,9 @@ export function MinimizedTaskView({
                     <TaskInlineProperties
                       task={task}
                       intentions={intentions}
+                      lists={lists}
                       onUpdate={updateTaskWithDeferredOrder}
+                      onConvertToListItem={convertTaskToListItem}
                       onOpenEditor={() => {
                         if (compact) {
                           requestTaskEdit(task.id);
