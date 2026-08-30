@@ -379,6 +379,28 @@ describe('accepted-action schemas', () => {
     });
     expectActionInvalid(
       {
+        kind: 'lists',
+        operation: 'convertListItemToTask',
+        intentionSlug: 'focus',
+      },
+      'itemId'
+    );
+    expectActionInvalid(
+      {
+        kind: 'lists',
+        operation: 'convertListItemToTask',
+        itemId: 'item-1',
+      },
+      'itemId'
+    );
+    expectActionValid({
+      kind: 'lists',
+      operation: 'convertListItemToTask',
+      itemId: 'item-1',
+      intentionSlug: 'focus',
+    });
+    expectActionInvalid(
+      {
         kind: 'vacation',
         operation: 'configure',
         listIds: ['not-a-uuid'],
