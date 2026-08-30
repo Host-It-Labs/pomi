@@ -146,23 +146,40 @@ describe('Assistant explicit List routing', () => {
     ).toBe(drafts);
   });
 
-  it('rejects explicitly targeted List items with unsupported metadata', () => {
-    for (const draft of [
-      { title: 'Milk', dueTime: '17:00' },
-      { title: 'Milk', description: 'Use the lactose-free brand' },
-      { title: 'Milk', recurrenceRule: 'FREQ=WEEKLY' },
-      { title: 'Milk', timerType: TIMER_TYPES.BREAK },
-      { title: 'Milk', timerType: TIMER_TYPES.LONG_BREAK },
-    ]) {
-      const drafts = [draft];
-      expect(() =>
+  it('sanitizes explicitly targeted List items with unsupported metadata', () => {
+    for (const [draft, sanitizedField] of [
+      [{ title: 'Milk', dueTime: '17:00' }, { dueTime: null }],
+      [
+        { title: 'Milk', description: 'Use the lactose-free brand' },
+        { description: null },
+      ],
+      [
+        { title: 'Milk', recurrenceRule: 'FREQ=WEEKLY' },
+        { recurrenceRule: null },
+      ],
+      [
+        { title: 'Milk', timerType: TIMER_TYPES.BREAK },
+        { timerType: TIMER_TYPES.WORK },
+      ],
+      [
+        { title: 'Milk', timerType: TIMER_TYPES.LONG_BREAK },
+        { timerType: TIMER_TYPES.WORK },
+      ],
+    ] as const) {
+      expect(
         routeListItems.call(
           routingService,
-          drafts,
+          [draft],
           'Add milk to the Groceries list',
           lists
         )
-      ).toThrow(BadRequestException);
+      ).toEqual([
+        {
+          title: 'Milk',
+          ...sanitizedField,
+          listId: 'groceries-id',
+        },
+      ]);
     }
   });
 
@@ -216,19 +233,40 @@ describe('Assistant explicit List routing', () => {
     ]);
   });
 
-  it('rejects mixed unsupported text after a List target', () => {
-    const drafts = [{ title: 'Milk', dueDate: '2026-08-30' }];
+  it('drops unsupported metadata while preserving supported List item fields', () => {
+    const drafts = [
+      {
+        title: 'Milk',
+        description: 'Include a note',
+        dueDate: '2026-08-30',
+        dueTime: '17:00',
+        priority: 'high' as const,
+        recurrenceRule: 'FREQ=DAILY',
+        recurrenceInterval: 2,
+        timerType: 'break' as const,
+      },
+    ];
 
-    expect(() =>
+    expect(
       routeListItems.call(
         routingService,
         drafts,
         'Add milk to the Groceries list due tomorrow and include a note',
         lists
       )
-    ).toThrow(
-      'List items support title, due date, priority, and Vacation Coverage only'
-    );
+    ).toEqual([
+      {
+        title: 'Milk',
+        description: null,
+        dueDate: '2026-08-30',
+        dueTime: null,
+        priority: 'high',
+        recurrenceRule: null,
+        recurrenceInterval: null,
+        timerType: 'work',
+        listId: 'groceries-id',
+      },
+    ]);
   });
 
   it('rejects an explicitly named List that is unavailable', () => {
@@ -259,10 +297,10 @@ describe('Assistant explicit List routing', () => {
     );
   });
 
-  it('returns localized feedback for unsupported metadata after a List target', () => {
+  it('sanitizes unsupported metadata regardless of response language', () => {
     const drafts = [{ title: 'Milk', dueTime: '17:00' }];
 
-    expect(() =>
+    expect(
       routeListItems.call(
         routingService,
         drafts,
@@ -270,9 +308,7 @@ describe('Assistant explicit List routing', () => {
         lists,
         'fr'
       )
-    ).toThrow(
-      'Les éléments de liste prennent uniquement en charge le titre, la date d’échéance, la priorité et Vacation Coverage.'
-    );
+    ).toEqual([{ title: 'Milk', dueTime: null, listId: 'groceries-id' }]);
   });
 
   it('prefers the longest exact List name when names overlap', () => {

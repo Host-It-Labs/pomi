@@ -1,4 +1,4 @@
-import type { Intention, List, Task } from '@pomi/shared';
+import type { Intention, List, ListItem, Task } from '@pomi/shared';
 import {
   TASK_STATUSES,
   TIMER_TYPES,
@@ -64,6 +64,7 @@ import {
 } from '../utils/listRefresh';
 import { showToastFromStore } from './toast/ToastContext';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
+import { mixTaskAndListItems } from '../utils/mixedTaskItems';
 
 const TASK_ACTION_BUTTON_BASE_CLASS =
   'group/task-action relative flex items-center justify-center overflow-visible rounded-full border border-slate-700/60 bg-slate-950/40 p-0 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-50';
@@ -163,6 +164,7 @@ export function MinimizedTaskView({
   const taskEditRequestedId = useUiStore.use.taskEditRequestedId();
   const requestTaskEdit = useUiStore.use.requestTaskEdit();
   const clearTaskEditRequest = useUiStore.use.clearTaskEditRequest();
+  const requestTaskItemReveal = useUiStore.use.requestTaskItemReveal();
   const taskSearchFocusRequest = useUiStore.use.taskSearchFocusRequest();
   const [pageIndex, setPageIndex] = useState(0);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -179,6 +181,10 @@ export function MinimizedTaskView({
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const [intentions, setIntentions] = useState<Intention[]>([]);
   const [lists, setLists] = useState<List[]>([]);
+  const [listItems, setListItems] = useState<ListItem[]>([]);
+  const [completingListItemIds, setCompletingListItemIds] = useState<string[]>(
+    []
+  );
   const [taskDestinationId, setTaskDestinationId] = useState<string | null>(
     null
   );
@@ -242,11 +248,18 @@ export function MinimizedTaskView({
   const loadLists = useCallback(async () => {
     if (!preferences?.listsExtension) {
       setLists([]);
+      setListItems([]);
       return;
     }
-    const response = await apiClient.lists.list({ query: {} });
-    if (response.status === 200) {
-      setLists(response.body.filter(list => !list.isArchived));
+    const [listsResponse, itemsResponse] = await Promise.all([
+      apiClient.lists.list({ query: {} }),
+      apiClient.lists.items({ query: {} }),
+    ]);
+    if (listsResponse.status === 200) {
+      setLists(listsResponse.body.filter(list => !list.isArchived));
+    }
+    if (itemsResponse.status === 200) {
+      setListItems(itemsResponse.body);
     }
   }, [preferences?.listsExtension]);
 
@@ -316,6 +329,101 @@ export function MinimizedTaskView({
       }
     },
     [loadLists, loadTasks, t]
+  );
+
+  const updateListItem = useCallback(
+    async (
+      item: ListItem,
+      updates: {
+        dueDate?: string | null;
+        priority?: ListItem['priority'];
+      }
+    ) => {
+      try {
+        await submitUserMutation({
+          kind: 'lists',
+          label: t('lists.updateItem'),
+          payload: { operation: 'updateItem', itemId: item.id, ...updates },
+          reconcile: loadLists,
+        });
+        await loadLists();
+        requestListRefresh();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [loadLists, t]
+  );
+
+  const completeListItem = useCallback(
+    async (item: ListItem) => {
+      if (completingListItemIds.includes(item.id)) return;
+      setCompletingListItemIds(current => [...current, item.id]);
+      try {
+        await submitUserMutation({
+          kind: 'lists',
+          label: t('lists.completeItem'),
+          payload: {
+            operation: 'updateItem',
+            itemId: item.id,
+            status: TASK_STATUSES.COMPLETED,
+          },
+          reconcile: loadLists,
+        });
+        await loadLists();
+        requestListRefresh();
+      } finally {
+        setCompletingListItemIds(current =>
+          current.filter(itemId => itemId !== item.id)
+        );
+      }
+    },
+    [completingListItemIds, loadLists, t]
+  );
+
+  const convertListItemToTask = useCallback(
+    async (
+      itemId: string,
+      intentionSlug: string,
+      subIntentionSlug: string | null
+    ) => {
+      try {
+        await submitUserMutation({
+          kind: 'lists',
+          label: t('task.intentionOrList'),
+          payload: {
+            operation: 'convertListItemToTask',
+            itemId,
+            intentionSlug,
+            subIntentionSlug,
+          },
+          reconcile: async () => {
+            await Promise.all([loadTasks(), loadLists()]);
+          },
+        });
+        await Promise.all([loadTasks(), loadLists()]);
+        requestListRefresh();
+        showToastFromStore(t('task.updated'), 'success');
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [loadLists, loadTasks, t]
+  );
+
+  const openListItem = useCallback(
+    (item: ListItem) => {
+      setExpanded(true);
+      setActiveTab('tasks');
+      requestTaskItemReveal({
+        kind: 'listItem',
+        id: item.id,
+        listId: item.listId,
+      });
+    },
+    [requestTaskItemReveal, setActiveTab, setExpanded]
   );
 
   useEffect(() => {
@@ -446,6 +554,26 @@ export function MinimizedTaskView({
     tasks,
     intentions,
   ]);
+  const displayListItems = useMemo(() => {
+    const query = effectiveTaskSearchQuery.trim();
+    if (!query && displayedTaskMode !== 'general') return [];
+    return searchMinimizedListItems(
+      listItems,
+      lists,
+      query,
+      hideVacationCovered
+    );
+  }, [
+    displayedTaskMode,
+    effectiveTaskSearchQuery,
+    hideVacationCovered,
+    listItems,
+    lists,
+  ]);
+  const displayEntries = useMemo(
+    () => mixTaskAndListItems(displayTasks, displayListItems, 'default'),
+    [displayListItems, displayTasks]
+  );
   const generalPreviewTasks = useMemo(
     () =>
       effectiveTaskSearchQuery.trim()
@@ -455,15 +583,31 @@ export function MinimizedTaskView({
           ),
     [effectiveTaskSearchQuery, taskView.generalPreviewTasks]
   );
-  const pageCount = Math.max(1, Math.ceil(displayTasks.length / tasksPerPage));
-  const visibleTasks = useMemo(() => {
-    if (mobileExpandedLayout) return displayTasks;
+  const pageCount = Math.max(
+    1,
+    Math.ceil(displayEntries.length / tasksPerPage)
+  );
+  const visibleEntries = useMemo(() => {
+    if (mobileExpandedLayout) return displayEntries;
     const normalizedPage = Math.min(pageIndex, pageCount - 1);
-    return displayTasks.slice(
+    return displayEntries.slice(
       normalizedPage * tasksPerPage,
       normalizedPage * tasksPerPage + tasksPerPage
     );
-  }, [displayTasks, mobileExpandedLayout, pageCount, pageIndex, tasksPerPage]);
+  }, [
+    displayEntries,
+    mobileExpandedLayout,
+    pageCount,
+    pageIndex,
+    tasksPerPage,
+  ]);
+  const visibleTasks = useMemo(
+    () =>
+      visibleEntries.flatMap(entry =>
+        entry.kind === 'task' ? [entry.task] : []
+      ),
+    [visibleEntries]
+  );
 
   useEffect(() => {
     setPageIndex(currentPage => Math.min(currentPage, pageCount - 1));
@@ -472,7 +616,9 @@ export function MinimizedTaskView({
   useLayoutEffect(() => {
     if (!taskDestinationId) return;
     const destinationPage = getTaskDestinationPageIndex(
-      displayTasks,
+      displayEntries.map(entry => ({
+        id: entry.kind === 'task' ? entry.task.id : entry.item.id,
+      })),
       taskDestinationId,
       tasksPerPage
     );
@@ -508,7 +654,7 @@ export function MinimizedTaskView({
       taskHighlightTimeoutRef.current = null;
     }, 1800);
   }, [
-    displayTasks,
+    displayEntries,
     mobileExpandedLayout,
     pageIndex,
     taskDestinationId,
@@ -740,8 +886,8 @@ export function MinimizedTaskView({
   ]);
 
   const availableRows = [
-    ...visibleTasks,
-    ...(generalPreviewTasks.length > 0 && visibleTasks.length < tasksPerPage
+    ...visibleEntries,
+    ...(generalPreviewTasks.length > 0 && visibleEntries.length < tasksPerPage
       ? ['general-preview' as const]
       : []),
   ];
@@ -956,7 +1102,7 @@ export function MinimizedTaskView({
             </div>
           )}
           {!isLoading &&
-            displayTasks.length === 0 &&
+            displayEntries.length === 0 &&
             generalPreviewTasks.length === 0 && (
               <div
                 className="rounded-md border border-dashed border-slate-700/55 px-3 text-xs text-slate-400 transition hover:border-indigo-500/60 hover:text-slate-200"
@@ -979,7 +1125,25 @@ export function MinimizedTaskView({
                 );
               }
 
-              const task = row;
+              if (row.kind === 'listItem') {
+                return (
+                  <MinimizedListItemRow
+                    key={`list-item:${row.item.id}`}
+                    item={row.item}
+                    list={row.list}
+                    intentions={intentions}
+                    compact={compact}
+                    mobileExpandedLayout={mobileExpandedLayout}
+                    isCompleting={completingListItemIds.includes(row.item.id)}
+                    onComplete={completeListItem}
+                    onUpdate={updateListItem}
+                    onConvertToTask={convertListItemToTask}
+                    onOpen={openListItem}
+                  />
+                );
+              }
+
+              const task = row.task;
               const isPinned = task.pinnedAt !== null;
               const isPinning = pinningTaskIds.includes(task.id);
               const isCompleting = completingTaskIds.includes(task.id);
@@ -1283,6 +1447,117 @@ function GeneralPreviewStrip({
   );
 }
 
+function MinimizedListItemRow({
+  item,
+  list,
+  intentions,
+  compact,
+  mobileExpandedLayout,
+  isCompleting,
+  onComplete,
+  onUpdate,
+  onConvertToTask,
+  onOpen,
+}: {
+  item: ListItem;
+  list: List;
+  intentions: Intention[];
+  compact: boolean;
+  mobileExpandedLayout: boolean;
+  isCompleting: boolean;
+  onComplete: (item: ListItem) => Promise<void>;
+  onUpdate: (
+    item: ListItem,
+    updates: {
+      dueDate?: string | null;
+      priority?: ListItem['priority'];
+    }
+  ) => Promise<boolean>;
+  onConvertToTask: (
+    itemId: string,
+    intentionSlug: string,
+    subIntentionSlug: string | null
+  ) => Promise<boolean>;
+  onOpen: (item: ListItem) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div
+      data-testid="minimized-list-item-row"
+      data-list-item-id={item.id}
+      data-completing={isCompleting}
+      className={clsx(
+        'group/minimized-task relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 overflow-visible rounded-md border border-slate-800/70 bg-slate-950/35 transition-all duration-200 hover:border-slate-700/80 hover:bg-slate-900/55',
+        compact
+          ? 'min-h-7 px-1.5'
+          : mobileExpandedLayout
+            ? 'min-h-10 px-2.5 py-1'
+            : 'min-h-8 px-2',
+        isCompleting && 'opacity-45 line-through'
+      )}
+    >
+      <div
+        aria-hidden="true"
+        className={clsx(
+          'absolute inset-y-1 left-0 w-0.5 rounded-r-full',
+          getTaskPriorityAccentClass(item.priority)
+        )}
+      />
+      <CompletionButton
+        label={item.title}
+        isCompleted={false}
+        isCompleting={isCompleting}
+        disabled={isCompleting}
+        onClick={() => void onComplete(item)}
+        compact={!mobileExpandedLayout}
+      />
+      <div className="min-w-0">
+        <OverflowTaskTitle
+          title={item.title}
+          testId="minimized-list-item-title"
+          nativeOnly
+          className="text-xs font-medium text-slate-100"
+        />
+        <TaskInlineProperties
+          task={item}
+          intentions={intentions}
+          currentList={list}
+          onUpdate={update =>
+            onUpdate(item, {
+              ...(update.dueDate !== undefined
+                ? { dueDate: update.dueDate }
+                : {}),
+              ...(update.priority !== undefined
+                ? { priority: update.priority }
+                : {}),
+            })
+          }
+          onConvertListItemToTask={onConvertToTask}
+          onOpenEditor={() => onOpen(item)}
+          showIntention
+          compact
+          isOverdue={isTaskOverdue({
+            dueDate: item.dueDate,
+            dueTime: null,
+          })}
+        />
+      </div>
+      <button
+        type="button"
+        aria-label={t('task.editFor', { title: item.title })}
+        title={t('common.edit')}
+        onClick={() => onOpen(item)}
+        className={clsx(
+          TASK_ACTION_BUTTON_BASE_CLASS,
+          mobileExpandedLayout ? 'h-8 w-8' : 'h-7 w-7'
+        )}
+      >
+        <FaEdit size={mobileExpandedLayout ? 14 : TASK_ACTION_ICON_SIZE} />
+      </button>
+    </div>
+  );
+}
+
 export function searchMinimizedTasks(
   tasks: Task[],
   query: string,
@@ -1302,20 +1577,37 @@ export function searchMinimizedTasks(
     );
 }
 
+export function searchMinimizedListItems(
+  items: ListItem[],
+  lists: List[],
+  query: string,
+  hideVacationCovered: boolean
+) {
+  const normalizedQuery = normalizeMiniSearchText(query);
+  const tokens = normalizedQuery.split(' ').filter(Boolean);
+  const listsById = new Map(lists.map(list => [list.id, list]));
+
+  return items
+    .filter(item => item.status === TASK_STATUSES.ACTIVE)
+    .filter(item => !hideVacationCovered || !item.vacationEligible)
+    .flatMap(item => {
+      const list = listsById.get(item.listId);
+      if (!list) return [];
+      const searchableText = normalizeMiniSearchText(
+        `${item.title} ${item.priority} ${list.title}`
+      );
+      return tokens.every(token => searchableText.includes(token))
+        ? [{ item, list }]
+        : [];
+    });
+}
+
 function doesTaskMatchMiniSearch(
   task: Task,
   query: string,
   intentions: Intention[] = []
 ) {
-  const normalize = (value: string) =>
-    value
-      .toLocaleLowerCase()
-      .normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^\p{L}\p{N}]+/gu, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  const normalizedQuery = normalize(query);
+  const normalizedQuery = normalizeMiniSearchText(query);
   if (!normalizedQuery) {
     return true;
   }
@@ -1337,11 +1629,21 @@ function doesTaskMatchMiniSearch(
       intention.emoji,
     ]),
   ]
-    .map(normalize)
+    .map(normalizeMiniSearchText)
     .join(' ');
   return normalizedQuery
     .split(' ')
     .every(token => searchableText.includes(token));
+}
+
+function normalizeMiniSearchText(value: string) {
+  return value
+    .toLocaleLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function doesTaskMatchCurrentTimer(

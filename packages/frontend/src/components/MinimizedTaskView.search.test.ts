@@ -1,8 +1,9 @@
-import type { Task } from '@pomi/shared';
+import type { List, ListItem, Task } from '@pomi/shared';
 import { describe, expect, it } from 'vitest';
 import {
   getPinShortcutTask,
   getTaskDestinationPageIndex,
+  searchMinimizedListItems,
   searchMinimizedTasks,
 } from './MinimizedTaskView';
 
@@ -146,5 +147,54 @@ describe('Minimized task search', () => {
     expect(getTaskDestinationPageIndex([{ id: 'first' }], 'missing', 3)).toBe(
       null
     );
+  });
+
+  it('includes active List items in General mode data and searches by item or List title', () => {
+    const lists = [
+      { id: 'groceries', title: 'Groceries' },
+      { id: 'travel', title: 'Travel' },
+    ] as List[];
+    const items = [
+      {
+        id: 'milk',
+        listId: 'groceries',
+        title: 'Buy milk',
+        priority: 'normal',
+        status: 'active',
+        vacationEligible: false,
+      },
+      {
+        id: 'passport',
+        listId: 'travel',
+        title: 'Renew passport',
+        priority: 'urgent',
+        status: 'active',
+        vacationEligible: false,
+      },
+      {
+        id: 'done',
+        listId: 'groceries',
+        title: 'Already bought',
+        priority: 'normal',
+        status: 'completed',
+        vacationEligible: false,
+      },
+    ] as ListItem[];
+
+    expect(
+      searchMinimizedListItems(items, lists, '', false).map(
+        entry => entry.item.id
+      )
+    ).toEqual(['milk', 'passport']);
+    expect(
+      searchMinimizedListItems(items, lists, 'groceries', false).map(
+        entry => entry.item.id
+      )
+    ).toEqual(['milk']);
+    expect(
+      searchMinimizedListItems(items, lists, 'passport urgent', false).map(
+        entry => entry.item.id
+      )
+    ).toEqual(['passport']);
   });
 });

@@ -195,30 +195,30 @@ export class AssistantListRoutingService {
     const match = strongestMatches.find(
       candidate => candidate.listId === matchedListId
     );
-    if (drafts.some(draft => this.hasUnsupportedListItemMetadata(draft))) {
-      throw new BadRequestException(
-        translateAssistant(language, 'listMetadataUnsupported')
-      );
-    }
     if (!match) return drafts;
+    const hasUnsupportedMetadata = drafts.some(draft =>
+      this.hasUnsupportedListItemMetadata(draft)
+    );
     if (!this.isUsableListRouteMatch(match, sourceTokens, drafts)) {
       const containsTrailingTask =
         drafts.length > 1 &&
         drafts.some(draft =>
           this.draftAppearsAfterListTarget(draft, sourceTokens, match.end)
         );
-      throw new BadRequestException(
-        translateAssistant(
-          language,
-          containsTrailingTask
-            ? 'listDestinationAmbiguous'
-            : 'listMetadataUnsupported'
-        )
-      );
+      if (containsTrailingTask || !hasUnsupportedMetadata) {
+        throw new BadRequestException(
+          translateAssistant(
+            language,
+            containsTrailingTask
+              ? 'listDestinationAmbiguous'
+              : 'listMetadataUnsupported'
+          )
+        );
+      }
     }
     const matchedList = lists.find(list => list.id === match.listId);
     return drafts.map(draft => ({
-      ...draft,
+      ...this.stripUnsupportedListItemMetadata(draft),
       title:
         match.lead === 'implicit-trailing-list' && matchedList
           ? this.stripTrailingListTitle(draft.title, matchedList.title)
@@ -261,12 +261,10 @@ export class AssistantListRoutingService {
         translateAssistant(language, 'listDestinationAmbiguous')
       );
     }
-    if (drafts.some(draft => this.hasUnsupportedListItemMetadata(draft))) {
-      throw new BadRequestException(
-        translateAssistant(language, 'listMetadataUnsupported')
-      );
-    }
-    return drafts.map(draft => ({ ...draft, listId: selectedListId }));
+    return explicitlyRouted.map(draft => ({
+      ...this.stripUnsupportedListItemMetadata(draft),
+      listId: selectedListId,
+    }));
   }
 
   private findListRouteMatches(
@@ -519,6 +517,22 @@ export class AssistantListRoutingService {
       draft.recurrenceInterval ||
       (draft.timerType && draft.timerType !== TIMER_TYPES.WORK)
     );
+  }
+
+  private stripUnsupportedListItemMetadata(
+    draft: ParsedTaskDraft
+  ): ParsedTaskDraft {
+    const sanitized = { ...draft };
+    if (draft.description !== undefined) sanitized.description = null;
+    if (draft.dueTime !== undefined) sanitized.dueTime = null;
+    if (draft.recurrenceRule !== undefined) sanitized.recurrenceRule = null;
+    if (draft.recurrenceInterval !== undefined) {
+      sanitized.recurrenceInterval = null;
+    }
+    if (draft.timerType && draft.timerType !== TIMER_TYPES.WORK) {
+      sanitized.timerType = TIMER_TYPES.WORK;
+    }
+    return sanitized;
   }
 
   private normalizeRoutingText(value: string) {
