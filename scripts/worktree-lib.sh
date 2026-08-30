@@ -183,19 +183,38 @@ pomi_node_modules_store_dir() {
 const fs = require('node:fs');
 
 const modulesFile = process.argv[2];
-let modules;
+const metadata = fs.readFileSync(modulesFile, 'utf8');
+let storeDir;
 
 try {
-  modules = JSON.parse(fs.readFileSync(modulesFile, 'utf8'));
+  storeDir = JSON.parse(metadata).storeDir;
 } catch {
+  // pnpm versions before v11 write this metadata as YAML.
+}
+
+if (typeof storeDir !== 'string' || storeDir.length === 0) {
+  const match = metadata.match(/^\s*storeDir\s*:\s*(.*?)\s*$/m);
+  if (match) {
+    storeDir = match[1].trim();
+    if (storeDir.startsWith('"') && storeDir.endsWith('"')) {
+      try {
+        storeDir = JSON.parse(storeDir);
+      } catch {
+        storeDir = undefined;
+      }
+    } else if (storeDir.startsWith("'") && storeDir.endsWith("'")) {
+      storeDir = storeDir.slice(1, -1).replace(/''/g, "'");
+    } else {
+      storeDir = storeDir.replace(/\s+#.*$/, '').trim();
+    }
+  }
+}
+
+if (typeof storeDir !== 'string' || storeDir.length === 0) {
   process.exit(1);
 }
 
-if (typeof modules.storeDir !== 'string' || modules.storeDir.length === 0) {
-  process.exit(1);
-}
-
-process.stdout.write(modules.storeDir);
+process.stdout.write(storeDir);
 NODE
 }
 
