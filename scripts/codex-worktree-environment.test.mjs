@@ -28,6 +28,10 @@ const cleanupScript = readFileSync(
   path.join(root, 'scripts/delete-worktree-environment.sh'),
   'utf8'
 );
+const worktreeLibrary = readFileSync(
+  path.join(root, 'scripts/worktree-lib.sh'),
+  'utf8'
+);
 
 test('Codex worktree setup installs the minimal development dependencies', () => {
   assert.ok(setupScript, 'worktree setup script is missing');
@@ -54,24 +58,19 @@ test('worktree setup can reuse the primary pnpm content-addressable store', () =
   const storeDirectory = path.join(temporaryRoot, 'pnpm-store');
   mkdirSync(modulesDirectory);
   mkdirSync(storeDirectory);
-  writeFileSync(
-    path.join(modulesDirectory, '.modules.yaml'),
-    JSON.stringify({ storeDir: storeDirectory })
-  );
-
   try {
-    const resolvedStore = execFileSync(
-      'bash',
-      [
-        '-c',
-        '. "$1" && pomi_node_modules_store_dir "$2"',
-        'bash',
-        path.join(root, 'scripts/worktree-lib.sh'),
-        temporaryRoot,
-      ],
-      { encoding: 'utf8' }
-    );
-    assert.equal(resolvedStore, storeDirectory);
+    for (const metadata of [
+      JSON.stringify({ storeDir: storeDirectory }),
+      `storeDir: ${JSON.stringify(storeDirectory)}\n`,
+    ]) {
+      writeFileSync(path.join(modulesDirectory, '.modules.yaml'), metadata);
+
+      const resolvedStore = execFileSync('bash', ['-s', temporaryRoot], {
+        encoding: 'utf8',
+        input: `${worktreeLibrary}\npomi_node_modules_store_dir "$1"\n`,
+      });
+      assert.equal(resolvedStore, storeDirectory);
+    }
   } finally {
     rmSync(temporaryRoot, { recursive: true, force: true });
   }
