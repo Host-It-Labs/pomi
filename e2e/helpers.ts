@@ -228,10 +228,10 @@ export class TestHelpers {
     const backToTimerButton = this.page
       .locator('button:has-text("Back")')
       .first();
-    const settingsTimerTab = this.page.locator(
-      'nav button[data-section-key="timer"]'
+    const settingsTimerSection = this.page.locator(
+      'section[data-section="timer"]'
     );
-    const settingsMarker = backToTimerButton.or(settingsTimerTab);
+    const settingsMarker = backToTimerButton.or(settingsTimerSection);
     const isAlreadyInSettings = await settingsMarker
       .first()
       .isVisible()
@@ -249,14 +249,6 @@ export class TestHelpers {
     await expect(settingsMarker.first()).toBeVisible({ timeout: 10000 });
   }
 
-  async getSettingsFeatureCard(name: SettingsFeatureName) {
-    return this.page
-      .locator('section[data-section="features"] div.rounded-xl', {
-        has: this.page.getByRole('heading', { name }),
-      })
-      .first();
-  }
-
   private async returnToTimerIfVisible() {
     const backToTimerButton = this.page
       .locator('button:has-text("Back")')
@@ -272,9 +264,7 @@ export class TestHelpers {
 
   private async setPreferenceViaApi(
     preferenceKey:
-      | 'sessionsExtension'
-      | 'intentionExtension'
-      | 'tasksExtension',
+      'sessionsExtension' | 'intentionExtension' | 'tasksExtension',
     value: boolean
   ) {
     try {
@@ -311,51 +301,29 @@ export class TestHelpers {
 
     await this.openSettings();
     if (await activeSection.count()) {
-      await this.returnToTimerIfVisible();
-      return;
-    }
-
-    const featuresTab = this.page.locator(
-      'nav button[data-section-key="features"]'
-    );
-    await expect(featuresTab).toBeVisible({ timeout: 10000 });
-    await featuresTab.click();
-    await expect(
-      this.page.locator('section[data-section="features"]')
-    ).toBeVisible({ timeout: 10000 });
-
-    const card = await this.getSettingsFeatureCard(name);
-    await expect(card).toBeVisible({ timeout: 10000 });
-
-    const activateButton = card
-      .getByRole('button', { name: /^(?:Activate|Enable)(?:\s+.+)?$/ })
-      .first();
-    if (
-      (await activateButton.count()) > 0 &&
-      (await activateButton.isVisible())
-    ) {
-      await activateButton.click();
-
-      if (name === 'Sessions') {
-        const configureSessionsHeading = this.page.locator(
-          'h2:has-text("Configure Sessions")'
-        );
-        if (await configureSessionsHeading.isVisible().catch(() => false)) {
-          const saveButton = this.page
-            .getByRole('button', { name: 'Save' })
-            .last();
-          await expect(saveButton).toBeVisible({ timeout: 10000 });
-          await saveButton.click();
+      const enableButton = activeSection.getByRole('button', {
+        name: /^Enable /,
+      });
+      if (await enableButton.isVisible().catch(() => false)) {
+        await enableButton.click();
+        if (name === 'Sessions') {
+          const configureSessionsHeading = this.page.getByRole('heading', {
+            name: 'Configure Sessions',
+          });
+          await expect(configureSessionsHeading).toBeVisible({
+            timeout: 10000,
+          });
+          await this.page.getByRole('button', { name: 'Save' }).last().click();
           await expect(configureSessionsHeading).not.toBeVisible({
             timeout: 10000,
           });
         }
       }
+      await this.returnToTimerIfVisible();
+      return;
     }
 
-    await this.openSettings();
-    await expect(activeSection.first()).toBeVisible({ timeout: 10000 });
-    await this.returnToTimerIfVisible();
+    throw new Error(`Settings section ${sectionKey} was not rendered`);
   }
 
   async disableSettingsFeature(name: SettingsFeatureName) {

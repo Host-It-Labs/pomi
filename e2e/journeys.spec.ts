@@ -599,7 +599,7 @@ test('10. syncs settings across clients into affected Timer behavior', async ({
     await new TestHelpers(peer).expandWindow();
     const helpers = new TestHelpers(page);
     await helpers.openSettings();
-    await page.locator('nav button[data-section-key="timer"]').click();
+    await expect(page.locator('section[data-section="timer"]')).toBeVisible();
     const label = page.getByText('Focus length', { exact: true });
     const setting = label.locator('..');
     await setting.getByText('min', { exact: true }).click();
