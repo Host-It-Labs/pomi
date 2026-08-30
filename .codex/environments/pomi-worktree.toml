@@ -21,6 +21,12 @@ command = "./scripts/delete-worktree-environment.sh"
 platform = "darwin"
 
 [[actions]]
+name = "cleanup after completed PR"
+icon = "run"
+command = "./scripts/cleanup-worktree-after-pr.sh"
+platform = "darwin"
+
+[[actions]]
 name = "release all"
 icon = "test"
 command = "pnpm run release:all"

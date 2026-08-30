@@ -66,13 +66,10 @@ else
   echo "[pomi] docker not found; skipped compose cleanup."
 fi
 
+pomi_remove_worktree_node_dependencies "$ROOT_DIR"
+
 rm -rf \
   "$ROOT_DIR/.pomi" \
-  "$ROOT_DIR/.pnpm-store" \
-  "$ROOT_DIR/node_modules" \
-  "$ROOT_DIR/packages/backend/node_modules" \
-  "$ROOT_DIR/packages/frontend/node_modules" \
-  "$ROOT_DIR/packages/shared/node_modules" \
   "$ROOT_DIR/packages/backend/pgdata" \
   "$ROOT_DIR/packages/backend/pgdata18" \
   "$ROOT_DIR/packages/frontend/src-tauri/target"
