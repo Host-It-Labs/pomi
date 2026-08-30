@@ -59,7 +59,12 @@ merge updates, and production-release closure.
 - The consolidation manifest must list every source PR in `sourcePrs`. After a
   consolidation merge, the trusted lifecycle verifies that each listed source
   head is contained in the merge commit, comments on it once, and closes it.
-  Source PRs remain open while the consolidation PR is open. The
+  Explicitly scoped same-repository sources may be listed without a Radar source
+  marker; any source that contains a Radar marker must keep a valid issue set.
+  Source PRs remain open while the consolidation PR is open. Historical
+  recovery may retain a source that independently merged first only when its
+  exact current head is contained in the recovery consolidation; a closed,
+  unmerged source remains invalid. The
   `consolidation-reconcile` command first retries the strict post-merge path.
   Only when that path fails for a historical, non-bot, multi-commit squash
   shape does it require the one-parent merge to be one commit ahead of the
@@ -67,6 +72,11 @@ merge updates, and production-release closure.
   and verify still-open source heads against that reviewed head; markers on
   already-closed source PRs are still counted while containment and closure
   are skipped.
+- Immediately before declaring a consolidation merge-ready, run
+  `consolidation-check-open` through the Pomi Radar App wrapper. It validates
+  current source heads and issue lifecycle without mutating GitHub. Any source
+  update, manifest edit, lifecycle change, or App credential failure invalidates
+  the earlier result and requires a fresh check after the branch is refreshed.
 - Release closure first verifies that `RELEASE_TAG` identifies an existing,
   published, non-prerelease GitHub Release before changing Radar issues.
   Historical recovery runs the current lifecycle code while deriving the

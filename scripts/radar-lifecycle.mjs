@@ -1814,11 +1814,6 @@ async function validateConsolidationSourcePulls(
         `Source PR #${sourcePrNumber} from the consolidation manifest was not found.`
       );
     }
-    if (!allowLegacy && sourcePull.user?.login !== radarBotLogin()) {
-      throw new Error(
-        `Source PR #${sourcePrNumber} must be authored by the Radar bot.`
-      );
-    }
     if (
       sourcePull.base?.ref !== 'main' ||
       sourcePull.base?.repo?.full_name !== repo() ||
@@ -1843,7 +1838,7 @@ async function validateConsolidationSourcePulls(
       sourceIssueNumbers.every(
         number => Number.isSafeInteger(number) && number > 0
       );
-    if ((!allowLegacy || hasSourceMarker) && !hasValidSourceMarker) {
+    if (hasSourceMarker && !hasValidSourceMarker) {
       throw new Error(
         `Source PR #${sourcePrNumber} must contain a valid Radar source marker.`
       );
@@ -1860,6 +1855,17 @@ async function validateConsolidationSourcePulls(
     }
     for (const issueNumber of sourceIssueNumbers)
       representedIssueNumbers.add(issueNumber);
+    const independentlyMerged =
+      sourcePull.state === 'closed' && Boolean(sourcePull.merged_at);
+    if (
+      options?.requireOpen === true &&
+      sourcePull.state !== 'open' &&
+      !independentlyMerged
+    ) {
+      throw new Error(
+        `Source PR #${sourcePrNumber} must remain open or already be merged with its exact head contained in the consolidation.`
+      );
+    }
     if (allowLegacy && sourcePull.state !== 'open') continue;
     if (!/^[0-9a-f]{40}$/.test(String(sourcePull.head?.sha))) {
       throw new Error(
@@ -1885,6 +1891,67 @@ async function validateConsolidationSourcePulls(
     );
   }
   return sourceByNumber;
+}
+
+function hasConsolidationMarker(pull) {
+  return String(pull?.body ?? '').includes(CONTRACT.consolidationMarker);
+}
+
+export async function validateConsolidationPullReady(pull) {
+  if (!hasConsolidationMarker(pull)) {
+    return { skipped: 'not-a-radar-consolidation' };
+  }
+  if (pull.state !== 'open') {
+    throw new Error('Radar consolidation PR must remain open before merging.');
+  }
+  const headSha = pull.head?.sha;
+  if (!/^[0-9a-f]{40}$/.test(String(headSha))) {
+    throw new Error(
+      'Radar consolidation PR does not expose a valid head commit.'
+    );
+  }
+  const manifest = readMarker(pull.body, CONTRACT.consolidationMarker);
+  const requestedNumbers = [...new Set(array(manifest?.issues).map(Number))];
+  const issues = await Promise.all(
+    requestedNumbers.map(issueNumber => github(`/issues/${issueNumber}`, {}))
+  );
+  const { issueNumbers, sourcePrNumbers } = validateConsolidationManifest(
+    { pull_request: pull },
+    issues
+  );
+  const sourcePulls = await Promise.all(
+    sourcePrNumbers.map(sourcePrNumber =>
+      github(`/pulls/${sourcePrNumber}`, {})
+    )
+  );
+  await validateConsolidationSourcePulls(
+    sourcePulls,
+    sourcePrNumbers,
+    issueNumbers,
+    pull.number,
+    headSha,
+    { containmentSha: headSha, requireOpen: true }
+  );
+  return {
+    pullRequest: Number(pull.number),
+    headSha,
+    issues: issueNumbers,
+    sourcePrs: sourcePrNumbers,
+  };
+}
+
+async function openConsolidationPulls() {
+  const pulls = await paginate('/pulls?state=open&base=main');
+  return pulls.filter(hasConsolidationMarker);
+}
+
+export async function validateOpenConsolidations() {
+  const pulls = await openConsolidationPulls();
+  return {
+    consolidations: await Promise.all(
+      pulls.map(pull => validateConsolidationPullReady(pull))
+    ),
+  };
 }
 
 async function closeConsolidationSourcePulls(
@@ -2319,6 +2386,12 @@ async function main() {
     const event = readJsonStdin();
     process.stdout.write(
       `${JSON.stringify(await consolidationMerged(event), null, 2)}\n`
+    );
+    return;
+  }
+  if (command === 'consolidation-check-open') {
+    process.stdout.write(
+      `${JSON.stringify(await validateOpenConsolidations(), null, 2)}\n`
     );
     return;
   }

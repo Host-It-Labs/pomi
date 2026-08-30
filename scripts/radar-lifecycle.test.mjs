@@ -32,6 +32,7 @@ import {
   selectCanonical,
   validateAutomationAuthentication,
   validateConsolidationManifest,
+  validateConsolidationPullReady,
 } from './radar-lifecycle.mjs';
 
 function consolidationEvent(overrides = {}) {
@@ -42,11 +43,13 @@ function consolidationEvent(overrides = {}) {
       base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
       head: {
         ref: 'radar/consolidation-test',
+        sha: 'f'.repeat(40),
         repo: { full_name: 'Host-It-Labs/pomi' },
       },
       body: '<!-- pomi-radar-consolidation:v1 {"issues":[33],"sourcePrs":[44]} -->',
       merge_commit_sha: 'a'.repeat(40),
       merged: true,
+      state: 'open',
       ...overrides,
     },
   };
@@ -573,18 +576,54 @@ test('merged consolidations refuse to close a source outside merge ancestry', as
   );
 });
 
-test('merged consolidations reject untrusted source PRs', async () => {
-  const event = consolidationEvent({
-    body: marker('pomi-radar-consolidation:v1', {
-      version: 1,
-      issues: [33],
-      sourcePrs: [44],
-    }),
-  });
+test('pre-merge readiness rejects a source head outside consolidation ancestry', async () => {
+  const event = consolidationEvent();
   const sourcePull = {
     number: 44,
     state: 'open',
-    user: { login: 'contributor' },
+    user: { login: 'pomi-radar[bot]' },
+    body: marker('pomi-radar-source:v1', {
+      version: 1,
+      track: 'feature',
+      issues: [33],
+    }),
+    base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+    head: {
+      sha: 'b'.repeat(40),
+      repo: { full_name: 'Host-It-Labs/pomi' },
+    },
+  };
+  await withFakeConsolidationGithub(
+    {
+      event,
+      issue: {
+        number: 33,
+        state: 'open',
+        body: marker('pomi-radar:v1', { version: 1 }),
+        labels: [{ name: 'radar:feature' }, { name: 'radar:in-review' }],
+      },
+      sourcePulls: [sourcePull],
+      comparisonStatus: 'diverged',
+    },
+    async (state, currentEvent) => {
+      await assert.rejects(
+        validateConsolidationPullReady(currentEvent.pull_request),
+        /not contained in consolidation PR/
+      );
+      assert.deepEqual(state.patches, []);
+      assert.equal(state.comments.get(33).length, 0);
+      assert.equal(state.comments.get(44).length, 0);
+    }
+  );
+});
+
+test('pre-merge readiness accepts an independently merged source only when its exact head is contained', async () => {
+  const event = consolidationEvent();
+  const sourcePull = {
+    number: 44,
+    state: 'closed',
+    merged_at: '2026-08-30T17:28:54Z',
+    user: { login: 'pomi-radar[bot]' },
     body: marker('pomi-radar-source:v1', {
       version: 1,
       track: 'feature',
@@ -609,12 +648,77 @@ test('merged consolidations reject untrusted source PRs', async () => {
       comparisonStatus: 'ahead',
     },
     async (state, currentEvent) => {
-      await assert.rejects(
-        consolidationMerged(currentEvent),
-        /must be authored by the Radar bot/
+      assert.deepEqual(
+        await validateConsolidationPullReady(currentEvent.pull_request),
+        {
+          pullRequest: 99,
+          headSha: 'f'.repeat(40),
+          issues: [33],
+          sourcePrs: [44],
+        }
       );
-      assert.equal(state.pulls.get(44).state, 'open');
-      assert.equal(state.comments.get(44).length, 0);
+      assert.deepEqual(state.patches, []);
+      assert.equal(state.pulls.get(44).state, 'closed');
+    }
+  );
+});
+
+test('merged consolidations accept explicitly listed same-repository sources without Radar markers', async () => {
+  const event = consolidationEvent({
+    body: marker('pomi-radar-consolidation:v1', {
+      version: 1,
+      issues: [33],
+      sourcePrs: [44, 45],
+    }),
+  });
+  const sourcePulls = [
+    {
+      number: 44,
+      state: 'open',
+      user: { login: 'pomi-radar[bot]' },
+      body: marker('pomi-radar-source:v1', {
+        version: 1,
+        track: 'feature',
+        issues: [33],
+      }),
+      base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+      head: {
+        sha: 'b'.repeat(40),
+        repo: { full_name: 'Host-It-Labs/pomi' },
+      },
+    },
+    {
+      number: 45,
+      state: 'open',
+      user: { login: 'NeoHuncho' },
+      body: 'Explicitly scoped maintenance source',
+      base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+      head: {
+        sha: 'c'.repeat(40),
+        repo: { full_name: 'Host-It-Labs/pomi' },
+      },
+    },
+  ];
+  await withFakeConsolidationGithub(
+    {
+      event,
+      issue: {
+        number: 33,
+        state: 'open',
+        body: marker('pomi-radar:v1', { version: 1 }),
+        labels: [{ name: 'radar:feature' }, { name: 'radar:in-review' }],
+      },
+      sourcePulls,
+      comparisonStatus: 'ahead',
+    },
+    async (state, currentEvent) => {
+      const result = await consolidationMerged(currentEvent);
+      assert.deepEqual(result.sourcePullRequests, {
+        closed: [44, 45],
+        alreadyClosed: [],
+      });
+      assert.equal(state.pulls.get(44).state, 'closed');
+      assert.equal(state.pulls.get(45).state, 'closed');
     }
   );
 });
