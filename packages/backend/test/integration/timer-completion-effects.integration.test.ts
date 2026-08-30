@@ -3,7 +3,10 @@ import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { TimerCompletionEffectsService } from '../../src/timer/timer-completion-effects.service';
-import { TimerCompletionOutboxService } from '../../src/timer/timer-completion-outbox.service';
+import {
+  MAX_DURABLE_COMPLETION_ATTEMPTS,
+  TimerCompletionOutboxService,
+} from '../../src/timer/timer-completion-outbox.service';
 
 const hasDatabase = Boolean(process.env.DATABASE_URL);
 
@@ -420,7 +423,7 @@ describe.runIf(hasDatabase)('Timer completion effects integration', () => {
     expect(row.processedAt).not.toBeNull();
   });
 
-  it('reclaims an expired notification lease regardless of retry count', async () => {
+  it('quarantines an exhausted expired notification lease before reclaiming it', async () => {
     const timer = completedTimer({});
     await service.persistCompletionEffects(userId, timer, {
       completedAt: 1_725_000_000_000,
@@ -438,30 +441,23 @@ describe.runIf(hasDatabase)('Timer completion effects integration', () => {
             "availableAt" = now() - interval '1 second'
         WHERE "id" = $1
       `,
-      [claim.id, 5]
+      [claim.id, MAX_DURABLE_COMPLETION_ATTEMPTS]
     );
 
-    const [reclaimed] = await outboxService.claimPendingCompletionNotifications(
-      1,
-      30_000
-    );
-    expect(reclaimed).toMatchObject({
-      id: claim.id,
-      attempts: 6,
+    await expect(
+      outboxService.claimPendingCompletionNotifications(1, 30_000)
+    ).resolves.toEqual([]);
+    const [row] = (await dataSource.query(
+      `SELECT "status", "processedAt", "claimToken", "claimedUntil", "lastError" FROM "notification_outbox" WHERE "id" = $1`,
+      [claim.id]
+    )) as Array<Record<string, unknown>>;
+    expect(row).toMatchObject({
+      status: 'failed',
+      claimToken: null,
+      claimedUntil: null,
+      lastError: 'Maximum durable completion notification attempts exhausted',
     });
-    expect(reclaimed.claimToken).not.toBe(claim.claimToken);
-    expect(
-      await outboxService.markClaimedCompletionNotificationProcessed(
-        claim.id,
-        claim.claimToken
-      )
-    ).toBe(false);
-    expect(
-      await outboxService.markClaimedCompletionNotificationProcessed(
-        claim.id,
-        reclaimed.claimToken
-      )
-    ).toBe(true);
+    expect(row.processedAt).not.toBeNull();
   });
 
   it('persists one deterministic continuation plan under a fenced lease', async () => {

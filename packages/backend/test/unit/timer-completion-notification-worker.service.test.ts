@@ -1,6 +1,7 @@
 import { TIMER_STATUSES, TIMER_TYPES, Timer } from '@pomi/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { TimerCompletionNotificationWorkerService } from '../../src/timer/timer-completion-notification-worker.service';
+import { MAX_DURABLE_COMPLETION_ATTEMPTS } from '../../src/timer/timer-completion-outbox.service';
 
 describe('TimerCompletionNotificationWorkerService', () => {
   it('dispatches and acknowledges a valid durable completion', async () => {
@@ -95,19 +96,20 @@ describe('TimerCompletionNotificationWorkerService', () => {
     expect(harness.markProcessed).not.toHaveBeenCalled();
   });
 
-  it('keeps transient failures retryable after repeated attempts', async () => {
+  it('dead-letters a transient failure after the durable retry budget is exhausted', async () => {
     const harness = createHarness();
     harness.emitCompleted.mockRejectedValueOnce(new Error('provider down'));
 
-    await harness.processJob(job({ attempts: 5 }));
+    await harness.processJob(
+      job({ attempts: MAX_DURABLE_COMPLETION_ATTEMPTS })
+    );
 
-    expect(harness.release).toHaveBeenCalledWith(
+    expect(harness.markFailed).toHaveBeenCalledWith(
       'outbox-1',
       'claim-1',
-      expect.objectContaining({ message: 'provider down' }),
-      80_000
+      expect.objectContaining({ message: 'provider down' })
     );
-    expect(harness.markFailed).not.toHaveBeenCalled();
+    expect(harness.release).not.toHaveBeenCalled();
     expect(harness.markProcessed).not.toHaveBeenCalled();
   });
 

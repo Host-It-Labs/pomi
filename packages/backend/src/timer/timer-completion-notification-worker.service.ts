@@ -10,6 +10,7 @@ import { PomiLogger } from '../logging/pomi-logger';
 import { formatSafeError } from '../logging/sanitize-log';
 import {
   ClaimedCompletionNotification,
+  MAX_DURABLE_COMPLETION_ATTEMPTS,
   TimerCompletionOutboxService,
 } from './timer-completion-outbox.service';
 import { TimerNotificationService } from './timer-notification.service';
@@ -175,6 +176,18 @@ export class TimerCompletionNotificationWorkerService
         );
         this.logger.error(
           `Timer completion notification ${job.id} was dead-lettered:`,
+          error
+        );
+        return;
+      }
+      if (job.attempts >= MAX_DURABLE_COMPLETION_ATTEMPTS) {
+        await this.outbox.markClaimedCompletionNotificationFailed(
+          job.id,
+          job.claimToken,
+          error
+        );
+        this.logger.error(
+          `Timer completion notification ${job.id} exhausted its retry budget:`,
           error
         );
         return;
