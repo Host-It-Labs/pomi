@@ -182,6 +182,7 @@ beforeEach(() => {
   mocks.preferences.assistantExtension = false;
   window.scrollTo = vi.fn();
   HTMLElement.prototype.scrollTo = vi.fn();
+  HTMLElement.prototype.scrollIntoView = vi.fn();
 });
 
 describe('Settings experience', () => {
@@ -294,6 +295,8 @@ describe('Settings experience', () => {
     const search = screen.getByRole('searchbox', { name: 'Search' });
     await user.type(search, 'nested sub-intentions');
 
+    expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+
     const target = document.querySelector<HTMLElement>(
       'section[data-section="intentions"]'
     );
@@ -304,6 +307,8 @@ describe('Settings experience', () => {
     ).toHaveAttribute('data-settings-search-match', 'true');
 
     await user.keyboard('{Enter}');
+
+    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledOnce();
 
     expect(
       target?.querySelector('[data-setting-id="intentionSubIntentions"] button')

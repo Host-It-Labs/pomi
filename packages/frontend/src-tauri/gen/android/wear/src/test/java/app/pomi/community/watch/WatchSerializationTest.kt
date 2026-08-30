@@ -89,7 +89,8 @@ class WatchSerializationTest {
             kind = "timer",
             action = "skip",
             timerType = "work",
-            skipLogMode = "record"
+            skipLogMode = "record",
+            resetOnFirstIntention = null
         ).toGatewayRequest()
         assertEquals("timer", timer.getString("kind"))
         assertEquals("skip", timer.getString("operation"))
@@ -101,7 +102,8 @@ class WatchSerializationTest {
             action = "setIntentions",
             timerType = "work",
             intentionSlugs = listOf("focus"),
-            subIntentions = mapOf("focus" to "code")
+            subIntentions = mapOf("focus" to "code"),
+            resetOnFirstIntention = null
         ).toGatewayRequest()
         assertEquals("focus", intentions.getJSONArray("intentions").getString(0))
         assertEquals("code", intentions.getJSONObject("subIntentions").getString("focus"))
@@ -132,12 +134,18 @@ class WatchSerializationTest {
             kind = "intentions",
             action = "startOrResume",
             timerType = "work",
-            intentionSlugs = listOf("focus")
+            intentionSlugs = listOf("focus"),
+            resetOnFirstIntention = null
         ).toGatewayRequest()
         assertEquals("createOrResume", startWithIntentions.getString("operation"))
         assertEquals("focus", startWithIntentions.getJSONArray("intentions").getString(0))
 
-        val session = PendingWatchAction(id = "session-command", kind = "session", position = 2).toGatewayRequest()
+        val session = PendingWatchAction(
+            id = "session-command",
+            kind = "session",
+            position = 2,
+            resetOnFirstIntention = null
+        ).toGatewayRequest()
         assertEquals("setSessionPosition", session.getString("operation"))
 
         val task = PendingWatchAction.completeTask("task-1").toGatewayRequest()
@@ -158,7 +166,7 @@ class WatchSerializationTest {
 
     @Test(expected = IllegalStateException::class)
     fun unsupportedActionKindsFailBeforeNetworkSubmission() {
-        PendingWatchAction(kind = "unknown").toGatewayRequest()
+        PendingWatchAction(kind = "unknown", resetOnFirstIntention = null).toGatewayRequest()
     }
 
     @Test
