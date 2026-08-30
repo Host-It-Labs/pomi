@@ -21,6 +21,7 @@ const LIST_ROUTE_LEADS = [
   ['under'],
   ['within'],
   ['for'],
+  ['with'],
   ['a'],
   ['ao'],
   ['aos'],
@@ -262,11 +263,9 @@ export class AssistantListRoutingService {
       const prefix = this.findListRoutePrefix(sourceTokens, titleStart);
       if (!prefix) continue;
 
-      const markerAfterTitle = this.isListRouteMarker(
-        sourceTokens[titleStart + titleTokens.length]
-      )
-        ? 1
-        : 0;
+      const markerAfterTitle = this.listMarkerSuffixLength(
+        sourceTokens.slice(titleStart + titleTokens.length)
+      );
       const hasListMarker = prefix.hasMarkerBeforeTitle || markerAfterTitle > 0;
       if (prefix.lead === 'for' && !hasListMarker) continue;
 
@@ -368,6 +367,18 @@ export class AssistantListRoutingService {
     return Boolean(
       token && LIST_ROUTE_MARKERS.some(marker => marker === token)
     );
+  }
+
+  private listMarkerSuffixLength(tokens: string[]) {
+    if (this.isListRouteMarker(tokens[0])) return 1;
+    if (
+      tokens[0] === 'as' &&
+      (tokens[1] === 'its' || tokens[1] === 'the') &&
+      this.isListRouteMarker(tokens[2])
+    ) {
+      return 3;
+    }
+    return 0;
   }
 
   private looksLikeListMetadata(value: string) {

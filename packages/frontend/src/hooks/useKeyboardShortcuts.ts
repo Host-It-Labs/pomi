@@ -206,9 +206,7 @@ export function useKeyboardShortcuts() {
         when: () =>
           activeTab === 'timer' &&
           !!extensionState &&
-          timer?.status === TIMER_STATUSES.PAUSED &&
-          (timer.type === TIMER_TYPES.BREAK ||
-            timer.type === TIMER_TYPES.LONG_BREAK),
+          timer?.status === TIMER_STATUSES.PAUSED,
         run: () => {
           if (!expanded) {
             setExpanded(true);

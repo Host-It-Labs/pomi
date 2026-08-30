@@ -753,6 +753,32 @@ export function Tasks() {
     resetFilters: resetUpdatedTaskFilters,
     setDestinationTaskId: setUpdatedTaskDestinationId,
   });
+  const createTaskWithViewFeedback = useCallback(
+    async (input: Parameters<typeof createTask>[0]) => {
+      const existingTaskIds = new Set(
+        useTasksStore.getState().tasks.map(task => task.id)
+      );
+      const didCreate = await createTask(input);
+      if (!didCreate) return false;
+
+      const createdTask = useTasksStore
+        .getState()
+        .tasks.find(task => !existingTaskIds.has(task.id));
+      showToastFromStore(
+        t('task.created'),
+        'success',
+        5000,
+        createdTask
+          ? {
+              label: t('task.viewUpdated'),
+              onClick: () => revealUpdatedTask(createdTask.id),
+            }
+          : undefined
+      );
+      return true;
+    },
+    [createTask, revealUpdatedTask, t]
+  );
   const updateTaskWithPositionFeedback = useCallback(
     async (updates: Parameters<typeof updateTask>[0]) => {
       const currentTask = tasks.find(task => task.id === updates.id);
@@ -1304,7 +1330,7 @@ export function Tasks() {
             setEditingTask(null);
             setCreateInitialTitle('');
           }}
-          onCreate={createTask}
+          onCreate={createTaskWithViewFeedback}
           onUpdate={updateTaskWithPositionFeedback}
           onCreateListItem={createListItemFromEditor}
           onConvertToListItem={convertTaskToListItem}

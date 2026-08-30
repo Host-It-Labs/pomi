@@ -271,6 +271,18 @@ describe('TaskQuickCreateRow assistant errors', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('uses the create shortcut again to cancel an open quick-create draft', () => {
+    const onCancel = vi.fn();
+    render(<TaskQuickCreateRow listId="list-1" onCancel={onCancel} />);
+
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'Milk' } });
+    fireEvent.keyDown(input, { code: 'KeyN', key: 'n', metaKey: true });
+
+    expect(onCancel).toHaveBeenCalledOnce();
+    expect(input).toHaveValue('');
+  });
+
   it('keeps direct task creation submission available without assistant capture', async () => {
     mocks.assistantStatus = {
       ...mocks.assistantStatus,

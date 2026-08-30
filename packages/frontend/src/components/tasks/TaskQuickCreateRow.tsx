@@ -34,6 +34,7 @@ import { showToastFromStore } from '../toast/ToastContext';
 import { Alert } from '../ui/Alert';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
+import { KeyboardShortcut } from '../ui/KeyboardShortcut';
 import { useI18n } from '../../i18n';
 
 type TaskQuickCreateDefaults = {
@@ -550,12 +551,15 @@ export function TaskQuickCreateRow({
   }, [onCancel, reset, stopTaskSpeechRecording]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== 'Escape') {
-      return;
+    const isCreateShortcut =
+      (event.metaKey || event.ctrlKey) &&
+      !event.altKey &&
+      !event.shiftKey &&
+      event.code === 'KeyN';
+    if (event.key === 'Escape' || (onCancel && isCreateShortcut)) {
+      event.preventDefault();
+      handleCancel();
     }
-
-    event.preventDefault();
-    handleCancel();
   };
 
   return (
@@ -656,6 +660,7 @@ export function TaskQuickCreateRow({
             className="h-9 w-9 shrink-0 !p-0"
           >
             <FaTimes size={10} />
+            <KeyboardShortcut text="N" showModIcon position="topRight" />
           </IconButton>
         )}
       </form>

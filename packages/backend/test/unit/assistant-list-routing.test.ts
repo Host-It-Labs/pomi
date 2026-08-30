@@ -61,6 +61,17 @@ describe('Assistant explicit List routing', () => {
     ]);
   });
 
+  it('routes a Task when the destination is phrased as its linked List', () => {
+    expect(
+      routeListItems.call(
+        routingService,
+        [{ title: 'Buy milk' }],
+        'Create a task to buy milk with Groceries as its List',
+        lists
+      )
+    ).toEqual([{ title: 'Buy milk', listId: 'groceries-id' }]);
+  });
+
   it('rejects mixed requests after an explicit List target', () => {
     const drafts = [{ title: 'Milk' }, { title: 'Call Mum' }];
 

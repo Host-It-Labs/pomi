@@ -169,6 +169,8 @@ export interface Preferences {
   workTimerDuration: number;
   breakTimerDuration: number;
   autoStartBreak: boolean;
+  autoStartWork?: boolean;
+  autoStartLongBreak?: boolean;
   notifications: boolean;
   notifyOnWorkComplete: boolean;
   notifyOnBreakComplete: boolean;
@@ -195,6 +197,7 @@ export interface Preferences {
   sessionLongBreakDuration: number;
   resetBreakOnFirstIntention: boolean;
   resetLongBreakOnFirstIntention: boolean;
+  resetWorkOnFirstIntention?: boolean;
   sessionShowLongBreakButton: boolean;
   sessionShowEta: boolean;
   sessionStackTimers: boolean;
@@ -718,6 +721,7 @@ export interface WatchStatus {
     canStartLongBreak: boolean;
     resetBreakOnFirstIntention: boolean;
     resetLongBreakOnFirstIntention: boolean;
+    resetWorkOnFirstIntention?: boolean;
   };
   tasks: WatchTaskSummary[];
   totalVisibleTasks: number;

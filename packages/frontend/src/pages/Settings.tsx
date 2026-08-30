@@ -33,7 +33,8 @@ import { ToggleField } from '../components/ui/ToggleField';
 import {
   SettingsControlGroup,
   SettingsSectionFrame,
-  SettingsStickyNav,
+  SettingsSearchFilter,
+  SettingsStickySearch,
 } from '../components/settings/SettingsExperience';
 import { useAssistantStore } from '../stores/assistantStore';
 import { useAuthStore } from '../stores/authStore';
@@ -90,57 +91,6 @@ const settingsSearchEntry = (
   terms: typeof terms === 'string' ? [terms] : terms,
 });
 
-const SETTINGS_SEARCH_HIGHLIGHT_CLASSES = [
-  'ring-2',
-  'ring-indigo-400/70',
-  'ring-offset-2',
-  'ring-offset-slate-950',
-];
-
-function findSettingsSearchTarget(
-  sectionNode: HTMLElement,
-  targetId?: string
-): HTMLElement {
-  if (!targetId) {
-    return sectionNode;
-  }
-
-  const settingTarget = Array.from(
-    sectionNode.querySelectorAll<HTMLElement>('[data-setting-id]')
-  ).find(element => element.dataset.settingId === targetId);
-  if (settingTarget) {
-    return settingTarget;
-  }
-
-  const idTarget = sectionNode.querySelector<HTMLElement>(`#${targetId}`);
-  return idTarget ?? sectionNode;
-}
-
-function findSettingsFocusableTarget(target: HTMLElement): HTMLElement | null {
-  const controlSelector =
-    'input:not([disabled]), select:not([disabled]), textarea:not([disabled])';
-  const focusableSelector =
-    'button:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-  if (target.matches(`${controlSelector}, ${focusableSelector}`)) {
-    return target;
-  }
-
-  return (
-    target.querySelector<HTMLElement>(controlSelector) ??
-    target.querySelector<HTMLElement>(focusableSelector)
-  );
-}
-
-function clearSettingsSearchHighlights() {
-  document
-    .querySelectorAll<HTMLElement>('[data-settings-search-match="true"]')
-    .forEach(element => {
-      delete element.dataset.settingsSearchMatch;
-      element.classList.remove(...SETTINGS_SEARCH_HIGHLIGHT_CLASSES);
-    });
-}
-
 export function Settings() {
   const { t } = useI18n();
   const preferences = usePreferencesStore.use.preferences();
@@ -159,11 +109,8 @@ export function Settings() {
   const [showTaskImport, setShowTaskImport] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const navRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const [activeSection, setActiveSection] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [focusSearchResult, setFocusSearchResult] = useState(false);
 
   useEffect(() => {
     void loadPreferences();
@@ -302,6 +249,7 @@ export function Settings() {
         sessionHasLongBreak: config.hasLongBreak,
         sessionLongBreakDuration: config.longBreakDuration,
         autoStartBreak: config.autoStartBreak,
+        autoStartLongBreak: config.autoStartBreak,
       });
 
       setShowSessionConfig(false);
@@ -321,7 +269,6 @@ export function Settings() {
     const offset = 100;
     const target = node.getBoundingClientRect().top + window.scrollY - offset;
 
-    setActiveSection(key);
     window.scrollTo({ top: target, behavior: 'smooth' });
   }, []);
 
@@ -446,15 +393,10 @@ export function Settings() {
             [
               t('timerSettings.resetBreakOnFirstIntention'),
               t('timerSettings.resetBreakOnFirstIntentionDescription'),
-            ],
-            'resetBreakOnFirstIntention'
-          ),
-          settingsSearchEntry(
-            [
               t('timerSettings.resetLongBreakOnFirstIntention'),
               t('timerSettings.resetLongBreakOnFirstIntentionDescription'),
             ],
-            'resetLongBreakOnFirstIntention'
+            'resetBreakOnFirstIntention'
           ),
           settingsSearchEntry(
             [
@@ -476,6 +418,7 @@ export function Settings() {
           <TimerSettings
             preferences={preferences}
             updatePreference={updatePreference}
+            updatePreferences={applyPreferenceUpdatesWithoutResult}
             workMinutes={workMinutes}
             breakMinutes={breakMinutes}
           />
@@ -883,177 +826,37 @@ export function Settings() {
   const normalizedSearchQuery = normalizeSettingsSearchText(searchQuery);
   const filteredSections = useMemo(() => {
     if (!normalizedSearchQuery) {
-      return sections;
+      return sections.map(section => ({ ...section, matchingTargetIds: [] }));
     }
 
-    return sections.filter(section =>
-      normalizeSettingsSearchText(
-        [
-          section.label,
-          section.title,
-          ...section.searchEntries.flatMap(entry => entry.terms),
-        ].join(' ')
-      ).includes(normalizedSearchQuery)
-    );
-  }, [normalizedSearchQuery, sections]);
-
-  useEffect(() => {
-    clearSettingsSearchHighlights();
-    if (!normalizedSearchQuery) {
-      if (focusSearchResult) {
-        setFocusSearchResult(false);
-      }
-      return;
-    }
-
-    const matchedTargets: HTMLElement[] = [];
-    const matchedTargetSet = new Set<HTMLElement>();
-    const focusableTargets: HTMLElement[] = [];
-
-    filteredSections.forEach(section => {
-      const sectionNode = sectionRefs.current[section.key];
-      if (!sectionNode) {
-        return;
-      }
-
+    return sections.flatMap(section => {
+      const sectionNameMatches = normalizeSettingsSearchText(
+        `${section.label} ${section.title}`
+      ).includes(normalizedSearchQuery);
       const matchingEntries = section.searchEntries.filter(entry =>
         normalizeSettingsSearchText(entry.terms.join(' ')).includes(
           normalizedSearchQuery
         )
       );
-      const sectionNameMatches = normalizeSettingsSearchText(
-        `${section.label} ${section.title}`
-      ).includes(normalizedSearchQuery);
-      const isFeatureDisabled =
-        section.featureKey !== undefined && !preferences[section.featureKey];
+      if (!sectionNameMatches && matchingEntries.length === 0) return [];
 
-      const entriesToHighlight: SettingsSearchEntry[] =
-        sectionNameMatches && !matchingEntries.length
-          ? [settingsSearchEntry([])]
-          : matchingEntries;
-
-      entriesToHighlight.forEach(entry => {
-        const target = findSettingsSearchTarget(
-          sectionNode,
-          isFeatureDisabled ? `feature-toggle-${section.key}` : entry.targetId
-        );
-        if (matchedTargetSet.has(target)) {
-          return;
-        }
-
-        matchedTargetSet.add(target);
-        matchedTargets.push(target);
-        target.dataset.settingsSearchMatch = 'true';
-        target.classList.add(...SETTINGS_SEARCH_HIGHLIGHT_CLASSES);
-        const focusableTarget = findSettingsFocusableTarget(target);
-        if (focusableTarget) {
-          focusableTargets.push(focusableTarget);
-        }
-      });
+      const matchingTargetIds = sectionNameMatches
+        ? section.searchEntries.flatMap(entry =>
+            entry.targetId ? [entry.targetId] : []
+          )
+        : matchingEntries.flatMap(entry =>
+            entry.targetId ? [entry.targetId] : []
+          );
+      if (
+        section.featureKey &&
+        !preferences[section.featureKey] &&
+        matchingEntries.length > 0
+      ) {
+        matchingTargetIds.push(`feature-toggle-${section.key}`);
+      }
+      return [{ ...section, matchingTargetIds }];
     });
-
-    if (!focusSearchResult) {
-      return clearSettingsSearchHighlights;
-    }
-
-    const firstTarget = matchedTargets[0];
-    if (!firstTarget) {
-      if (focusSearchResult) {
-        setFocusSearchResult(false);
-      }
-      return;
-    }
-
-    if (typeof firstTarget.scrollIntoView === 'function') {
-      firstTarget.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }
-
-    const firstFocusableTarget = focusableTargets[0];
-    if (
-      firstFocusableTarget &&
-      (focusSearchResult || document.activeElement !== searchInputRef.current)
-    ) {
-      firstFocusableTarget.focus({ preventScroll: true });
-    }
-
-    if (focusSearchResult) {
-      setFocusSearchResult(false);
-    }
-
-    return clearSettingsSearchHighlights;
-  }, [filteredSections, focusSearchResult, normalizedSearchQuery, preferences]);
-
-  useEffect(() => {
-    if (!filteredSections.length) {
-      if (activeSection) {
-        setActiveSection('');
-      }
-      return;
-    }
-
-    if (!filteredSections.some(section => section.key === activeSection)) {
-      setActiveSection(filteredSections[0].key);
-    }
-  }, [activeSection, filteredSections]);
-
-  useEffect(() => {
-    if (!filteredSections.length) {
-      return;
-    }
-
-    const handleScroll = () => {
-      const scrollPosition = window.scrollY + 100;
-      let currentKey = filteredSections[0].key;
-
-      filteredSections.forEach(section => {
-        const node = sectionRefs.current[section.key];
-        if (!node) {
-          return;
-        }
-
-        if (node.offsetTop <= scrollPosition) {
-          currentKey = section.key;
-        }
-      });
-
-      if (currentKey !== activeSection) {
-        setActiveSection(currentKey);
-      }
-    };
-
-    handleScroll();
-    window.addEventListener('scroll', handleScroll, { passive: true });
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, [activeSection, filteredSections]);
-
-  useEffect(() => {
-    if (!activeSection || !navRef.current) {
-      return;
-    }
-
-    const activeButton = navRef.current.querySelector(
-      `[data-section-key="${activeSection}"]`
-    ) as HTMLButtonElement;
-
-    if (!activeButton) {
-      return;
-    }
-
-    const nav = navRef.current;
-    const buttonLeft = activeButton.offsetLeft;
-    const buttonWidth = activeButton.offsetWidth;
-    const navWidth = nav.offsetWidth;
-
-    const targetScroll = buttonLeft - navWidth / 2 + buttonWidth / 2;
-
-    nav.scrollTo({
-      left: targetScroll,
-      behavior: 'smooth',
-    });
-  }, [activeSection]);
+  }, [normalizedSearchQuery, preferences, sections]);
 
   return (
     <PageShell>
@@ -1068,51 +871,12 @@ export function Settings() {
           {isIos && (
             <div className="fixed top-0 left-0 right-0 z-20 h-[env(safe-area-inset-top)] bg-slate-950/95 backdrop-blur supports-backdrop-filter:bg-slate-950/80" />
           )}
-          <div className="flex items-center justify-between gap-3 pb-3 pt-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <BackButton targetTab="timer" />
-              <div className="min-w-0">
-                <h1 className="truncate text-lg font-semibold tracking-tight text-white">
-                  {t('settings.title')}
-                </h1>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative w-44 sm:w-56">
-                <label htmlFor="settings-search" className="sr-only">
-                  {t('common.search')}
-                </label>
-                <Input
-                  ref={searchInputRef}
-                  id="settings-search"
-                  type="search"
-                  value={searchQuery}
-                  onChange={event => setSearchQuery(event.target.value)}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter') {
-                      setFocusSearchResult(true);
-                    }
-                  }}
-                  placeholder={t('common.search')}
-                  aria-label={t('common.search')}
-                  className="pr-10 text-sm"
-                />
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  type="button"
-                  aria-label={t('common.clear')}
-                  title={t('common.clear')}
-                  disabled={!searchQuery}
-                  onClick={() => {
-                    setSearchQuery('');
-                    searchInputRef.current?.focus();
-                  }}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 !px-2 !py-1"
-                >
-                  ×
-                </Button>
-              </div>
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 pb-3 pt-3">
+            <BackButton targetTab="timer" />
+            <h1 className="text-sm font-semibold tracking-tight text-slate-100">
+              {t('settings.title')}
+            </h1>
+            <div className="flex justify-end">
               <Button
                 variant="secondary"
                 size="sm"
@@ -1123,29 +887,21 @@ export function Settings() {
               </Button>
             </div>
           </div>
-          <SettingsStickyNav isDesktop={isDesktop} isIos={isIos}>
-            <nav
-              ref={navRef}
-              className="app-scrollbar flex gap-1.5 overflow-x-auto py-2"
-            >
-              {filteredSections.map(section => (
-                <button
-                  key={section.key}
-                  type="button"
-                  data-section-key={section.key}
-                  onClick={() => handleTabClick(section.key)}
-                  className={`inline-flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium transition-all motion-reduce:transition-none ${
-                    activeSection === section.key
-                      ? 'bg-indigo-500/90 text-white shadow-md shadow-indigo-950/40'
-                      : 'bg-slate-900/70 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                  }`}
-                >
-                  <span className="text-[11px] opacity-80">{section.icon}</span>
-                  {section.label}
-                </button>
-              ))}
-            </nav>
-          </SettingsStickyNav>
+          <SettingsStickySearch isDesktop={isDesktop} isIos={isIos}>
+            <label htmlFor="settings-search" className="sr-only">
+              {t('common.search')}
+            </label>
+            <Input
+              ref={searchInputRef}
+              id="settings-search"
+              type="search"
+              value={searchQuery}
+              onChange={event => setSearchQuery(event.target.value)}
+              placeholder={t('common.search')}
+              aria-label={t('common.search')}
+              className="my-2 h-10 text-sm"
+            />
+          </SettingsStickySearch>
 
           {error && (
             <Alert variant="error" className="animate-pulse">
@@ -1188,7 +944,12 @@ export function Settings() {
                       : undefined
                   }
                 >
-                  <div className="text-slate-200">{section.content}</div>
+                  <SettingsSearchFilter
+                    active={Boolean(normalizedSearchQuery)}
+                    targetIds={section.matchingTargetIds}
+                  >
+                    <div className="text-slate-200">{section.content}</div>
+                  </SettingsSearchFilter>
                 </SettingsSectionFrame>
               </section>
             ))}

@@ -154,7 +154,8 @@ type VoiceReadbackFormatter = {
     rawTasks: unknown[],
     sourceText: string,
     intentions: Array<{ slug: string; title: string }>,
-    language: string
+    language: string,
+    today?: string
   ): string;
 };
 
@@ -175,7 +176,8 @@ function formatVoiceReadback(
     rawTasks,
     sourceText,
     intentions,
-    language
+    language,
+    '2026-07-29'
   );
 }
 
@@ -350,8 +352,8 @@ describe('Assistant voice phases', () => {
     );
 
     expect(result).toContain('Tâche créée : Préparer le rapport');
-    expect(result).toContain('pour le 2026-07-30');
-    expect(result).toContain('à 09:00');
+    expect(result).toContain('pour demain');
+    expect(result).toContain('à 09 h');
     expect(result).toContain('répète');
     expect(result).toContain('priorité haute');
     expect(result).toContain('minuteur de pause');

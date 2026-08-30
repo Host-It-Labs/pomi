@@ -1,8 +1,11 @@
 import type { Preferences, User } from '@pomi/shared';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SettingsSectionFrame } from '../components/settings/SettingsExperience';
+import {
+  SettingsSearchFilter,
+  SettingsSectionFrame,
+} from '../components/settings/SettingsExperience';
 
 const mocks = vi.hoisted(() => ({
   user: { id: 'user-1', username: 'member', isAdmin: false } as User,
@@ -211,11 +214,27 @@ describe('Settings experience', () => {
     expect(onToggle).toHaveBeenCalledOnce();
   });
 
+  it('keeps only matching controls while preserving their group heading', () => {
+    render(
+      <SettingsSearchFilter active targetIds={['matching-setting']}>
+        <section data-settings-control-group>
+          <h3>Essentials</h3>
+          <div data-setting-id="matching-setting">Matching setting</div>
+          <div data-settings-separator />
+          <div data-setting-id="other-setting">Other setting</div>
+        </section>
+      </SettingsSearchFilter>
+    );
+
+    expect(screen.getByText('Essentials')).toBeVisible();
+    expect(screen.getByText('Matching setting')).toBeVisible();
+    expect(screen.getByText('Other setting')).not.toBeVisible();
+  });
+
   it('does not render or mount Admin for non-admin users', () => {
     render(<Settings />);
 
-    const toolbar = screen.getByRole('navigation');
-    expect(within(toolbar).queryByRole('button', { name: 'Admin' })).toBeNull();
+    expect(screen.queryByRole('navigation')).toBeNull();
     expect(screen.queryByTestId('ai-infrastructure')).toBeNull();
   });
 
@@ -227,13 +246,12 @@ describe('Settings experience', () => {
     } as User;
     render(<Settings />);
 
-    const toolbar = screen.getByRole('navigation');
-    expect(within(toolbar).queryByRole('button', { name: 'Admin' })).toBeNull();
+    expect(screen.queryByRole('navigation')).toBeNull();
     expect(screen.getByTestId('ai-infrastructure')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Admin' })).toBeVisible();
   });
 
-  it('filters section navigation and content with a trimmed case-insensitive query', async () => {
+  it('filters sections and their individual controls with a trimmed case-insensitive query', async () => {
     const user = userEvent.setup();
     render(<Settings />);
 
@@ -241,34 +259,17 @@ describe('Settings experience', () => {
     await user.type(search, '  NOTIFICATIONS  ');
 
     expect(sectionKeys()).toEqual(['notifications', 'tasks']);
-    const navigation = screen.getByRole('navigation');
-    expect(
-      within(navigation).getByRole('button', { name: 'Notifications' })
-    ).toBeVisible();
-    expect(
-      within(navigation).queryByRole('button', { name: 'General' })
-    ).toBeNull();
-    expect(
-      within(navigation).getByRole('button', { name: 'Tasks' })
-    ).toBeVisible();
+    expect(screen.queryByRole('navigation')).toBeNull();
   });
 
-  it('exposes an accessible clear action that restores all visible sections', async () => {
+  it('uses only the native search clear affordance', async () => {
     const user = userEvent.setup();
     render(<Settings />);
 
     const search = screen.getByRole('searchbox', { name: 'Search' });
-    const clear = screen.getByRole('button', { name: 'Clear' });
-    expect(clear).toBeDisabled();
-
     await user.type(search, 'task');
-    expect(clear).toBeEnabled();
-    clear.focus();
-    await user.keyboard('{Enter}');
-
-    expect(search).toHaveValue('');
-    expect(search).toHaveFocus();
-    expect(sectionKeys()).toHaveLength(6);
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+    expect(search).toHaveValue('task');
   });
 
   it('announces an empty search result without rendering section blocks', async () => {
@@ -284,10 +285,10 @@ describe('Settings experience', () => {
       'No matching settings sections'
     );
     expect(sectionKeys()).toEqual([]);
-    expect(screen.getByRole('button', { name: 'Clear' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
   });
 
-  it('matches a translated control description and highlights its control', async () => {
+  it('matches a translated control description without highlighting or moving focus', async () => {
     const user = userEvent.setup();
     mocks.preferences.intentionExtension = true;
     render(<Settings />);
@@ -304,18 +305,15 @@ describe('Settings experience', () => {
     expect(sectionKeys()).toEqual(['intentions']);
     expect(
       target?.querySelector('[data-setting-id="intentionSubIntentions"]')
-    ).toHaveAttribute('data-settings-search-match', 'true');
+    ).toBeVisible();
 
     await user.keyboard('{Enter}');
 
-    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledOnce();
-
-    expect(
-      target?.querySelector('[data-setting-id="intentionSubIntentions"] button')
-    ).toHaveFocus();
+    expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+    expect(search).toHaveFocus();
   });
 
-  it('focuses the activation action when a matching feature is disabled', async () => {
+  it('keeps the activation action available when a matching feature is disabled', async () => {
     const user = userEvent.setup();
     render(<Settings />);
 
@@ -325,13 +323,10 @@ describe('Settings experience', () => {
     const enableIntentions = screen.getByRole('button', {
       name: 'Enable Intentions',
     });
-    expect(enableIntentions).toHaveAttribute(
-      'data-settings-search-match',
-      'true'
-    );
+    expect(enableIntentions).toBeVisible();
 
     await user.keyboard('{Enter}');
 
-    expect(enableIntentions).toHaveFocus();
+    expect(search).toHaveFocus();
   });
 });

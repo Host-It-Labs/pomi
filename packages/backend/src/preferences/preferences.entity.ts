@@ -45,6 +45,12 @@ export class Preferences {
   @Column({ default: false })
   autoStartBreak: boolean;
 
+  @Column({ default: false })
+  autoStartWork: boolean;
+
+  @Column({ default: false })
+  autoStartLongBreak: boolean;
+
   @Column({ default: true })
   notifications: boolean;
 
@@ -122,6 +128,9 @@ export class Preferences {
 
   @Column({ default: false })
   resetLongBreakOnFirstIntention: boolean;
+
+  @Column({ default: false })
+  resetWorkOnFirstIntention: boolean;
 
   @Column({ default: false })
   sessionShowLongBreakButton: boolean;

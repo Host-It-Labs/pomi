@@ -4,7 +4,7 @@ import '../../App.css';
 import {
   SettingsControlGroup,
   SettingsSectionFrame,
-  SettingsStickyNav,
+  SettingsStickySearch,
 } from './SettingsExperience';
 import { TaskPriorityMultiSelect } from './TaskPriorityMultiSelect';
 
@@ -49,28 +49,24 @@ describe('Settings experience browser layout', () => {
     ).toEqual(['Essentials', 'Personalize']);
   });
 
-  it('keeps only section navigation sticky', async () => {
+  it('keeps only Settings search sticky', async () => {
     mount(
       <>
         <header data-testid="page-header">Settings</header>
-        <SettingsStickyNav isDesktop={false} isIos={false}>
-          <nav className="flex overflow-x-auto">
-            <button type="button">General</button>
-            <button type="button">Notifications</button>
-            <button type="button">Tasks</button>
-          </nav>
-        </SettingsStickyNav>
+        <SettingsStickySearch isDesktop={false} isIos={false}>
+          <input type="search" aria-label="Search" />
+        </SettingsStickySearch>
       </>
     );
 
     await vi.waitFor(() =>
-      expect(host?.querySelector('[data-settings-navigation]')).toBeTruthy()
+      expect(host?.querySelector('[data-settings-search]')).toBeTruthy()
     );
     const header = host!.querySelector(
       '[data-testid="page-header"]'
     ) as HTMLElement;
     const navigation = host!.querySelector(
-      '[data-settings-navigation]'
+      '[data-settings-search]'
     ) as HTMLElement;
     expect(getComputedStyle(header).position).toBe('static');
     expect(getComputedStyle(navigation).position).toBe('sticky');

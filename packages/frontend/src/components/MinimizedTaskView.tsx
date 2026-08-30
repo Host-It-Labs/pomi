@@ -581,7 +581,7 @@ export function MinimizedTaskView({
   }, [canUseTaskSearch, isTaskSearchOpen]);
 
   const openTaskCreate = useCallback(() => {
-    setIsQuickCreateOpen(true);
+    setIsQuickCreateOpen(current => !current);
   }, []);
 
   const openAdvancedTaskCreate = useCallback(
@@ -834,7 +834,7 @@ export function MinimizedTaskView({
         ) : (
           <div className="flex items-center gap-2">
             {isTaskSearchOpen && canUseTaskSearch ? (
-              <label className="relative z-10 w-28 min-w-0 shrink-0">
+              <label className="relative z-10 min-w-0 flex-1">
                 <span className="sr-only">
                   {t('navigation.searchVisibleTasks')}
                 </span>
@@ -875,7 +875,13 @@ export function MinimizedTaskView({
               </div>
             )}
             {!mobileExpandedLayout && (
-              <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 justify-center">
+              <div
+                className={clsx(
+                  'flex justify-center',
+                  !isTaskSearchOpen &&
+                    'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'
+                )}
+              >
                 <PaginationControls
                   pageIndex={pageIndex}
                   pageCount={pageCount}
@@ -884,49 +890,65 @@ export function MinimizedTaskView({
                   direction="vertical"
                   previousLabel={t('navigation.previousTaskPage')}
                   nextLabel={t('navigation.nextTaskPage')}
-                  className={isMobile ? 'gap-0.5' : 'gap-1'}
-                  buttonSizeClassName={isMobile ? 'h-7 w-7' : undefined}
+                  className={
+                    isTaskSearchOpen ? 'gap-0' : isMobile ? 'gap-0.5' : 'gap-1'
+                  }
+                  buttonSizeClassName={
+                    isTaskSearchOpen
+                      ? 'h-6 w-6'
+                      : isMobile
+                        ? 'h-7 w-7'
+                        : undefined
+                  }
                   buttonClassName="bg-transparent hover:bg-transparent"
                   countClassName={clsx(
-                    isMobile ? 'min-w-7 text-xs' : 'text-[10px]'
+                    isTaskSearchOpen
+                      ? 'min-w-6 text-[9px]'
+                      : isMobile
+                        ? 'min-w-7 text-xs'
+                        : 'text-[10px]'
                   )}
-                  iconSize={isMobile ? 15 : 16}
+                  iconSize={isTaskSearchOpen ? 12 : isMobile ? 15 : 16}
                   showSinglePageControls={!compact}
                 />
               </div>
             )}
             <div className="ml-auto flex shrink-0 items-center justify-end gap-1">
-              {canUseTaskSearch && (
+              {canUseTaskSearch && isTaskSearchOpen ? (
                 <CompactIconButton
-                  label={
-                    isTaskSearchOpen ? t('task.closeSearch') : t('task.search')
-                  }
-                  title={
-                    isTaskSearchOpen
-                      ? t('task.closeSearch')
-                      : t('task.searchShortcut')
-                  }
+                  label={t('task.closeSearch')}
+                  title={t('task.closeSearch')}
                   onClick={toggleTaskSearch}
-                  variant={isTaskSearchOpen ? 'primary' : 'secondary'}
+                  variant="secondary"
                 >
-                  {isTaskSearchOpen ? (
-                    <FaTimes size={9} />
-                  ) : (
-                    <FaSearch size={9} />
-                  )}
+                  <FaTimes size={9} />
                   <KeyboardShortcut text="K" showModIcon />
                 </CompactIconButton>
+              ) : (
+                <>
+                  {canUseTaskSearch && (
+                    <CompactIconButton
+                      label={t('task.search')}
+                      title={t('task.searchShortcut')}
+                      onClick={toggleTaskSearch}
+                      variant="secondary"
+                    >
+                      <FaSearch size={9} />
+                      <KeyboardShortcut text="K" showModIcon />
+                    </CompactIconButton>
+                  )}
+                  <CompactIconButton
+                    label={t('navigation.addTask')}
+                    title={t('navigation.addTask')}
+                    onClick={openTaskCreate}
+                    variant="primary"
+                    className={mobileExpandedLayout ? '!h-8 !w-8' : undefined}
+                  >
+                    <FaPlus size={mobileExpandedLayout ? 10 : 9} />
+                    <KeyboardShortcut text="N" showModIcon />
+                  </CompactIconButton>
+                </>
               )}
-              <CompactIconButton
-                label={t('navigation.addTask')}
-                title={t('navigation.addTask')}
-                onClick={openTaskCreate}
-                variant="primary"
-                className={mobileExpandedLayout ? '!h-8 !w-8' : undefined}
-              >
-                <FaPlus size={mobileExpandedLayout ? 10 : 9} />
-                <KeyboardShortcut text="N" showModIcon />
-              </CompactIconButton>
             </div>
           </div>
         )}

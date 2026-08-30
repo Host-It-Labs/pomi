@@ -507,11 +507,11 @@ export function MinimizedIntentionsPicker({
         )
       );
       const resetOnFirstIntention =
-        nextTimerType === TIMER_TYPES.BREAK
-          ? preferences?.resetBreakOnFirstIntention === true
-          : nextTimerType === TIMER_TYPES.LONG_BREAK
-            ? preferences?.resetLongBreakOnFirstIntention === true
-            : false;
+        nextTimerType === TIMER_TYPES.WORK
+          ? preferences?.resetWorkOnFirstIntention === true
+          : nextTimerType === TIMER_TYPES.BREAK
+            ? preferences?.resetBreakOnFirstIntention === true
+            : preferences?.resetLongBreakOnFirstIntention === true;
 
       const parentKey = getParentKey(intention.sourceType, slug);
       const subIntentions = subIntentionsByParent[parentKey] ?? [];
@@ -551,6 +551,7 @@ export function MinimizedIntentionsPicker({
       isOpen,
       onOpenChange,
       preferences?.intentionRequireSelection,
+      preferences?.resetWorkOnFirstIntention,
       preferences?.resetBreakOnFirstIntention,
       preferences?.resetLongBreakOnFirstIntention,
       selectedIntentions,
@@ -569,11 +570,11 @@ export function MinimizedIntentionsPicker({
         [subPickerState.parent.slug]: subSlug,
       };
       const resetOnFirstIntention =
-        subPickerState.timerType === TIMER_TYPES.BREAK
-          ? preferences?.resetBreakOnFirstIntention === true
-          : subPickerState.timerType === TIMER_TYPES.LONG_BREAK
-            ? preferences?.resetLongBreakOnFirstIntention === true
-            : false;
+        subPickerState.timerType === TIMER_TYPES.WORK
+          ? preferences?.resetWorkOnFirstIntention === true
+          : subPickerState.timerType === TIMER_TYPES.BREAK
+            ? preferences?.resetBreakOnFirstIntention === true
+            : preferences?.resetLongBreakOnFirstIntention === true;
       createOrResumeTimer(
         subPickerState.timerType,
         subPickerState.intentions[0],
@@ -588,6 +589,7 @@ export function MinimizedIntentionsPicker({
       completeSelection,
       createOrResumeTimer,
       isConnected,
+      preferences?.resetWorkOnFirstIntention,
       preferences?.resetBreakOnFirstIntention,
       preferences?.resetLongBreakOnFirstIntention,
       subPickerState,

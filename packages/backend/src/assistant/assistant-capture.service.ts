@@ -883,7 +883,8 @@ export class AssistantCaptureService {
                 prepared.interpretation.rawTasks,
                 prepared.transcript,
                 intentions,
-                messageLanguage
+                messageLanguage,
+                runtime.today
               )
             );
           }

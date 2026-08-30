@@ -523,14 +523,14 @@ function resolveTransition(
   if (timer.type === TIMER_TYPES.WORK) {
     if (timer.isExtension) {
       const type = timer.extensionNextTimerType ?? TIMER_TYPES.BREAK;
+      const autoStart = resolveTimerAutoStart(preferences, type);
       return {
         type,
-        startPaused:
-          type === TIMER_TYPES.WORK ? true : !preferences.autoStartBreak,
+        startPaused: !autoStart,
         delayMs: 500,
         stackedSessions:
           type === TIMER_TYPES.BREAK ? timer.stackedSessions : undefined,
-        isAutoStarted: type !== TIMER_TYPES.WORK && preferences.autoStartBreak,
+        isAutoStarted: autoStart,
       };
     }
 
@@ -540,19 +540,18 @@ function resolveTransition(
       timer.sessionTotal &&
       timer.sessionPosition >= timer.sessionTotal
     ) {
+      const type = preferences.sessionHasLongBreak
+        ? TIMER_TYPES.LONG_BREAK
+        : TIMER_TYPES.WORK;
+      const autoStart = resolveTimerAutoStart(preferences, type);
       return {
-        type: preferences.sessionHasLongBreak
-          ? TIMER_TYPES.LONG_BREAK
-          : TIMER_TYPES.WORK,
-        startPaused: preferences.sessionHasLongBreak
-          ? !preferences.autoStartBreak
-          : true,
+        type,
+        startPaused: !autoStart,
         delayMs: 500,
         focusedTaskIds: timer.focusedTaskIds,
-        isAutoStarted:
-          preferences.sessionHasLongBreak && preferences.autoStartBreak,
+        isAutoStarted: autoStart,
         extensionCandidate:
-          preferences.sessionHasLongBreak && preferences.autoStartBreak
+          preferences.sessionHasLongBreak && autoStart
             ? buildExtensionCandidate(
                 timer,
                 preferences,
@@ -562,22 +561,25 @@ function resolveTransition(
       };
     }
 
+    const autoStart = resolveTimerAutoStart(preferences, TIMER_TYPES.BREAK);
     return {
       type: TIMER_TYPES.BREAK,
-      startPaused: !preferences.autoStartBreak,
+      startPaused: !autoStart,
       delayMs: 500,
       stackedSessions: timer.stackedSessions,
       focusedTaskIds: timer.focusedTaskIds,
-      isAutoStarted: preferences.autoStartBreak,
-      extensionCandidate: preferences.autoStartBreak
+      isAutoStarted: autoStart,
+      extensionCandidate: autoStart
         ? buildExtensionCandidate(timer, preferences, TIMER_TYPES.BREAK)
         : undefined,
     };
   }
 
+  const autoStart = resolveTimerAutoStart(preferences, TIMER_TYPES.WORK);
   return {
     type: TIMER_TYPES.WORK,
-    startPaused: true,
+    startPaused: !autoStart,
+    isAutoStarted: autoStart,
     delayMs: 100,
   };
 }
@@ -702,8 +704,15 @@ function resolveBreakAutoStart(
 ): boolean {
   return (
     (type === TIMER_TYPES.BREAK || type === TIMER_TYPES.LONG_BREAK) &&
-    preferences.autoStartBreak
+    resolveTimerAutoStart(preferences, type)
   );
+}
+
+function resolveTimerAutoStart(preferences: Preferences, type: TimerTypes) {
+  if (type === TIMER_TYPES.WORK) return preferences.autoStartWork ?? false;
+  if (type === TIMER_TYPES.LONG_BREAK)
+    return preferences.autoStartLongBreak ?? preferences.autoStartBreak;
+  return preferences.autoStartBreak;
 }
 
 function buildExtensionCandidate(

@@ -1,4 +1,4 @@
-import { Preferences } from '@pomi/shared';
+import { Preferences, type TimerTypes } from '@pomi/shared';
 import { FaHistory, FaPlusCircle } from 'react-icons/fa';
 import { ExtrasSection } from '../components/ExtrasSection';
 import { DurationSlider } from '../components/ui/DurationSlider';
@@ -7,19 +7,34 @@ import { ToggleField } from '../components/ui/ToggleField';
 import { SettingsControlGroup } from '../components/settings/SettingsExperience';
 import { MILLISECONDS_PER_MINUTE } from '../constants/time';
 import { useI18n } from '../i18n';
+import clsx from 'clsx';
+import { TIMER_TYPES } from '@pomi/shared/src/constants';
 
 export const TimerSettings = ({
   preferences,
   updatePreference,
+  updatePreferences,
   workMinutes,
   breakMinutes,
 }: {
   preferences: Preferences;
   updatePreference: (key: keyof Preferences, value: any) => Promise<void>;
+  updatePreferences: (updates: Partial<Preferences>) => Promise<void>;
   workMinutes: number;
   breakMinutes: number;
 }) => {
   const { t } = useI18n();
+  const autoStartTypes = {
+    [TIMER_TYPES.WORK]: preferences.autoStartWork ?? false,
+    [TIMER_TYPES.BREAK]: preferences.autoStartBreak,
+    [TIMER_TYPES.LONG_BREAK]: preferences.autoStartLongBreak ?? false,
+  };
+  const resetTypes = {
+    [TIMER_TYPES.WORK]: preferences.resetWorkOnFirstIntention ?? false,
+    [TIMER_TYPES.BREAK]: preferences.resetBreakOnFirstIntention ?? false,
+    [TIMER_TYPES.LONG_BREAK]:
+      preferences.resetLongBreakOnFirstIntention ?? false,
+  };
 
   return (
     <div className="space-y-4">
@@ -75,36 +90,62 @@ export const TimerSettings = ({
 
         <ToggleField
           id="autoStartBreak"
-          checked={preferences.autoStartBreak}
-          onChange={value => updatePreference('autoStartBreak', value)}
+          checked={Object.values(autoStartTypes).some(Boolean)}
+          onChange={value =>
+            updatePreferences({
+              autoStartWork: value,
+              autoStartBreak: value,
+              autoStartLongBreak: value,
+            })
+          }
           label={t('timerSettings.autoStartBreaks')}
           description={t('timerSettings.autoStartBreaksDescription')}
+        />
+        <TimerTypeBadges
+          values={autoStartTypes}
+          onToggle={type =>
+            updatePreferences({
+              ...(type === TIMER_TYPES.WORK
+                ? { autoStartWork: !autoStartTypes[type] }
+                : type === TIMER_TYPES.BREAK
+                  ? { autoStartBreak: !autoStartTypes[type] }
+                  : { autoStartLongBreak: !autoStartTypes[type] }),
+            })
+          }
         />
 
         <Separator />
 
         <ToggleField
           id="resetBreakOnFirstIntention"
-          checked={preferences.resetBreakOnFirstIntention ?? false}
+          checked={Object.values(resetTypes).some(Boolean)}
           onChange={value =>
-            updatePreference('resetBreakOnFirstIntention', value)
+            updatePreferences({
+              resetWorkOnFirstIntention: value,
+              resetBreakOnFirstIntention: value,
+              resetLongBreakOnFirstIntention: value,
+            })
           }
           label={t('timerSettings.resetBreakOnFirstIntention')}
           description={t('timerSettings.resetBreakOnFirstIntentionDescription')}
         />
-
-        <Separator />
-
-        <ToggleField
-          id="resetLongBreakOnFirstIntention"
-          checked={preferences.resetLongBreakOnFirstIntention ?? false}
-          onChange={value =>
-            updatePreference('resetLongBreakOnFirstIntention', value)
+        <TimerTypeBadges
+          values={resetTypes}
+          onToggle={type =>
+            updatePreferences({
+              ...(type === TIMER_TYPES.WORK
+                ? {
+                    resetWorkOnFirstIntention: !resetTypes[type],
+                  }
+                : type === TIMER_TYPES.BREAK
+                  ? {
+                      resetBreakOnFirstIntention: !resetTypes[type],
+                    }
+                  : {
+                      resetLongBreakOnFirstIntention: !resetTypes[type],
+                    }),
+            })
           }
-          label={t('timerSettings.resetLongBreakOnFirstIntention')}
-          description={t(
-            'timerSettings.resetLongBreakOnFirstIntentionDescription'
-          )}
         />
       </SettingsControlGroup>
 
@@ -132,3 +173,41 @@ export const TimerSettings = ({
     </div>
   );
 };
+
+function TimerTypeBadges({
+  values,
+  onToggle,
+}: {
+  values: Record<TimerTypes, boolean>;
+  onToggle: (type: TimerTypes) => void;
+}) {
+  const { t } = useI18n();
+  const options = [
+    { type: TIMER_TYPES.WORK, label: t('common.work') },
+    { type: TIMER_TYPES.BREAK, label: t('common.break') },
+    { type: TIMER_TYPES.LONG_BREAK, label: t('common.longBreak') },
+  ];
+  return (
+    <div
+      className="flex flex-wrap gap-1.5 pl-1"
+      aria-label={t('settings.timer')}
+    >
+      {options.map(option => (
+        <button
+          key={option.type}
+          type="button"
+          aria-pressed={values[option.type]}
+          onClick={() => onToggle(option.type)}
+          className={clsx(
+            'rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+            values[option.type]
+              ? 'border-indigo-400/50 bg-indigo-500/15 text-indigo-200'
+              : 'border-slate-700/70 bg-slate-900/50 text-slate-500 hover:text-slate-300'
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}

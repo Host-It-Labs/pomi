@@ -113,6 +113,7 @@ export class WatchService {
         resetBreakOnFirstIntention: preferences.resetBreakOnFirstIntention,
         resetLongBreakOnFirstIntention:
           preferences.resetLongBreakOnFirstIntention,
+        resetWorkOnFirstIntention: preferences.resetWorkOnFirstIntention,
       },
       tasks,
       totalVisibleTasks: visibleTasks.length,

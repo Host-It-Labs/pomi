@@ -91,11 +91,11 @@ export async function focusTaskOnTimer({
   }
 
   const resetOnFirstIntention =
-    task.timerType === TIMER_TYPES.BREAK
-      ? preferences?.resetBreakOnFirstIntention === true
-      : task.timerType === TIMER_TYPES.LONG_BREAK
-        ? preferences?.resetLongBreakOnFirstIntention === true
-        : false;
+    task.timerType === TIMER_TYPES.WORK
+      ? preferences?.resetWorkOnFirstIntention === true
+      : task.timerType === TIMER_TYPES.BREAK
+        ? preferences?.resetBreakOnFirstIntention === true
+        : preferences?.resetLongBreakOnFirstIntention === true;
 
   const didFocus = await createOrResumeTimer(
     task.timerType,

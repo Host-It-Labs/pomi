@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { TIMER_TYPES, TimerTypes } from '@pomi/shared';
+import { normalizeAppLanguage, TIMER_TYPES, TimerTypes } from '@pomi/shared';
 import { Intention } from '../intentions/intentions.entity';
 import { TaskEntity } from '../tasks/tasks.entity';
 import { toRecord } from './assistant-input-utils';
@@ -19,7 +19,8 @@ export class AssistantVoiceReadbackService {
     rawTasks: unknown[],
     sourceText: string,
     intentions: Intention[],
-    language: string | null | undefined
+    language: string | null | undefined,
+    today = new Date().toISOString().slice(0, 10)
   ) {
     const readbacks = tasks.map((task, index) => {
       const draft = drafts[index] ?? { title: task.title };
@@ -36,7 +37,8 @@ export class AssistantVoiceReadbackService {
           task,
           metadataSource,
           intentions,
-          language
+          language,
+          today
         ),
       };
     });
@@ -63,7 +65,8 @@ export class AssistantVoiceReadbackService {
     task: TaskEntity,
     metadataSource: VoiceTaskReadbackSource,
     intentions: Intention[],
-    language: string | null | undefined
+    language: string | null | undefined,
+    today: string
   ) {
     const { rawTask, text: sourceText } = metadataSource;
     const linkedIntention = task.intentionSlug
@@ -118,11 +121,11 @@ export class AssistantVoiceReadbackService {
     return translateAssistant(language, 'taskReadbackDetails', {
       dueDate:
         task.dueDate && this.hasExplicitVoiceDueDate(rawTask)
-          ? task.dueDate
+          ? this.formatDueDateForSpeech(task.dueDate, today, language)
           : '',
       dueTime:
         task.dueTime && this.hasExplicitVoiceDueTime(sourceText, rawTask)
-          ? task.dueTime
+          ? this.formatDueTimeForSpeech(task.dueTime, language)
           : '',
       priority: this.hasExplicitVoicePriority(sourceText, rawTask)
         ? task.priority
@@ -298,6 +301,65 @@ export class AssistantVoiceReadbackService {
       rule?.match(/(?:^|;)INTERVAL=(\d+)(?:;|$)/)?.[1] ??
       (task.recurrenceInterval ? String(task.recurrenceInterval) : '1');
     return { frequency, interval: Number(interval) || 1 };
+  }
+
+  private formatDueDateForSpeech(
+    dueDate: string,
+    today: string,
+    language: string | null | undefined
+  ) {
+    const due = this.parseCalendarDate(dueDate);
+    const reference = this.parseCalendarDate(today);
+    if (!due || !reference) return dueDate;
+
+    const locale = normalizeAppLanguage(language) ?? 'en';
+    const dayDifference = Math.round(
+      (due.getTime() - reference.getTime()) / 86_400_000
+    );
+    const relative = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+    if (Math.abs(dayDifference) <= 2) {
+      return relative.format(dayDifference, 'day');
+    }
+    if (dayDifference !== 0 && dayDifference % 7 === 0) {
+      const weekDifference = dayDifference / 7;
+      if (Math.abs(weekDifference) <= 4) {
+        return relative.format(weekDifference, 'week');
+      }
+    }
+
+    return new Intl.DateTimeFormat(locale, {
+      day: 'numeric',
+      month: 'long',
+      ...(due.getUTCFullYear() === reference.getUTCFullYear()
+        ? {}
+        : { year: 'numeric' as const }),
+      timeZone: 'UTC',
+    }).format(due);
+  }
+
+  private formatDueTimeForSpeech(
+    dueTime: string,
+    language: string | null | undefined
+  ) {
+    const match = dueTime.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+    if (!match) return dueTime;
+    const date = new Date(
+      Date.UTC(2000, 0, 1, Number(match[1]), Number(match[2]))
+    );
+    return new Intl.DateTimeFormat(normalizeAppLanguage(language) ?? 'en', {
+      hour: 'numeric',
+      minute: match[2] === '00' ? undefined : '2-digit',
+      timeZone: 'UTC',
+    }).format(date);
+  }
+
+  private parseCalendarDate(value: string) {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const date = new Date(
+      Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    );
+    return date.toISOString().slice(0, 10) === value ? date : null;
   }
 
   private voiceTaskString(rawTask: Record<string, unknown>, key: string) {

@@ -43,6 +43,14 @@ export class UpdatePreferencesDto {
 
   @IsOptional()
   @IsBoolean()
+  autoStartWork?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  autoStartLongBreak?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   notifications?: boolean;
 
   @IsOptional()
@@ -151,6 +159,10 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsBoolean()
   resetLongBreakOnFirstIntention?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  resetWorkOnFirstIntention?: boolean;
 
   @IsOptional()
   @IsBoolean()

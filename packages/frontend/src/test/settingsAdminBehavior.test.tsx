@@ -178,12 +178,13 @@ describe('Settings and admin behavior replacements', () => {
           timerExtension: true,
         })}
         updatePreference={updatePreference}
+        updatePreferences={vi.fn().mockResolvedValue(undefined)}
         workMinutes={25}
         breakMinutes={5}
       />
     );
 
-    expect(screen.getByLabelText('Auto-start breaks')).not.toBeDisabled();
+    expect(screen.getByLabelText('Auto-start timers')).not.toBeDisabled();
     const labels = [
       screen.getByText('Save time when skipping'),
       screen.getByText('Keep going after a timer'),

@@ -6,6 +6,7 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useFeedbackRecorderStore } from '../feedback/FeedbackRecorder';
 import { v4 as uuid } from 'uuid';
 import { ASSISTANT_MAX_RECORDING_MINUTES } from '@pomi/shared/src/constants';
 import {
@@ -96,6 +97,7 @@ export function AssistantLauncher() {
   const [message, setMessage] = useState('');
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  const feedbackRecordingStage = useFeedbackRecorderStore.use.stage();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const segmentChunksRef = useRef<Blob[]>([]);
   const recordingSegmentsRef = useRef<Blob[]>([]);
@@ -562,7 +564,12 @@ export function AssistantLauncher() {
     toggleAssistantRecording,
   ]);
 
-  if (!status?.assistantEnabled) {
+  if (
+    !status?.assistantEnabled ||
+    feedbackRecordingStage === 'starting' ||
+    feedbackRecordingStage === 'recording' ||
+    feedbackRecordingStage === 'sending'
+  ) {
     return null;
   }
 
@@ -571,7 +578,7 @@ export function AssistantLauncher() {
   }
 
   return createPortal(
-    <div className="relative z-[110] flex items-center">
+    <div className="relative z-[2147483647] flex items-center">
       {stage === 'idle' ? (
         <IconButton
           label={t('assistant.title')}
@@ -604,7 +611,7 @@ export function AssistantLauncher() {
           </button>
           <span
             data-testid="assistant-recording-elapsed"
-            className="absolute left-full top-1/2 ml-1.5 -translate-y-1/2 whitespace-nowrap font-mono text-[10px] tabular-nums text-slate-300"
+            className="absolute left-1/2 top-full mt-0.5 -translate-x-1/2 whitespace-nowrap font-mono text-[10px] tabular-nums text-slate-300"
           >
             {formatDuration(recordingSeconds)}
           </span>

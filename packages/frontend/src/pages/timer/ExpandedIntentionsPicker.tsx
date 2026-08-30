@@ -324,11 +324,11 @@ export function ExpandedIntentionsPicker({
         )
       );
       const resetOnFirstIntention =
-        nextTimerType === TIMER_TYPES.BREAK
-          ? preferences?.resetBreakOnFirstIntention === true
-          : nextTimerType === TIMER_TYPES.LONG_BREAK
-            ? preferences?.resetLongBreakOnFirstIntention === true
-            : false;
+        nextTimerType === TIMER_TYPES.WORK
+          ? preferences?.resetWorkOnFirstIntention === true
+          : nextTimerType === TIMER_TYPES.BREAK
+            ? preferences?.resetBreakOnFirstIntention === true
+            : preferences?.resetLongBreakOnFirstIntention === true;
 
       if (!nextIntentions.includes(slug)) {
         createOrResumeTimer(
@@ -370,6 +370,7 @@ export function ExpandedIntentionsPicker({
       intentionType,
       isDisconnected,
       preferences?.intentionRequireSelection,
+      preferences?.resetWorkOnFirstIntention,
       preferences?.resetBreakOnFirstIntention,
       preferences?.resetLongBreakOnFirstIntention,
       selectedSubIntentions,
@@ -387,11 +388,11 @@ export function ExpandedIntentionsPicker({
         [subPickerState.parent.slug]: subSlug,
       };
       const resetOnFirstIntention =
-        subPickerState.timerType === TIMER_TYPES.BREAK
-          ? preferences?.resetBreakOnFirstIntention === true
-          : subPickerState.timerType === TIMER_TYPES.LONG_BREAK
-            ? preferences?.resetLongBreakOnFirstIntention === true
-            : false;
+        subPickerState.timerType === TIMER_TYPES.WORK
+          ? preferences?.resetWorkOnFirstIntention === true
+          : subPickerState.timerType === TIMER_TYPES.BREAK
+            ? preferences?.resetBreakOnFirstIntention === true
+            : preferences?.resetLongBreakOnFirstIntention === true;
       createOrResumeTimer(
         subPickerState.timerType,
         subPickerState.intentions[0],
@@ -405,6 +406,7 @@ export function ExpandedIntentionsPicker({
     [
       createOrResumeTimer,
       isDisconnected,
+      preferences?.resetWorkOnFirstIntention,
       preferences?.resetBreakOnFirstIntention,
       preferences?.resetLongBreakOnFirstIntention,
       subPickerState,

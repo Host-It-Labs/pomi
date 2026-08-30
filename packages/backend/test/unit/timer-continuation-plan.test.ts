@@ -140,6 +140,39 @@ describe('buildTimerContinuationPlan', () => {
     expect(plan.extensionState).toEqual({ kind: 'clear' });
   });
 
+  it('auto-starts Work after a completed break when Work is selected', () => {
+    const plan = buildPlan(
+      completedTimer({ type: TIMER_TYPES.BREAK }),
+      preferences({ autoStartWork: true })
+    );
+
+    expect(plan.nextTimer).toEqual(
+      expect.objectContaining({
+        type: TIMER_TYPES.WORK,
+        status: TIMER_STATUSES.RUNNING,
+        isAutoStarted: true,
+      })
+    );
+  });
+
+  it('can keep long breaks paused while short breaks auto-start', () => {
+    const plan = buildPlan(
+      completedTimer({ sessionPosition: 4, sessionTotal: 4 }),
+      preferences({
+        autoStartBreak: true,
+        autoStartLongBreak: false,
+        sessionHasLongBreak: true,
+      })
+    );
+
+    expect(plan.nextTimer).toEqual(
+      expect.objectContaining({
+        type: TIMER_TYPES.LONG_BREAK,
+        status: TIMER_STATUSES.PAUSED,
+      })
+    );
+  });
+
   it('preserves extension routing without copying focused tasks', () => {
     const plan = buildPlan(
       completedTimer({

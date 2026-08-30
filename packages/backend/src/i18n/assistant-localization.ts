@@ -263,7 +263,7 @@ const TASK_READBACK_LABELS: Record<AssistantLanguage, TaskReadbackLabels> = {
     separator: '، ',
   },
   fr: {
-    dueDate: 'pour le',
+    dueDate: 'pour',
     dueTime: 'à',
     recurrence: 'répète',
     priorityPrefix: 'priorité',

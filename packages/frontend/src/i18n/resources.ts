@@ -795,18 +795,17 @@ const english: TranslationCatalog = {
   'task.switchToAll': 'Switch to all tasks',
   'task.vikunjaExport': 'Vikunja export',
 
-  'timerSettings.autoStartBreaks': 'Auto-start breaks',
+  'timerSettings.autoStartBreaks': 'Auto-start timers',
   'timerSettings.autoStartBreaksDescription':
-    'Automatically start short and long breaks after work.',
+    'Choose which timer types start automatically.',
   'timerSettings.breakLength': 'Break length',
   'timerSettings.focusLength': 'Focus length',
   'timerSettings.keepGoing': 'Keep going after a timer',
   'timerSettings.keepGoingDescription':
     'Continue tracking elapsed time after the timer ends.',
-  'timerSettings.resetBreakOnFirstIntention':
-    'Reset short break on first Intention',
+  'timerSettings.resetBreakOnFirstIntention': 'Reset timer on first Intention',
   'timerSettings.resetBreakOnFirstIntentionDescription':
-    'Restart an automatically started short break when its first Intention is selected.',
+    'Restart a selected auto-started timer when its first Intention is selected.',
   'timerSettings.resetLongBreakOnFirstIntention':
     'Reset long break on first Intention',
   'timerSettings.resetLongBreakOnFirstIntentionDescription':
