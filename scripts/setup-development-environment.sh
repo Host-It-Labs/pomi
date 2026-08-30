@@ -67,6 +67,7 @@ pomi_mark_install_current() {
 }
 
 install_args=(install --frozen-lockfile)
+main_store_dir=""
 
 if pomi_is_linked_worktree; then
   main_worktree="$(pomi_main_worktree)"
@@ -74,6 +75,12 @@ if pomi_is_linked_worktree; then
 
   if [[ -z "$mismatches" ]]; then
     install_args+=(--prefer-offline)
+
+    main_store_dir="$(pomi_node_modules_store_dir "$main_worktree" || true)"
+    if [[ -n "$main_store_dir" && -d "$main_store_dir" ]]; then
+      install_args+=(--store-dir "$main_store_dir")
+      echo "[pomi] reusing the primary worktree's pnpm content-addressable store."
+    fi
 
     if pomi_install_is_current; then
       echo "[pomi] install inputs match main worktree and are current; existing node_modules is ready."
@@ -92,5 +99,15 @@ elif pomi_install_is_current; then
   exit 0
 fi
 
-pnpm "${install_args[@]}"
+if [[ -n "$main_store_dir" ]]; then
+  if ! pnpm "${install_args[@]}"; then
+    echo "[pomi] primary pnpm store is unavailable; retrying with a worktree-local store." >&2
+    CI=1 pnpm install \
+      --frozen-lockfile \
+      --prefer-offline \
+      --store-dir "$ROOT_DIR/.pnpm-store"
+  fi
+else
+  pnpm "${install_args[@]}"
+fi
 pomi_mark_install_current

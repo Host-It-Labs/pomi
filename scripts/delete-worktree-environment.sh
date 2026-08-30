@@ -68,6 +68,7 @@ fi
 
 rm -rf \
   "$ROOT_DIR/.pomi" \
+  "$ROOT_DIR/.pnpm-store" \
   "$ROOT_DIR/node_modules" \
   "$ROOT_DIR/packages/backend/node_modules" \
   "$ROOT_DIR/packages/frontend/node_modules" \
