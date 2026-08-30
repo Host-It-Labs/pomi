@@ -149,6 +149,7 @@ export class TasksController {
         dueTime: data.dueTime,
         priority: data.priority,
         timerType: data.timerType,
+        customDuration: data.customDuration,
         pinned: data.pinned,
         intentionSlug: data.intentionSlug,
         subIntentionSlug: data.subIntentionSlug,

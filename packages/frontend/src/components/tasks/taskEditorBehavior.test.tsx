@@ -30,6 +30,7 @@ function task(overrides: Partial<Task>): Task {
     priority: 'high',
     status: 'active',
     timerType: 'work',
+    customDuration: null,
     pinnedAt: null,
     intentionSlug: null,
     subIntentionSlug: null,

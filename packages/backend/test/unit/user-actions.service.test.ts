@@ -113,6 +113,7 @@ function createService(
   const timerService = {
     pauseTimer: async () => timerCalls.push('pause'),
     resetTimer: async () => timerCalls.push('reset'),
+    createOrResumeTimer: vi.fn(async () => ({ id: 'timer-1' })),
   };
   const service = new UserActionsService(
     {
@@ -568,6 +569,36 @@ describe('UserActionsService accepted-action queue', () => {
     );
     expect(await store.read('user-1', 'client:intention')).toMatchObject({
       status: 'succeeded',
+    });
+  });
+
+  it('forwards a focused Task custom duration through the Timer action gateway', async () => {
+    const store = new InMemoryUserActionsStore();
+    const action = {
+      kind: 'timer' as const,
+      operation: 'createOrResume' as const,
+      timerType: 'work' as const,
+      intention: 'focus',
+      intentions: ['focus'],
+      subIntentions: { focus: 'planning' },
+      focusedTaskId: 'task-1',
+      customDuration: 1_800_000,
+    };
+    store.add('user-1', accepted('client:task-focus', action), action);
+    const { service, timerService } = createService(store);
+
+    await (
+      service as unknown as { processUserQueue(userId: string): Promise<void> }
+    ).processUserQueue('user-1');
+
+    expect(timerService.createOrResumeTimer).toHaveBeenCalledWith('user-1', {
+      type: 'work',
+      intention: 'focus',
+      intentions: ['focus'],
+      subIntentions: { focus: 'planning' },
+      focusedTaskId: 'task-1',
+      customDuration: 1_800_000,
+      resetOnFirstIntention: undefined,
     });
   });
 

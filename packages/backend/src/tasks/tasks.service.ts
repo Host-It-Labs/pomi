@@ -115,6 +115,7 @@ type CreateTaskInput = {
   dueTime?: string | null;
   priority?: TaskPriority;
   timerType?: TimerTypes;
+  customDuration?: number | null;
   pinned?: boolean;
   intentionSlug?: string | null;
   subIntentionSlug?: string | null;
@@ -879,6 +880,7 @@ export class TasksService {
       dueTime,
       priority,
       timerType,
+      customDuration,
       pinned,
       intentionSlug,
       subIntentionSlug,
@@ -937,6 +939,7 @@ export class TasksService {
       priority: resolvedPriority,
       status: TASK_STATUSES.ACTIVE,
       timerType: resolvedTimerType,
+      customDuration: this.normalizeCustomDuration(customDuration),
       pinnedAt: pinned ? new Date() : null,
       intentionSlug: link.intentionSlug,
       subIntentionSlug: link.subIntentionSlug,
@@ -1600,6 +1603,7 @@ export class TasksService {
       manualOrderOverride?: boolean;
       priority?: TaskPriority;
       timerType?: TimerTypes;
+      customDuration?: number | null;
       pinned?: boolean;
       status?: TaskStatus;
       intentionSlug?: string | null;
@@ -1704,6 +1708,11 @@ export class TasksService {
     }
     if (updates.timerType !== undefined) {
       task.timerType = updates.timerType;
+    }
+    if (updates.customDuration !== undefined) {
+      task.customDuration = this.normalizeCustomDuration(
+        updates.customDuration
+      );
     }
     if (updates.pinned !== undefined) {
       task.pinnedAt = updates.pinned ? task.pinnedAt || new Date() : null;
@@ -2027,6 +2036,7 @@ export class TasksService {
       priority: definition.priority,
       status: TASK_STATUSES.ACTIVE,
       timerType: definition.timerType,
+      customDuration: null,
       pinnedAt: null,
       intentionSlug: definition.intentionSlug,
       subIntentionSlug: definition.subIntentionSlug,
@@ -2153,6 +2163,18 @@ export class TasksService {
     }
 
     return trimmedTitle;
+  }
+
+  private normalizeCustomDuration(duration: number | null | undefined) {
+    if (duration === undefined || duration === null) {
+      return null;
+    }
+    if (!Number.isInteger(duration) || duration < 1) {
+      throw new BadRequestException(
+        'Task custom duration must be a positive whole number of milliseconds'
+      );
+    }
+    return duration;
   }
 
   private async seedPastDueReminderKeyIfNeeded(

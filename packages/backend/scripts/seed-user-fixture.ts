@@ -54,6 +54,7 @@ type SeedTask = {
   priority: TaskPriority;
   status: TaskStatus;
   timerType?: TimerTypes;
+  customDuration?: number | null;
   intentionTitle: string;
   subIntentionTitle?: string | null;
   manualOrder?: number | null;
@@ -283,6 +284,7 @@ const baseSeedTasks: SeedTask[] = [
     status: TASK_STATUSES.ACTIVE,
     intentionTitle: 'Focus',
     subIntentionTitle: 'Planning',
+    customDuration: 30 * 60 * 1000,
     recurrenceRule: null,
     recurrenceAnchorMode: 'planned',
   },
@@ -890,6 +892,7 @@ async function findFixtureHealthIssues(
       priority: expected.priority,
       status: expected.status,
       timerType: expected.timerType ?? TIMER_TYPES.WORK,
+      customDuration: expected.customDuration ?? null,
       intentionSlug: assignment?.intentionSlug ?? null,
       subIntentionSlug: assignment?.subIntentionSlug ?? null,
       recurrenceRule: expected.recurrenceRule,
@@ -1277,6 +1280,7 @@ export async function seedUserFixture({
         priority: task.priority,
         status: task.status,
         timerType: task.timerType ?? TIMER_TYPES.WORK,
+        customDuration: task.customDuration ?? null,
         intentionSlug: assignment.intentionSlug,
         subIntentionSlug: assignment.subIntentionSlug,
         recurrenceRule: task.recurrenceRule,

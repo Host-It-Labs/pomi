@@ -28,6 +28,7 @@ type TaskCreateInput = {
   dueTime?: string | null;
   priority?: TaskPriority;
   timerType?: TimerTypes;
+  customDuration?: number | null;
   pinned?: boolean;
   intentionSlug?: string | null;
   subIntentionSlug?: string | null;
@@ -50,6 +51,7 @@ type TaskUpdateInput = {
   manualOrderOverride?: boolean;
   priority?: TaskPriority;
   timerType?: TimerTypes;
+  customDuration?: number | null;
   pinned?: boolean;
   status?: TaskStatus;
   intentionSlug?: string | null;
@@ -510,6 +512,7 @@ function getTaskUpdatePayload(task: Task): Omit<TaskUpdateInput, 'id'> {
     manualOrderOverride: task.manualOrderOverride,
     priority: task.priority,
     timerType: task.timerType,
+    customDuration: task.customDuration,
     pinned: task.pinnedAt !== null,
     status: task.status,
     intentionSlug: task.intentionSlug,

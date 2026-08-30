@@ -33,13 +33,20 @@ describe('accepted-action schemas', () => {
         kind: 'timer',
         operation: 'createOrResume',
         timerType: 'work',
+        focusedTaskId: 'task-1',
+        customDuration: 1_800_000,
       })
-    ).toMatchObject({ kind: 'timer', operation: 'createOrResume' });
+    ).toMatchObject({
+      kind: 'timer',
+      operation: 'createOrResume',
+      customDuration: 1_800_000,
+    });
     expect(
       userActionSchema.parse({
         kind: 'tasks',
         operation: 'update',
         taskId: 'task',
+        customDuration: 1_800_000,
         recurrenceAnchorMode: 'completion',
         followUpDefinition: {
           title: 'Send the follow-up',
@@ -209,6 +216,15 @@ describe('accepted-action schemas', () => {
       operation: 'createOrResume',
       timerType: 'break',
     });
+    expectActionInvalid(
+      {
+        kind: 'timer',
+        operation: 'createOrResume',
+        timerType: 'work',
+        customDuration: 0,
+      },
+      'customDuration'
+    );
 
     expectActionInvalid(
       { kind: 'timer', operation: 'setSessionPosition' },
@@ -279,7 +295,17 @@ describe('accepted-action schemas', () => {
       kind: 'tasks',
       operation: 'create',
       title: 'Ship tests',
+      customDuration: 1_800_000,
     });
+    expectActionInvalid(
+      {
+        kind: 'tasks',
+        operation: 'update',
+        taskId: 'task-1',
+        customDuration: 0,
+      },
+      'customDuration'
+    );
 
     for (const operation of ['update', 'complete'] as const) {
       expectActionInvalid({ kind: 'tasks', operation }, 'taskId');

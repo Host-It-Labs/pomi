@@ -75,6 +75,9 @@ export class TaskEntity {
   @Column({ type: 'varchar', default: TIMER_TYPES.WORK })
   timerType: TimerTypes;
 
+  @Column({ type: 'integer', nullable: true })
+  customDuration: number | null;
+
   @Column({ type: 'timestamp', nullable: true })
   pinnedAt: Date | null;
 
