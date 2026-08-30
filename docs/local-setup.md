@@ -48,6 +48,15 @@ not start Docker, tmux, migrations, or the application. The worktree is ready
 for the Node test suites; database, browser, Rust, and Wear tests still need
 their respective local services or toolchains.
 
+After the PR is ready, automatic review comments have been resolved or
+explicitly dispositioned, and all CI checks are green, run
+`./scripts/cleanup-worktree-after-pr.sh`. It verifies the PR state, current
+branch/commit, CI results, and automatic review threads before removing only
+the worktree's `node_modules` directories and fallback `.pnpm-store`. Use
+`./scripts/cleanup-worktree-after-pr.sh --check-only` to run the gate without
+deleting anything. Docker resources, source files, and the primary pnpm store
+are not touched.
+
 The standard credential paths are:
 
 - `config/secrets/pomi-radar.private-key.pem` for the Pomi Radar GitHub App;

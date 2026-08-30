@@ -218,6 +218,28 @@ process.stdout.write(storeDir);
 NODE
 }
 
+pomi_remove_worktree_node_dependencies() {
+  local root_dir package_node_modules
+  root_dir="$1"
+
+  rm -rf \
+    "$root_dir/.pnpm-store" \
+    "$root_dir/node_modules"
+
+  [[ -d "$root_dir/packages" ]] || return 0
+
+  while IFS= read -r -d '' package_node_modules; do
+    rm -rf "$package_node_modules"
+  done < <(
+    find "$root_dir/packages" \
+      -mindepth 2 \
+      -maxdepth 2 \
+      -name node_modules \
+      -prune \
+      -print0
+  )
+}
+
 pomi_cargo_input_files_for_root() {
   local root_dir
   root_dir="$1"

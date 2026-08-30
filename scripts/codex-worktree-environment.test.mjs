@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -12,7 +13,17 @@ import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import test from 'node:test';
 
+import {
+  automaticReviewSummaryProblems,
+  pullRequestCompletionProblems,
+  unprocessedAutomaticReviewThreads,
+} from './cleanup-worktree-after-pr.mjs';
+
 const root = path.resolve(import.meta.dirname, '..');
+const environmentConfig = readFileSync(
+  path.join(root, '.codex/environments/pomi-worktree.toml'),
+  'utf8'
+);
 const environmentPath = path.join(
   root,
   '.codex/environments/pomi-worktree.toml'
@@ -26,6 +37,10 @@ const dependencySetupScript = readFileSync(
 );
 const cleanupScript = readFileSync(
   path.join(root, 'scripts/delete-worktree-environment.sh'),
+  'utf8'
+);
+const afterPrCleanupScript = readFileSync(
+  path.join(root, 'scripts/cleanup-worktree-after-pr.sh'),
   'utf8'
 );
 const worktreeLibrary = readFileSync(
@@ -47,7 +62,18 @@ test('Codex worktree setup installs the minimal development dependencies', () =>
     'dependency setup must remain executable'
   );
   assert.match(dependencySetupScript, /--store-dir "\$ROOT_DIR\/\.pnpm-store"/);
-  assert.match(cleanupScript, /"\$ROOT_DIR\/\.pnpm-store"/);
+  assert.match(cleanupScript, /pomi_remove_worktree_node_dependencies/);
+  assert.match(
+    environmentConfig,
+    /name = "cleanup after completed PR"[\s\S]*command = "\.\/scripts\/cleanup-worktree-after-pr\.sh"/
+  );
+  assert.equal(
+    statSync(path.join(root, 'scripts/cleanup-worktree-after-pr.sh')).mode &
+      0o111,
+    0o111,
+    'PR completion cleanup must remain executable'
+  );
+  assert.match(afterPrCleanupScript, /--check-only/);
 });
 
 test('worktree setup can reuse the primary pnpm content-addressable store', () => {
@@ -74,4 +100,150 @@ test('worktree setup can reuse the primary pnpm content-addressable store', () =
   } finally {
     rmSync(temporaryRoot, { recursive: true, force: true });
   }
+});
+
+test('PR completion cleanup removes only worktree Node dependencies', () => {
+  const temporaryRoot = mkdtempSync(
+    path.join(os.tmpdir(), 'pomi-worktree-cleanup-test-')
+  );
+  mkdirSync(path.join(temporaryRoot, 'node_modules'));
+  mkdirSync(path.join(temporaryRoot, '.pnpm-store'));
+  mkdirSync(path.join(temporaryRoot, 'packages/backend/node_modules'), {
+    recursive: true,
+  });
+  mkdirSync(path.join(temporaryRoot, 'packages/frontend/node_modules'), {
+    recursive: true,
+  });
+  mkdirSync(path.join(temporaryRoot, '.pomi'));
+  mkdirSync(path.join(temporaryRoot, 'packages/backend/src'), {
+    recursive: true,
+  });
+
+  try {
+    execFileSync('bash', ['-s', temporaryRoot], {
+      encoding: 'utf8',
+      input: `${worktreeLibrary}\npomi_remove_worktree_node_dependencies "$1"\n`,
+    });
+    assert.equal(existsSync(path.join(temporaryRoot, 'node_modules')), false);
+    assert.equal(existsSync(path.join(temporaryRoot, '.pnpm-store')), false);
+    assert.equal(
+      existsSync(path.join(temporaryRoot, 'packages/backend/node_modules')),
+      false
+    );
+    assert.equal(
+      existsSync(path.join(temporaryRoot, 'packages/frontend/node_modules')),
+      false
+    );
+    assert.equal(existsSync(path.join(temporaryRoot, '.pomi')), true);
+    assert.equal(
+      existsSync(path.join(temporaryRoot, 'packages/backend/src')),
+      true
+    );
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test('PR completion gate requires green checks and processed automatic reviews', () => {
+  const localHead = 'a'.repeat(40);
+  const summary = [
+    '<!-- codex-pull-request-review-summary -->',
+    '| 📝 **Code Review** | ✅ **Completed** |',
+    '| 🔒 **Security Review** | ✅ **Completed** |',
+  ].join('\n');
+  const pullRequest = {
+    state: 'OPEN',
+    isDraft: false,
+    headRefName: 'dev/example',
+    headRefOid: localHead,
+    statusCheckRollup: [
+      { name: 'tests', status: 'COMPLETED', conclusion: 'SUCCESS' },
+      { name: 'CodeQL', status: 'COMPLETED', conclusion: 'SUCCESS' },
+    ],
+  };
+
+  assert.deepEqual(
+    pullRequestCompletionProblems({
+      pullRequest,
+      localBranch: 'dev/example',
+      localHead,
+      comments: [
+        { author: { login: 'chatgpt-codex-connector' }, body: summary },
+      ],
+      reviewThreads: [
+        {
+          isResolved: true,
+          comments: {
+            nodes: [{ author: { login: 'github-advanced-security[bot]' } }],
+          },
+        },
+        {
+          isResolved: false,
+          comments: {
+            nodes: [
+              { author: { login: 'chatgpt-codex-connector' } },
+              {
+                author: { login: 'NeoHuncho' },
+                body: '<!-- pomi-review-disposition:v1 {"version":1,"outcome":"contradicts-request","requiresUserCheck":true} -->',
+              },
+            ],
+          },
+        },
+      ],
+    }),
+    []
+  );
+
+  const blocked = pullRequestCompletionProblems({
+    pullRequest: {
+      ...pullRequest,
+      statusCheckRollup: [
+        { name: 'tests', status: 'IN_PROGRESS', conclusion: null },
+      ],
+    },
+    localBranch: 'dev/example',
+    localHead,
+    comments: [
+      {
+        author: { login: 'chatgpt-codex-connector' },
+        body: summary.replace('Security Review', 'Pending Review'),
+      },
+    ],
+    reviewThreads: [
+      {
+        isResolved: false,
+        comments: {
+          nodes: [{ author: { login: 'chatgpt-codex-connector' } }],
+        },
+      },
+    ],
+  });
+  assert.ok(
+    blocked.some(problem => problem.includes('tests is not completed'))
+  );
+  assert.ok(blocked.some(problem => problem.includes('Security Review')));
+  assert.ok(
+    blocked.some(problem => problem.includes('automatic review thread'))
+  );
+
+  assert.deepEqual(
+    automaticReviewSummaryProblems([
+      { author: { login: 'NeoHuncho' }, body: summary },
+    ]),
+    ['Codex automatic review summary is missing.']
+  );
+  assert.equal(
+    unprocessedAutomaticReviewThreads([
+      {
+        isResolved: false,
+        comments: {
+          nodes: [
+            { author: { login: 'chatgpt-codex-connector' } },
+            { author: { login: 'NeoHuncho' }, body: 'I will investigate.' },
+          ],
+        },
+      },
+    ]).length,
+    1
+  );
 });

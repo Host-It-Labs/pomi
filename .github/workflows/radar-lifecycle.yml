@@ -3,15 +3,115 @@ name: Radar lifecycle
 on:
   pull_request:
     types: [closed]
+  pull_request_target:
+    types:
+      [
+        opened,
+        closed,
+        reopened,
+        synchronize,
+        edited,
+        ready_for_review,
+        converted_to_draft,
+      ]
+  issues:
+    types: [opened, edited, closed, reopened, labeled, unlabeled]
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
   issues: write
   pull-requests: write
+  statuses: write
 
 jobs:
+  consolidation-readiness:
+    name: Radar consolidation readiness
+    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trusted lifecycle tooling
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Discover open Radar consolidations
+        id: discovery
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! grep -q "consolidation-check-open" scripts/radar-lifecycle.mjs; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls?state=open&base=main" \
+            --jq '.[] | select((.body // "") | contains("<!-- pomi-radar-consolidation:v1 ")) | .head.sha' \
+            > "$RUNNER_TEMP/pomi-consolidation-heads"
+
+      - name: Mark consolidations pending
+        if: ${{ steps.discovery.outputs.enabled == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          while IFS= read -r head_sha; do
+            test -z "$head_sha" && continue
+            [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]]
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
+              -f state=pending \
+              -f context='Radar consolidation readiness' \
+              -f description='Checking current source PR heads and lifecycle state' \
+              -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          done < "$RUNNER_TEMP/pomi-consolidation-heads"
+
+      - name: Mint Pomi Radar bot token
+        if: ${{ steps.discovery.outputs.enabled == 'true' }}
+        id: readiness_radar_token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.POMI_RADAR_APP_ID }}
+          private-key: ${{ secrets.POMI_RADAR_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: pomi
+
+      - name: Validate open Radar consolidations
+        if: ${{ steps.discovery.outputs.enabled == 'true' && steps.readiness_radar_token.outcome == 'success' }}
+        id: readiness_validation
+        env:
+          GITHUB_TOKEN: ${{ steps.readiness_radar_token.outputs.token }}
+          POMI_GITHUB_APP_BOT_LOGIN: pomi-radar[bot]
+        run: node scripts/radar-lifecycle.mjs consolidation-check-open
+
+      - name: Publish consolidation readiness
+        if: ${{ always() && steps.discovery.outputs.enabled == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TOKEN_OUTCOME: ${{ steps.readiness_radar_token.outcome }}
+          VALIDATION_OUTCOME: ${{ steps.readiness_validation.outcome }}
+        run: |
+          if [[ "$TOKEN_OUTCOME" == 'success' && "$VALIDATION_OUTCOME" == 'success' ]]; then
+            state=success
+            description='Current source PR heads and lifecycle state are valid'
+          else
+            state=failure
+            description='Consolidation is stale or its lifecycle authentication failed'
+          fi
+
+          while IFS= read -r head_sha; do
+            test -z "$head_sha" && continue
+            [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]]
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
+              -f state="$state" \
+              -f context='Radar consolidation readiness' \
+              -f description="$description" \
+              -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          done < "$RUNNER_TEMP/pomi-consolidation-heads"
+
   consolidation-merged:
-    if: ${{ github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main' }}
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main' }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out trusted lifecycle tooling
