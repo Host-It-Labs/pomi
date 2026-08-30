@@ -13,7 +13,11 @@ import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import test from 'node:test';
 
-import { pullRequestCompletionProblems } from './cleanup-worktree-after-pr.mjs';
+import {
+  automaticReviewSummaryProblems,
+  pullRequestCompletionProblems,
+  unprocessedAutomaticReviewThreads,
+} from './cleanup-worktree-after-pr.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const environmentConfig = readFileSync(
@@ -163,7 +167,9 @@ test('PR completion gate requires green checks and processed automatic reviews',
       pullRequest,
       localBranch: 'dev/example',
       localHead,
-      comments: [{ body: summary }],
+      comments: [
+        { author: { login: 'chatgpt-codex-connector' }, body: summary },
+      ],
       reviewThreads: [
         {
           isResolved: true,
@@ -176,7 +182,10 @@ test('PR completion gate requires green checks and processed automatic reviews',
           comments: {
             nodes: [
               { author: { login: 'chatgpt-codex-connector' } },
-              { author: { login: 'NeoHuncho' } },
+              {
+                author: { login: 'NeoHuncho' },
+                body: '<!-- pomi-review-disposition:v1 {"version":1,"outcome":"contradicts-request","requiresUserCheck":true} -->',
+              },
             ],
           },
         },
@@ -194,7 +203,12 @@ test('PR completion gate requires green checks and processed automatic reviews',
     },
     localBranch: 'dev/example',
     localHead,
-    comments: [{ body: summary.replace('Security Review', 'Pending Review') }],
+    comments: [
+      {
+        author: { login: 'chatgpt-codex-connector' },
+        body: summary.replace('Security Review', 'Pending Review'),
+      },
+    ],
     reviewThreads: [
       {
         isResolved: false,
@@ -210,5 +224,26 @@ test('PR completion gate requires green checks and processed automatic reviews',
   assert.ok(blocked.some(problem => problem.includes('Security Review')));
   assert.ok(
     blocked.some(problem => problem.includes('automatic review thread'))
+  );
+
+  assert.deepEqual(
+    automaticReviewSummaryProblems([
+      { author: { login: 'NeoHuncho' }, body: summary },
+    ]),
+    ['Codex automatic review summary is missing.']
+  );
+  assert.equal(
+    unprocessedAutomaticReviewThreads([
+      {
+        isResolved: false,
+        comments: {
+          nodes: [
+            { author: { login: 'chatgpt-codex-connector' } },
+            { author: { login: 'NeoHuncho' }, body: 'I will investigate.' },
+          ],
+        },
+      },
+    ]).length,
+    1
   );
 });

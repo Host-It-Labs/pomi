@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const CODEX_REVIEW_SUMMARY_MARKER =
   '<!-- codex-pull-request-review-summary -->';
+const REVIEW_DISPOSITION_MARKER = 'pomi-review-disposition:v1';
 const REQUIRED_AUTOMATIC_REVIEWS = ['Code Review', 'Security Review'];
 const PASSING_CHECK_CONCLUSIONS = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
 const COMPLETED_PR_STATES = new Set(['OPEN', 'CLOSED', 'MERGED']);
@@ -40,12 +41,41 @@ export function isAutomaticReviewAuthor(login) {
   );
 }
 
+function isCodexReviewAuthor(login) {
+  const normalized = String(login ?? '')
+    .trim()
+    .toLowerCase();
+  return (
+    normalized === 'chatgpt-codex-connector' ||
+    normalized === 'chatgpt-codex-connector[bot]'
+  );
+}
+
+function hasExplicitReviewDisposition(comment) {
+  const body = String(comment?.body ?? '');
+  const match = body.match(
+    /<!--\s*pomi-review-disposition:v1\s+(\{[^]*?\})\s*-->/
+  );
+  if (!match) return false;
+  try {
+    const disposition = JSON.parse(match[1]);
+    return (
+      disposition.version === 1 &&
+      disposition.outcome === 'contradicts-request' &&
+      disposition.requiresUserCheck === true
+    );
+  } catch {
+    return false;
+  }
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
 }
 
 export function automaticReviewSummaryProblems(comments) {
   const summaries = array(comments)
+    .filter(comment => isCodexReviewAuthor(authorLogin(comment)))
     .map(comment => String(comment?.body ?? ''))
     .filter(body => body.includes(CODEX_REVIEW_SUMMARY_MARKER));
 
@@ -79,7 +109,11 @@ export function unprocessedAutomaticReviewThreads(threads) {
     const lastAutomaticComment = Math.max(...automaticCommentIndexes);
     return !comments
       .slice(lastAutomaticComment + 1)
-      .some(comment => !isAutomaticReviewAuthor(authorLogin(comment)));
+      .some(
+        comment =>
+          !isAutomaticReviewAuthor(authorLogin(comment)) &&
+          hasExplicitReviewDisposition(comment)
+      );
   });
 }
 
@@ -149,7 +183,7 @@ export function pullRequestCompletionProblems({
   if (unprocessedThreads.length) {
     problems.push(
       unprocessedThreads.length +
-        ' automatic review thread(s) still need a resolution or human disposition.'
+        ` automatic review thread(s) still need a resolution or explicit ${REVIEW_DISPOSITION_MARKER} disposition.`
     );
   }
   return problems;

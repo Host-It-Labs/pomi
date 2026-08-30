@@ -780,6 +780,7 @@ test('merged consolidations audit already-closed source PRs', async () => {
   const sourcePull = {
     number: 44,
     state: 'closed',
+    merged_at: '2026-08-30T17:28:54Z',
     user: { login: 'pomi-radar[bot]' },
     body: marker('pomi-radar-source:v1', {
       version: 1,
@@ -811,6 +812,47 @@ test('merged consolidations audit already-closed source PRs', async () => {
         alreadyClosed: [44],
       });
       assert.equal(state.comments.get(44).length, 1);
+    }
+  );
+});
+
+test('merged consolidations reject a source closed without merging', async () => {
+  const event = consolidationEvent();
+  const sourcePull = {
+    number: 44,
+    state: 'closed',
+    merged_at: null,
+    user: { login: 'pomi-radar[bot]' },
+    body: marker('pomi-radar-source:v1', {
+      version: 1,
+      track: 'feature',
+      issues: [33],
+    }),
+    base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+    head: {
+      sha: 'b'.repeat(40),
+      repo: { full_name: 'Host-It-Labs/pomi' },
+    },
+  };
+  await withFakeConsolidationGithub(
+    {
+      event,
+      issue: {
+        number: 33,
+        state: 'open',
+        body: marker('pomi-radar:v1', { version: 1 }),
+        labels: [{ name: 'radar:feature' }, { name: 'radar:in-review' }],
+      },
+      sourcePulls: [sourcePull],
+      comparisonStatus: 'ahead',
+    },
+    async (state, currentEvent) => {
+      await assert.rejects(
+        consolidationMerged(currentEvent),
+        /must remain open or already be merged/
+      );
+      assert.equal(state.comments.get(33).length, 0);
+      assert.equal(state.comments.get(44).length, 0);
     }
   );
 });

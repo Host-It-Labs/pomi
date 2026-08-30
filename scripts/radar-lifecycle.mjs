@@ -1857,10 +1857,21 @@ async function validateConsolidationSourcePulls(
       representedIssueNumbers.add(issueNumber);
     const independentlyMerged =
       sourcePull.state === 'closed' && Boolean(sourcePull.merged_at);
+    const closedByThisConsolidation =
+      options?.allowLifecycleClosed === true &&
+      sourcePull.state === 'closed' &&
+      !sourcePull.merged_at &&
+      (await paginate(`/issues/${sourcePrNumber}/comments`)).some(
+        comment =>
+          isRadarBotComment(comment) &&
+          eventRevision(comment)?.id ===
+            `consolidation:${consolidationNumber}:${mergeSha}:source-pr:${sourcePrNumber}`
+      );
     if (
       options?.requireOpen === true &&
       sourcePull.state !== 'open' &&
-      !independentlyMerged
+      !independentlyMerged &&
+      !closedByThisConsolidation
     ) {
       throw new Error(
         `Source PR #${sourcePrNumber} must remain open or already be merged with its exact head contained in the consolidation.`
@@ -2071,7 +2082,12 @@ export async function consolidationMerged(event, options) {
     issueNumbers,
     pull.number,
     mergeSha,
-    { ...options, containmentSha }
+    {
+      ...options,
+      containmentSha,
+      requireOpen: !allowLegacy,
+      allowLifecycleClosed: !allowLegacy,
+    }
   );
   const claimContexts = new Map();
   for (const issue of issues) {
