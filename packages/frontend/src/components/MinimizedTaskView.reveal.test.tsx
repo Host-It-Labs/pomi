@@ -1,4 +1,5 @@
 import type { Preferences, Task } from '@pomi/shared';
+import type { ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   requestTaskCreate: vi.fn(),
   requestTaskEdit: vi.fn(),
   clearTaskEditRequest: vi.fn(),
+  requestTaskItemReveal: vi.fn(),
   showToastFromStore: vi.fn(),
 }));
 
@@ -77,6 +79,7 @@ vi.mock('../stores/uiStore', () => ({
       taskEditRequestedId: () => null,
       requestTaskEdit: () => mocks.requestTaskEdit,
       clearTaskEditRequest: () => mocks.clearTaskEditRequest,
+      requestTaskItemReveal: () => mocks.requestTaskItemReveal,
       taskSearchFocusRequest: () => 0,
     },
   },
@@ -134,7 +137,11 @@ vi.mock('./tasks/TaskTimerTypeBadge', () => ({
 }));
 
 vi.mock('./tasks/TaskQuickCreateRow', () => ({
-  TaskQuickCreateRow: () => null,
+  TaskQuickCreateRow: ({ onCancel }: { onCancel?: () => void }) => (
+    <button type="button" onClick={onCancel}>
+      Cancel quick create
+    </button>
+  ),
 }));
 
 vi.mock('./tasks/TaskDescriptionModal', () => ({
@@ -171,7 +178,19 @@ vi.mock('./ui/Button', () => ({
 }));
 
 vi.mock('./ui/CompactIconButton', () => ({
-  CompactIconButton: () => null,
+  CompactIconButton: ({
+    children,
+    label,
+    onClick,
+  }: {
+    children: ReactNode;
+    label: string;
+    onClick: () => void;
+  }) => (
+    <button type="button" aria-label={label} onClick={onClick}>
+      {children}
+    </button>
+  ),
 }));
 
 vi.mock('./ui/IntentionEmojiPair', () => ({
@@ -209,6 +228,35 @@ beforeEach(() => {
 });
 
 describe('MinimizedTaskView updated-task reveal', () => {
+  it('keeps one Add task entry point and exposes a non-interactive empty state', () => {
+    mocks.tasks = [];
+
+    render(<MinimizedTaskView visibleRowLimit={3} />);
+
+    expect(screen.getAllByRole('button', { name: 'Add task' })).toHaveLength(1);
+    expect(screen.getByText('No tasks')).toBeInTheDocument();
+  });
+
+  it('returns to the mini view through the visible quick-create cancel control', () => {
+    render(<MinimizedTaskView compact visibleRowLimit={3} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
+    expect(
+      screen.getByRole('button', { name: 'Cancel quick create' })
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Cancel quick create' })
+    );
+
+    expect(
+      screen.queryByRole('button', { name: 'Cancel quick create' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Add task' })
+    ).toBeInTheDocument();
+  });
+
   it.each([true, false])(
     'moves to the updated Task page in the %s timer surface',
     async compact => {
@@ -277,6 +325,7 @@ function task(id: string, order: number): Task {
     priority: 'normal',
     status: 'active',
     timerType: 'work',
+    customDuration: null,
     pinnedAt: null,
     intentionSlug: null,
     subIntentionSlug: null,

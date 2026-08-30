@@ -1,5 +1,9 @@
-import { TASK_PRIORITIES, TASK_STATUSES } from '@pomi/shared';
-import { describe, expect, it } from 'vitest';
+import {
+  NOTIFICATION_GROUPS,
+  TASK_PRIORITIES,
+  TASK_STATUSES,
+} from '@pomi/shared';
+import { describe, expect, it, vi } from 'vitest';
 import { TaskNotificationService } from '../../src/tasks/task-notification.service';
 
 type TaskRecord = Record<string, any>;
@@ -34,9 +38,26 @@ function createTask(overrides: Record<string, unknown> = {}): TaskRecord {
   };
 }
 
-function createService(tasks: TaskRecord[], preferences = createPreferences()) {
+function createService(
+  tasks: TaskRecord[],
+  preferences = createPreferences(),
+  getPreferencesOrNotificationOverrides:
+    | ((userId: string) => Promise<ReturnType<typeof createPreferences>>)
+    | Record<string, unknown> = {}
+) {
   const sent: TaskRecord[] = [];
   const clientEvents: TaskRecord[] = [];
+  const getPreferences =
+    typeof getPreferencesOrNotificationOverrides === 'function'
+      ? getPreferencesOrNotificationOverrides
+      : undefined;
+  const notificationOverrides =
+    typeof getPreferencesOrNotificationOverrides === 'function'
+      ? {}
+      : getPreferencesOrNotificationOverrides;
+  const getPreferencesMock = vi.fn(
+    getPreferences ?? (async (_userId: string) => preferences)
+  );
   const query = {
     where: () => query,
     andWhere: () => query,
@@ -56,7 +77,7 @@ function createService(tasks: TaskRecord[], preferences = createPreferences()) {
         if (task) Object.assign(task, updates);
       },
     } as never,
-    { getPreferences: async () => preferences } as never,
+    { getPreferences: getPreferencesMock } as never,
     {
       sendTaskNotification: async (
         title: string,
@@ -65,6 +86,7 @@ function createService(tasks: TaskRecord[], preferences = createPreferences()) {
         priority: number,
         tags: string[]
       ) => sent.push({ title, message, userId, priority, tags }),
+      ...notificationOverrides,
     } as never,
     {
       onClientNotification: {
@@ -72,10 +94,82 @@ function createService(tasks: TaskRecord[], preferences = createPreferences()) {
       },
     } as never
   );
-  return { service, sent, clientEvents, preferences };
+  return { service, sent, clientEvents, preferences, getPreferencesMock };
 }
 
 describe('TaskNotificationService', () => {
+  it('reads preferences once per user and keeps each user task order isolated', async () => {
+    const tasks = [
+      createTask({
+        id: 'user-1-first',
+        userId: 'user-1',
+        priority: TASK_PRIORITIES.HIGH,
+      }),
+      createTask({
+        id: 'user-2-first',
+        userId: 'user-2',
+        priority: TASK_PRIORITIES.HIGH,
+      }),
+      createTask({
+        id: 'user-1-second',
+        userId: 'user-1',
+        priority: TASK_PRIORITIES.HIGH,
+      }),
+      createTask({
+        id: 'user-2-second',
+        userId: 'user-2',
+        priority: TASK_PRIORITIES.HIGH,
+      }),
+    ];
+    const fixture = createService(
+      tasks,
+      createPreferences({ pushNotifications: false }),
+      async () => createPreferences({ pushNotifications: false })
+    );
+
+    await fixture.service.scanDueTasks(new Date('2026-06-17T09:00:00.000Z'));
+
+    expect(fixture.getPreferencesMock).toHaveBeenCalledTimes(2);
+    expect(fixture.getPreferencesMock).toHaveBeenCalledWith('user-1');
+    expect(fixture.getPreferencesMock).toHaveBeenCalledWith('user-2');
+    expect(
+      fixture.clientEvents
+        .filter(item => item.userId === 'user-1')
+        .map(item => item.task.id)
+    ).toEqual(['user-1-first', 'user-1-second']);
+    expect(
+      fixture.clientEvents
+        .filter(item => item.userId === 'user-2')
+        .map(item => item.task.id)
+    ).toEqual(['user-2-first', 'user-2-second']);
+  });
+
+  it('continues processing other users when one preference read fails', async () => {
+    const fixture = createService(
+      [
+        createTask({ id: 'failed-user-task', userId: 'failed-user' }),
+        createTask({
+          id: 'healthy-user-task',
+          userId: 'healthy-user',
+          priority: TASK_PRIORITIES.HIGH,
+        }),
+      ],
+      createPreferences({ pushNotifications: false }),
+      async userId => {
+        if (userId === 'failed-user')
+          throw new Error('preferences unavailable');
+        return createPreferences({ pushNotifications: false });
+      }
+    );
+
+    await fixture.service.scanDueTasks(new Date('2026-06-17T09:00:00.000Z'));
+
+    expect(fixture.getPreferencesMock).toHaveBeenCalledTimes(2);
+    expect(fixture.clientEvents.map(item => item.task.id)).toEqual([
+      'healthy-user-task',
+    ]);
+  });
+
   it('skips a scan cleanly when migrations or storage are unavailable', async () => {
     const service = new TaskNotificationService(
       {
@@ -106,9 +200,11 @@ describe('TaskNotificationService', () => {
   });
 
   it('sends reminders for contextual follow-ups', async () => {
-    const { service, sent } = createService([
-      createTask({ itemKind: 'followUp', priority: TASK_PRIORITIES.HIGH }),
-    ]);
+    const { service, sent } = createService(
+      [createTask({ itemKind: 'followUp', priority: TASK_PRIORITIES.HIGH })],
+      undefined,
+      {}
+    );
 
     await service.scanDueTasks(new Date('2026-06-17T09:00:00.000Z'));
 
@@ -117,9 +213,9 @@ describe('TaskNotificationService', () => {
 
   it('sends one normal reminder when a selected Task priority becomes due', async () => {
     const tasks = [createTask({ priority: TASK_PRIORITIES.HIGH })];
-    const first = createService(tasks);
+    const first = createService(tasks, undefined, {});
     await first.service.scanDueTasks(new Date('2026-06-17T09:00:00.000Z'));
-    const restarted = createService(tasks);
+    const restarted = createService(tasks, undefined, {});
     await restarted.service.scanDueTasks(new Date('2026-06-17T09:05:00.000Z'));
 
     expect(first.sent).toEqual([
@@ -129,15 +225,49 @@ describe('TaskNotificationService', () => {
       }),
     ]);
     expect(first.clientEvents.map(item => item.type)).toEqual(['taskReminder']);
+    expect(first.clientEvents[0]).toMatchObject({
+      notificationGroup: NOTIFICATION_GROUPS.TASK,
+    });
     expect(restarted.sent).toHaveLength(0);
     expect(restarted.clientEvents).toHaveLength(0);
     expect(tasks[0].lastReminderKey).toBe('task-1:2026-06-17:09:00');
   });
 
+  it('emits the client reminder even when push delivery fails', async () => {
+    const tasks = [createTask({ priority: TASK_PRIORITIES.HIGH })];
+    const sendTaskNotification = vi.fn(async () => false);
+    const fixture = createService(tasks, createPreferences(), {
+      sendTaskNotification,
+    });
+
+    await fixture.service.scanDueTasks(new Date('2026-06-17T09:00:00.000Z'));
+    await fixture.service.scanDueTasks(new Date('2026-06-17T09:01:00.000Z'));
+
+    expect(sendTaskNotification).toHaveBeenCalledOnce();
+    expect(tasks[0].lastReminderKey).toBe('task-1:2026-06-17:09:00');
+    expect(fixture.clientEvents).toHaveLength(1);
+  });
+
+  it('keeps urgent repeats on the client path when push delivery fails', async () => {
+    const tasks = [createTask()];
+    const sendTaskNotification = vi.fn(async () => false);
+    const fixture = createService(tasks, createPreferences(), {
+      sendTaskNotification,
+    });
+
+    await fixture.service.scanDueTasks(new Date('2026-06-17T09:00:00.000Z'));
+    await fixture.service.scanDueTasks(new Date('2026-06-17T09:30:00.000Z'));
+
+    expect(sendTaskNotification).toHaveBeenCalledTimes(2);
+    expect(tasks[0].lastReminderKey).toBe('task-1:2026-06-17:09:00');
+    expect(fixture.clientEvents).toHaveLength(2);
+  });
+
   it('uses the account language for task reminders', async () => {
     const fixture = createService(
       [createTask({ priority: TASK_PRIORITIES.HIGH })],
-      createPreferences({ language: 'fr' })
+      createPreferences({ language: 'fr' }),
+      {}
     );
 
     await fixture.service.scanDueTasks(new Date('2026-06-17T09:00:00.000Z'));
@@ -151,7 +281,8 @@ describe('TaskNotificationService', () => {
   it('allows an empty priority selection to disable Task reminders', async () => {
     const fixture = createService(
       [createTask()],
-      createPreferences({ taskReminderPriorities: [] })
+      createPreferences({ taskReminderPriorities: [] }),
+      {}
     );
 
     await fixture.service.scanDueTasks(new Date('2026-06-17T10:00:00.000Z'));
@@ -162,7 +293,7 @@ describe('TaskNotificationService', () => {
 
   it('applies live Task priority changes on the next scan', async () => {
     const task = createTask({ priority: TASK_PRIORITIES.NORMAL });
-    const fixture = createService([task]);
+    const fixture = createService([task], undefined, {});
 
     await fixture.service.scanDueTasks(new Date('2026-06-17T09:00:00.000Z'));
     task.priority = TASK_PRIORITIES.HIGH;
@@ -173,7 +304,11 @@ describe('TaskNotificationService', () => {
   });
 
   it('defaults date-only reminders to 10:00 in the user time zone', async () => {
-    const fixture = createService([createTask({ dueTime: null })]);
+    const fixture = createService(
+      [createTask({ dueTime: null })],
+      undefined,
+      {}
+    );
     await fixture.service.scanDueTasks(new Date('2026-06-17T09:59:00.000Z'));
     await fixture.service.scanDueTasks(new Date('2026-06-17T10:00:00.000Z'));
     expect(fixture.sent).toHaveLength(1);
@@ -182,7 +317,8 @@ describe('TaskNotificationService', () => {
   it('uses the user time zone for due instants', async () => {
     const fixture = createService(
       [createTask({ dueTime: '10:00' })],
-      createPreferences({ timeZone: 'America/New_York' })
+      createPreferences({ timeZone: 'America/New_York' }),
+      {}
     );
     await fixture.service.scanDueTasks(new Date('2026-06-17T13:59:00.000Z'));
     await fixture.service.scanDueTasks(new Date('2026-06-17T14:00:00.000Z'));
@@ -190,7 +326,7 @@ describe('TaskNotificationService', () => {
   });
 
   it('repeats the normal urgent reminder path at the selected interval', async () => {
-    const fixture = createService([createTask()]);
+    const fixture = createService([createTask()], undefined, {});
     for (const time of ['09:00', '09:29', '09:30', '09:59', '10:00']) {
       await fixture.service.scanDueTasks(
         new Date(`2026-06-17T${time}:00.000Z`)
@@ -223,7 +359,7 @@ describe('TaskNotificationService', () => {
     ],
   ])('stops repeating when the Task is %s', async (_label, stopTask) => {
     const task = createTask();
-    const fixture = createService([task]);
+    const fixture = createService([task], undefined, {});
     await fixture.service.scanDueTasks(new Date('2026-06-17T09:00:00.000Z'));
     stopTask(task);
     await fixture.service.scanDueTasks(new Date('2026-06-17T09:30:00.000Z'));
@@ -240,7 +376,7 @@ describe('TaskNotificationService', () => {
     ],
     ['repetition is disabled', { taskUrgentReminderRepeatEnabled: false }],
   ])('does not repeat when %s', async (_label, preferenceUpdate) => {
-    const fixture = createService([createTask()]);
+    const fixture = createService([createTask()], undefined, {});
     await fixture.service.scanDueTasks(new Date('2026-06-17T09:00:00.000Z'));
     Object.assign(fixture.preferences, preferenceUpdate);
     await fixture.service.scanDueTasks(new Date('2026-06-17T09:30:00.000Z'));
@@ -251,7 +387,8 @@ describe('TaskNotificationService', () => {
   it('keeps the ordinary client reminder path when push is disabled', async () => {
     const fixture = createService(
       [createTask()],
-      createPreferences({ pushNotifications: false })
+      createPreferences({ pushNotifications: false }),
+      {}
     );
     await fixture.service.scanDueTasks(new Date('2026-06-17T09:00:00.000Z'));
     await fixture.service.scanDueTasks(new Date('2026-06-17T09:30:00.000Z'));

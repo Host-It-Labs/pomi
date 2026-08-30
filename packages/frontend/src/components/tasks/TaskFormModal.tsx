@@ -15,7 +15,7 @@ import {
   TIMER_TYPES,
 } from '@pomi/shared/src/constants';
 import clsx from 'clsx';
-import { FaArchive } from 'react-icons/fa';
+import { FaArchive, FaClock } from 'react-icons/fa';
 import {
   type FormEvent,
   type ReactNode,
@@ -30,6 +30,7 @@ import { Modal } from '../ui/Modal';
 import { UnsavedChangesDialog } from '../ui/UnsavedChangesDialog';
 import { showToastFromStore } from '../toast/ToastContext';
 import { useI18n } from '../../i18n';
+import { MILLISECONDS_PER_MINUTE } from '../../constants/time';
 import {
   buildSimpleTaskRecurrence,
   parseSimpleTaskRecurrence,
@@ -37,6 +38,10 @@ import {
   type TaskRecurrenceUnit,
 } from './TaskRecurrenceFields';
 import { TaskArchiveConfirmationModal } from './TaskArchiveConfirmationModal';
+import {
+  IntentionAssignmentPicker,
+  type IntentionAssignmentPickerChange,
+} from '../intentions/IntentionAssignmentPicker';
 
 const TASK_PRIORITY_OPTIONS: Array<{ value: TaskPriority }> = [
   { value: TASK_PRIORITIES.LOW },
@@ -64,6 +69,26 @@ const getDefaultDueDate = (preferences: Preferences | null | undefined) => {
   return date.toLocaleDateString('en-CA');
 };
 
+const getDefaultTimerDurationMinutes = (
+  preferences: Preferences | null | undefined,
+  timerType: TimerTypes
+) => {
+  const duration =
+    timerType === TIMER_TYPES.WORK
+      ? preferences?.workTimerDuration
+      : timerType === TIMER_TYPES.BREAK
+        ? preferences?.breakTimerDuration
+        : preferences?.sessionLongBreakDuration;
+  return Math.round(
+    (duration ??
+      (timerType === TIMER_TYPES.WORK
+        ? 25 * MILLISECONDS_PER_MINUTE
+        : timerType === TIMER_TYPES.BREAK
+          ? 5 * MILLISECONDS_PER_MINUTE
+          : 15 * MILLISECONDS_PER_MINUTE)) / MILLISECONDS_PER_MINUTE
+  );
+};
+
 type ListItemFormPayload = {
   title: string;
   dueDate: string | null;
@@ -77,6 +102,7 @@ type TaskFormPayload = {
   dueTime?: string | null;
   priority?: TaskPriority;
   timerType?: TimerTypes;
+  customDuration?: number | null;
   intentionSlug?: string | null;
   subIntentionSlug?: string | null;
   recurrenceRule?: string | null;
@@ -140,7 +166,10 @@ export function TaskFormModal({
   onConvertToListItem,
 }: TaskFormModalProps) {
   const { t } = useI18n();
-  const availableLists = task?.followUpSourceTaskId ? [] : (lists ?? []);
+  const availableLists = useMemo(
+    () => (task?.followUpSourceTaskId ? [] : (lists ?? [])),
+    [lists, task?.followUpSourceTaskId]
+  );
   const currentTimerType = timer?.type;
   const currentTimerFocusedTaskCount = timer?.focusedTaskIds?.length ?? 0;
   const currentTimerIntention = timer?.intention ?? '';
@@ -158,9 +187,11 @@ export function TaskFormModal({
   const [timerType, setTimerType] = useState<TimerTypes>(
     defaultTimerType ?? TIMER_TYPES.WORK
   );
+  const [customDurationMinutes, setCustomDurationMinutes] = useState('');
   const [intentionSlug, setIntentionSlug] = useState('');
   const [subIntentionSlug, setSubIntentionSlug] = useState('');
   const [selectedListId, setSelectedListId] = useState('');
+  const [isDestinationPickerOpen, setIsDestinationPickerOpen] = useState(false);
   const [recurrenceInterval, setRecurrenceInterval] = useState('');
   const [recurrenceUnit, setRecurrenceUnit] =
     useState<TaskRecurrenceUnit>('DAILY');
@@ -275,15 +306,44 @@ export function TaskFormModal({
   const selectedList =
     availableLists.find(list => list.id === selectedListId) ?? null;
   const isListDestination = selectedList !== null;
-  const destinationValue = selectedListId
-    ? `list:${selectedListId}`
-    : intentionSlug
-      ? `intention:${intentionSlug}:${subIntentionSlug}`
-      : 'general';
+  const destinationOptions = useMemo(
+    () => [
+      ...eligibleIntentions.map(intention => ({
+        value: intention.slug,
+        title: intention.title,
+        emoji: intention.emoji,
+        group: t('intention.intentions'),
+      })),
+      ...availableLists.map(list => ({
+        value: list.id,
+        title: list.title,
+        emoji: list.emoji ?? '📋',
+        assignmentType: 'list' as const,
+        group: t('intention.lists'),
+      })),
+    ],
+    [availableLists, eligibleIntentions, t]
+  );
+
+  const handleDestinationChange = (change: IntentionAssignmentPickerChange) => {
+    if (change.reason === 'list' && change.listId) {
+      setSelectedListId(change.listId);
+      setIntentionSlug('');
+      setSubIntentionSlug('');
+      return;
+    }
+    const nextIntentionSlug = change.intentionSlugs[0] ?? '';
+    setSelectedListId('');
+    setIntentionSlug(nextIntentionSlug);
+    setSubIntentionSlug(
+      nextIntentionSlug ? (change.subIntentions[nextIntentionSlug] ?? '') : ''
+    );
+  };
 
   useEffect(() => {
     if (!isOpen) {
       initializedFormKeyRef.current = null;
+      setIsDestinationPickerOpen(false);
       return;
     }
 
@@ -309,6 +369,11 @@ export function TaskFormModal({
       setDueTime(task.dueTime ?? '');
       setPriority(task.priority);
       setTimerType(task.timerType);
+      setCustomDurationMinutes(
+        task.customDuration
+          ? String(Math.round(task.customDuration / MILLISECONDS_PER_MINUTE))
+          : ''
+      );
       setIntentionSlug(task.intentionSlug ?? '');
       setSubIntentionSlug(task.subIntentionSlug ?? '');
       setSelectedListId('');
@@ -342,6 +407,9 @@ export function TaskFormModal({
           dueTime: task.dueTime ?? '',
           priority: task.priority,
           timerType: task.timerType,
+          customDurationMinutes: task.customDuration
+            ? String(Math.round(task.customDuration / MILLISECONDS_PER_MINUTE))
+            : '',
           intentionSlug: task.intentionSlug ?? '',
           subIntentionSlug: task.subIntentionSlug ?? '',
           recurrenceInterval: recurrence.interval,
@@ -407,6 +475,7 @@ export function TaskFormModal({
     setDueTime('');
     setPriority(TASK_PRIORITIES.NORMAL);
     setTimerType(nextTimerType);
+    setCustomDurationMinutes('');
     setIntentionSlug(hasDefaultIntention ? defaultIntention : '');
     setSubIntentionSlug(defaultSubIntention);
     setSelectedListId('');
@@ -440,6 +509,7 @@ export function TaskFormModal({
         dueTime: '',
         priority: TASK_PRIORITIES.NORMAL,
         timerType: nextTimerType,
+        customDurationMinutes: '',
         intentionSlug: hasDefaultIntention ? defaultIntention : '',
         subIntentionSlug: defaultSubIntention,
         recurrenceInterval: '',
@@ -564,6 +634,21 @@ export function TaskFormModal({
       );
       return;
     }
+    const parsedCustomDurationMinutes = customDurationMinutes.trim()
+      ? Number(customDurationMinutes)
+      : null;
+    if (
+      parsedCustomDurationMinutes !== null &&
+      (!Number.isInteger(parsedCustomDurationMinutes) ||
+        parsedCustomDurationMinutes < 1)
+    ) {
+      showToastFromStore(t('task.customDurationInvalid'), 'error');
+      return;
+    }
+    const customDuration =
+      parsedCustomDurationMinutes === null
+        ? null
+        : parsedCustomDurationMinutes * MILLISECONDS_PER_MINUTE;
     const taskPayload = {
       title: title.trim(),
       description: description.trim() || null,
@@ -571,6 +656,7 @@ export function TaskFormModal({
       dueTime: dueTime || null,
       priority,
       timerType,
+      customDuration,
       intentionSlug: intentionSlug || null,
       subIntentionSlug: subIntentionSlug || null,
       recurrenceRule: recurrence.rule,
@@ -621,6 +707,7 @@ export function TaskFormModal({
     dueTime,
     priority,
     timerType,
+    customDurationMinutes,
     intentionSlug,
     subIntentionSlug,
     recurrenceInterval,
@@ -736,68 +823,33 @@ export function TaskFormModal({
                   label={t('task.intentionOrList')}
                   help={t('task.chooseGeneralIntentionList')}
                 >
-                  <select
-                    aria-label={t('task.intentionOrList')}
-                    data-testid="task-intention-dropdown"
-                    value={destinationValue}
+                  <IntentionAssignmentPicker
+                    label={t('task.intentionOrList')}
+                    showLabel={false}
+                    options={destinationOptions}
+                    subIntentionsByParent={subIntentionsByParent}
+                    selectedIntentions={intentionSlug ? [intentionSlug] : []}
+                    selectedSubIntentions={
+                      intentionSlug && subIntentionSlug
+                        ? { [intentionSlug]: subIntentionSlug }
+                        : {}
+                    }
+                    selectedListId={selectedListId || null}
+                    mode="single"
+                    isOpen={isDestinationPickerOpen}
+                    onOpenChange={setIsDestinationPickerOpen}
+                    onChange={handleDestinationChange}
+                    allowClear
+                    clearLabel={t('task.general')}
+                    emptyLabel={t('task.general')}
+                    noSelectionLabel={t('task.general')}
+                    searchAriaLabel={t('task.intentionOrList')}
+                    searchPlaceholder={t('common.search')}
+                    maxHeight={260}
                     disabled={saving}
-                    className={selectClassName}
-                    onChange={event => {
-                      const value = event.target.value;
-                      if (value.startsWith('list:')) {
-                        setSelectedListId(value.slice('list:'.length));
-                        setIntentionSlug('');
-                        setSubIntentionSlug('');
-                        return;
-                      }
-                      setSelectedListId('');
-                      if (value === 'general') {
-                        setIntentionSlug('');
-                        setSubIntentionSlug('');
-                        return;
-                      }
-                      const [, parentSlug, childSlug = ''] = value.split(':');
-                      setIntentionSlug(parentSlug ?? '');
-                      setSubIntentionSlug(childSlug);
-                    }}
-                  >
-                    <option value="general">{t('task.general')}</option>
-                    {eligibleIntentions.length > 0 && (
-                      <optgroup label={t('intention.intentions')}>
-                        {eligibleIntentions.flatMap(intention => {
-                          const children =
-                            subIntentionsByParent[intention.slug] ?? [];
-                          return children.length > 0
-                            ? children.map(child => (
-                                <option
-                                  key={`${intention.slug}:${child.slug}`}
-                                  value={`intention:${intention.slug}:${child.slug}`}
-                                >
-                                  {intention.emoji} {intention.title} ›{' '}
-                                  {child.emoji} {child.title}
-                                </option>
-                              ))
-                            : [
-                                <option
-                                  key={intention.slug}
-                                  value={`intention:${intention.slug}:`}
-                                >
-                                  {intention.emoji} {intention.title}
-                                </option>,
-                              ];
-                        })}
-                      </optgroup>
-                    )}
-                    {availableLists.length > 0 && (
-                      <optgroup label={t('intention.lists')}>
-                        {availableLists.map(list => (
-                          <option key={list.id} value={`list:${list.id}`}>
-                            {list.emoji ?? '📋'} {list.title}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
+                    triggerClassName="h-[42px] text-sm"
+                    triggerTestId="task-intention-dropdown"
+                  />
                 </Field>
 
                 {!isListDestination && (
@@ -829,6 +881,36 @@ export function TaskFormModal({
                         {t('common.longBreak')}
                       </option>
                     </select>
+                  </Field>
+                )}
+
+                {!isListDestination && (
+                  <Field
+                    label={t('task.customDuration')}
+                    help={t('task.customDurationHelp')}
+                  >
+                    <div className="flex items-center gap-2">
+                      <FaClock className="text-slate-500" size={12} />
+                      <Input
+                        aria-label={t('task.customDuration')}
+                        type="number"
+                        min={1}
+                        max={240}
+                        step={1}
+                        value={customDurationMinutes}
+                        disabled={saving}
+                        onChange={event =>
+                          setCustomDurationMinutes(event.target.value)
+                        }
+                        placeholder={String(
+                          getDefaultTimerDurationMinutes(preferences, timerType)
+                        )}
+                        className="w-20 text-center"
+                      />
+                      <span className="text-xs text-slate-400">
+                        {t('common.min')}
+                      </span>
+                    </div>
                   </Field>
                 )}
 
@@ -1249,6 +1331,7 @@ function serializeTaskFormState(state: {
   dueTime: string;
   priority: TaskPriority;
   timerType: TimerTypes;
+  customDurationMinutes: string;
   intentionSlug: string;
   subIntentionSlug: string;
   recurrenceInterval: string;

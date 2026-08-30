@@ -2,6 +2,8 @@ import { TIMER_TYPES } from '@pomi/shared/src/constants';
 
 export const NOTIFICATION_MAX_AGE_MS = 60000;
 export const NOTIFICATION_SOUND_DEBOUNCE_MS = 2000;
+export const MACOS_NOTIFICATION_SETTINGS_URL =
+  'x-apple.systempreferences:com.apple.Notifications-Settings.extension';
 
 export const NOTIFICATION_SOUNDS = {
   TIMER_WARNING: 'timer-warning.mp3',

@@ -40,6 +40,19 @@ merge updates, and production-release closure.
 - Use `Related #N` in source and consolidation PRs. Never use a closing keyword.
 - Accept moves to `radar:accepted`; Ask moves to `radar:needs-agent`; Reject
   requires a reason, moves to `radar:rejected`, and closes as not planned.
+- When implementation verification finds complete existing coverage, move the
+  issue to `radar:already-implemented` with concrete evidence and leave it open
+  for user confirmation. Confirming closes it as completed; reconsidering
+  returns it to `radar:accepted` with the user's required reason.
+- The `mark-already-implemented` payload must include `issueNumber`,
+  `summary`, `evidence`, `validation`, `gap`, and an explicit ISO `verifiedAt`.
+  The Radar presents these as “Why no new implementation is needed”,
+  “Evidence”, “How it was checked”, and “What could still be missing”. The
+  command provisions its
+  lifecycle label when needed and closes any open source PR containing the
+  issue because its branch may still contain the detached implementation. Any
+  open consolidation that contains the issue is also closed for the same
+  reason; remaining issues require fresh source and consolidation PRs.
 - A consolidation merge moves included canonical issues to
   `radar:ready-for-release`. Only a successful, non-prerelease production job
   closes included issues as `radar:released` and resolves mapped Sentry groups.
@@ -118,11 +131,31 @@ record the remaining choice and recommended assumption, move to
 
 ## Scheduled preflight
 
+Worktree ownership is a hard concurrency gate. Each automation run has one
+mutable worktree owner. Parent and child automations may share a path only when
+the scheduler guarantees that their runs cannot overlap; a one-hour offset is
+not itself a lock. If two active automations are configured for the same path
+without that guarantee, pause or reconfigure them before running. Never use a
+same-directory or shared-environment fork for a coding or file-writing
+subagent. Writer subagents use separate git worktrees and branches; read-only
+subagents must be explicitly labeled and must not edit, generate artifacts,
+install dependencies, or run commands with file-writing side effects.
+
 Before lifecycle preflight, verify the automation is in its dedicated worktree
-and expected branch, and require a clean worktree. Fetch the branch and
+and expected branch, and require a clean worktree. Capture the resolved current
+path, branch, complete porcelain status, and registered worktrees before any
+checkout or delegation; ignore only macOS `.DS_Store`. If a gate fails, stop and
+report the exact path, branch, and status entries. Do not switch branches,
+stash, reset, clean, checkout, commit, or delegate to self-heal a dirty or wrong
+worktree. Fetch the branch and
 `origin/main`; fast-forward when the local branch is behind its remote, merge
 `origin/main` when needed, and stop without discarding work on divergence or a
 merge conflict. An ahead-only automation branch is valid and must be preserved.
+
+A single broad diff for one logical batch does not require local checkpoints.
+Preserve it on its owning branch and recover it as one unit if the run is
+interrupted; worktree isolation and single-writer ownership are the safety
+boundaries.
 
 After branch synchronization, run `node scripts/radar-lifecycle.mjs preflight`
 before research, builds, or other writes. Reconcile duplicates first. Stop when

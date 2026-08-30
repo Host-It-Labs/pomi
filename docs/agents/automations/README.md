@@ -22,6 +22,21 @@ Planning parents use `gpt-5.6-sol` with high reasoning. Implementation children
 use `gpt-5.6-luna` with max reasoning. All six schedules remain paused until
 their App and track preflight gates are green.
 
+## Worktree ownership
+
+Each run has one mutable worktree owner. Parent and child schedules must not
+overlap in the same path unless the scheduler provides an explicit
+non-overlap guarantee; the one-hour cadence offset is not a lock. Before
+reactivating a schedule, verify its runtime worktree assignment and pause or
+reconfigure any conflicting pair.
+
+Never use a same-directory or shared-environment fork for a coding or
+file-writing subagent. Writer subagents use separate git worktrees and
+branches. Read-only subagents must be explicitly labeled, have no
+file-writing side effects, and stop after analysis. A broad diff from one
+logical batch does not require local checkpoints; isolation and single-writer
+ownership are the recovery boundaries.
+
 | Planning parent                        | Implementation child                  | Parent cadence | Child cadence |
 | -------------------------------------- | ------------------------------------- | -------------- | ------------- |
 | `pomi-parent-feature-and-bug-planning` | `pomi-daily-feature-and-bug-requests` | 00:30, 11:30   | 01:30, 12:30  |

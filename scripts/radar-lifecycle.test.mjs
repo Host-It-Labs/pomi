@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   acknowledgeAgentPass,
+  alreadyImplementedVerification,
   classifyMatch,
   consolidationMerged,
   dailyFeatureSlotPlan,
@@ -13,6 +14,7 @@ import {
   evidenceDelta,
   issueEnrichmentGaps,
   marker,
+  markAlreadyImplemented,
   nextLifecycleLabels,
   planClarification,
   preflightHasWork,
@@ -477,6 +479,59 @@ test('merged consolidations close contained source PRs and retry idempotently', 
   );
 });
 
+test('consolidation transitions respect another lifecycle claim for the issue', async () => {
+  const event = consolidationEvent();
+  const sourcePull = {
+    number: 44,
+    state: 'open',
+    user: { login: 'pomi-radar[bot]' },
+    body: marker('pomi-radar-source:v1', {
+      version: 1,
+      track: 'feature',
+      issues: [33],
+    }),
+    base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+    head: {
+      sha: 'b'.repeat(40),
+      repo: { full_name: 'Host-It-Labs/pomi' },
+    },
+  };
+  await withFakeConsolidationGithub(
+    {
+      event,
+      issue: {
+        number: 33,
+        state: 'open',
+        body: marker('pomi-radar:v1', { version: 1 }),
+        labels: [{ name: 'radar:feature' }, { name: 'radar:in-review' }],
+      },
+      sourcePulls: [sourcePull],
+      comparisonStatus: 'ahead',
+      comments: {
+        33: [
+          {
+            id: 1,
+            user: { login: 'pomi-radar[bot]' },
+            body: marker('pomi-radar-event:v1', {
+              id: 'already-implemented:33:pending',
+              expectedRevision: 0,
+              claimScope: 'radar:in-review:',
+            }),
+          },
+        ],
+      },
+    },
+    async (state, currentEvent) => {
+      await assert.rejects(
+        consolidationMerged(currentEvent),
+        /changed while the consolidation lifecycle transition was being recorded/
+      );
+      assert.equal(state.pulls.get(44).state, 'open');
+      assert.equal(state.comments.get(33).length, 1);
+    }
+  );
+});
+
 test('merged consolidations refuse to close a source outside merge ancestry', async () => {
   const event = consolidationEvent();
   const sourcePull = {
@@ -512,6 +567,7 @@ test('merged consolidations refuse to close a source outside merge ancestry', as
         /not contained in consolidation PR/
       );
       assert.equal(state.pulls.get(44).state, 'open');
+      assert.equal(state.comments.get(33).length, 0);
       assert.equal(state.comments.get(44).length, 0);
     }
   );
@@ -829,6 +885,13 @@ async function withFakeGithub(initialIssue, run) {
 async function withFakeGithubIssues(initialIssues, run, options = {}) {
   const previousFetch = globalThis.fetch;
   const previousToken = process.env.GITHUB_TOKEN;
+  const sourcePulls = options.pulls ?? [];
+  const comments = new Map(
+    [...initialIssues, ...sourcePulls].map(item => [item.number, []])
+  );
+  for (const [number, values] of Object.entries(options.comments ?? {})) {
+    comments.set(Number(number), globalThis.structuredClone(values));
+  }
   const state = {
     issues: new Map(
       initialIssues.map(issue => [
@@ -836,32 +899,62 @@ async function withFakeGithubIssues(initialIssues, run, options = {}) {
         globalThis.structuredClone(issue),
       ])
     ),
-    comments: new Map(initialIssues.map(issue => [issue.number, []])),
+    pulls: new Map(
+      sourcePulls.map(pull => [pull.number, globalThis.structuredClone(pull)])
+    ),
+    labels: new Set(options.labels ?? []),
+    comments,
     patches: [],
     failFinalDuplicatePatch: options.failFinalDuplicatePatch === true,
+    failFinalAlreadyImplementedPatch:
+      options.failFinalAlreadyImplementedPatch === true,
+    failConsolidationPatch: options.failConsolidationPatch === true,
   };
   process.env.GITHUB_TOKEN = 'test-token';
   globalThis.fetch = async (input, init = {}) => {
     const url = new URL(String(input));
     const method = init.method ?? 'GET';
-    const match = url.pathname.match(/\/issues\/(\d+)(\/comments)?$/);
+    if (url.pathname.endsWith('/labels') && method === 'GET')
+      return globalThis.Response.json(
+        [...state.labels].map(name => ({ name }))
+      );
+    if (url.pathname.endsWith('/labels') && method === 'POST') {
+      const label = JSON.parse(init.body);
+      state.labels.add(label.name);
+      return globalThis.Response.json(label);
+    }
+    if (url.pathname.endsWith('/pulls') && method === 'GET')
+      return globalThis.Response.json([...state.pulls.values()]);
+    const match = url.pathname.match(/\/(issues|pulls)\/(\d+)(\/comments)?$/);
     if (!match)
       return globalThis.Response.json(
         { message: `Unexpected ${method} ${url.pathname}` },
         { status: 500 }
       );
-    const issueNumber = Number(match[1]);
-    if (match[2] && method === 'GET')
+    const resource = match[1];
+    const issueNumber = Number(match[2]);
+    const collection = resource === 'issues' ? state.issues : state.pulls;
+    if (match[3] && method === 'GET')
       return globalThis.Response.json(state.comments.get(issueNumber) ?? []);
-    if (match[2] && method === 'POST') {
+    if (match[3] && method === 'POST') {
       const comments = state.comments.get(issueNumber) ?? [];
-      const comment = { id: comments.length + 1, ...JSON.parse(init.body) };
+      const comment = {
+        id: comments.length + 1,
+        user: { login: 'pomi-radar[bot]' },
+        ...JSON.parse(init.body),
+      };
       comments.push(comment);
       state.comments.set(issueNumber, comments);
+      const value = collection.get(issueNumber);
+      if (value?.updated_at) {
+        value.updated_at = new Date(
+          new Date(value.updated_at).getTime() + 1000
+        ).toISOString();
+      }
       return globalThis.Response.json(comment);
     }
     if (method === 'GET')
-      return globalThis.Response.json(state.issues.get(issueNumber));
+      return globalThis.Response.json(collection.get(issueNumber));
     if (method === 'PATCH') {
       const changes = JSON.parse(init.body);
       if (
@@ -875,16 +968,39 @@ async function withFakeGithubIssues(initialIssues, run, options = {}) {
           { status: 500 }
         );
       }
+      if (
+        state.failFinalAlreadyImplementedPatch &&
+        resource === 'issues' &&
+        changes.labels?.includes('radar:already-implemented')
+      ) {
+        state.failFinalAlreadyImplementedPatch = false;
+        return globalThis.Response.json(
+          { message: 'Injected final already-implemented patch failure' },
+          { status: 500 }
+        );
+      }
+      if (
+        state.failConsolidationPatch &&
+        resource === 'pulls' &&
+        changes.state === 'closed' &&
+        changes.body?.includes('pomi-radar-consolidation:v1')
+      ) {
+        state.failConsolidationPatch = false;
+        return globalThis.Response.json(
+          { message: 'Injected consolidation patch failure' },
+          { status: 500 }
+        );
+      }
       const normalized = {
         ...changes,
         ...(changes.labels
           ? { labels: changes.labels.map(name => ({ name })) }
           : {}),
       };
-      const issue = { ...state.issues.get(issueNumber), ...normalized };
-      state.issues.set(issueNumber, issue);
-      state.patches.push({ issueNumber, changes });
-      return globalThis.Response.json(issue);
+      const value = { ...collection.get(issueNumber), ...normalized };
+      collection.set(issueNumber, value);
+      state.patches.push({ resource, issueNumber, changes });
+      return globalThis.Response.json(value);
     }
     return globalThis.Response.json(
       { message: `Unexpected ${method} ${url.pathname}` },
@@ -909,6 +1025,7 @@ async function withFakeConsolidationGithub(
     comparisonAheadBy,
     commitTreeSha,
     commitParents,
+    comments: initialComments,
   },
   run
 ) {
@@ -927,6 +1044,8 @@ async function withFakeConsolidationGithub(
       number => [number, []]
     )
   );
+  for (const [number, values] of Object.entries(initialComments ?? {}))
+    comments.set(Number(number), globalThis.structuredClone(values));
   const state = { issues, pulls, comments, patches: [] };
   process.env.GITHUB_TOKEN = 'test-token';
   globalThis.fetch = async (input, init = {}) => {
@@ -941,7 +1060,11 @@ async function withFakeConsolidationGithub(
         return globalThis.Response.json(comments.get(number) ?? []);
       if (match[3] && method === 'POST') {
         const values = comments.get(number) ?? [];
-        const comment = { id: values.length + 1, ...JSON.parse(init.body) };
+        const comment = {
+          id: values.length + 1,
+          user: { login: 'pomi-radar[bot]' },
+          ...JSON.parse(init.body),
+        };
         values.push(comment);
         comments.set(number, values);
         return globalThis.Response.json(comment);
@@ -1063,6 +1186,490 @@ test('one active lifecycle label replaces any prior lifecycle labels', () => {
     ),
     ['radar:feature', 'radar:accepted']
   );
+});
+
+test('already-implemented verification requires an explicit remaining-gap statement', () => {
+  const verification = {
+    summary: 'Existing auth checks already cover the reported path.',
+    evidence:
+      'The shared guard rejects expired sessions before private data loads.',
+    validation: 'Focused expiration and refresh-failure tests pass.',
+    gap: 'No material gap found.',
+  };
+  assert.deepEqual(
+    alreadyImplementedVerification({
+      ...verification,
+      verifiedAt: '2026-08-29T10:00:00Z',
+    }),
+    {
+      outcome: 'already-implemented',
+      ...verification,
+      verifiedAt: '2026-08-29T10:00:00Z',
+    }
+  );
+  assert.throws(
+    () => alreadyImplementedVerification({ summary: 'Covered' }),
+    /evidence, validation, gap, verifiedAt/
+  );
+  for (const verifiedAt of [
+    '08/29/2026',
+    '2026-02-30T10:00:00Z',
+    '2026-08-29T10:00:00+00:00',
+  ]) {
+    assert.throws(
+      () => alreadyImplementedVerification({ ...verification, verifiedAt }),
+      /valid ISO 8601 UTC verifiedAt timestamp/
+    );
+  }
+});
+
+test('already-implemented issues wait for the user without entering the implementation queue', async () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    updated_at: '2026-08-29T09:00:00Z',
+    labels: [{ name: 'radar:security' }, { name: 'radar:in-review' }],
+    body: marker('pomi-radar:v1', { version: 1 }),
+  };
+  await withFakeGithubIssues([issue], async state => {
+    const verification = {
+      summary: 'The current protection already covers the reported behavior.',
+      evidence: 'The shared request boundary rejects the unsafe input.',
+      validation: 'Focused invalid-input tests pass.',
+      gap: 'No material gap found.',
+      verifiedAt: '2026-08-29T10:00:00Z',
+    };
+    const first = await markAlreadyImplemented({
+      issueNumber: 54,
+      ...verification,
+    });
+    assert.equal(first.updated, true);
+    assert.equal(first.duplicate, false);
+    assert.deepEqual(
+      state.issues.get(54).labels.map(label => label.name),
+      ['radar:security', 'radar:already-implemented']
+    );
+    assert.equal(state.issues.get(54).state, 'open');
+    assert.deepEqual(
+      readMarker(state.issues.get(54).body, 'pomi-radar:v1')
+        .implementationVerification,
+      { outcome: 'already-implemented', ...verification }
+    );
+    assert.equal(state.comments.get(54).length, 1);
+
+    const second = await markAlreadyImplemented({
+      issueNumber: 54,
+      ...verification,
+    });
+    assert.equal(second.duplicate, true);
+    assert.equal(state.comments.get(54).length, 1);
+  });
+});
+
+test('already-implemented rejects ambiguous source or lifecycle labels', async () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    updated_at: '2026-08-29T09:00:00Z',
+    labels: [
+      { name: 'radar:security' },
+      { name: 'radar:performance' },
+      { name: 'radar:in-review' },
+    ],
+    body: marker('pomi-radar:v1', { version: 1 }),
+  };
+  const verification = {
+    summary: 'The existing protection covers the reported behavior.',
+    evidence: 'The shared request boundary rejects unsafe input.',
+    validation: 'Focused invalid-input tests pass.',
+    gap: 'No material gap found.',
+    verifiedAt: '2026-08-29T10:00:00Z',
+  };
+  await withFakeGithubIssues([issue], async state => {
+    await assert.rejects(
+      markAlreadyImplemented({ issueNumber: 54, ...verification }),
+      /exactly one Radar source label and one lifecycle label/
+    );
+    state.issues.get(54).labels = [
+      { name: 'radar:security' },
+      { name: 'radar:in-review' },
+      { name: 'radar:ready-for-release' },
+    ];
+    await assert.rejects(
+      markAlreadyImplemented({ issueNumber: 54, ...verification }),
+      /exactly one Radar source label and one lifecycle label/
+    );
+    assert.equal(state.comments.get(54).length, 0);
+  });
+});
+
+test('already-implemented retries reuse their original claim after a final patch failure', async () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    updated_at: '2026-08-29T09:00:00Z',
+    labels: [{ name: 'radar:security' }, { name: 'radar:in-review' }],
+    body: marker('pomi-radar:v1', { version: 1 }),
+  };
+  await withFakeGithubIssues(
+    [issue],
+    async state => {
+      const verification = {
+        summary: 'The current protection already covers the reported behavior.',
+        evidence: 'The shared request boundary rejects the unsafe input.',
+        validation: 'Focused invalid-input tests pass.',
+        gap: 'No material gap found.',
+        verifiedAt: '2026-08-29T10:00:00Z',
+      };
+      await assert.rejects(
+        markAlreadyImplemented({ issueNumber: 54, ...verification }),
+        /GitHub PATCH \/issues\/54 failed: 500/
+      );
+      assert.equal(state.comments.get(54).length, 1);
+      await markAlreadyImplemented({ issueNumber: 54, ...verification });
+      assert.equal(state.comments.get(54).length, 1);
+      assert.equal(
+        readMarker(state.issues.get(54).body, 'pomi-radar:v1')
+          .implementationVerification.outcome,
+        'already-implemented'
+      );
+    },
+    { failFinalAlreadyImplementedPatch: true }
+  );
+});
+
+test('already-implemented rejects a competing verification claim for the same issue', async () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    updated_at: '2026-08-29T09:00:00Z',
+    labels: [{ name: 'radar:security' }, { name: 'radar:in-review' }],
+    body: marker('pomi-radar:v1', { version: 1 }),
+  };
+  await withFakeGithubIssues(
+    [issue],
+    async state => {
+      await assert.rejects(
+        markAlreadyImplemented({
+          issueNumber: 54,
+          summary: 'A competing verification is already in progress.',
+          evidence: 'An existing claim comment owns this issue transition.',
+          validation: 'The claim ownership guard was exercised.',
+          gap: 'No material gap found.',
+          verifiedAt: '2026-08-29T10:00:00Z',
+        }),
+        /changed while implementation verification was being recorded/
+      );
+      assert.equal(state.comments.get(54).length, 1);
+      assert.deepEqual(
+        state.issues.get(54).labels.map(label => label.name),
+        ['radar:security', 'radar:in-review']
+      );
+    },
+    {
+      comments: {
+        54: [
+          {
+            id: 1,
+            user: { login: 'pomi-radar[bot]' },
+            body: marker('pomi-radar-event:v1', {
+              id: 'already-implemented:54:other-verification',
+              expectedRevision: 123,
+              claimScope: 'radar:in-review:',
+            }),
+          },
+        ],
+      },
+    }
+  );
+});
+
+test('already-implemented ignores verification claims from other authors', async () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    updated_at: '2026-08-29T09:00:00Z',
+    labels: [{ name: 'radar:security' }, { name: 'radar:in-review' }],
+    body: marker('pomi-radar:v1', { version: 1 }),
+  };
+  await withFakeGithubIssues(
+    [issue],
+    async state => {
+      await markAlreadyImplemented({
+        issueNumber: 54,
+        summary: 'The existing protection covers the reported behavior.',
+        evidence: 'The shared request boundary rejects unsafe input.',
+        validation: 'Focused invalid-input tests pass.',
+        gap: 'No material gap found.',
+        verifiedAt: '2026-08-29T10:00:00Z',
+      });
+      assert.equal(state.comments.get(54).length, 2);
+      assert.equal(state.comments.get(54)[0].user.login, 'contributor');
+      assert.equal(state.comments.get(54)[1].user.login, 'pomi-radar[bot]');
+      assert.deepEqual(
+        state.issues.get(54).labels.map(label => label.name),
+        ['radar:security', 'radar:already-implemented']
+      );
+    },
+    {
+      comments: {
+        54: [
+          {
+            id: 1,
+            user: { login: 'contributor' },
+            body: marker('pomi-radar-event:v1', {
+              id: 'already-implemented:54:forged',
+              expectedRevision: 123,
+              claimScope: 'radar:in-review:',
+            }),
+          },
+        ],
+      },
+    }
+  );
+});
+
+test('already-implemented can verify an issue again after reconsideration', async () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    updated_at: '2026-08-29T09:00:00Z',
+    labels: [{ name: 'radar:security' }, { name: 'radar:in-review' }],
+    body: marker('pomi-radar:v1', { version: 1 }),
+  };
+  await withFakeGithubIssues([issue], async state => {
+    await markAlreadyImplemented({
+      issueNumber: 54,
+      summary: 'The existing protection covers the reported behavior.',
+      evidence: 'The shared request boundary rejects unsafe input.',
+      validation: 'Focused invalid-input tests pass.',
+      gap: 'No material gap found.',
+      verifiedAt: '2026-08-29T10:00:00Z',
+    });
+    state.issues.get(54).labels = [
+      { name: 'radar:security' },
+      { name: 'radar:accepted' },
+    ];
+    const result = await markAlreadyImplemented({
+      issueNumber: 54,
+      summary: 'The existing protection still covers the behavior.',
+      evidence: 'The shared request boundary still rejects unsafe input.',
+      validation: 'The focused regression suite still passes.',
+      gap: 'No material gap found.',
+      verifiedAt: '2026-08-29T11:00:00Z',
+    });
+    assert.equal(result.updated, true);
+    assert.equal(
+      readMarker(state.issues.get(54).body, 'pomi-radar:v1')
+        .implementationVerification.summary,
+      'The existing protection still covers the behavior.'
+    );
+    assert.equal(state.comments.get(54).length, 2);
+  });
+});
+
+test('already-implemented closes grouped source PRs and empty consolidations', async () => {
+  const verification = {
+    summary: 'The current protection already covers the reported behavior.',
+    evidence: 'The shared request boundary rejects the unsafe input.',
+    validation: 'Focused invalid-input tests pass.',
+    gap: 'No material gap found.',
+    verifiedAt: '2026-08-29T10:00:00Z',
+  };
+  await withFakeGithubIssues(
+    [
+      {
+        number: 54,
+        state: 'open',
+        updated_at: '2026-08-29T09:00:00Z',
+        labels: [{ name: 'radar:security' }, { name: 'radar:in-review' }],
+        body: marker('pomi-radar:v1', { version: 1 }),
+      },
+      {
+        number: 78,
+        state: 'open',
+        updated_at: '2026-08-29T09:00:00Z',
+        labels: [{ name: 'radar:performance' }, { name: 'radar:in-review' }],
+        body: marker('pomi-radar:v1', { version: 1 }),
+      },
+    ],
+    async state => {
+      const grouped = await markAlreadyImplemented({
+        issueNumber: 54,
+        ...verification,
+      });
+      assert.deepEqual(grouped.sourcePullRequests, {
+        closed: [194],
+        detached: [],
+      });
+      assert.deepEqual(grouped.consolidationPullRequests, {
+        closed: [196],
+        detached: [],
+      });
+      assert.deepEqual(
+        readMarker(state.pulls.get(194).body, 'pomi-radar-source:v1').issues,
+        [54, 55]
+      );
+      assert.equal(state.pulls.get(194).state, 'closed');
+      assert.deepEqual(
+        readMarker(state.pulls.get(196).body, 'pomi-radar-consolidation:v1'),
+        { version: 1, issues: [55], sourcePrs: [] }
+      );
+      assert.equal(state.pulls.get(196).state, 'closed');
+
+      const empty = await markAlreadyImplemented({
+        issueNumber: 78,
+        ...verification,
+      });
+      assert.deepEqual(empty.sourcePullRequests, {
+        closed: [195],
+        detached: [],
+      });
+      assert.deepEqual(empty.consolidationPullRequests, {
+        closed: [197],
+        detached: [],
+      });
+      assert.equal(state.pulls.get(195).state, 'closed');
+      assert.equal(state.pulls.get(197).state, 'closed');
+    },
+    {
+      pulls: [
+        {
+          number: 194,
+          state: 'open',
+          user: { login: 'pomi-radar[bot]' },
+          body: marker('pomi-radar-source:v1', {
+            version: 1,
+            track: 'security',
+            issues: [54, 55],
+          }),
+        },
+        {
+          number: 195,
+          state: 'open',
+          user: { login: 'pomi-radar[bot]' },
+          body: marker('pomi-radar-source:v1', {
+            version: 1,
+            track: 'performance',
+            issues: [78],
+          }),
+        },
+        {
+          number: 196,
+          state: 'open',
+          user: { login: 'pomi-radar[bot]' },
+          body: marker('pomi-radar-consolidation:v1', {
+            version: 1,
+            issues: [54, 55],
+            sourcePrs: [194],
+          }),
+        },
+        {
+          number: 197,
+          state: 'open',
+          user: { login: 'pomi-radar[bot]' },
+          body: marker('pomi-radar-consolidation:v1', {
+            version: 1,
+            issues: [78],
+            sourcePrs: [195],
+          }),
+        },
+      ],
+    }
+  );
+});
+
+test('already-implemented retries remove a source PR closed before consolidation cleanup', async () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    updated_at: '2026-08-29T09:00:00Z',
+    labels: [{ name: 'radar:security' }, { name: 'radar:in-review' }],
+    body: marker('pomi-radar:v1', { version: 1 }),
+  };
+  const verification = {
+    summary: 'The existing protection covers the reported behavior.',
+    evidence: 'The shared request boundary rejects unsafe input.',
+    validation: 'Focused invalid-input tests pass.',
+    gap: 'No material gap found.',
+    verifiedAt: '2026-08-29T10:00:00Z',
+  };
+  await withFakeGithubIssues(
+    [issue],
+    async state => {
+      await assert.rejects(
+        markAlreadyImplemented({ issueNumber: 54, ...verification }),
+        /GitHub PATCH \/pulls\/196 failed: 500/
+      );
+      assert.equal(state.pulls.get(194).state, 'closed');
+      assert.equal(state.pulls.get(196).state, 'open');
+
+      const result = await markAlreadyImplemented({
+        issueNumber: 54,
+        ...verification,
+      });
+      assert.deepEqual(result.consolidationPullRequests, {
+        closed: [196],
+        detached: [],
+      });
+      assert.deepEqual(
+        readMarker(state.pulls.get(196).body, 'pomi-radar-consolidation:v1'),
+        { version: 1, issues: [55], sourcePrs: [195] }
+      );
+      assert.equal(state.pulls.get(196).state, 'closed');
+    },
+    {
+      failConsolidationPatch: true,
+      pulls: [
+        {
+          number: 194,
+          state: 'open',
+          user: { login: 'pomi-radar[bot]' },
+          body: marker('pomi-radar-source:v1', {
+            version: 1,
+            track: 'security',
+            issues: [54],
+          }),
+        },
+        {
+          number: 195,
+          state: 'open',
+          user: { login: 'pomi-radar[bot]' },
+          body: marker('pomi-radar-source:v1', {
+            version: 1,
+            track: 'security',
+            issues: [55],
+          }),
+        },
+        {
+          number: 196,
+          state: 'open',
+          user: { login: 'pomi-radar[bot]' },
+          body: marker('pomi-radar-consolidation:v1', {
+            version: 1,
+            issues: [54, 55],
+            sourcePrs: [194, 195],
+          }),
+        },
+      ],
+    }
+  );
+});
+
+test('already-implemented proposals occupy a visible proposal slot but are not agent work', () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    generatedAt: '2026-08-29T10:00:00Z',
+    pendingAgentPass: false,
+    labels: ['radar:security', 'radar:already-implemented'],
+  };
+  assert.deepEqual(selectActionableIssues([issue]), []);
+  assert.deepEqual(proposalSlotPlan([issue]), {
+    visibleProposalCount: 1,
+    visibleProposalIssueNumbers: [54],
+    proposalSlotsNeeded: 2,
+  });
 });
 
 test('clarification round two asks only unlocked questions', () => {

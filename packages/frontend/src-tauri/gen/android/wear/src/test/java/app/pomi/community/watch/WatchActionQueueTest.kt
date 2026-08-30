@@ -44,7 +44,7 @@ class WatchActionQueueTest {
         assertEquals("session", session.kind)
         assertEquals(3, session.position)
 
-        val intentions = PendingWatchAction.intentions("setIntentions", listOf("focus"), mapOf("focus" to "code"), "work")
+        val intentions = PendingWatchAction.intentions("setIntentions", listOf("focus"), mapOf("focus" to "code"), "work", null)
         assertEquals(listOf("focus"), intentions.intentionSlugs)
         assertEquals(mapOf("focus" to "code"), intentions.subIntentions)
 

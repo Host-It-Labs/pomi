@@ -1,8 +1,9 @@
-import type { Task } from '@pomi/shared';
+import type { List, ListItem, Task } from '@pomi/shared';
 import { describe, expect, it } from 'vitest';
 import {
   getPinShortcutTask,
   getTaskDestinationPageIndex,
+  searchMinimizedListItems,
   searchMinimizedTasks,
 } from './MinimizedTaskView';
 
@@ -23,6 +24,7 @@ function task(id: string, overrides: Partial<Task> = {}): Task {
     priority: 'normal',
     status: 'active',
     timerType: 'work',
+    customDuration: null,
     pinnedAt: null,
     intentionSlug: null,
     subIntentionSlug: null,
@@ -88,6 +90,41 @@ describe('Minimized task search', () => {
     expect(results.map(value => value.id)).toEqual(['visible']);
   });
 
+  it('matches normalized Task details and linked Intention names', () => {
+    const linkedTask = task('linked', {
+      title: 'Préparer résumé',
+      priority: 'urgent',
+      intentionSlug: 'client-work',
+    });
+    const intention = {
+      id: 'intention-1',
+      userId: 'user-1',
+      title: 'Client Work',
+      emoji: '💼',
+      slug: 'client-work',
+      type: 'work' as const,
+      parentIntentionId: null,
+      hasCustomDuration: false,
+      keepScreenAwake: false,
+      isHabit: false,
+      isArchived: false,
+      isFavorite: false,
+      allowsTasks: true,
+      usageCount: 0,
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    };
+
+    expect(
+      searchMinimizedTasks([linkedTask], 'preparer', null, false, [intention])
+    ).toEqual([linkedTask]);
+    expect(
+      searchMinimizedTasks([linkedTask], 'client work', null, false, [
+        intention,
+      ])
+    ).toEqual([linkedTask]);
+  });
+
   it('does not expose contextual follow-ups through pin shortcuts', () => {
     const parent = task('parent');
     const followUp = task('follow-up', {
@@ -110,5 +147,54 @@ describe('Minimized task search', () => {
     expect(getTaskDestinationPageIndex([{ id: 'first' }], 'missing', 3)).toBe(
       null
     );
+  });
+
+  it('includes active List items in General mode data and searches by item or List title', () => {
+    const lists = [
+      { id: 'groceries', title: 'Groceries' },
+      { id: 'travel', title: 'Travel' },
+    ] as List[];
+    const items = [
+      {
+        id: 'milk',
+        listId: 'groceries',
+        title: 'Buy milk',
+        priority: 'normal',
+        status: 'active',
+        vacationEligible: false,
+      },
+      {
+        id: 'passport',
+        listId: 'travel',
+        title: 'Renew passport',
+        priority: 'urgent',
+        status: 'active',
+        vacationEligible: false,
+      },
+      {
+        id: 'done',
+        listId: 'groceries',
+        title: 'Already bought',
+        priority: 'normal',
+        status: 'completed',
+        vacationEligible: false,
+      },
+    ] as ListItem[];
+
+    expect(
+      searchMinimizedListItems(items, lists, '', false).map(
+        entry => entry.item.id
+      )
+    ).toEqual(['milk', 'passport']);
+    expect(
+      searchMinimizedListItems(items, lists, 'groceries', false).map(
+        entry => entry.item.id
+      )
+    ).toEqual(['milk']);
+    expect(
+      searchMinimizedListItems(items, lists, 'passport urgent', false).map(
+        entry => entry.item.id
+      )
+    ).toEqual(['passport']);
   });
 });

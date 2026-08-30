@@ -31,6 +31,8 @@ function status(overrides: Partial<WatchStatus>): WatchStatus {
       intentionMultiSelect: false,
       advancedSkip: false,
       sessionsEnabled: false,
+      resetBreakOnFirstIntention: false,
+      resetLongBreakOnFirstIntention: false,
     },
     tasks: [],
     totalVisibleTasks: 0,

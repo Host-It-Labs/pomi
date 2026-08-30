@@ -15,6 +15,7 @@ void import('./seed-user-fixture').then(({ runEnsureSeedUserFixture }) =>
     password,
     successLabel: 'Copyme user',
     isAdmin: true,
-    fixtureMarker: { fixtureName, seedVersion: 9 },
+    includeCanonicalLists: true,
+    fixtureMarker: { fixtureName, seedVersion: 13 },
   })
 );

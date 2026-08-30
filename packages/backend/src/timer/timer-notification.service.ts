@@ -2,6 +2,7 @@ import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import {
   CLIENT_NOTIFICATION_TYPES,
   ClientNotificationType,
+  NOTIFICATION_GROUPS,
   Preferences,
   TIMER_STATUSES,
   TIMER_TYPES,
@@ -118,6 +119,7 @@ export class TimerNotificationService {
       timer,
       timestamp: Date.now(),
       minutesLeft,
+      notificationGroup: NOTIFICATION_GROUPS.TIMER,
     });
     await this.notificationService.sendTimerWarningNotification(
       timer,
@@ -142,6 +144,7 @@ export class TimerNotificationService {
       timer,
       timestamp: Date.now(),
       isLastWorkTimerInSession,
+      notificationGroup: NOTIFICATION_GROUPS.TIMER,
     });
     await this.notificationService.sendTimerCompletedNotification(
       timer,
@@ -176,6 +179,7 @@ export class TimerNotificationService {
       timer,
       timestamp: completedAt,
       isLastWorkTimerInSession,
+      notificationGroup: NOTIFICATION_GROUPS.TIMER,
     });
   }
 
@@ -185,6 +189,7 @@ export class TimerNotificationService {
       type: CLIENT_NOTIFICATION_TYPES.LONG_BREAK_DETECTED,
       timer,
       timestamp: Date.now(),
+      notificationGroup: NOTIFICATION_GROUPS.TIMER,
     });
     await this.notificationService.sendLongBreakDetectedNotification(
       timer,
@@ -207,6 +212,7 @@ export class TimerNotificationService {
       type: CLIENT_NOTIFICATION_TYPES.LONG_BREAK_DETECTED,
       timer: replacementTimer,
       timestamp: detectedAt,
+      notificationGroup: NOTIFICATION_GROUPS.TIMER,
     });
   }
 
@@ -216,6 +222,7 @@ export class TimerNotificationService {
       type: CLIENT_NOTIFICATION_TYPES.PAUSED_TIMER_REMINDER,
       timer,
       timestamp: Date.now(),
+      notificationGroup: NOTIFICATION_GROUPS.TIMER,
     });
     await this.notificationService.sendPausedTimerReminderNotification(
       timer,

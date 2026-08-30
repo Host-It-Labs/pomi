@@ -3,7 +3,6 @@ import { TIMER_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
 import { motion } from 'framer-motion';
 import {
   type TouchEvent,
-  type WheelEvent,
   useCallback,
   useEffect,
   useRef,
@@ -39,7 +38,6 @@ import { hasOpenModal } from '../../utils/modalRegistry';
 import { isIos, isMac, isMobile } from '../../utils/osUtils';
 import { getSelectedTimerIntentions } from '../../utils/timerIntentions';
 import { useI18n } from '../../i18n';
-import { getWheelPageDirection } from '../../utils/pagedGesture';
 
 interface ExpandedIntentionsPickerProps {
   useTallSafeAreaFallback: boolean;
@@ -59,8 +57,6 @@ type SubPickerState = {
 
 const EXPANDED_SUB_INTENTIONS_PAGE_SIZE = 6;
 const EXPANDED_PICKER_GESTURE_THRESHOLD = 36;
-const EXPANDED_PICKER_WHEEL_THRESHOLD = 18;
-const EXPANDED_PICKER_WHEEL_LOCK_MS = 280;
 const getParentKey = (type: IntentionType, slug: string) => `${type}:${slug}`;
 const getShortcutNumber = (event: globalThis.KeyboardEvent) => {
   if (event.code.startsWith('Digit')) {
@@ -100,7 +96,6 @@ export function ExpandedIntentionsPicker({
   const preferences = usePreferencesStore.use.preferences();
   const latestRequestIdRef = useRef(0);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const lastWheelPageChangeRef = useRef(0);
   const selectedIntentions = getSelectedTimerIntentions(timer);
   const selectedSubIntentions = timer?.subIntentions ?? {};
 
@@ -323,13 +318,21 @@ export function ExpandedIntentionsPicker({
           nextIntentions.includes(parentSlug)
         )
       );
+      const resetOnFirstIntention =
+        nextTimerType === TIMER_TYPES.WORK
+          ? preferences?.resetWorkOnFirstIntention === true
+          : nextTimerType === TIMER_TYPES.BREAK
+            ? preferences?.resetBreakOnFirstIntention === true
+            : preferences?.resetLongBreakOnFirstIntention === true;
 
       if (!nextIntentions.includes(slug)) {
         createOrResumeTimer(
           nextTimerType,
           nextIntentions[0],
           nextIntentions,
-          nextSubIntentions
+          nextSubIntentions,
+          undefined,
+          resetOnFirstIntention
         );
         return;
       }
@@ -351,7 +354,9 @@ export function ExpandedIntentionsPicker({
         nextTimerType,
         nextIntentions[0],
         nextIntentions,
-        nextSubIntentions
+        nextSubIntentions,
+        undefined,
+        resetOnFirstIntention
       );
     },
     [
@@ -360,6 +365,9 @@ export function ExpandedIntentionsPicker({
       intentionType,
       isDisconnected,
       preferences?.intentionRequireSelection,
+      preferences?.resetWorkOnFirstIntention,
+      preferences?.resetBreakOnFirstIntention,
+      preferences?.resetLongBreakOnFirstIntention,
       selectedSubIntentions,
       subIntentionsByParent,
       timer?.type,
@@ -374,15 +382,30 @@ export function ExpandedIntentionsPicker({
         ...subPickerState.subIntentions,
         [subPickerState.parent.slug]: subSlug,
       };
+      const resetOnFirstIntention =
+        subPickerState.timerType === TIMER_TYPES.WORK
+          ? preferences?.resetWorkOnFirstIntention === true
+          : subPickerState.timerType === TIMER_TYPES.BREAK
+            ? preferences?.resetBreakOnFirstIntention === true
+            : preferences?.resetLongBreakOnFirstIntention === true;
       createOrResumeTimer(
         subPickerState.timerType,
         subPickerState.intentions[0],
         subPickerState.intentions,
-        nextSubIntentions
+        nextSubIntentions,
+        undefined,
+        resetOnFirstIntention
       );
       setSubPickerState(null);
     },
-    [createOrResumeTimer, isDisconnected, subPickerState]
+    [
+      createOrResumeTimer,
+      isDisconnected,
+      preferences?.resetWorkOnFirstIntention,
+      preferences?.resetBreakOnFirstIntention,
+      preferences?.resetLongBreakOnFirstIntention,
+      subPickerState,
+    ]
   );
 
   const handleAddIntention = useCallback(() => {
@@ -604,48 +627,6 @@ export function ExpandedIntentionsPicker({
       setCurrentPage(page => Math.min(maxPage, Math.max(0, page + direction)));
     },
     [maxPage, subMaxPage, subPickerState]
-  );
-
-  const handlePickerWheel = useCallback(
-    (event: WheelEvent<HTMLDivElement>) => {
-      const activePage = subPickerState ? subCurrentPage : currentPage;
-      const activeMaxPage = subPickerState ? subMaxPage : maxPage;
-      if (activeMaxPage <= 0) {
-        return;
-      }
-
-      const direction = getWheelPageDirection(
-        event.deltaX,
-        event.deltaY,
-        EXPANDED_PICKER_WHEEL_THRESHOLD
-      );
-      if (direction === null) return;
-      const canMove =
-        direction > 0 ? activePage < activeMaxPage : activePage > 0;
-      if (!canMove) {
-        return;
-      }
-
-      event.preventDefault();
-      const now = Date.now();
-      if (
-        now - lastWheelPageChangeRef.current <
-        EXPANDED_PICKER_WHEEL_LOCK_MS
-      ) {
-        return;
-      }
-
-      lastWheelPageChangeRef.current = now;
-      changeHorizontalPage(direction);
-    },
-    [
-      changeHorizontalPage,
-      currentPage,
-      maxPage,
-      subCurrentPage,
-      subMaxPage,
-      subPickerState,
-    ]
   );
 
   const handlePickerTouchStart = useCallback(
@@ -1278,7 +1259,6 @@ export function ExpandedIntentionsPicker({
       initial={{ opacity: 0, y: isTopPlacement ? -16 : 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      onWheel={isMobile ? undefined : handlePickerWheel}
       onTouchStart={isMobile ? handlePickerTouchStart : undefined}
       onTouchEnd={isMobile ? handlePickerTouchEnd : undefined}
     >

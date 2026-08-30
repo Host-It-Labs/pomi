@@ -33,13 +33,20 @@ describe('accepted-action schemas', () => {
         kind: 'timer',
         operation: 'createOrResume',
         timerType: 'work',
+        focusedTaskId: 'task-1',
+        customDuration: 1_800_000,
       })
-    ).toMatchObject({ kind: 'timer', operation: 'createOrResume' });
+    ).toMatchObject({
+      kind: 'timer',
+      operation: 'createOrResume',
+      customDuration: 1_800_000,
+    });
     expect(
       userActionSchema.parse({
         kind: 'tasks',
         operation: 'update',
         taskId: 'task',
+        customDuration: 1_800_000,
         recurrenceAnchorMode: 'completion',
         followUpDefinition: {
           title: 'Send the follow-up',
@@ -209,6 +216,15 @@ describe('accepted-action schemas', () => {
       operation: 'createOrResume',
       timerType: 'break',
     });
+    expectActionInvalid(
+      {
+        kind: 'timer',
+        operation: 'createOrResume',
+        timerType: 'work',
+        customDuration: 0,
+      },
+      'customDuration'
+    );
 
     expectActionInvalid(
       { kind: 'timer', operation: 'setSessionPosition' },
@@ -257,6 +273,20 @@ describe('accepted-action schemas', () => {
       intentions: [],
     });
     expectActionValid({ kind: 'timer', operation: 'pause' });
+    expectActionValid({
+      kind: 'timer',
+      operation: 'selectIntention',
+      intention: 'focus',
+      resetOnFirstIntention: true,
+    });
+    expect(
+      userActionSchema.safeParse({
+        kind: 'timer',
+        operation: 'selectIntention',
+        intention: 'focus',
+        resetOnFirstIntention: 'true',
+      }).success
+    ).toBe(false);
   });
 
   it('validates every conditional Task action requirement', () => {
@@ -265,7 +295,17 @@ describe('accepted-action schemas', () => {
       kind: 'tasks',
       operation: 'create',
       title: 'Ship tests',
+      customDuration: 1_800_000,
     });
+    expectActionInvalid(
+      {
+        kind: 'tasks',
+        operation: 'update',
+        taskId: 'task-1',
+        customDuration: 0,
+      },
+      'customDuration'
+    );
 
     for (const operation of ['update', 'complete'] as const) {
       expectActionInvalid({ kind: 'tasks', operation }, 'taskId');
@@ -336,6 +376,28 @@ describe('accepted-action schemas', () => {
       operation: 'convertTaskToListItem',
       taskId: 'task-1',
       listId: 'list-1',
+    });
+    expectActionInvalid(
+      {
+        kind: 'lists',
+        operation: 'convertListItemToTask',
+        intentionSlug: 'focus',
+      },
+      'itemId'
+    );
+    expectActionInvalid(
+      {
+        kind: 'lists',
+        operation: 'convertListItemToTask',
+        itemId: 'item-1',
+      },
+      'itemId'
+    );
+    expectActionValid({
+      kind: 'lists',
+      operation: 'convertListItemToTask',
+      itemId: 'item-1',
+      intentionSlug: 'focus',
     });
     expectActionInvalid(
       {
@@ -549,6 +611,62 @@ describe('accepted-action schemas', () => {
     expect(
       apiContract.lists.list.query.parse({ includeArchived: 'false' })
     ).toEqual({ includeArchived: false });
+  });
+
+  it('accepts independent Wear reset preferences for both break types', () => {
+    const statusSchema = apiContract.watch.status.responses[200];
+    const baseStatus = {
+      serverNowMs: 0,
+      language: 'en',
+      taskMode: 'intention',
+      timer: null,
+      assistant: {
+        assistantEnabled: false,
+        speechCaptureEnabled: false,
+        aiTaskCaptureEnabled: false,
+        assistantRecordingMaxMinutes: null,
+        usageBudgetPeriod: 'daily',
+        usageBudgetCapUsd: null,
+        usageBudgetUsedUsd: 0,
+        usageBudgetRemainingUsd: null,
+      },
+      timerControls: {
+        canStartOrResume: true,
+        canPause: false,
+        canAddFiveMinutes: false,
+        canReset: false,
+        canSkip: false,
+        requiresIntentionSelection: false,
+        intentionRequireSelection: false,
+        intentionMultiSelect: false,
+        advancedSkip: false,
+        sessionsEnabled: false,
+        canStartLongBreak: false,
+        resetBreakOnFirstIntention: false,
+        resetLongBreakOnFirstIntention: false,
+      },
+      tasks: [],
+      totalVisibleTasks: 0,
+      totalActiveTasks: 0,
+    };
+
+    for (const [resetBreakOnFirstIntention, resetLongBreakOnFirstIntention] of [
+      [false, false],
+      [true, false],
+      [false, true],
+      [true, true],
+    ]) {
+      expect(
+        statusSchema.safeParse({
+          ...baseStatus,
+          timerControls: {
+            ...baseStatus.timerControls,
+            resetBreakOnFirstIntention,
+            resetLongBreakOnFirstIntention,
+          },
+        }).success
+      ).toBe(true);
+    }
   });
 
   it('requires an immutable manifest for durable Assistant audio chunks', () => {

@@ -420,6 +420,50 @@ describe.runIf(hasDatabase)('Timer completion effects integration', () => {
     expect(row.processedAt).not.toBeNull();
   });
 
+  it('reclaims an expired notification lease regardless of retry count', async () => {
+    const timer = completedTimer({});
+    await service.persistCompletionEffects(userId, timer, {
+      completedAt: 1_725_000_000_000,
+      isLastWorkTimerInSession: false,
+    });
+    const [claim] = await outboxService.claimPendingCompletionNotifications(
+      1,
+      30_000
+    );
+    await dataSource.query(
+      `
+        UPDATE "notification_outbox"
+        SET "attempts" = $2,
+            "claimedUntil" = now() - interval '1 second',
+            "availableAt" = now() - interval '1 second'
+        WHERE "id" = $1
+      `,
+      [claim.id, 5]
+    );
+
+    const [reclaimed] = await outboxService.claimPendingCompletionNotifications(
+      1,
+      30_000
+    );
+    expect(reclaimed).toMatchObject({
+      id: claim.id,
+      attempts: 6,
+    });
+    expect(reclaimed.claimToken).not.toBe(claim.claimToken);
+    expect(
+      await outboxService.markClaimedCompletionNotificationProcessed(
+        claim.id,
+        claim.claimToken
+      )
+    ).toBe(false);
+    expect(
+      await outboxService.markClaimedCompletionNotificationProcessed(
+        claim.id,
+        reclaimed.claimToken
+      )
+    ).toBe(true);
+  });
+
   it('persists one deterministic continuation plan under a fenced lease', async () => {
     const timer = completedTimer({});
     await service.persistCompletionEffects(userId, timer, {

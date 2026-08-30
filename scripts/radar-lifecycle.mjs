@@ -399,6 +399,69 @@ export function selectActionableIssues(issues) {
   );
 }
 
+const ALREADY_IMPLEMENTED_LIFECYCLE = 'radar:already-implemented';
+const ALREADY_IMPLEMENTED_LABEL = {
+  color: 'c2b5ff',
+  description: 'Existing protection verified; waiting for user confirmation',
+};
+const SOURCE_MARKER = 'pomi-radar-source:v1';
+const IMPLEMENTATION_LIFECYCLES = new Set([
+  'radar:accepted',
+  'radar:in-progress',
+  'radar:in-review',
+  ALREADY_IMPLEMENTED_LIFECYCLE,
+]);
+
+function isExplicitIsoTimestamp(value) {
+  const match = String(value ?? '').match(
+    /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.(\d{1,3}))?Z$/
+  );
+  if (!match) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  const milliseconds = Number((match[7] ?? '').padEnd(3, '0') || 0);
+  return (
+    date.getUTCFullYear() === Number(match[1]) &&
+    date.getUTCMonth() + 1 === Number(match[2]) &&
+    date.getUTCDate() === Number(match[3]) &&
+    date.getUTCHours() === Number(match[4]) &&
+    date.getUTCMinutes() === Number(match[5]) &&
+    date.getUTCSeconds() === Number(match[6]) &&
+    date.getUTCMilliseconds() === milliseconds
+  );
+}
+
+function implementationVerification(input) {
+  const verification = {
+    outcome: 'already-implemented',
+    summary: String(input.summary ?? '').trim(),
+    evidence: String(input.evidence ?? '').trim(),
+    validation: String(input.validation ?? '').trim(),
+    gap: String(input.gap ?? '').trim(),
+    verifiedAt: String(input.verifiedAt ?? '').trim(),
+  };
+  const missing = [
+    'summary',
+    'evidence',
+    'validation',
+    'gap',
+    'verifiedAt',
+  ].filter(field => !verification[field]);
+  if (missing.length)
+    throw new Error(
+      `Already-implemented verification requires: ${missing.join(', ')}.`
+    );
+  if (!isExplicitIsoTimestamp(verification.verifiedAt))
+    throw new Error(
+      'Already-implemented verification requires a valid ISO 8601 UTC verifiedAt timestamp.'
+    );
+  return verification;
+}
+
+export function alreadyImplementedVerification(input) {
+  return implementationVerification(input);
+}
+
 export function selectEnrichmentIssues(issues) {
   const presentationStates = new Set(
     CONTRACT.presentation.actionRequiredLifecycle
@@ -826,7 +889,15 @@ export async function preflight(track) {
 async function addCommentOnce(issueNumber, body, eventId) {
   const eventMarker = marker('pomi-radar-event:v1', { id: eventId });
   const comments = await paginate(`/issues/${issueNumber}/comments`);
-  if (comments.some(comment => String(comment.body).includes(eventMarker)))
+  if (
+    comments.some(
+      comment =>
+        String(comment.body).includes(eventMarker) ||
+        (isRadarBotComment(comment) &&
+          eventRevision(comment)?.id === eventId &&
+          eventRevision(comment)?.claimScope)
+    )
+  )
     return false;
   await github(`/issues/${issueNumber}/comments`, {
     method: 'POST',
@@ -835,8 +906,340 @@ async function addCommentOnce(issueNumber, body, eventId) {
   return true;
 }
 
-async function setIssueLifecycle(issueNumber, lifecycle, state, stateReason) {
+function eventRevision(comment) {
+  const event = readMarker(comment.body, 'pomi-radar-event:v1');
+  if (!event) return null;
+  const encodedRevision = Number(String(event.id).split(':')[1]);
+  return {
+    id: String(event.id),
+    expectedRevision: Number(event.expectedRevision ?? encodedRevision),
+    claimScope: event.claimScope ? String(event.claimScope) : null,
+  };
+}
+
+function isRadarBotComment(comment) {
+  return comment?.user?.login === radarBotLogin();
+}
+
+async function claimMutation(
+  issueNumber,
+  body,
+  eventId,
+  expectedRevision,
+  claimScope
+) {
+  let issueComments = await paginate(`/issues/${issueNumber}/comments`);
+  let own = issueComments.find(
+    comment =>
+      isRadarBotComment(comment) && eventRevision(comment)?.id === eventId
+  );
+  const normalizedClaimScope = String(claimScope ?? '');
+  const existingClaim = issueComments.find(comment => {
+    const event = eventRevision(comment);
+    return (
+      isRadarBotComment(comment) &&
+      event?.claimScope === normalizedClaimScope &&
+      event.id !== eventId
+    );
+  });
+  if (!own && existingClaim) return false;
+  if (!own) {
+    own = await github(`/issues/${issueNumber}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({
+        body: `${body || 'Radar lifecycle update requested.'}\n\n${marker(
+          'pomi-radar-event:v1',
+          {
+            id: eventId,
+            expectedRevision,
+            claimScope: normalizedClaimScope,
+          }
+        )}`,
+      }),
+    });
+    issueComments = await paginate(`/issues/${issueNumber}/comments`);
+  }
+  const claimRevision =
+    eventRevision(own)?.expectedRevision ?? expectedRevision;
+  const contenders = issueComments
+    .filter(comment => {
+      const event = eventRevision(comment);
+      const ownEvent = comment.id === own.id;
+      return (
+        isRadarBotComment(comment) &&
+        event?.expectedRevision === claimRevision &&
+        (event.claimScope === normalizedClaimScope || ownEvent)
+      );
+    })
+    .sort((left, right) => Number(left.id) - Number(right.id));
+  return contenders[0]?.id === own.id;
+}
+
+function issueLifecycle(issue) {
+  return (issue.labels ?? [])
+    .map(label => (typeof label === 'string' ? label : label.name))
+    .find(label => CONTRACT.lifecycle.includes(label));
+}
+
+function issueMutationRevision(issue) {
+  const markerData = readMarker(issue.body, CONTRACT.marker) ?? {};
+  const updatedAt = new Date(issue.updated_at).getTime();
+  return Math.max(
+    Number(markerData.mutationRevision) || 0,
+    Number.isFinite(updatedAt) ? updatedAt : 0
+  );
+}
+
+function issueClaimScope(issue, lifecycle = issueLifecycle(issue)) {
+  const markerData = readMarker(issue.body, CONTRACT.marker) ?? {};
+  return `${lifecycle ?? ''}:${markerData.lastMutationId ?? ''}`;
+}
+
+async function assertIssueLifecycleCurrent(
+  issueNumber,
+  expectedLifecycle,
+  expectedLastMutationId
+) {
   const issue = await github(`/issues/${issueNumber}`, {});
+  const current = readMarker(issue.body, CONTRACT.marker) ?? {};
+  if (
+    issueLifecycle(issue) !== expectedLifecycle ||
+    (expectedLastMutationId !== undefined &&
+      current.lastMutationId !== expectedLastMutationId)
+  ) {
+    throw new Error(
+      `Issue #${issueNumber} changed while the Radar lifecycle transition was being recorded.`
+    );
+  }
+  return { issue, data: current };
+}
+
+async function ensureLifecycleLabel(lifecycle) {
+  if (lifecycle !== ALREADY_IMPLEMENTED_LIFECYCLE) return;
+  const existing = await paginate('/labels');
+  if (existing.some(label => label.name === lifecycle)) return;
+  try {
+    await github('/labels', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: lifecycle,
+        ...ALREADY_IMPLEMENTED_LABEL,
+      }),
+    });
+  } catch (error) {
+    const refreshed = await paginate('/labels');
+    if (refreshed.some(label => label.name === lifecycle)) return;
+    throw error;
+  }
+}
+
+function sourcePullIssueNumbers(source) {
+  if (!Array.isArray(source?.issues)) return [];
+  const issueNumbers = source.issues.map(Number);
+  if (
+    issueNumbers.some(
+      issueNumber => !Number.isSafeInteger(issueNumber) || issueNumber <= 0
+    )
+  ) {
+    return [];
+  }
+  return [...new Set(issueNumbers)];
+}
+
+function consolidationPullBodyWithManifest(pull, manifest) {
+  const next = marker(CONTRACT.consolidationMarker, manifest);
+  return String(pull.body).replace(
+    /<!--\s*pomi-radar-consolidation:v1\s+\{[^]*?\}\s*-->/,
+    next
+  );
+}
+
+async function detachAlreadyImplementedSourcePulls(issueNumber) {
+  const pulls = await paginate('/pulls?state=all&base=main');
+  const pullByNumber = new Map(pulls.map(pull => [Number(pull.number), pull]));
+  const sourceCandidates = pulls
+    .map(pull => {
+      const source = readMarker(pull.body, SOURCE_MARKER);
+      return { pull, source, issueNumbers: sourcePullIssueNumbers(source) };
+    })
+    .filter(
+      ({ pull, source }) =>
+        pull.state === 'open' &&
+        source?.version === 1 &&
+        Array.isArray(source.issues) &&
+        source.issues.map(Number).includes(issueNumber)
+    );
+  const consolidationCandidates = pulls
+    .map(pull => {
+      const manifest = readMarker(pull.body, CONTRACT.consolidationMarker);
+      return { pull, manifest };
+    })
+    .filter(
+      ({ pull, manifest }) =>
+        pull.state === 'open' &&
+        Array.isArray(manifest?.issues) &&
+        manifest.issues.map(Number).includes(issueNumber)
+    );
+  for (const { pull, issueNumbers } of sourceCandidates) {
+    if (pull.user?.login !== radarBotLogin()) {
+      throw new Error(
+        `Source PR #${pull.number} must be authored by the Radar bot before issue #${issueNumber} can be detached.`
+      );
+    }
+    if (!issueNumbers.length) {
+      throw new Error(
+        `Source PR #${pull.number} has an invalid Radar source marker.`
+      );
+    }
+  }
+  const consolidationData = consolidationCandidates.map(
+    ({ pull, manifest }) => {
+      if (pull.user?.login !== radarBotLogin()) {
+        throw new Error(
+          `Consolidation PR #${pull.number} must be authored by the Radar bot before issue #${issueNumber} can be detached.`
+        );
+      }
+      const issueNumbers = sourcePullIssueNumbers({ issues: manifest.issues });
+      const sourcePrNumbers = sourcePullIssueNumbers({
+        issues: manifest.sourcePrs,
+      });
+      if (!issueNumbers.length || !sourcePrNumbers.length) {
+        throw new Error(
+          `Consolidation PR #${pull.number} has an invalid Radar consolidation marker.`
+        );
+      }
+      return { pull, manifest, issueNumbers, sourcePrNumbers };
+    }
+  );
+  const referencedSourcePrNumbers = [
+    ...new Set(consolidationData.flatMap(data => data.sourcePrNumbers)),
+  ];
+  await Promise.all(
+    referencedSourcePrNumbers
+      .filter(sourcePrNumber => !pullByNumber.has(sourcePrNumber))
+      .map(async sourcePrNumber => {
+        const sourcePull = await github(`/pulls/${sourcePrNumber}`, {});
+        pullByNumber.set(sourcePrNumber, sourcePull);
+      })
+  );
+  const sourcePrsToRemove = new Set();
+  for (const sourcePrNumber of referencedSourcePrNumbers) {
+    const sourcePull = pullByNumber.get(sourcePrNumber);
+    if (!sourcePull) {
+      throw new Error(
+        `Source PR #${sourcePrNumber} from a consolidation marker was not found.`
+      );
+    }
+    if (sourcePull.user?.login !== radarBotLogin()) {
+      throw new Error(
+        `Source PR #${sourcePrNumber} must be authored by the Radar bot before issue #${issueNumber} can be detached.`
+      );
+    }
+    const source = readMarker(sourcePull.body, SOURCE_MARKER);
+    const issueNumbers = sourcePullIssueNumbers(source);
+    if (source?.version !== 1 || !issueNumbers.length) {
+      throw new Error(
+        `Source PR #${sourcePrNumber} has an invalid Radar source marker.`
+      );
+    }
+    if (issueNumbers.includes(issueNumber))
+      sourcePrsToRemove.add(sourcePrNumber);
+  }
+  const detached = [];
+  const closed = [];
+  for (const { pull } of sourceCandidates) {
+    const sourcePrNumber = Number(pull.number);
+    if (!Number.isSafeInteger(sourcePrNumber) || sourcePrNumber <= 0) {
+      throw new Error('Radar source PR number is invalid.');
+    }
+    sourcePrsToRemove.add(sourcePrNumber);
+  }
+  for (const { pull } of sourceCandidates) {
+    const sourcePrNumber = Number(pull.number);
+    const eventId = `already-implemented:${issueNumber}:source-pr:${sourcePrNumber}`;
+    await addCommentOnce(
+      sourcePrNumber,
+      `Closed because issue #${issueNumber} was verified as already implemented. This source branch may contain changes for that issue, so the remaining Radar work must be recreated in a fresh source PR.`,
+      eventId
+    );
+    await github(`/pulls/${sourcePrNumber}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        state: 'closed',
+      }),
+    });
+    closed.push(sourcePrNumber);
+  }
+  const consolidationClosed = [];
+  const consolidationDetached = [];
+  for (const {
+    pull,
+    manifest,
+    issueNumbers,
+    sourcePrNumbers,
+  } of consolidationData) {
+    const consolidationNumber = Number(pull.number);
+    if (
+      !Number.isSafeInteger(consolidationNumber) ||
+      consolidationNumber <= 0
+    ) {
+      throw new Error('Radar consolidation PR number is invalid.');
+    }
+    const remainingIssues = issueNumbers.filter(value => value !== issueNumber);
+    const remainingSourcePrs = sourcePrNumbers.filter(
+      value => !sourcePrsToRemove.has(value)
+    );
+    const eventId = `already-implemented:${issueNumber}:consolidation:${consolidationNumber}`;
+    const remainingDescription = remainingIssues.length
+      ? `The remaining Radar issues stay recorded for a fresh consolidation: ${remainingIssues.map(value => `#${value}`).join(', ')}.`
+      : 'This consolidation has no remaining Radar issues.';
+    await addCommentOnce(
+      consolidationNumber,
+      `Closed because issue #${issueNumber} was verified as already implemented. The existing consolidation branch may still contain the detached implementation, so it must be recreated before any remaining issue is merged. ${remainingDescription}`,
+      eventId
+    );
+    await github(`/pulls/${consolidationNumber}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        body: consolidationPullBodyWithManifest(pull, {
+          ...manifest,
+          issues: remainingIssues,
+          sourcePrs: remainingSourcePrs,
+        }),
+        state: 'closed',
+      }),
+    });
+    consolidationClosed.push(consolidationNumber);
+  }
+  return {
+    sourcePullRequests: { closed, detached },
+    consolidationPullRequests: {
+      closed: consolidationClosed,
+      detached: consolidationDetached,
+    },
+  };
+}
+
+async function setIssueLifecycle(
+  issueNumber,
+  lifecycle,
+  state,
+  stateReason,
+  expectedLastMutationId,
+  expectedCurrentLifecycle
+) {
+  const issue = await github(`/issues/${issueNumber}`, {});
+  const current = readMarker(issue.body, CONTRACT.marker) ?? {};
+  if (
+    (expectedCurrentLifecycle &&
+      issueLifecycle(issue) !== expectedCurrentLifecycle) ||
+    (expectedLastMutationId !== undefined &&
+      current.lastMutationId !== expectedLastMutationId)
+  ) {
+    throw new Error(
+      `Issue #${issueNumber} changed while the Radar lifecycle transition was being recorded.`
+    );
+  }
   const labels = nextLifecycleLabels(
     issue.labels.map(label => label.name),
     lifecycle
@@ -867,13 +1270,16 @@ async function updateIssueData(
   issueNumber,
   changes,
   title,
-  expectedLastMutationId
+  expectedLastMutationId,
+  expectedCurrentLifecycle
 ) {
   const issue = await github(`/issues/${issueNumber}`, {});
   const current = readMarker(issue.body, CONTRACT.marker) ?? {};
   if (
-    expectedLastMutationId &&
-    current.lastMutationId !== expectedLastMutationId
+    (expectedCurrentLifecycle &&
+      issueLifecycle(issue) !== expectedCurrentLifecycle) ||
+    (expectedLastMutationId !== undefined &&
+      current.lastMutationId !== expectedLastMutationId)
   ) {
     throw new Error(
       `Issue #${issueNumber} changed after this agent pass started. Rerun preflight and process the latest decision.`
@@ -978,6 +1384,120 @@ export async function enrichIssue(input) {
     issueNumber,
     updated: true,
     eventId: `enrichment:${issueNumber}:${digest}`,
+  };
+}
+
+export async function markAlreadyImplemented(input) {
+  const issueNumber = Number(input.issueNumber);
+  if (!Number.isInteger(issueNumber) || issueNumber <= 0)
+    throw new Error('A canonical issueNumber is required.');
+  const verification = implementationVerification(input);
+  const issue = await github(`/issues/${issueNumber}`, {});
+  const labels = issue.labels.map(label => label.name);
+  const current = readMarker(issue.body, CONTRACT.marker) ?? {};
+  const sourceLabels = labels.filter(label => CONTRACT.sources.includes(label));
+  const lifecycleLabels = labels.filter(label =>
+    CONTRACT.lifecycle.includes(label)
+  );
+  const currentLifecycle = lifecycleLabels[0];
+  const digest = createHash('sha256')
+    .update(JSON.stringify(verification))
+    .digest('hex')
+    .slice(0, 12);
+  const eventId = `already-implemented:${issueNumber}:${digest}`;
+  if (
+    sourceLabels.length !== 1 ||
+    lifecycleLabels.length !== 1 ||
+    current.duplicateOf ||
+    labels.includes('duplicate')
+  )
+    throw new Error(
+      `Issue #${issueNumber} must have exactly one Radar source label and one lifecycle label.`
+    );
+  if (
+    !['radar:security', 'radar:performance'].some(label =>
+      sourceLabels.includes(label)
+    )
+  )
+    throw new Error(
+      `Issue #${issueNumber} is not a Security or Performance Radar issue.`
+    );
+  if (currentLifecycle === ALREADY_IMPLEMENTED_LIFECYCLE) {
+    if (
+      JSON.stringify(current.implementationVerification) ===
+      JSON.stringify(verification)
+    ) {
+      return { issueNumber, updated: false, duplicate: true, eventId };
+    }
+    throw new Error(
+      `Issue #${issueNumber} already awaits user confirmation; do not replace its verification.`
+    );
+  }
+  if (!IMPLEMENTATION_LIFECYCLES.has(currentLifecycle))
+    throw new Error(
+      `Issue #${issueNumber} is not in an implementation lifecycle.`
+    );
+  if (current.pendingAgentPass === true)
+    throw new Error(
+      `Issue #${issueNumber} has a pending user decision and must not be changed by implementation.`
+    );
+  const readable = [
+    'Implementation verification found complete existing coverage.',
+    '',
+    `- **Why this is covered:** ${verification.summary}`,
+    `- **Evidence:** ${verification.evidence}`,
+    `- **How it was checked:** ${verification.validation}`,
+    `- **Remaining gap:** ${verification.gap}`,
+  ].join('\n');
+  await ensureLifecycleLabel(ALREADY_IMPLEMENTED_LIFECYCLE);
+  const expectedRevision = issueMutationRevision(issue);
+  const claimScope = issueClaimScope(issue, currentLifecycle);
+  if (
+    !(await claimMutation(
+      issueNumber,
+      readable,
+      eventId,
+      expectedRevision,
+      claimScope
+    ))
+  )
+    throw new Error(
+      `Issue #${issueNumber} changed while implementation verification was being recorded.`
+    );
+  await assertIssueLifecycleCurrent(
+    issueNumber,
+    currentLifecycle,
+    current.lastMutationId
+  );
+  const detachedPullRequests =
+    await detachAlreadyImplementedSourcePulls(issueNumber);
+  const { issue: finalIssue } = await assertIssueLifecycleCurrent(
+    issueNumber,
+    currentLifecycle,
+    current.lastMutationId
+  );
+  const updated = await github(`/issues/${issueNumber}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      body: issueBodyWithData(finalIssue, {
+        implementationVerification: verification,
+        pendingAgentPass: false,
+      }),
+      labels: nextLifecycleLabels(
+        finalIssue.labels.map(label => label.name),
+        ALREADY_IMPLEMENTED_LIFECYCLE
+      ),
+      state: 'open',
+    }),
+  });
+  return {
+    issueNumber,
+    updated: true,
+    duplicate: false,
+    eventId,
+    sourcePullRequests: detachedPullRequests.sourcePullRequests,
+    consolidationPullRequests: detachedPullRequests.consolidationPullRequests,
+    issue: updated,
   };
 }
 
@@ -1486,6 +2006,39 @@ export async function consolidationMerged(event, options) {
     mergeSha,
     { ...options, containmentSha }
   );
+  const claimContexts = new Map();
+  for (const issue of issues) {
+    const issueNumber = Number(issue.number);
+    const current = readMarker(issue.body, CONTRACT.marker) ?? {};
+    const lifecycle = issueLifecycle(issue);
+    const eventId = `consolidation:${pull.number}:${mergeSha}:issue:${issueNumber}`;
+    const body = `Included in consolidation PR #${pull.number} at merge commit \`${mergeSha}\`. Ready for the next production release.`;
+    if (
+      !(await claimMutation(
+        issueNumber,
+        body,
+        eventId,
+        issueMutationRevision(issue),
+        issueClaimScope(issue, lifecycle)
+      ))
+    ) {
+      throw new Error(
+        `Issue #${issueNumber} changed while the consolidation lifecycle transition was being recorded.`
+      );
+    }
+    claimContexts.set(issueNumber, {
+      lifecycle,
+      lastMutationId: current.lastMutationId,
+    });
+  }
+  for (const issueNumber of issueNumbers) {
+    const context = claimContexts.get(issueNumber);
+    await assertIssueLifecycleCurrent(
+      issueNumber,
+      context.lifecycle,
+      context.lastMutationId
+    );
+  }
   const sourcePullRequests = await closeConsolidationSourcePulls(
     sourcePulls,
     pull,
@@ -1493,20 +2046,34 @@ export async function consolidationMerged(event, options) {
     allowLegacy ? { auditAlreadyClosed: false } : undefined
   );
   for (const issueNumber of issueNumbers) {
+    const context = claimContexts.get(issueNumber);
+    await assertIssueLifecycleCurrent(
+      issueNumber,
+      context.lifecycle,
+      context.lastMutationId
+    );
     await addCommentOnce(
       issueNumber,
       `Included in consolidation PR #${pull.number} at merge commit \`${mergeSha}\`. Ready for the next production release.`,
       `consolidation:${pull.number}:${mergeSha}:issue:${issueNumber}`
     );
-    await updateIssueData(issueNumber, {
-      consolidationPullRequest: pull.number,
-      consolidationMergeSha: mergeSha,
-    });
+    await updateIssueData(
+      issueNumber,
+      {
+        consolidationPullRequest: pull.number,
+        consolidationMergeSha: mergeSha,
+      },
+      undefined,
+      context.lastMutationId,
+      context.lifecycle
+    );
     await setIssueLifecycle(
       issueNumber,
       'radar:ready-for-release',
       'open',
-      undefined
+      undefined,
+      context.lastMutationId,
+      context.lifecycle
     );
   }
   return { updated: issueNumbers, sourcePullRequests, mergeSha };
@@ -1724,6 +2291,13 @@ async function main() {
     const input = readJsonStdin();
     process.stdout.write(
       `${JSON.stringify(await enrichIssue(input), null, 2)}\n`
+    );
+    return;
+  }
+  if (command === 'mark-already-implemented') {
+    const input = readJsonStdin();
+    process.stdout.write(
+      `${JSON.stringify(await markAlreadyImplemented(input), null, 2)}\n`
     );
     return;
   }

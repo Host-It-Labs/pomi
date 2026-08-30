@@ -40,7 +40,7 @@ vi.mock('../toast/ToastContext', () => ({
 function Harness() {
   return (
     <>
-      <div id="feedback-session-slot-timer" />
+      <div id="assistant-session-slot-timer" />
       <FeedbackRecorder />
     </>
   );

@@ -26,6 +26,10 @@ const LABELS = {
   'radar:accepted': ['9ce6a6', 'Accepted for implementation'],
   'radar:in-progress': ['1d76db', 'Implementation in progress'],
   'radar:in-review': ['0052cc', 'Implementation is in review'],
+  'radar:already-implemented': [
+    'c2b5ff',
+    'Existing protection verified; waiting for user confirmation',
+  ],
   'radar:ready-for-release': [
     '0e8a16',
     'Merged and waiting for production release',

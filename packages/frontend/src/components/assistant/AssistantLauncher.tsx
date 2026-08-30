@@ -6,6 +6,7 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useFeedbackRecorderStore } from '../feedback/FeedbackRecorder';
 import { v4 as uuid } from 'uuid';
 import { ASSISTANT_MAX_RECORDING_MINUTES } from '@pomi/shared/src/constants';
 import {
@@ -64,7 +65,8 @@ type AssistantVoiceResult = {
   message: string;
   spokenAudioBase64: string | null;
   spokenAudioMimeType: string | null;
-  tasks: unknown[];
+  tasks: Array<{ id: string }>;
+  listItems: Array<{ id: string; listId: string }>;
 };
 
 function normalizeVoiceResponse(result: unknown): {
@@ -96,6 +98,7 @@ export function AssistantLauncher() {
   const [message, setMessage] = useState('');
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  const feedbackRecordingStage = useFeedbackRecorderStore.use.stage();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const segmentChunksRef = useRef<Blob[]>([]);
   const recordingSegmentsRef = useRef<Blob[]>([]);
@@ -107,6 +110,9 @@ export function AssistantLauncher() {
   const recordingStartedAtRef = useRef<number | null>(null);
   const expanded = useUiStore.use.expanded();
   const activeTab = useUiStore.use.activeTab();
+  const setExpanded = useUiStore.use.setExpanded();
+  const setActiveTab = useUiStore.use.setActiveTab();
+  const requestTaskItemReveal = useUiStore.use.requestTaskItemReveal();
   const authToken = useAuthStore.use.token();
 
   const configuredMaxRecordingMinutes = (
@@ -332,9 +338,30 @@ export function AssistantLauncher() {
 
       setMessage(response.body.message);
       setStage('result');
+      const createdTask = response.body.tasks[0];
+      const createdListItem = response.body.listItems[0];
       showToastFromStore(
         response.body.message || t('assistant.completed'),
-        'success'
+        'success',
+        5000,
+        createdTask || createdListItem
+          ? {
+              label: t('task.viewUpdated'),
+              onClick: () => {
+                setExpanded(true);
+                setActiveTab('tasks');
+                requestTaskItemReveal(
+                  createdTask
+                    ? { kind: 'task', id: createdTask.id }
+                    : {
+                        kind: 'listItem',
+                        id: createdListItem.id,
+                        listId: createdListItem.listId,
+                      }
+                );
+              },
+            }
+          : undefined
       );
       const audioFinished =
         response.body.spokenAudioBase64 && response.body.spokenAudioMimeType
@@ -562,7 +589,12 @@ export function AssistantLauncher() {
     toggleAssistantRecording,
   ]);
 
-  if (!status?.assistantEnabled) {
+  if (
+    !status?.assistantEnabled ||
+    feedbackRecordingStage === 'starting' ||
+    feedbackRecordingStage === 'recording' ||
+    feedbackRecordingStage === 'sending'
+  ) {
     return null;
   }
 
@@ -571,7 +603,7 @@ export function AssistantLauncher() {
   }
 
   return createPortal(
-    <div className="relative z-[110] flex items-center">
+    <div className="relative z-[2147483647] flex items-center">
       {stage === 'idle' ? (
         <IconButton
           label={t('assistant.title')}
@@ -604,7 +636,7 @@ export function AssistantLauncher() {
           </button>
           <span
             data-testid="assistant-recording-elapsed"
-            className="absolute left-full top-1/2 ml-1.5 -translate-y-1/2 whitespace-nowrap font-mono text-[10px] tabular-nums text-slate-300"
+            className="absolute left-1/2 top-full mt-0.5 -translate-x-1/2 whitespace-nowrap font-mono text-[10px] tabular-nums text-slate-300"
           >
             {formatDuration(recordingSeconds)}
           </span>

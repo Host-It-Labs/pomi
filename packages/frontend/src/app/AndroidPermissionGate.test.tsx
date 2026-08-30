@@ -8,6 +8,7 @@ const platform = vi.hoisted(() => ({
   isAndroid: true,
   isDesktop: false,
   isMobile: true,
+  isMac: false,
   isTauri: false,
   isDebugMobileSimulator: false,
   platformName: 'android',

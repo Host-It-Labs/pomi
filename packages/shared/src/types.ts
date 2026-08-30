@@ -7,7 +7,6 @@ export type TaskRecurrenceAnchorMode = 'planned' | 'completion';
 export type TaskCreationSource = 'manual' | 'assistant' | 'voice';
 export type TaskDefaultDueDateMode = 'off' | 'tomorrow' | 'week' | 'custom';
 export type TaskSortMode = 'default' | 'created-desc' | 'created-asc';
-export type TaskPageViewMode = 'list' | 'calendar';
 export type AssistantDebugLogKind = 'taskCapture' | 'voiceCommand';
 export type AssistantDebugLogSource = 'typed' | 'dictation' | 'assistantVoice';
 export type AssistantDebugLogStatus =
@@ -61,14 +60,16 @@ export interface Timer {
   originalDuration?: number;
   originalBreakDuration?: number;
   isExtension?: boolean;
+  isAutoStarted?: boolean;
+  hasConsumedFirstIntentionReset?: boolean;
+  extensionCandidate?: TimerExtensionCandidate;
   extensionOriginalTimerId?: string;
   extensionBaseDuration?: number;
   extensionNextTimerType?: TimerTypes;
   focusedTaskIds?: string[];
 }
 
-export interface TimerExtensionState {
-  startTime: number;
+export interface TimerExtensionCandidate {
   maxDuration?: number;
   intention?: string;
   intentionSlugs?: string[];
@@ -83,6 +84,10 @@ export interface TimerExtensionState {
   originalTimerId: string;
   originalDuration: number;
   extensionNextTimerType?: TimerTypes;
+}
+
+export interface TimerExtensionState extends TimerExtensionCandidate {
+  startTime: number;
 }
 
 export type TimerSkipLogMode = 'none' | 'elapsed' | 'full';
@@ -164,6 +169,8 @@ export interface Preferences {
   workTimerDuration: number;
   breakTimerDuration: number;
   autoStartBreak: boolean;
+  autoStartWork?: boolean;
+  autoStartLongBreak?: boolean;
   notifications: boolean;
   notifyOnWorkComplete: boolean;
   notifyOnBreakComplete: boolean;
@@ -188,7 +195,9 @@ export interface Preferences {
   sessionPomodorosCount: number;
   sessionHasLongBreak: boolean;
   sessionLongBreakDuration: number;
-  sessionLongBreakAutoStart: boolean;
+  resetBreakOnFirstIntention: boolean;
+  resetLongBreakOnFirstIntention: boolean;
+  resetWorkOnFirstIntention?: boolean;
   sessionShowLongBreakButton: boolean;
   sessionShowEta: boolean;
   sessionStackTimers: boolean;
@@ -389,6 +398,7 @@ export interface Task {
   priority: TaskPriority;
   status: TaskStatus;
   timerType: TimerTypes;
+  customDuration: number | null;
   pinnedAt: string | null;
   intentionSlug: string | null;
   subIntentionSlug: string | null;
@@ -709,6 +719,9 @@ export interface WatchStatus {
     advancedSkip: boolean;
     sessionsEnabled: boolean;
     canStartLongBreak: boolean;
+    resetBreakOnFirstIntention: boolean;
+    resetLongBreakOnFirstIntention: boolean;
+    resetWorkOnFirstIntention?: boolean;
   };
   tasks: WatchTaskSummary[];
   totalVisibleTasks: number;

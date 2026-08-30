@@ -8,7 +8,7 @@ declare global {
   }
 }
 
-export const E2E_PASSWORD = 'testpass123';
+export const E2E_PASSWORD = 'testpass1234';
 
 export function deterministicUsername(testInfo: TestInfo, suffix: string) {
   const slug = testInfo.testId

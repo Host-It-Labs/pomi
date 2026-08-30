@@ -508,10 +508,24 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
               'Assistant preparation ID must match the action ID'
             );
           }
-          return this.assistantCaptureService.commitPreparedTaskFromText(
-            userId,
-            preparationId
-          );
+          const listId = action.payload?.listId;
+          if (
+            listId !== undefined &&
+            listId !== null &&
+            typeof listId !== 'string'
+          ) {
+            throw new BadRequestException('Assistant List ID must be a string');
+          }
+          return listId === undefined
+            ? this.assistantCaptureService.commitPreparedTaskFromText(
+                userId,
+                preparationId
+              )
+            : this.assistantCaptureService.commitPreparedTaskFromText(
+                userId,
+                preparationId,
+                listId
+              );
         }
         if (action.operation === 'createTaskFromText') {
           const payload = action.payload ?? {};
@@ -521,7 +535,8 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
             userId,
             payload.text,
             payload.defaults as never,
-            typeof payload.debugLogId === 'string' ? payload.debugLogId : null
+            typeof payload.debugLogId === 'string' ? payload.debugLogId : null,
+            typeof payload.listId === 'string' ? payload.listId : null
           );
         }
         if (action.operation === 'updateSettings') {
@@ -621,6 +636,8 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           intentions: action.intentions,
           subIntentions: action.subIntentions,
           focusedTaskId: action.focusedTaskId,
+          customDuration: action.customDuration,
+          resetOnFirstIntention: action.resetOnFirstIntention,
         });
       case 'selectIntention':
         if (!action.intention)
@@ -629,7 +646,8 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           userId,
           action.timerType ?? TIMER_TYPES.WORK,
           action.intention,
-          action.subIntentions
+          action.subIntentions,
+          action.resetOnFirstIntention
         );
       case 'setIntentions':
         if (!action.intentions)
@@ -638,7 +656,8 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           userId,
           action.timerType ?? TIMER_TYPES.WORK,
           action.intentions,
-          action.subIntentions
+          action.subIntentions,
+          action.resetOnFirstIntention
         );
       case 'pause':
         return this.timerService.pauseTimer(userId);
@@ -702,6 +721,17 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           priority: action.priority,
           vacationEligible: action.vacationEligible,
         }
+      );
+    }
+    if (action.operation === 'convertListItemToTask') {
+      if (!action.itemId || !action.intentionSlug) {
+        throw new BadRequestException('List item and Intention are required');
+      }
+      return this.listsService.convertListItemToTask(
+        userId,
+        action.itemId,
+        action.intentionSlug,
+        action.subIntentionSlug
       );
     }
     if (action.operation === 'create') {
@@ -771,6 +801,7 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           dueTime: action.dueTime,
           priority: action.priority,
           timerType: action.timerType,
+          customDuration: action.customDuration,
           pinned: action.pinned,
           intentionSlug: action.intentionSlug,
           subIntentionSlug: action.subIntentionSlug,

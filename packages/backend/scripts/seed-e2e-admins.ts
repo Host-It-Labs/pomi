@@ -8,7 +8,7 @@ if (!databaseUrl) throw new Error('DATABASE_URL is required');
 const usernamePattern =
   process.env.POMI_E2E_ADMIN_USERNAME_PATTERN ??
   'testuser_e2e_admin_{repeatIndex}_{parallelIndex}';
-const password = process.env.POMI_E2E_ADMIN_PASSWORD ?? 'testpass123';
+const password = process.env.POMI_E2E_ADMIN_PASSWORD ?? 'testpass1234';
 const repeatCount = Number(process.env.POMI_E2E_ADMIN_REPEAT_COUNT ?? '1');
 const parallelCount = Number(process.env.POMI_E2E_ADMIN_PARALLEL_COUNT ?? '7');
 

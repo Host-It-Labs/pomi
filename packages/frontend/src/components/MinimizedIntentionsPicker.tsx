@@ -29,6 +29,10 @@ import { orderIntentionsForHabits } from '../utils/habits';
 import { hasOpenModal } from '../utils/modalRegistry';
 import { isMac } from '../utils/osUtils';
 import { getSelectedTimerIntentions } from '../utils/timerIntentions';
+import {
+  getCompactGridColumnClass,
+  getCompactPickerMinWidth,
+} from '../utils/minimizedIntentionsLayout';
 import { IntentionEmojiPair } from './ui/IntentionEmojiPair';
 import { KeyboardShortcut } from './ui/KeyboardShortcut';
 import { PaginationControls } from './PaginationControls';
@@ -273,6 +277,9 @@ export function MinimizedIntentionsPicker({
   const visiblePickerGridColumnClass = getGridColumnClass(
     visiblePickerSlots.length
   );
+  const visibleCompactGridColumnClass = getCompactGridColumnClass(
+    visiblePickerSlots.length
+  );
 
   const openPicker = useCallback(() => {
     setSubPickerState(null);
@@ -499,6 +506,12 @@ export function MinimizedIntentionsPicker({
           nextIntentions.includes(parentSlug)
         )
       );
+      const resetOnFirstIntention =
+        nextTimerType === TIMER_TYPES.WORK
+          ? preferences?.resetWorkOnFirstIntention === true
+          : nextTimerType === TIMER_TYPES.BREAK
+            ? preferences?.resetBreakOnFirstIntention === true
+            : preferences?.resetLongBreakOnFirstIntention === true;
 
       const parentKey = getParentKey(intention.sourceType, slug);
       const subIntentions = subIntentionsByParent[parentKey] ?? [];
@@ -519,7 +532,9 @@ export function MinimizedIntentionsPicker({
         nextTimerType,
         nextIntentions[0],
         nextIntentions,
-        nextSubIntentions
+        nextSubIntentions,
+        undefined,
+        resetOnFirstIntention
       );
 
       if (isOpen) {
@@ -536,6 +551,9 @@ export function MinimizedIntentionsPicker({
       isOpen,
       onOpenChange,
       preferences?.intentionRequireSelection,
+      preferences?.resetWorkOnFirstIntention,
+      preferences?.resetBreakOnFirstIntention,
+      preferences?.resetLongBreakOnFirstIntention,
       selectedIntentions,
       selectedSubIntentions,
       subIntentionsByParent,
@@ -551,15 +569,31 @@ export function MinimizedIntentionsPicker({
         ...subPickerState.subIntentions,
         [subPickerState.parent.slug]: subSlug,
       };
+      const resetOnFirstIntention =
+        subPickerState.timerType === TIMER_TYPES.WORK
+          ? preferences?.resetWorkOnFirstIntention === true
+          : subPickerState.timerType === TIMER_TYPES.BREAK
+            ? preferences?.resetBreakOnFirstIntention === true
+            : preferences?.resetLongBreakOnFirstIntention === true;
       createOrResumeTimer(
         subPickerState.timerType,
         subPickerState.intentions[0],
         subPickerState.intentions,
-        nextSubIntentions
+        nextSubIntentions,
+        undefined,
+        resetOnFirstIntention
       );
       completeSelection(subPickerState.returnStartIndex);
     },
-    [completeSelection, createOrResumeTimer, isConnected, subPickerState]
+    [
+      completeSelection,
+      createOrResumeTimer,
+      isConnected,
+      preferences?.resetWorkOnFirstIntention,
+      preferences?.resetBreakOnFirstIntention,
+      preferences?.resetLongBreakOnFirstIntention,
+      subPickerState,
+    ]
   );
 
   const getSelectedSubIntention = (intention: PickerIntention) => {
@@ -799,6 +833,12 @@ export function MinimizedIntentionsPicker({
   const showPickerControls = showPreviousPageButton || showNextPageButton;
   const currentPageIndex = Math.floor(currentStartIndex / activePageSize);
   const pageCount = Math.floor(maxStartIndex / activePageSize) + 1;
+  const compactPickerMinWidth = compactForTasks
+    ? getCompactPickerMinWidth(
+        visiblePickerSlots.length,
+        showPickerControls && !isChoosingSubIntention
+      )
+    : undefined;
 
   const renderPageSelectionBadge = (count: number) => {
     if (count <= 0) {
@@ -1040,9 +1080,16 @@ export function MinimizedIntentionsPicker({
           data-testid={isOpen ? 'minimized-intentions-picker' : undefined}
           className={clsx(
             'pointer-events-auto relative z-20 flex items-center',
-            compactForTasks ? 'h-8 min-h-8 max-h-8 overflow-visible' : 'mt-5',
+            compactForTasks
+              ? 'h-8 min-h-8 max-h-8 shrink-0 overflow-visible'
+              : 'mt-5',
             !isConnected && 'opacity-50'
           )}
+          style={
+            compactPickerMinWidth !== undefined
+              ? { minWidth: compactPickerMinWidth }
+              : undefined
+          }
           initial={{ opacity: 0, scale: compactForTasks ? 1 : 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: compactForTasks ? 1 : 0.96 }}
@@ -1052,7 +1099,7 @@ export function MinimizedIntentionsPicker({
             className={clsx(
               'flex items-center',
               compactForTasks
-                ? 'h-8 min-h-8 max-h-8 gap-1 overflow-visible'
+                ? 'h-8 min-h-8 max-h-8 shrink-0 gap-1 overflow-visible'
                 : 'flex-col gap-0.5'
             )}
           >
@@ -1080,8 +1127,8 @@ export function MinimizedIntentionsPicker({
                 <div
                   data-testid="minimized-intentions-grid"
                   className={clsx(
-                    'grid h-8 min-h-8 max-h-8 items-center gap-2 overflow-visible',
-                    visiblePickerGridColumnClass
+                    'grid h-8 min-h-8 max-h-8 shrink-0 items-center gap-2 overflow-visible',
+                    visibleCompactGridColumnClass
                   )}
                 >
                   {visiblePickerSlots.map((slot, index) =>
@@ -1094,9 +1141,11 @@ export function MinimizedIntentionsPicker({
                 data-testid="minimized-intentions-grid"
                 className={clsx(
                   compactForTasks
-                    ? 'grid h-8 min-h-8 max-h-8 items-center gap-2 overflow-visible'
+                    ? 'grid h-8 min-h-8 max-h-8 shrink-0 items-center gap-2 overflow-visible'
                     : 'grid gap-2',
-                  visiblePickerGridColumnClass
+                  compactForTasks
+                    ? visibleCompactGridColumnClass
+                    : visiblePickerGridColumnClass
                 )}
               >
                 {visiblePickerSlots.map((slot, index) =>
@@ -1137,7 +1186,7 @@ export function MinimizedIntentionsPicker({
                     <div
                       className={clsx(
                         compactForTasks
-                          ? 'grid h-7 min-h-7 max-h-7 w-[7.5rem] items-center justify-items-center gap-0 overflow-visible'
+                          ? 'grid h-7 min-h-7 max-h-7 w-[7.5rem] shrink-0 items-center justify-items-center gap-0 overflow-visible'
                           : 'grid h-8 min-h-8 max-h-8 items-center gap-2 overflow-visible',
                         pickerGridColumnClass
                       )}
@@ -1151,7 +1200,7 @@ export function MinimizedIntentionsPicker({
                   <div
                     className={clsx(
                       compactForTasks
-                        ? 'grid h-7 min-h-7 max-h-7 w-[7.5rem] items-center justify-items-center gap-0 overflow-visible'
+                        ? 'grid h-7 min-h-7 max-h-7 w-[7.5rem] shrink-0 items-center justify-items-center gap-0 overflow-visible'
                         : 'grid h-8 min-h-8 max-h-8 items-center gap-2 overflow-visible',
                       pickerGridColumnClass
                     )}

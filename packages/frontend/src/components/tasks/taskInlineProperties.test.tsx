@@ -1,4 +1,4 @@
-import type { Intention, Task } from '@pomi/shared';
+import type { Intention, List, ListItem, Task } from '@pomi/shared';
 import {
   cleanup,
   fireEvent,
@@ -39,6 +39,7 @@ function task(overrides: Partial<Task>): Task {
     priority: 'normal',
     status: 'active',
     timerType: 'work',
+    customDuration: null,
     pinnedAt: null,
     intentionSlug: null,
     subIntentionSlug: null,
@@ -95,32 +96,51 @@ const intentions: Intention[] = [
   },
 ];
 
+const lists: List[] = [
+  {
+    id: 'list-groceries',
+    userId: 'user-1',
+    title: 'Groceries',
+    emoji: '🛒',
+    description: null,
+    vacationDefault: false,
+    isArchived: false,
+    isFavorite: false,
+    sourceIntentionId: null,
+    createdAt: '2026-07-26T08:00:00.000Z',
+    updatedAt: '2026-07-26T08:00:00.000Z',
+  },
+];
+
 function renderProperties(
   currentTask = task({}),
-  onUpdate = vi.fn().mockResolvedValue(true)
+  onUpdate = vi.fn().mockResolvedValue(true),
+  onConvertToListItem = vi.fn().mockResolvedValue(true)
 ) {
   render(
     <TaskInlineProperties
       task={currentTask}
       intentions={intentions}
+      lists={lists}
       onUpdate={onUpdate}
+      onConvertToListItem={onConvertToListItem}
       onOpenEditor={vi.fn()}
       showIntention
       compact={false}
       isOverdue={false}
     />
   );
-  return onUpdate;
+  return { onUpdate, onConvertToListItem };
 }
 
 describe('inline Task properties', () => {
   it('makes linked intention selection an explicit confirmed Task update', async () => {
     const user = userEvent.setup();
-    const onUpdate = renderProperties();
+    const { onUpdate } = renderProperties();
 
     await user.click(
       screen.getByRole('button', {
-        name: 'Ship release notes has no linked intention. Set intention',
+        name: 'Intention / List: Ship release notes',
       })
     );
     await user.click(screen.getByRole('option', { name: /Release$/ }));
@@ -134,9 +154,82 @@ describe('inline Task properties', () => {
     });
   });
 
+  it('moves a Task to a List from the same custom assignment picker', async () => {
+    const user = userEvent.setup();
+    const { onConvertToListItem } = renderProperties();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Intention / List: Ship release notes',
+      })
+    );
+    expect(document.body).toHaveStyle({ overflow: 'hidden' });
+    await user.click(screen.getByRole('option', { name: /Groceries/ }));
+    expect(document.body.style.overflow).toBe('');
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+
+    expect(onConvertToListItem).toHaveBeenCalledWith(
+      'task-release',
+      'list-groceries',
+      {
+        title: 'Ship release notes',
+        dueDate: '2026-08-03',
+        priority: 'normal',
+        vacationEligible: false,
+      }
+    );
+  });
+
+  it('uses the same controls to move a List item back to an Intention', async () => {
+    const user = userEvent.setup();
+    const onConvertListItemToTask = vi.fn().mockResolvedValue(true);
+    const listItem: ListItem = {
+      id: 'item-tomatoes',
+      userId: 'user-1',
+      listId: lists[0].id,
+      title: 'Tomatoes',
+      dueDate: null,
+      priority: 'normal',
+      status: 'active',
+      manualOrder: null,
+      manualOrderOverride: false,
+      itemKind: 'listItem',
+      vacationEligible: false,
+      createdAt: '2026-07-26T08:00:00.000Z',
+      updatedAt: '2026-07-26T08:00:00.000Z',
+    };
+
+    render(
+      <TaskInlineProperties
+        task={listItem}
+        intentions={intentions}
+        currentList={lists[0]}
+        onUpdate={vi.fn().mockResolvedValue(true)}
+        onConvertListItemToTask={onConvertListItemToTask}
+        onOpenEditor={vi.fn()}
+        showIntention
+        compact={false}
+        isOverdue={false}
+      />
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: 'Intention / List: Tomatoes' })
+    );
+    await user.click(screen.getByRole('option', { name: /Release$/ }));
+    await user.click(screen.getByRole('button', { name: /documentation/i }));
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+
+    expect(onConvertListItemToTask).toHaveBeenCalledWith(
+      'item-tomatoes',
+      'release',
+      'documentation'
+    );
+  });
+
   it('clears a non-recurring due date and time but protects recurrence scheduling', async () => {
     const user = userEvent.setup();
-    const onUpdate = renderProperties();
+    const { onUpdate } = renderProperties();
 
     await user.click(
       screen.getByRole('button', {
@@ -166,7 +259,7 @@ describe('inline Task properties', () => {
 
   it('saves a changed due date when the popover is dismissed outside', async () => {
     const user = userEvent.setup();
-    const onUpdate = renderProperties();
+    const { onUpdate } = renderProperties();
 
     await user.click(
       screen.getByRole('button', {
@@ -186,11 +279,38 @@ describe('inline Task properties', () => {
         dueDate: '2026-08-12',
       })
     );
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a failed outside due-date update open with its draft intact', async () => {
+    const user = userEvent.setup();
+    const { onUpdate } = renderProperties(
+      task({}),
+      vi.fn().mockResolvedValue(false)
+    );
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Change due date for Ship release notes',
+      })
+    );
+    const input = screen.getByLabelText('Due date');
+    await user.clear(input);
+    await user.type(input, '2026-08-12');
+    await user.click(document.body);
+
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1));
+    expect(onUpdate).toHaveBeenCalledWith({
+      id: 'task-release',
+      dueDate: '2026-08-12',
+    });
+    expect(screen.getByTestId('task-due-date-popover')).toBeVisible();
+    expect(screen.getByLabelText('Due date')).toHaveValue('2026-08-12');
   });
 
   it('saves the same due-date draft through Apply', async () => {
     const user = userEvent.setup();
-    const onUpdate = renderProperties();
+    const { onUpdate } = renderProperties();
 
     await user.click(
       screen.getByRole('button', {
@@ -229,7 +349,7 @@ describe('inline Task properties', () => {
 
   it('keeps the due-date draft when Cancel closes the popover', async () => {
     const user = userEvent.setup();
-    const onUpdate = renderProperties();
+    const { onUpdate } = renderProperties();
 
     await user.click(
       screen.getByRole('button', {
@@ -246,7 +366,7 @@ describe('inline Task properties', () => {
 
   it('keeps the due-date draft when Escape closes the popover', async () => {
     const user = userEvent.setup();
-    const onUpdate = renderProperties();
+    const { onUpdate } = renderProperties();
 
     await user.click(
       screen.getByRole('button', {
@@ -263,7 +383,7 @@ describe('inline Task properties', () => {
 
   it('clears a due date when an empty draft is dismissed outside', async () => {
     const user = userEvent.setup();
-    const onUpdate = renderProperties();
+    const { onUpdate } = renderProperties();
 
     await user.click(
       screen.getByRole('button', {

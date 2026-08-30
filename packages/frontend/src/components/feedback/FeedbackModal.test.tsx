@@ -44,15 +44,16 @@ describe('FeedbackModal', () => {
     });
   });
 
-  it('waits for the user to choose recording or typing', () => {
+  it('opens with typed feedback focused and offers recording in the header', () => {
     render(<FeedbackModal isOpen onClose={vi.fn()} />);
 
     expect(
-      screen.getByRole('button', { name: /^Record feedback/ })
-    ).toBeVisible();
+      screen.getByPlaceholderText('What should we improve?')
+    ).toHaveFocus();
     expect(
-      screen.getByRole('button', { name: /^Type feedback/ })
+      screen.getByRole('button', { name: 'Record feedback' })
     ).toBeVisible();
+    expect(screen.queryByRole('button', { name: /^Type feedback/ })).toBeNull();
     expect(mocks.getUserMedia).not.toHaveBeenCalled();
   });
 
@@ -71,7 +72,6 @@ describe('FeedbackModal', () => {
   it('asks before discarding typed feedback', () => {
     render(<FeedbackModal isOpen onClose={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /^Type feedback/ }));
     fireEvent.change(screen.getByPlaceholderText('What should we improve?'), {
       target: { value: 'The mobile list is difficult to use.' },
     });
@@ -87,7 +87,6 @@ describe('FeedbackModal', () => {
       <FeedbackModal isOpen onClose={() => undefined} />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /^Type feedback/ }));
     fireEvent.change(screen.getByPlaceholderText('What should we improve?'), {
       target: { value: 'Keep this draft while the app updates.' },
     });
@@ -106,7 +105,7 @@ describe('FeedbackModal', () => {
     ).toBe('Keep this draft while the app updates.');
   });
 
-  it('cancels recording without transcription or submission', async () => {
+  it('closes after recording starts and leaves cancellation to the global recorder', async () => {
     const stopTrack = vi.fn();
     mocks.getUserMedia.mockResolvedValue({
       getTracks: () => [{ stop: stopTrack }],
@@ -129,15 +128,15 @@ describe('FeedbackModal', () => {
     const onClose = vi.fn();
     render(<FeedbackModal isOpen onClose={onClose} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /^Record feedback/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record feedback' }));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Stop & send/ })).toBeEnabled()
+      expect(useFeedbackRecorderStore.getState().stage).toBe('recording')
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
 
-    expect(useFeedbackRecorderStore.getState().stage).toBe('idle');
+    expect(useFeedbackRecorderStore.getState().stage).toBe('recording');
     expect(onClose).toHaveBeenCalledOnce();
+    useFeedbackRecorderStore.getState().cancelRecording();
+    expect(useFeedbackRecorderStore.getState().stage).toBe('idle');
     expect(mocks.transcribe).not.toHaveBeenCalled();
     expect(submitUserMutation).not.toHaveBeenCalled();
     expect(stopTrack).toHaveBeenCalled();
@@ -170,23 +169,36 @@ describe('FeedbackModal', () => {
 
     const onClose = vi.fn();
     const first = render(<FeedbackModal isOpen onClose={onClose} />);
-    fireEvent.click(screen.getByRole('button', { name: /^Record feedback/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record feedback' }));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Stop & send/ })).toBeEnabled()
+      expect(useFeedbackRecorderStore.getState().stage).toBe('recording')
     );
+    expect(onClose).toHaveBeenCalledOnce();
     first.unmount();
 
-    render(<FeedbackModal isOpen onClose={onClose} />);
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Stop & send/ })).toBeEnabled()
-    );
-    fireEvent.click(screen.getByRole('button', { name: /Stop & send/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Stop & send/ }));
+    useFeedbackRecorderStore.getState().stopRecording();
+    useFeedbackRecorderStore.getState().stopRecording();
 
     await waitFor(() => expect(mocks.transcribe).toHaveBeenCalledOnce());
     await waitFor(() => expect(submitUserMutation).toHaveBeenCalledOnce());
-    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
     expect(stopTrack).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the modal open while microphone startup is pending', async () => {
+    mocks.getUserMedia.mockReturnValue(new Promise(() => undefined));
+    vi.stubGlobal('MediaRecorder', class {});
+    const onClose = vi.fn();
+    render(<FeedbackModal isOpen onClose={onClose} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record feedback' }));
+
+    await waitFor(() =>
+      expect(useFeedbackRecorderStore.getState().stage).toBe('starting')
+    );
+    expect(onClose).not.toHaveBeenCalled();
+    expect(
+      screen.getByPlaceholderText('What should we improve?')
+    ).toBeVisible();
   });
 
   it('releases an acquired stream when recorder startup fails', async () => {
@@ -202,11 +214,13 @@ describe('FeedbackModal', () => {
         }
       }
     );
-    render(<FeedbackModal isOpen onClose={vi.fn()} />);
+    const onClose = vi.fn();
+    render(<FeedbackModal isOpen onClose={onClose} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /^Record feedback/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record feedback' }));
 
     await waitFor(() => expect(stopTrack).toHaveBeenCalledOnce());
+    expect(onClose).not.toHaveBeenCalled();
     expect(
       screen.getByText(
         'Microphone permission was not granted. You can type instead.'

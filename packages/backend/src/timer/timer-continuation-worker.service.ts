@@ -356,6 +356,11 @@ export class TimerContinuationWorkerService
       !this.hasValidOptionalNumericFields(timer) ||
       (timer.isExtension !== undefined &&
         typeof timer.isExtension !== 'boolean') ||
+      (timer.isAutoStarted !== undefined &&
+        typeof timer.isAutoStarted !== 'boolean') ||
+      (timer.hasConsumedFirstIntentionReset !== undefined &&
+        typeof timer.hasConsumedFirstIntentionReset !== 'boolean') ||
+      !this.isOptionalExtensionCandidate(timer.extensionCandidate) ||
       (timer.extensionNextTimerType !== undefined &&
         !Object.values(TIMER_TYPES).includes(timer.extensionNextTimerType)) ||
       (timer.sessionIntentionEmojis !== undefined &&
@@ -443,6 +448,21 @@ export class TimerContinuationWorkerService
       timer.originalBreakDuration,
       timer.extensionBaseDuration,
     ].every(value => value === undefined || this.isSafePositiveInteger(value));
+  }
+
+  private isOptionalExtensionCandidate(value: unknown): boolean {
+    if (value === undefined) return true;
+    if (!this.isRecord(value)) return false;
+    return (
+      this.isNonEmptyString(value.originalTimerId) &&
+      this.isSafePositiveInteger(value.originalDuration) &&
+      (value.maxDuration === undefined ||
+        this.isSafePositiveInteger(value.maxDuration)) &&
+      (value.extensionNextTimerType === undefined ||
+        Object.values(TIMER_TYPES).includes(
+          value.extensionNextTimerType as Timer['type']
+        ))
+    );
   }
 
   private async wait(durationMs: number): Promise<void> {

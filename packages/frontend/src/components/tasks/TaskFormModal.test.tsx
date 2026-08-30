@@ -67,6 +67,12 @@ const baseProps = {
   onConvertToListItem: vi.fn().mockResolvedValue(true),
 };
 
+async function chooseListDestination() {
+  const destination = await screen.findByLabelText('Intention / List');
+  fireEvent.click(destination);
+  fireEvent.click(screen.getByRole('option', { name: /Launch/ }));
+}
+
 describe('shared Task editor destinations', () => {
   it('keeps the editor dialog names stable for automation and accessibility', () => {
     const { rerender } = render(<TaskFormModal {...baseProps} task={null} />);
@@ -85,10 +91,11 @@ describe('shared Task editor destinations', () => {
     render(<TaskFormModal {...baseProps} task={null} />);
 
     const destination = await screen.findByLabelText('Intention / List');
+    fireEvent.click(destination);
     expect(screen.getByRole('option', { name: /Enabled/ })).toBeVisible();
     expect(screen.queryByRole('option', { name: /Disabled/ })).toBeNull();
 
-    fireEvent.change(destination, { target: { value: `list:${list.id}` } });
+    fireEvent.click(screen.getByRole('option', { name: /Launch/ }));
     await waitFor(() =>
       expect(screen.queryByLabelText('Task description')).toBeNull()
     );
@@ -109,9 +116,7 @@ describe('shared Task editor destinations', () => {
       />
     );
 
-    fireEvent.change(await screen.findByLabelText('Intention / List'), {
-      target: { value: `list:${list.id}` },
-    });
+    await chooseListDestination();
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() =>
@@ -134,9 +139,7 @@ describe('shared Task editor destinations', () => {
       />
     );
 
-    fireEvent.change(await screen.findByLabelText('Intention / List'), {
-      target: { value: `list:${list.id}` },
-    });
+    await chooseListDestination();
     fireEvent.change(screen.getByLabelText('Task due date'), {
       target: { value: '2099-01-02' },
     });
@@ -162,8 +165,8 @@ describe('shared Task editor destinations', () => {
       />
     );
 
-    expect(await screen.findByLabelText('Intention / List')).toHaveValue(
-      'general'
+    expect(await screen.findByLabelText('Intention / List')).toHaveTextContent(
+      'Tasks without an Intention'
     );
   });
 
@@ -261,9 +264,7 @@ describe('shared Task editor destinations', () => {
       />
     );
 
-    fireEvent.change(await screen.findByLabelText('Intention / List'), {
-      target: { value: `list:${list.id}` },
-    });
+    await chooseListDestination();
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     fireEvent.click(screen.getByRole('button', { name: 'Move to List' }));
 
@@ -304,5 +305,82 @@ describe('shared Task editor destinations', () => {
         expect.objectContaining({ id: task.id, vacationEligible: true })
       )
     );
+  });
+
+  it('creates and edits a Task custom duration in whole minutes', async () => {
+    const onCreate = vi.fn().mockResolvedValue(true);
+    const { unmount } = render(
+      <TaskFormModal
+        {...baseProps}
+        task={null}
+        initialTitle="Focus block"
+        onCreate={onCreate}
+      />
+    );
+
+    const duration = await screen.findByLabelText('Custom duration');
+    fireEvent.change(duration, { target: { value: '30' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() =>
+      expect(onCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ customDuration: 1_800_000 })
+      )
+    );
+    unmount();
+
+    const existingTask = {
+      id: 'task-duration',
+      title: 'Focus block',
+      description: null,
+      dueDate: null,
+      dueTime: null,
+      priority: 'normal',
+      timerType: 'work',
+      customDuration: 1_800_000,
+      intentionSlug: null,
+      subIntentionSlug: null,
+      recurrenceRule: null,
+      recurrenceInterval: null,
+      recurrenceAnchorMode: 'planned',
+      vacationEligible: false,
+    } as Task;
+    const onUpdate = vi.fn().mockResolvedValue(true);
+    render(
+      <TaskFormModal {...baseProps} task={existingTask} onUpdate={onUpdate} />
+    );
+
+    const editedDuration = await screen.findByLabelText('Custom duration');
+    expect(editedDuration).toHaveValue(30);
+    fireEvent.change(editedDuration, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(onUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: existingTask.id,
+          customDuration: null,
+        })
+      )
+    );
+  });
+
+  it('rejects a non-positive Task custom duration before saving', async () => {
+    const onCreate = vi.fn().mockResolvedValue(true);
+    render(
+      <TaskFormModal
+        {...baseProps}
+        task={null}
+        initialTitle="Invalid duration"
+        onCreate={onCreate}
+      />
+    );
+
+    fireEvent.change(await screen.findByLabelText('Custom duration'), {
+      target: { value: '0' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    expect(onCreate).not.toHaveBeenCalled();
   });
 });

@@ -13,6 +13,7 @@ const notification = vi.hoisted(() => ({
 vi.mock('../utils/osUtils', () => ({
   isAndroid: false,
   isDesktop: true,
+  isMac: false,
 }));
 
 vi.mock('../utils/notificationUtils', () => ({

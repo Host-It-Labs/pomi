@@ -16,6 +16,7 @@ import { AssistantDebugSettingEntity } from '../src/assistant/assistant-debug.en
 import { DevelopmentFixtureMarkerEntity } from '../src/development-fixtures/development-fixture-marker.entity';
 import { generateIntentionSlug } from '../src/intentions/intention-slug';
 import { Intention } from '../src/intentions/intentions.entity';
+import { ListEntity } from '../src/lists/lists.entity';
 import { Preferences } from '../src/preferences/preferences.entity';
 import { Statistic } from '../src/statistics/statistics.entity';
 import { TaskEntity, TaskEventEntity } from '../src/tasks/tasks.entity';
@@ -54,6 +55,7 @@ type SeedTask = {
   priority: TaskPriority;
   status: TaskStatus;
   timerType?: TimerTypes;
+  customDuration?: number | null;
   intentionTitle: string;
   subIntentionTitle?: string | null;
   manualOrder?: number | null;
@@ -68,11 +70,31 @@ type SeedTask = {
   eventType?: TaskLifecycleEventType;
 };
 
+const COPYME_LIST = {
+  title: 'Groceries',
+  emoji: '🛒',
+  description: 'Weekly groceries and household essentials',
+};
+
+const COPYME_LIST_ITEMS = [
+  {
+    title: 'Buy oat milk',
+    dueOffsetDays: 1,
+    priority: TASK_PRIORITIES.HIGH,
+  },
+  {
+    title: 'Pick up fresh vegetables',
+    dueOffsetDays: null,
+    priority: TASK_PRIORITIES.NORMAL,
+  },
+] as const;
+
 type SeedUserFixtureOptions = {
   username: string;
   password: string;
   successLabel: string;
   isAdmin?: boolean;
+  includeCanonicalLists?: boolean;
   fixtureMarker?: {
     fixtureName: string;
     seedVersion: number;
@@ -101,7 +123,9 @@ function buildFixturePreferences(userId: string) {
     language: 'en' as const,
     workTimerDuration: WORK_DURATION_MS,
     breakTimerDuration: BREAK_DURATION_MS,
-    autoStartBreak: false,
+    autoStartBreak: true,
+    autoStartWork: true,
+    autoStartLongBreak: false,
     notifications: false,
     notifyOnWorkComplete: true,
     notifyOnBreakComplete: true,
@@ -129,7 +153,9 @@ function buildFixturePreferences(userId: string) {
     sessionPomodorosCount: 4,
     sessionHasLongBreak: true,
     sessionLongBreakDuration: LONG_BREAK_DURATION_MS,
-    sessionLongBreakAutoStart: false,
+    resetBreakOnFirstIntention: true,
+    resetLongBreakOnFirstIntention: false,
+    resetWorkOnFirstIntention: true,
     sessionShowLongBreakButton: true,
     longBreakToBreakEnabled: true,
     sessionShowEta: true,
@@ -282,6 +308,7 @@ const baseSeedTasks: SeedTask[] = [
     status: TASK_STATUSES.ACTIVE,
     intentionTitle: 'Focus',
     subIntentionTitle: 'Planning',
+    customDuration: 30 * 60 * 1000,
     recurrenceRule: null,
     recurrenceAnchorMode: 'planned',
   },
@@ -866,9 +893,12 @@ async function findFixtureHealthIssues(
   const tasks = await dataSource.getRepository(TaskEntity).find({
     where: { userId: user.id },
   });
-  if (tasks.length !== expectedTasks.length) {
+  const expectedListItemCount = options.includeCanonicalLists
+    ? COPYME_LIST_ITEMS.length
+    : 0;
+  if (tasks.length !== expectedTasks.length + expectedListItemCount) {
     issues.push(
-      `expected ${expectedTasks.length} canonical tasks, found ${tasks.length}`
+      `expected ${expectedTasks.length} canonical tasks and ${expectedListItemCount} List items, found ${tasks.length} task records`
     );
   }
   const tasksByTitle = new Map(tasks.map(task => [task.title, task]));
@@ -889,6 +919,7 @@ async function findFixtureHealthIssues(
       priority: expected.priority,
       status: expected.status,
       timerType: expected.timerType ?? TIMER_TYPES.WORK,
+      customDuration: expected.customDuration ?? null,
       intentionSlug: assignment?.intentionSlug ?? null,
       subIntentionSlug: assignment?.subIntentionSlug ?? null,
       recurrenceRule: expected.recurrenceRule,
@@ -925,6 +956,49 @@ async function findFixtureHealthIssues(
     ) {
       issues.push(`canonical task ${expected.title} is missing or changed`);
     }
+  }
+
+  const lists = await dataSource.getRepository(ListEntity).find({
+    where: { userId: user.id },
+  });
+  if (options.includeCanonicalLists) {
+    const list = lists.find(candidate => candidate.title === COPYME_LIST.title);
+    if (
+      lists.length !== 1 ||
+      !list ||
+      list.emoji !== COPYME_LIST.emoji ||
+      list.description !== COPYME_LIST.description ||
+      !list.isFavorite ||
+      list.isArchived
+    ) {
+      issues.push('canonical List is missing or changed');
+    } else {
+      const listItems = tasks.filter(task => task.itemKind === 'listItem');
+      for (const expected of COPYME_LIST_ITEMS) {
+        const item = listItems.find(
+          candidate => candidate.title === expected.title
+        );
+        if (
+          !item ||
+          item.listId !== list.id ||
+          item.status !== TASK_STATUSES.ACTIVE ||
+          item.priority !== expected.priority ||
+          item.dueDate !==
+            (expected.dueOffsetDays === null
+              ? null
+              : format(
+                  addDays(new Date(), expected.dueOffsetDays),
+                  'yyyy-MM-dd'
+                ))
+        ) {
+          issues.push(
+            `canonical List item ${expected.title} is missing or changed`
+          );
+        }
+      }
+    }
+  } else if (lists.length > 0 || expectedListItemCount > 0) {
+    issues.push('unexpected canonical List data');
   }
 
   const rawCounts = await dataSource
@@ -1042,6 +1116,7 @@ export async function seedUserFixture({
   password,
   successLabel,
   isAdmin = false,
+  includeCanonicalLists = false,
   fixtureMarker,
   seedData,
 }: SeedUserFixtureOptions): Promise<void> {
@@ -1055,6 +1130,7 @@ export async function seedUserFixture({
     const preferencesRepository =
       queryRunner.manager.getRepository(Preferences);
     const intentionsRepository = queryRunner.manager.getRepository(Intention);
+    const listsRepository = queryRunner.manager.getRepository(ListEntity);
     const statisticsRepository = queryRunner.manager.getRepository(Statistic);
     const tasksRepository = queryRunner.manager.getRepository(TaskEntity);
     const taskEventsRepository =
@@ -1260,6 +1336,20 @@ export async function seedUserFixture({
         intention,
       ])
     );
+    const savedList = includeCanonicalLists
+      ? await listsRepository.save(
+          listsRepository.create({
+            userId: savedUser.id,
+            title: COPYME_LIST.title,
+            emoji: COPYME_LIST.emoji,
+            description: COPYME_LIST.description,
+            vacationDefault: false,
+            isArchived: false,
+            isFavorite: true,
+            sourceIntentionId: null,
+          })
+        )
+      : null;
     const tasksToSave = userSeedTasks.map(task => {
       const assignment = resolveSeedTaskAssignment(
         task,
@@ -1276,6 +1366,7 @@ export async function seedUserFixture({
         priority: task.priority,
         status: task.status,
         timerType: task.timerType ?? TIMER_TYPES.WORK,
+        customDuration: task.customDuration ?? null,
         intentionSlug: assignment.intentionSlug,
         subIntentionSlug: assignment.subIntentionSlug,
         recurrenceRule: task.recurrenceRule,
@@ -1302,6 +1393,53 @@ export async function seedUserFixture({
       });
     });
     const savedTasks = await tasksRepository.save(tasksToSave);
+    const savedListItems = savedList
+      ? await tasksRepository.save(
+          COPYME_LIST_ITEMS.map(item =>
+            tasksRepository.create({
+              userId: savedUser.id,
+              title: item.title,
+              description: null,
+              sourceTranscript: null,
+              creationSource: 'manual',
+              importSource: null,
+              importSourceTaskId: null,
+              dueDate:
+                item.dueOffsetDays === null
+                  ? null
+                  : format(
+                      addDays(new Date(), item.dueOffsetDays),
+                      'yyyy-MM-dd'
+                    ),
+              dueTime: null,
+              manualOrder: null,
+              manualOrderOverride: false,
+              lastReminderKey: null,
+              priority: item.priority,
+              status: TASK_STATUSES.ACTIVE,
+              timerType: TIMER_TYPES.WORK,
+              customDuration: null,
+              pinnedAt: null,
+              intentionSlug: null,
+              subIntentionSlug: null,
+              recurrenceRule: null,
+              recurrenceInterval: null,
+              recurrenceSequenceIndex: 0,
+              recurrenceAnchorMode: 'planned',
+              followUpTaskId: null,
+              followUpDefinition: null,
+              followUpDelayDays: null,
+              followUpSourceTaskId: null,
+              itemKind: 'listItem',
+              listId: savedList.id,
+              taskRestoreState: null,
+              vacationEligible: false,
+              lastVacationRunId: null,
+              lastVacationShiftedOn: null,
+            })
+          )
+        )
+      : [];
     const seedTaskByTitle = new Map(
       userSeedTasks.map(task => [task.title, task])
     );
@@ -1393,6 +1531,8 @@ export async function seedUserFixture({
         `- userId: ${savedUser.id}`,
         `- intentions: ${savedIntentions.length}`,
         `- tasks: ${savedTasks.length}`,
+        `- Lists: ${savedList ? 1 : 0}`,
+        `- List items: ${savedListItems.length}`,
         `- task events: ${taskEventsToSave.length}`,
         `- work stats: ${workStatsCount}`,
         `- break stats: ${breakStatsCount}`,

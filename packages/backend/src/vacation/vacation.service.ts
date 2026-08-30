@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { TASK_STATUSES } from '@pomi/shared';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, LessThan, Not, Repository } from 'typeorm';
 import { v4 as uuid } from 'uuid';
 import { Intention } from '../intentions/intentions.entity';
 import { ListEntity } from '../lists/lists.entity';
@@ -106,6 +106,10 @@ export class VacationService implements OnModuleInit, OnModuleDestroy {
         { vacationEligible: false }
       );
     }
+    await this.vacationRepository.update(
+      { userId, active: true },
+      { lastProcessedOn: null, lastProcessedTimeZone: null }
+    );
     this.realtimeEvents.emitTasksUpdate(userId);
     await this.preferencesService.updatePreferences(userId, {
       vacationCoverageConfigured: true,
@@ -122,15 +126,39 @@ export class VacationService implements OnModuleInit, OnModuleDestroy {
     if (endsOn && endsOn <= today) {
       throw new BadRequestException('Return date must be after today');
     }
-    let state = await this.vacationRepository.findOne({ where: { userId } });
-    state ??= this.vacationRepository.create({ userId });
-    state.active = true;
-    state.runId = uuid();
-    state.startedOn = today;
-    state.endsOn = endsOn ?? null;
-    state = await this.vacationRepository.save(state);
-    await this.applyDueDateShifts(state, today, preferences.timeZone);
-    return this.publicState(state);
+    const result = await this.vacationRepository.manager.transaction(
+      async manager => {
+        const vacationRepository = manager.getRepository(VacationEntity);
+        const tasksRepository = manager.getRepository(TaskEntity);
+        let state = await vacationRepository.findOne({
+          where: { userId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (state?.active) {
+          return { state, changed: false };
+        }
+        state ??= vacationRepository.create({ userId });
+        state.active = true;
+        state.runId = uuid();
+        state.startedOn = today;
+        state.endsOn = endsOn ?? null;
+        state.lastProcessedOn = null;
+        state.lastProcessedTimeZone = null;
+        state = await vacationRepository.save(state);
+        const changed = await this.applyDueDateShifts(
+          state,
+          today,
+          preferences.timeZone,
+          tasksRepository
+        );
+        state.lastProcessedOn = today;
+        state.lastProcessedTimeZone = preferences.timeZone;
+        state = await vacationRepository.save(state);
+        return { state, changed };
+      }
+    );
+    if (result.changed) this.realtimeEvents.emitTasksUpdate(userId);
+    return this.publicState(result.state);
   }
 
   async deactivate(userId: string) {
@@ -152,41 +180,83 @@ export class VacationService implements OnModuleInit, OnModuleDestroy {
       where: { active: true },
     });
     for (const state of states) {
-      const preferences = await this.preferencesService.getPreferences(
-        state.userId
+      const changed = await this.processActiveVacation(
+        state.userId,
+        resolvedNow
       );
+      if (changed) this.realtimeEvents.emitTasksUpdate(state.userId);
+    }
+  }
+
+  private async processActiveVacation(
+    userId: string,
+    now: Date
+  ): Promise<boolean> {
+    return this.vacationRepository.manager.transaction(async manager => {
+      const vacationRepository = manager.getRepository(VacationEntity);
+      const tasksRepository = manager.getRepository(TaskEntity);
+      const state = await vacationRepository.findOne({
+        where: { userId, active: true },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!state) return false;
+
+      const preferences = await this.preferencesService.getPreferences(userId);
       if (!preferences.vacationExtension) {
         state.active = false;
-        await this.vacationRepository.save(state);
-        continue;
+        await vacationRepository.save(state);
+        return false;
       }
-      const today = this.localDate(resolvedNow, preferences.timeZone);
-      if (state.endsOn && today >= state.endsOn) {
-        await this.applyDueDateShifts(
-          state,
-          this.addDays(state.endsOn, -1),
-          preferences.timeZone
-        );
-        state.active = false;
-        await this.vacationRepository.save(state);
-        continue;
+
+      const today = this.localDate(now, preferences.timeZone);
+      const processingThrough =
+        state.endsOn && today >= state.endsOn
+          ? this.addDays(state.endsOn, -1)
+          : today;
+      const shouldProcess =
+        state.lastProcessedOn !== processingThrough ||
+        state.lastProcessedTimeZone !== preferences.timeZone;
+      const shouldRun =
+        shouldProcess ||
+        (state.runId !== null &&
+          (await this.hasUnprocessedDueDateShifts(
+            state,
+            processingThrough,
+            tasksRepository
+          )));
+
+      if (!shouldRun) {
+        if (state.endsOn && today >= state.endsOn) {
+          state.active = false;
+          await vacationRepository.save(state);
+        }
+        return false;
       }
-      await this.applyDueDateShifts(state, today, preferences.timeZone);
-    }
+
+      const changed = await this.applyDueDateShifts(
+        state,
+        processingThrough,
+        preferences.timeZone,
+        tasksRepository
+      );
+      state.lastProcessedOn = processingThrough;
+      state.lastProcessedTimeZone = preferences.timeZone;
+      if (state.endsOn && today >= state.endsOn) state.active = false;
+      await vacationRepository.save(state);
+      return changed;
+    });
   }
 
   private async applyDueDateShifts(
     state: VacationEntity,
     throughDate: string,
-    timeZone: string
-  ) {
-    if (!state.runId || !state.startedOn) return;
-    const items = await this.tasksRepository.find({
-      where: {
-        userId: state.userId,
-        status: TASK_STATUSES.ACTIVE,
-        vacationEligible: true,
-      },
+    timeZone: string,
+    tasksRepository: Repository<TaskEntity>
+  ): Promise<boolean> {
+    if (!state.runId || !state.startedOn) return false;
+    const items = await tasksRepository.find({
+      where: this.getUnprocessedDueDateShiftWhere(state, throughDate),
+      lock: { mode: 'pessimistic_write' },
     });
     let changed = false;
     for (const item of items) {
@@ -208,10 +278,49 @@ export class VacationService implements OnModuleInit, OnModuleDestroy {
       item.lastReminderKey = null;
       item.lastVacationRunId = state.runId;
       item.lastVacationShiftedOn = lastDate;
-      await this.tasksRepository.save(item);
+      await tasksRepository.save(item);
       changed = true;
     }
-    if (changed) this.realtimeEvents.emitTasksUpdate(state.userId);
+    return changed;
+  }
+
+  private async hasUnprocessedDueDateShifts(
+    state: VacationEntity,
+    throughDate: string,
+    tasksRepository: Repository<TaskEntity>
+  ) {
+    return tasksRepository.exists({
+      where: this.getUnprocessedDueDateShiftWhere(state, throughDate),
+    });
+  }
+
+  private getUnprocessedDueDateShiftWhere(
+    state: VacationEntity,
+    throughDate: string
+  ) {
+    if (!state.runId) return [];
+    const runId = state.runId;
+    const base = {
+      userId: state.userId,
+      status: TASK_STATUSES.ACTIVE,
+      vacationEligible: true,
+      dueDate: Not(IsNull()),
+    };
+
+    return [
+      { ...base, lastVacationRunId: IsNull() },
+      { ...base, lastVacationRunId: Not(runId) },
+      {
+        ...base,
+        lastVacationRunId: runId,
+        lastVacationShiftedOn: IsNull(),
+      },
+      {
+        ...base,
+        lastVacationRunId: runId,
+        lastVacationShiftedOn: LessThan(throughDate),
+      },
+    ];
   }
 
   private publicState(state: VacationEntity | null) {

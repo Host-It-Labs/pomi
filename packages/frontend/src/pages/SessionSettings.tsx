@@ -30,7 +30,7 @@ export const SessionSettings = ({
   return (
     <div className="space-y-4">
       <SettingsControlGroup title={t('settings.essentials')}>
-        <div className="space-y-1">
+        <div className="space-y-1" data-setting-id="sessionPomodorosCount">
           <div className="flex justify-between items-center">
             <label
               htmlFor="sessionPomodorosCount"
@@ -64,7 +64,10 @@ export const SessionSettings = ({
 
         {preferences.sessionHasLongBreak && (
           <div className="ml-4 space-y-6">
-            <div className="space-y-1">
+            <div
+              className="space-y-1"
+              data-setting-id="sessionLongBreakDuration"
+            >
               <div className="flex justify-between items-center">
                 <label
                   htmlFor="sessionLongBreakDuration"
@@ -89,16 +92,6 @@ export const SessionSettings = ({
             </div>
 
             <Separator />
-
-            <ToggleField
-              id="sessionLongBreakAutoStart"
-              checked={preferences.sessionLongBreakAutoStart ?? false}
-              onChange={value =>
-                updatePreference('sessionLongBreakAutoStart', value)
-              }
-              label={t('session.autoStartLongBreak')}
-              description={t('session.autoStartLongBreakDescription')}
-            />
           </div>
         )}
       </SettingsControlGroup>

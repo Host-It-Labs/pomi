@@ -42,6 +42,10 @@ import { getAdditionalSelectedIntentionsCount } from '../utils/timerIntentions';
 import { getLongBreakSwitchAction } from '../utils/longBreakSwitch';
 import { ExpandedIntentionsPicker } from './timer/ExpandedIntentionsPicker';
 import { TimeRemainingCircle } from './timer/TimeRemainingCircle';
+import {
+  getTimerStagePanelReservation,
+  shouldShowExpandedTaskView,
+} from './timer/timerLayout';
 import { MOBILE_TASK_ROW_HEIGHT } from '../constants/mobileTaskLayout';
 import { useI18n } from '../i18n';
 
@@ -220,14 +224,12 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
     preferences,
     timer,
   });
-  const showExpandedTaskView =
-    expanded &&
-    preferences?.tasksExtension &&
-    (timer?.type === TIMER_TYPES.WORK ||
-      ((timer?.type === TIMER_TYPES.BREAK ||
-        timer?.type === TIMER_TYPES.LONG_BREAK) &&
-        preferences.tasksDuringBreaks)) &&
-    !timer?.isExtension;
+  const showExpandedTaskView = shouldShowExpandedTaskView({
+    isExpanded: expanded,
+    tasksExtension: preferences?.tasksExtension,
+    timerType: timer?.type,
+    tasksDuringBreaks: preferences?.tasksDuringBreaks,
+  });
   const showExpandedIntentionsPicker =
     showIntentionsPicker && !timer?.isExtension;
   const showDisabledIntentionsSkeleton =
@@ -249,9 +251,24 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
   const showTopTaskPanel = showExpandedTaskView || showTasksSetupPlaceholder;
   const showTopIntentionsPicker =
     showExpandedIntentionsPicker && showExpandedTaskView;
+  const isLoadingTimerLayout = expanded && (!preferences || !timer);
+  const { hasBottomPanel: hasTimerStageBottomPanel } =
+    getTimerStagePanelReservation({
+      isExpanded: expanded,
+      isLoading: isLoadingTimerLayout,
+      hasTopPanel: Boolean(showTopIntentionsPicker || showTopTaskPanel),
+      hasBottomPanel: Boolean(showBottomPanel),
+    });
+  const hasTimerStageTopIntentionsPanel =
+    showTopIntentionsPicker || isLoadingTimerLayout;
 
   const measureMobileTimerLayout = useCallback(() => {
-    if (isDesktop || (!showExpandedIntentionsPicker && !showExpandedTaskView)) {
+    if (
+      isDesktop ||
+      (!showExpandedIntentionsPicker &&
+        !showExpandedTaskView &&
+        !isLoadingTimerLayout)
+    ) {
       setMobileTimerStageBounds(null);
       setMobileTimerVisualOffset(0);
       setMobileTaskRowLimit(DEFAULT_TASK_ROWS);
@@ -285,7 +302,9 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
       !navigationBounds ||
       !timerCircleBounds ||
       timerVisualBounds.length === 0 ||
-      (showExpandedIntentionsPicker && !pickerBounds) ||
+      ((showExpandedIntentionsPicker || isLoadingTimerLayout) &&
+        !pickerBounds) ||
+      (isLoadingTimerLayout && !taskBounds) ||
       (showExpandedTaskView && (!taskBounds || !taskGridBounds))
     ) {
       return;
@@ -301,12 +320,14 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
     const timerCircleCenter =
       timerCircleBounds.top + timerCircleBounds.height / 2;
 
-    const topSurfaceBottom = showTopIntentionsPicker
-      ? navigationBounds.bottom + MOBILE_PICKER_NAV_GAP + pickerBounds!.height
-      : navigationBounds.bottom;
-    const bottomSurfaceTop = showExpandedTaskView
-      ? taskBounds!.top
-      : pickerBounds?.top;
+    const topSurfaceBottom =
+      showTopIntentionsPicker || isLoadingTimerLayout
+        ? navigationBounds.bottom + MOBILE_PICKER_NAV_GAP + pickerBounds!.height
+        : navigationBounds.bottom;
+    const bottomSurfaceTop =
+      showExpandedTaskView || isLoadingTimerLayout
+        ? taskBounds!.top
+        : pickerBounds?.top;
     if (bottomSurfaceTop === undefined) return;
 
     if (showExpandedTaskView) {
@@ -347,6 +368,7 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
   }, [
     showExpandedIntentionsPicker,
     showExpandedTaskView,
+    isLoadingTimerLayout,
     showTopIntentionsPicker,
   ]);
 
@@ -608,18 +630,18 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
             'flex w-full items-center justify-center pointer-events-auto',
             isDesktop &&
               expanded &&
-              showTopIntentionsPicker &&
+              hasTimerStageTopIntentionsPanel &&
               '-translate-y-[20px]',
             isDesktop
               ? [
                   'absolute left-0 right-0',
-                  showTopIntentionsPicker
+                  hasTimerStageTopIntentionsPanel
                     ? 'top-[236px]'
                     : showTopTaskPanel
                       ? 'top-[210px]'
                       : 'top-[64px]',
-                  showBottomPanel
-                    ? showTopIntentionsPicker
+                  hasTimerStageBottomPanel
+                    ? hasTimerStageTopIntentionsPanel
                       ? 'bottom-[176px]'
                       : 'bottom-[204px]'
                     : 'bottom-0',
@@ -711,6 +733,70 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
             placement={showTopIntentionsPicker ? 'top' : 'bottom'}
           />
         </div>
+      )}
+
+      {isLoadingTimerLayout && (
+        <>
+          <div
+            ref={expandedPickerRef}
+            data-testid="timer-loading-intentions-surface"
+            aria-hidden="true"
+            className={clsx(
+              'left-0 right-0 z-10 w-full',
+              isDesktop ? 'absolute top-[78px]' : 'fixed'
+            )}
+            style={!isDesktop ? { top: mobilePickerTop } : undefined}
+          >
+            <div className="w-full px-3 pb-2 pt-1.5">
+              <div className="flex flex-col gap-1.5">
+                {Array.from({ length: 3 }).map((_, rowIndex) => (
+                  <div
+                    key={`timer-loading-intentions-row-${rowIndex}`}
+                    className="flex justify-center gap-1.5"
+                  >
+                    {Array.from({ length: 3 }).map((__, itemIndex) => (
+                      <div
+                        key={`timer-loading-intention-${rowIndex}-${itemIndex}`}
+                        className={clsx(
+                          'w-[30%] max-w-40 animate-pulse rounded-md bg-slate-800/45',
+                          isDesktop ? 'h-8' : 'h-12'
+                        )}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-1 min-h-8" />
+            </div>
+          </div>
+
+          <div
+            ref={expandedTasksRef}
+            data-testid="timer-loading-tasks-surface"
+            aria-hidden="true"
+            className={clsx(
+              'left-0 right-0 z-10 w-full px-2',
+              isDesktop
+                ? 'absolute bottom-2'
+                : [
+                    'fixed bottom-[calc(env(safe-area-inset-bottom)+0.25rem)]',
+                    isIos ? 'translate-y-2' : 'translate-y-3',
+                  ]
+            )}
+          >
+            <div className="mx-auto max-w-md px-4 py-2">
+              <div className="mb-2 min-h-9" />
+              <div className="grid min-h-[96px] grid-rows-3 gap-1">
+                {Array.from({ length: 3 }).map((_, rowIndex) => (
+                  <div
+                    key={`timer-loading-task-${rowIndex}`}
+                    className="min-h-8 animate-pulse rounded-md border border-slate-800/60 bg-slate-900/55"
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {showExpandedTaskView && (
@@ -829,8 +915,8 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
       )}
 
       {expanded && timer?.isExtension && timer.intention && (
-        <div className="absolute bottom-0 left-0 right-0 w-full z-10 flex justify-center pb-6">
-          <div className="flex items-center gap-2 rounded-full bg-slate-800/60 border border-slate-700/50 px-4 py-2">
+        <div className="absolute bottom-0 left-0 right-0 z-10 flex w-full justify-center pb-6">
+          <div className="flex items-center gap-2 rounded-full border border-slate-700/50 bg-slate-800/60 px-4 py-2">
             {(timer.intentionEmoji || timer.subIntentionEmoji) && (
               <IntentionEmojiPair
                 parentEmoji={timer.intentionEmoji}
@@ -838,7 +924,7 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
                 size="sm"
               />
             )}
-            <span className="text-xs text-slate-300 font-medium">
+            <span className="text-xs font-medium text-slate-300">
               {activeIntentionLabel}
               {additionalIntentionsCount > 0
                 ? ` +${additionalIntentionsCount}`

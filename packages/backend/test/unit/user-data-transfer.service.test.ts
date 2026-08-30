@@ -43,6 +43,8 @@ describe('UserDataTransferService', () => {
           id: 'source-preferences',
           userId: 'source-user',
           language: 'fr-FR',
+          autoStartBreak: false,
+          sessionLongBreakAutoStart: true,
         },
         intentions: [
           {
@@ -135,6 +137,12 @@ describe('UserDataTransferService', () => {
           currentTimer: {
             userId: 'source-user',
             focusedTaskIds: ['source-task'],
+            isAutoStarted: true,
+            extensionCandidate: {
+              originalTimerId: 'source-statistic',
+              originalDuration: 1_500_000,
+              extensionNextTimerType: 'break',
+            },
           },
           sessionState: null,
           lastCompletionTimestamp: null,
@@ -142,12 +150,18 @@ describe('UserDataTransferService', () => {
           undoState: null,
           undoHistory: [],
           redoHistory: [],
-          extensionState: null,
+          extensionState: {
+            startTime: 2_000,
+            originalTimerId: 'source-statistic',
+            originalDuration: 1_500_000,
+            extensionNextTimerType: 'break',
+          },
         },
       },
     } as never);
 
     const preferences = inserted.get('Preferences')?.[0];
+    const statistic = inserted.get('Statistic')?.[0];
     const [parent, child] = inserted.get('Intention') ?? [];
     const [task, template, generatedFollowUp] =
       inserted.get('TaskEntity') ?? [];
@@ -156,7 +170,9 @@ describe('UserDataTransferService', () => {
     expect(preferences).toMatchObject({
       userId: targetUserId,
       language: 'fr',
+      autoStartBreak: true,
     });
+    expect(preferences).not.toHaveProperty('sessionLongBreakAutoStart');
     expect(preferences?.id).not.toBe('source-preferences');
     expect(parent.id).not.toBe('source-parent');
     expect(child.id).not.toBe('source-child');
@@ -210,10 +226,23 @@ describe('UserDataTransferService', () => {
     expect(inserted.get('AssistantUsageEntity')?.[0].id).not.toBe(
       'source-usage'
     );
+    expect(statistic?.id).not.toBe('source-statistic');
     expect(importedRuntime).toMatchObject({
       currentTimer: {
         userId: targetUserId,
         focusedTaskIds: [task.id],
+        isAutoStarted: true,
+        extensionCandidate: {
+          originalTimerId: statistic?.id,
+          originalDuration: 1_500_000,
+          extensionNextTimerType: 'break',
+        },
+      },
+      extensionState: {
+        startTime: 2_000,
+        originalTimerId: statistic?.id,
+        originalDuration: 1_500_000,
+        extensionNextTimerType: 'break',
       },
     });
   });

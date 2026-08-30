@@ -3,7 +3,6 @@ import {
   List,
   ListItem,
   Task,
-  type TaskPageViewMode,
   type TaskSortMode,
   TaskStatus,
 } from '@pomi/shared';
@@ -27,8 +26,6 @@ import {
 } from 'react';
 import {
   FaArchive,
-  FaCalendarAlt,
-  FaCheckSquare,
   FaEdit,
   FaFileImport,
   FaGripVertical,
@@ -61,7 +58,6 @@ import { TaskImportModal } from '../components/tasks/TaskImportModal';
 import { TaskQuickCreateRow } from '../components/tasks/TaskQuickCreateRow';
 import { OverflowTaskTitle } from '../components/tasks/OverflowTaskTitle';
 import { TaskInlineProperties } from '../components/tasks/TaskInlineProperties';
-import { TaskCalendarNavigator } from '../components/tasks/TaskCalendarNavigator';
 import { TaskArchiveConfirmationModal } from '../components/tasks/TaskArchiveConfirmationModal';
 import { CompletionButton } from '../components/tasks/CompletionButton';
 import { MobileSwipeActionRow } from '../components/tasks/MobileSwipeActionRow';
@@ -74,13 +70,6 @@ import {
   TaskPropertyFilterMenu,
   type TaskPropertyFilters,
 } from '../components/tasks/TaskPropertyFilterMenu';
-import {
-  buildTaskBulkAssignmentOptions,
-  TaskBulkActionModal,
-  runTaskBulkUpdates,
-  type TaskBulkAssignmentOption,
-  type TaskBulkUpdate,
-} from '../components/tasks/TaskBulkActionModal';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { IconButton } from '../components/ui/IconButton';
@@ -124,7 +113,6 @@ import { useDefaultTaskSort } from './taskDefaultSort';
 import { useUpdatedTaskReveal } from './taskUpdatedReveal';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
 import { TASKS_PAGE_CONTAINER_CLASS } from '../constants/taskLayout';
-import { filterCalendarEntries, getTodayDateKey } from '../utils/taskCalendar';
 
 type TaskIntentionFilterValue = string | null;
 type TaskDropPlacement = 'before' | 'after';
@@ -165,6 +153,9 @@ export function Tasks() {
   const taskSearchFocusRequest = useUiStore.use.taskSearchFocusRequest();
   const taskQuickCreateFocusRequest =
     useUiStore.use.taskQuickCreateFocusRequest();
+  const taskItemRevealRequest = useUiStore.use.taskItemRevealRequest();
+  const clearTaskItemRevealRequest =
+    useUiStore.use.clearTaskItemRevealRequest();
   const [intentions, setIntentions] = useState<Intention[]>([]);
   const [lists, setLists] = useState<List[]>([]);
   const [listItems, setListItems] = useState<ListItem[]>([]);
@@ -173,8 +164,6 @@ export function Tasks() {
   const [newListTitle, setNewListTitle] = useState('');
   const [newListEmoji, setNewListEmoji] = useState('');
   const [isCreatingList, setIsCreatingList] = useState(false);
-  const [newListItemTitle, setNewListItemTitle] = useState('');
-  const [isSavingListItem, setIsSavingListItem] = useState(false);
   const [editingListItem, setEditingListItem] = useState<ListItem | null>(null);
   const [completingListItemIds, setCompletingListItemIds] = useState<string[]>(
     []
@@ -205,24 +194,11 @@ export function Tasks() {
   const [restoringTaskId, setRestoringTaskId] = useState<string | null>(null);
   const [descriptionTask, setDescriptionTask] = useState<Task | null>(null);
   const [taskSortMode, setTaskSortMode] = useState<TaskSortMode>('default');
-  const [taskPageViewMode, setTaskPageViewMode] =
-    useState<TaskPageViewMode>('list');
-  const [taskCalendarAnchor, setTaskCalendarAnchor] = useState(getTodayDateKey);
-  const [taskCalendarDate, setTaskCalendarDate] = useState<string | null>(
-    getTodayDateKey
-  );
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [propertyFilters, setPropertyFilters] = useState<TaskPropertyFilters>(
     EMPTY_TASK_PROPERTY_FILTERS
   );
   const [isPropertyMenuOpen, setIsPropertyMenuOpen] = useState(false);
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(
-    new Set()
-  );
-  const [isBulkActionOpen, setIsBulkActionOpen] = useState(false);
-  const [isBulkSaving, setIsBulkSaving] = useState(false);
-  const [bulkError, setBulkError] = useState<string | null>(null);
   const [updatedTaskDestinationId, setUpdatedTaskDestinationId] = useState<
     string | null
   >(null);
@@ -578,27 +554,6 @@ export function Tasks() {
       (!hideVacationCovered || !item.vacationEligible)
   ).length;
 
-  const createListItem = useCallback(async () => {
-    if (!selectedList || !newListItemTitle.trim() || isSavingListItem) return;
-    setIsSavingListItem(true);
-    try {
-      await submitUserMutation({
-        kind: 'lists',
-        label: t('task.addToList', { title: selectedList.title }),
-        payload: {
-          operation: 'createItem',
-          listId: selectedList.id,
-          title: newListItemTitle.trim(),
-        },
-        reconcile: loadLists,
-      });
-      setNewListItemTitle('');
-      await loadLists();
-    } finally {
-      setIsSavingListItem(false);
-    }
-  }, [isSavingListItem, loadLists, newListItemTitle, selectedList, t]);
-
   const updateListItem = useCallback(
     async (
       item: ListItem,
@@ -708,6 +663,36 @@ export function Tasks() {
     [loadLists, loadTasks, t]
   );
 
+  const convertListItemToTask = useCallback(
+    async (
+      itemId: string,
+      intentionSlug: string,
+      subIntentionSlug: string | null
+    ) => {
+      try {
+        await submitUserMutation({
+          kind: 'lists',
+          label: t('task.intentionOrList'),
+          payload: {
+            operation: 'convertListItemToTask',
+            itemId,
+            intentionSlug,
+            subIntentionSlug,
+          },
+          reconcile: async () => {
+            await Promise.all([loadTasks(), loadLists()]);
+          },
+        });
+        await Promise.all([loadTasks(), loadLists()]);
+        showToastFromStore(t('task.updated'), 'success');
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [loadLists, loadTasks, t]
+  );
+
   const resetSelectedList = useCallback(async () => {
     if (!selectedList) return;
     await submitUserMutation({
@@ -799,9 +784,46 @@ export function Tasks() {
   }, []);
   const revealUpdatedTask = useUpdatedTaskReveal({
     resetFilters: resetUpdatedTaskFilters,
-    setPageViewMode: setTaskPageViewMode,
     setDestinationTaskId: setUpdatedTaskDestinationId,
   });
+  useEffect(() => {
+    if (!taskItemRevealRequest) return;
+    if (taskItemRevealRequest.kind === 'listItem') {
+      setTaskSearchQuery('');
+      setSelectedIntentionFilter(null);
+      setPropertyFilters(EMPTY_TASK_PROPERTY_FILTERS);
+      setSelectedListId(taskItemRevealRequest.listId);
+    } else {
+      revealUpdatedTask(taskItemRevealRequest.id);
+    }
+    clearTaskItemRevealRequest();
+  }, [clearTaskItemRevealRequest, revealUpdatedTask, taskItemRevealRequest]);
+  const createTaskWithViewFeedback = useCallback(
+    async (input: Parameters<typeof createTask>[0]) => {
+      const existingTaskIds = new Set(
+        useTasksStore.getState().tasks.map(task => task.id)
+      );
+      const didCreate = await createTask(input);
+      if (!didCreate) return false;
+
+      const createdTask = useTasksStore
+        .getState()
+        .tasks.find(task => !existingTaskIds.has(task.id));
+      showToastFromStore(
+        t('task.created'),
+        'success',
+        5000,
+        createdTask
+          ? {
+              label: t('task.viewUpdated'),
+              onClick: () => revealUpdatedTask(createdTask.id),
+            }
+          : undefined
+      );
+      return true;
+    },
+    [createTask, revealUpdatedTask, t]
+  );
   const updateTaskWithPositionFeedback = useCallback(
     async (updates: Parameters<typeof updateTask>[0]) => {
       const currentTask = tasks.find(task => task.id === updates.id);
@@ -867,36 +889,6 @@ export function Tasks() {
     taskSearchQuery,
     taskView.tasks,
   ]);
-  const applyBulkUpdates = useCallback(
-    async (updates: TaskBulkUpdate[]) => {
-      setIsBulkSaving(true);
-      setBulkError(null);
-      try {
-        const failed = new Set(await runTaskBulkUpdates(updates, updateTask));
-        await loadTasks();
-        if (failed.size > 0) {
-          setSelectedTaskIds(failed);
-          setBulkError(
-            t('task.bulkPartialFailure', {
-              failed: failed.size,
-              total: updates.length,
-            })
-          );
-          return;
-        }
-        setIsBulkActionOpen(false);
-        setSelectedTaskIds(new Set());
-        setSelectionMode(false);
-        showToastFromStore(
-          t('task.bulkUpdated', { count: updates.length }),
-          'success'
-        );
-      } finally {
-        setIsBulkSaving(false);
-      }
-    },
-    [loadTasks, t, updateTask]
-  );
   const eligibleMixedListItems = useMemo(() => {
     const query = normalizeSearchText(taskSearchQuery);
     if (
@@ -936,56 +928,6 @@ export function Tasks() {
       mixTaskAndListItems(visibleTasks, eligibleMixedListItems, taskSortMode),
     [eligibleMixedListItems, taskSortMode, visibleTasks]
   );
-  const displayedTaskItems = useMemo(
-    () =>
-      taskPageViewMode === 'calendar' && selectedList === null
-        ? filterCalendarEntries(mixedTaskItems, taskCalendarDate)
-        : mixedTaskItems,
-    [mixedTaskItems, selectedList, taskCalendarDate, taskPageViewMode]
-  );
-  const displayedTasks = useMemo(
-    () =>
-      displayedTaskItems
-        .filter(
-          (entry): entry is Extract<MixedTaskItem, { kind: 'task' }> =>
-            entry.kind === 'task'
-        )
-        .map(entry => entry.task),
-    [displayedTaskItems]
-  );
-  useEffect(() => {
-    if (!selectionMode) return;
-    const displayedIds = new Set(displayedTasks.map(task => task.id));
-    setSelectedTaskIds(current => {
-      const next = new Set(
-        [...current].filter(taskId => displayedIds.has(taskId))
-      );
-      return next.size === current.size ? current : next;
-    });
-  }, [displayedTasks, selectionMode]);
-
-  const selectedBulkTasks = useMemo(
-    () => displayedTasks.filter(task => selectedTaskIds.has(task.id)),
-    [displayedTasks, selectedTaskIds]
-  );
-  const allDisplayedTasksSelected =
-    displayedTasks.length > 0 &&
-    displayedTasks.every(task => selectedTaskIds.has(task.id));
-  const selectedBulkTimerTypes = useMemo(
-    () => new Set(selectedBulkTasks.map(task => task.timerType)),
-    [selectedBulkTasks]
-  );
-  const bulkAssignmentUnavailableReason =
-    selectedBulkTimerTypes.size > 1 ? t('task.bulkSameTimerType') : null;
-  const bulkAssignmentOptions = useMemo<TaskBulkAssignmentOption[]>(() => {
-    const onlyTimerType =
-      selectedBulkTimerTypes.size === 1 ? [...selectedBulkTimerTypes][0] : null;
-    return buildTaskBulkAssignmentOptions(
-      intentions,
-      onlyTimerType,
-      t('task.noIntention')
-    );
-  }, [intentions, selectedBulkTimerTypes, t]);
   const orderedIntentionFamilyTasks = useMemo(() => {
     if (!selectedFilterOption) return [];
     const parentSlug =
@@ -1013,7 +955,7 @@ export function Tasks() {
     destination.scrollIntoView({ behavior: 'auto', block: 'center' });
     destination.focus({ preventScroll: true });
     setPinnedTaskDestinationId(null);
-  }, [displayedTaskItems, pinnedTaskDestinationId]);
+  }, [mixedTaskItems, pinnedTaskDestinationId]);
   useLayoutEffect(() => {
     if (!updatedTaskDestinationId) return;
     const destination = Array.from(
@@ -1031,7 +973,7 @@ export function Tasks() {
       setHighlightedTaskId(null);
       updatedTaskHighlightTimeoutRef.current = null;
     }, 1800);
-  }, [displayedTaskItems, updatedTaskDestinationId]);
+  }, [mixedTaskItems, updatedTaskDestinationId]);
   useEffect(
     () => () => {
       if (updatedTaskHighlightTimeoutRef.current !== null) {
@@ -1049,22 +991,20 @@ export function Tasks() {
     ? taskSearchQuery.trim()
       ? `${activeListItems.length} of ${visibleActiveSelectedListItemCount}`
       : `${activeListItems.length}`
-    : taskPageViewMode === 'calendar'
-      ? `${displayedTaskItems.length} of ${mixedTaskItems.length}`
-      : hasActiveFilters
-        ? `${mixedTaskItems.length} of ${
-            taskView.tasks.length +
-            (selectedFilterOption === null &&
-            preferences?.listsExtension === true &&
-            propertyFilters.timerTypes.includes(TIMER_TYPES.WORK)
-              ? listItems.filter(
-                  item =>
-                    item.status === TASK_STATUSES.ACTIVE &&
-                    (!hideVacationCovered || !item.vacationEligible)
-                ).length
-              : 0)
-          }`
-        : `${mixedTaskItems.length}`;
+    : hasActiveFilters
+      ? `${mixedTaskItems.length} of ${
+          taskView.tasks.length +
+          (selectedFilterOption === null &&
+          preferences?.listsExtension === true &&
+          propertyFilters.timerTypes.includes(TIMER_TYPES.WORK)
+            ? listItems.filter(
+                item =>
+                  item.status === TASK_STATUSES.ACTIVE &&
+                  (!hideVacationCovered || !item.vacationEligible)
+              ).length
+            : 0)
+        }`
+      : `${mixedTaskItems.length}`;
   const showImportAction = hasImportedTasks === false;
   const hideTasksTitle =
     showImportAction &&
@@ -1198,38 +1138,9 @@ export function Tasks() {
                   <FaFileImport size={11} />
                 </IconButton>
               )}
-              {!selectedList && (
-                <IconButton
-                  label={t('common.calendar')}
-                  title={t('common.calendar')}
-                  size="sm"
-                  variant={
-                    taskPageViewMode === 'calendar' ? 'primary' : 'secondary'
-                  }
-                  aria-pressed={taskPageViewMode === 'calendar'}
-                  onClick={() =>
-                    setTaskPageViewMode(currentMode =>
-                      currentMode === 'calendar' ? 'list' : 'calendar'
-                    )
-                  }
-                  className="h-8 w-8 !p-0"
-                >
-                  <FaCalendarAlt size={11} />
-                </IconButton>
-              )}
             </div>
           </div>
         </header>
-
-        {taskPageViewMode === 'calendar' && !selectedList && (
-          <TaskCalendarNavigator
-            entries={mixedTaskItems}
-            anchorDate={taskCalendarAnchor}
-            selectedDate={taskCalendarDate}
-            onAnchorDateChange={setTaskCalendarAnchor}
-            onSelectedDateChange={setTaskCalendarDate}
-          />
-        )}
 
         <section
           aria-label={
@@ -1240,33 +1151,7 @@ export function Tasks() {
           className="mt-4 rounded-xl border border-indigo-500/25 bg-linear-to-br from-indigo-950/40 via-slate-900/65 to-slate-950/75 p-2.5 shadow-sm shadow-indigo-950/30"
         >
           {selectedList ? (
-            <form
-              className="flex items-center gap-2"
-              onSubmit={event => {
-                event.preventDefault();
-                void createListItem();
-              }}
-            >
-              <span className="shrink-0 text-lg" aria-hidden="true">
-                {selectedList.emoji ?? '📋'}
-              </span>
-              <input
-                autoFocus
-                value={newListItemTitle}
-                onChange={event => setNewListItemTitle(event.target.value)}
-                placeholder={t('task.addToList', {
-                  title: selectedList.title,
-                })}
-                className="h-10 min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-white outline-none focus:border-indigo-500"
-              />
-              <Button
-                type="submit"
-                size="sm"
-                disabled={isSavingListItem || !newListItemTitle.trim()}
-              >
-                {t('common.add')}
-              </Button>
-            </form>
+            <TaskQuickCreateRow autoFocus listId={selectedList.id} />
           ) : (
             <TaskQuickCreateRow
               focusRequest={taskQuickCreateFocusRequest}
@@ -1358,31 +1243,6 @@ export function Tasks() {
             >
               {taskCountLabel}
             </span>
-            {!selectedList && (selectionMode || displayedTasks.length > 0) && (
-              <IconButton
-                label={
-                  selectionMode
-                    ? t('task.exitSelectionMode')
-                    : t('task.selectMultiple')
-                }
-                title={
-                  selectionMode
-                    ? t('task.exitSelectionMode')
-                    : t('task.selectMultiple')
-                }
-                size="sm"
-                variant={selectionMode ? 'primary' : 'secondary'}
-                aria-pressed={selectionMode}
-                onClick={() => {
-                  setSelectionMode(current => !current);
-                  setSelectedTaskIds(new Set());
-                  setBulkError(null);
-                }}
-                className="h-7 w-7 !p-0"
-              >
-                <FaCheckSquare size={11} />
-              </IconButton>
-            )}
           </div>
           <div className="flex items-center gap-2">
             {hasActiveFilters && (
@@ -1418,39 +1278,6 @@ export function Tasks() {
           </div>
         </div>
 
-        {selectionMode && !selectedList ? (
-          <div className="mt-2 flex min-h-9 items-center gap-2 rounded-lg border border-indigo-500/25 bg-indigo-950/25 px-2.5 py-1.5 text-xs">
-            <span className="min-w-0 flex-1 truncate text-indigo-100">
-              {t('task.selectedCount', { count: selectedBulkTasks.length })}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedTaskIds(
-                  allDisplayedTasksSelected
-                    ? new Set()
-                    : new Set(displayedTasks.map(task => task.id))
-                );
-              }}
-              className="rounded px-2 py-1 text-slate-300 hover:bg-slate-800"
-            >
-              {allDisplayedTasksSelected
-                ? t('common.clear')
-                : t('task.selectVisible')}
-            </button>
-            <Button
-              size="xs"
-              onClick={() => {
-                setBulkError(null);
-                setIsBulkActionOpen(true);
-              }}
-              disabled={selectedBulkTasks.length === 0}
-            >
-              {t('task.bulkManage')}
-            </Button>
-          </div>
-        ) : null}
-
         <div className="mt-2 space-y-2.5">
           {error && <Alert variant="error">{error}</Alert>}
           {intentionsError && <Alert variant="error">{intentionsError}</Alert>}
@@ -1464,6 +1291,7 @@ export function Tasks() {
           {selectedList ? (
             <SelectedListItems
               list={selectedList}
+              intentions={intentions}
               activeItems={activeListItems}
               completedItems={completedListItems}
               archivedItems={archivedListItems}
@@ -1475,6 +1303,8 @@ export function Tasks() {
                 updateListItem(item, { status: TASK_STATUSES.ACTIVE })
               }
               onReset={() => setIsResetListOpen(true)}
+              onUpdate={updateListItem}
+              onConvertToTask={convertListItemToTask}
             />
           ) : null}
 
@@ -1503,52 +1333,37 @@ export function Tasks() {
               </div>
             )}
 
-          {!selectedList &&
-            !isLoading &&
-            mixedTaskItems.length > 0 &&
-            (taskPageViewMode === 'calendar' &&
-            displayedTaskItems.length === 0 ? (
-              <div className="rounded-lg border border-slate-800/60 bg-slate-900/35 px-5 py-8 text-center text-sm text-slate-400">
-                {t('task.noTasksForDate')}
-              </div>
-            ) : (
-              <MixedTaskList
-                entries={displayedTaskItems}
-                completingTaskIds={completingTaskIds}
-                completingListItemIds={completingListItemIds}
-                orderedUndatedTaskIds={orderedIntentionFamilyTasks.map(
-                  task => task.id
-                )}
-                canReorder={
-                  taskPageViewMode === 'list' &&
-                  selectedFilterOption !== null &&
-                  taskSortMode === 'default' &&
-                  normalizeSearchText(taskSearchQuery).length === 0
-                }
-                intentions={intentions}
-                onEdit={setEditingTask}
-                onEditListItem={setEditingListItem}
-                onCompleteListItem={completeListItem}
-                onArchiveListItem={setArchivingListItem}
-                onOpenDescription={setDescriptionTask}
-                onUpdate={updateTaskWithPositionFeedback}
-                onReorder={reorderVisibleTasks}
-                showTypeBadge={
-                  propertyFilters.timerTypes.length !== 1 || isTaskSearchActive
-                }
-                selectionMode={selectionMode}
-                selectedTaskIds={selectedTaskIds}
-                onToggleSelection={taskId =>
-                  setSelectedTaskIds(current => {
-                    const next = new Set(current);
-                    if (next.has(taskId)) next.delete(taskId);
-                    else next.add(taskId);
-                    return next;
-                  })
-                }
-                highlightedTaskId={highlightedTaskId}
-              />
-            ))}
+          {!selectedList && !isLoading && mixedTaskItems.length > 0 && (
+            <MixedTaskList
+              entries={mixedTaskItems}
+              completingTaskIds={completingTaskIds}
+              completingListItemIds={completingListItemIds}
+              orderedUndatedTaskIds={orderedIntentionFamilyTasks.map(
+                task => task.id
+              )}
+              canReorder={
+                selectedFilterOption !== null &&
+                taskSortMode === 'default' &&
+                normalizeSearchText(taskSearchQuery).length === 0
+              }
+              intentions={intentions}
+              lists={lists}
+              onEdit={setEditingTask}
+              onEditListItem={setEditingListItem}
+              onCompleteListItem={completeListItem}
+              onArchiveListItem={setArchivingListItem}
+              onUpdateListItem={updateListItem}
+              onConvertListItemToTask={convertListItemToTask}
+              onOpenDescription={setDescriptionTask}
+              onUpdate={updateTaskWithPositionFeedback}
+              onConvertToListItem={convertTaskToListItem}
+              onReorder={reorderVisibleTasks}
+              showTypeBadge={
+                propertyFilters.timerTypes.length !== 1 || isTaskSearchActive
+              }
+              highlightedTaskId={highlightedTaskId}
+            />
+          )}
         </div>
 
         <TaskFormModal
@@ -1567,27 +1382,13 @@ export function Tasks() {
             setEditingTask(null);
             setCreateInitialTitle('');
           }}
-          onCreate={createTask}
+          onCreate={createTaskWithViewFeedback}
           onUpdate={updateTaskWithPositionFeedback}
           onCreateListItem={createListItemFromEditor}
           onConvertToListItem={convertTaskToListItem}
           onArchive={task =>
             updateTask({ id: task.id, status: TASK_STATUSES.ARCHIVED })
           }
-        />
-        <TaskBulkActionModal
-          isOpen={isBulkActionOpen}
-          selectedTasks={selectedBulkTasks}
-          assignmentOptions={bulkAssignmentOptions}
-          assignmentUnavailableReason={bulkAssignmentUnavailableReason}
-          isSaving={isBulkSaving}
-          error={bulkError}
-          onClose={() => {
-            if (isBulkSaving) return;
-            setIsBulkActionOpen(false);
-            setBulkError(null);
-          }}
-          onConfirm={applyBulkUpdates}
         />
         <TaskDescriptionModal
           task={descriptionTask}
@@ -2184,6 +1985,7 @@ function TaskArchiveModal({
 
 function SelectedListItems({
   list,
+  intentions,
   activeItems,
   completedItems,
   archivedItems,
@@ -2193,8 +1995,11 @@ function SelectedListItems({
   onArchive,
   onRestore,
   onReset,
+  onUpdate,
+  onConvertToTask,
 }: {
   list: List;
+  intentions: Intention[];
   activeItems: ListItem[];
   completedItems: ListItem[];
   archivedItems: ListItem[];
@@ -2204,22 +2009,45 @@ function SelectedListItems({
   onArchive: (item: ListItem) => void;
   onRestore: (item: ListItem) => Promise<void>;
   onReset: () => void;
+  onUpdate: (
+    item: ListItem,
+    updates: {
+      dueDate?: string | null;
+      priority?: ListItem['priority'];
+    }
+  ) => Promise<void>;
+  onConvertToTask: (
+    itemId: string,
+    intentionSlug: string,
+    subIntentionSlug: string | null
+  ) => Promise<boolean>;
 }) {
   const { t } = useI18n();
   return (
     <div className="space-y-4" data-testid="selected-list-items">
-      <div className="space-y-2.5">
-        {activeItems.map(item => (
-          <ListItemTaskRow
-            key={item.id}
-            item={item}
-            list={list}
-            isCompleting={completingItemIds.includes(item.id)}
-            onEdit={onEdit}
-            onComplete={onComplete}
-            onArchive={onArchive}
-          />
-        ))}
+      <div>
+        {activeItems.length > 0 && (
+          <div className="overflow-visible rounded-xl border border-slate-800/75 bg-slate-900/30 shadow-sm shadow-black/15">
+            {activeItems.map(item => (
+              <div
+                key={item.id}
+                className="border-b border-slate-800/65 last:border-b-0"
+              >
+                <ListItemTaskRow
+                  item={item}
+                  list={list}
+                  intentions={intentions}
+                  isCompleting={completingItemIds.includes(item.id)}
+                  onEdit={onEdit}
+                  onComplete={onComplete}
+                  onArchive={onArchive}
+                  onUpdate={onUpdate}
+                  onConvertToTask={onConvertToTask}
+                />
+              </div>
+            ))}
+          </div>
+        )}
         {activeItems.length === 0 && (
           <div className="rounded-xl border border-dashed border-slate-700/70 px-5 py-8 text-center text-sm text-slate-500">
             {t('task.noActiveItemsInList', { title: list.title })}
@@ -2243,10 +2071,13 @@ function SelectedListItems({
                 key={item.id}
                 item={item}
                 list={list}
+                intentions={intentions}
                 onEdit={onEdit}
                 onComplete={onComplete}
                 onArchive={onArchive}
                 onRestore={onRestore}
+                onUpdate={onUpdate}
+                onConvertToTask={onConvertToTask}
               />
             ))}
           </div>
@@ -2264,10 +2095,13 @@ function SelectedListItems({
                 key={item.id}
                 item={item}
                 list={list}
+                intentions={intentions}
                 onEdit={onEdit}
                 onComplete={onComplete}
                 onArchive={onArchive}
                 onRestore={onRestore}
+                onUpdate={onUpdate}
+                onConvertToTask={onConvertToTask}
               />
             ))}
           </div>
@@ -2280,19 +2114,35 @@ function SelectedListItems({
 function ListItemTaskRow({
   item,
   list,
+  intentions,
   isCompleting,
   onEdit,
   onComplete,
   onArchive,
   onRestore,
+  onUpdate,
+  onConvertToTask,
 }: {
   item: ListItem;
   list: List;
+  intentions: Intention[];
   isCompleting?: boolean;
   onEdit: (item: ListItem) => void;
   onComplete: (item: ListItem) => Promise<void>;
   onArchive: (item: ListItem) => void;
   onRestore?: (item: ListItem) => Promise<void>;
+  onUpdate: (
+    item: ListItem,
+    updates: {
+      dueDate?: string | null;
+      priority?: ListItem['priority'];
+    }
+  ) => Promise<void>;
+  onConvertToTask: (
+    itemId: string,
+    intentionSlug: string,
+    subIntentionSlug: string | null
+  ) => Promise<boolean>;
 }) {
   const { t } = useI18n();
   const isActive = item.status === TASK_STATUSES.ACTIVE;
@@ -2304,46 +2154,79 @@ function ListItemTaskRow({
       data-list-item-id={item.id}
       data-completing={isCompletionPending}
       className={clsx(
-        'group/list-item relative flex min-h-14 items-center gap-3 border-l-2 border-indigo-400/70 bg-slate-900/75 px-3 py-2 transition-all duration-200',
+        'group/task-row relative transition-all duration-200 hover:bg-slate-800/25',
         (isCompleted || isCompletionPending) && 'opacity-50'
       )}
     >
-      <CompletionButton
-        label={item.title}
-        isCompleted={!isActive}
-        isCompleting={isCompletionPending}
-        disabled={isCompletionPending}
-        onClick={() => void (isActive ? onComplete(item) : onRestore?.(item))}
-        compact
+      <div
+        aria-hidden="true"
+        className={clsx(
+          'absolute inset-y-2 left-0 w-0.5 rounded-r-full',
+          getTaskPriorityAccentClass(item.priority)
+        )}
       />
-      <div className="min-w-0 flex-1">
-        <p
-          className={clsx(
-            'truncate text-sm font-medium text-slate-100',
-            (isCompleted || isCompletionPending) &&
-              'text-slate-500 line-through'
-          )}
-        >
-          {item.title}
-        </p>
-        <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-500">
-          <span className="truncate text-indigo-200/75">
-            {list.emoji ?? '📋'} {list.title}
-          </span>
-          <span>{t(`common.${item.priority}`)}</span>
-          {item.dueDate && <time data-swipe-start>{item.dueDate}</time>}
+      <div className="grid min-h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 py-2 pl-3 pr-2.5">
+        <CompletionButton
+          label={item.title}
+          isCompleted={!isActive}
+          isCompleting={isCompletionPending}
+          disabled={isCompletionPending}
+          onClick={() => void (isActive ? onComplete(item) : onRestore?.(item))}
+        />
+        <div className="min-w-0">
+          <p
+            className={clsx(
+              'truncate text-[13px] font-semibold text-slate-100',
+              (isCompleted || isCompletionPending) &&
+                'text-slate-500 line-through'
+            )}
+          >
+            {item.title}
+          </p>
+          <div className="mt-1">
+            <TaskInlineProperties
+              task={item}
+              intentions={intentions}
+              currentList={list}
+              onUpdate={async update => {
+                try {
+                  await onUpdate(item, {
+                    ...(update.dueDate !== undefined
+                      ? { dueDate: update.dueDate }
+                      : {}),
+                    ...(update.priority !== undefined
+                      ? { priority: update.priority }
+                      : {}),
+                  });
+                  return true;
+                } catch {
+                  return false;
+                }
+              }}
+              onConvertListItemToTask={onConvertToTask}
+              onOpenEditor={() => onEdit(item)}
+              showIntention
+              compact={false}
+              isOverdue={isTaskOverdue({
+                dueDate: item.dueDate,
+                dueTime: null,
+              })}
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-0.5 opacity-80 transition-opacity group-hover/task-row:opacity-100 group-focus-within/task-row:opacity-100">
+          <IconButton
+            label={t('task.editFor', { title: item.title })}
+            title={t('common.edit')}
+            size="sm"
+            variant="secondary"
+            onClick={() => onEdit(item)}
+            className="!rounded-full"
+          >
+            <FaEdit />
+          </IconButton>
         </div>
       </div>
-      <IconButton
-        label={t('task.editFor', { title: item.title })}
-        title={t('common.edit')}
-        size="sm"
-        variant="secondary"
-        onClick={() => onEdit(item)}
-        className="!rounded-full opacity-80 transition-opacity group-hover/list-item:opacity-100 group-focus-within/list-item:opacity-100"
-      >
-        <FaEdit />
-      </IconButton>
     </div>
   );
   return isMobile && isActive ? (
@@ -2507,17 +2390,18 @@ function MixedTaskList({
   orderedUndatedTaskIds,
   canReorder,
   intentions,
+  lists,
   onEdit,
   onEditListItem,
   onCompleteListItem,
   onArchiveListItem,
+  onUpdateListItem,
+  onConvertListItemToTask,
   onOpenDescription,
   onUpdate,
+  onConvertToListItem,
   onReorder,
   showTypeBadge,
-  selectionMode,
-  selectedTaskIds,
-  onToggleSelection,
   highlightedTaskId,
 }: {
   entries: MixedTaskItem[];
@@ -2526,10 +2410,23 @@ function MixedTaskList({
   orderedUndatedTaskIds: string[];
   canReorder: boolean;
   intentions: Intention[];
+  lists: List[];
   onEdit: (task: Task) => void;
   onEditListItem: (item: ListItem) => void;
   onCompleteListItem: (item: ListItem) => Promise<void>;
   onArchiveListItem: (item: ListItem) => void;
+  onUpdateListItem: (
+    item: ListItem,
+    updates: {
+      dueDate?: string | null;
+      priority?: ListItem['priority'];
+    }
+  ) => Promise<void>;
+  onConvertListItemToTask: (
+    itemId: string,
+    intentionSlug: string,
+    subIntentionSlug: string | null
+  ) => Promise<boolean>;
   onOpenDescription: (task: Task) => void;
   onUpdate: (task: {
     id: string;
@@ -2545,15 +2442,22 @@ function MixedTaskList({
     recurrenceInterval?: number | null;
     recurrenceAnchorMode?: Task['recurrenceAnchorMode'];
   }) => Promise<boolean>;
+  onConvertToListItem: (
+    taskId: string,
+    listId: string,
+    item: {
+      title: string;
+      dueDate: string | null;
+      priority: ListItem['priority'];
+      vacationEligible: boolean;
+    }
+  ) => Promise<boolean>;
   onReorder: (
     draggedTaskId: string,
     targetTaskId: string,
     placement: TaskDropPlacement
   ) => Promise<boolean>;
   showTypeBadge: boolean;
-  selectionMode: boolean;
-  selectedTaskIds: Set<string>;
-  onToggleSelection: (taskId: string) => void;
   highlightedTaskId: string | null;
 }) {
   const tasks = entries
@@ -2767,10 +2671,13 @@ function MixedTaskList({
                 <ListItemTaskRow
                   item={entry.item}
                   list={entry.list}
+                  intentions={intentions}
                   isCompleting={isCompleting}
                   onEdit={onEditListItem}
                   onComplete={onCompleteListItem}
                   onArchive={onArchiveListItem}
+                  onUpdate={onUpdateListItem}
+                  onConvertToTask={onConvertListItemToTask}
                 />
               </motion.div>
             );
@@ -2795,9 +2702,11 @@ function MixedTaskList({
                 task={task}
                 isCompleting={isCompleting}
                 intentions={intentions}
+                lists={lists}
                 onEdit={onEdit}
                 onOpenDescription={onOpenDescription}
                 onUpdate={onUpdate}
+                onConvertToListItem={onConvertToListItem}
                 canReorder={
                   canReorder &&
                   !task.pinnedAt &&
@@ -2811,9 +2720,6 @@ function MixedTaskList({
                 onPointerDown={event => handlePointerDown(event, task)}
                 onMouseDown={event => handleMouseDown(event, task)}
                 showTypeBadge={showTypeBadge}
-                selectionMode={selectionMode}
-                isSelected={selectedTaskIds.has(task.id)}
-                onToggleSelection={() => onToggleSelection(task.id)}
                 isHighlighted={highlightedTaskId === task.id}
               />
             </motion.div>
@@ -2828,23 +2734,23 @@ function TaskRow({
   task,
   isCompleting,
   intentions,
+  lists,
   onEdit,
   onOpenDescription,
   onUpdate,
+  onConvertToListItem,
   canReorder,
   isDragging,
   dropPlacement,
   onPointerDown,
   onMouseDown,
   showTypeBadge,
-  selectionMode,
-  isSelected,
-  onToggleSelection,
   isHighlighted,
 }: {
   task: Task;
   isCompleting: boolean;
   intentions: Intention[];
+  lists: List[];
   onEdit: (task: Task) => void;
   onOpenDescription: (task: Task) => void;
   onUpdate: (task: {
@@ -2861,15 +2767,22 @@ function TaskRow({
     recurrenceInterval?: number | null;
     recurrenceAnchorMode?: Task['recurrenceAnchorMode'];
   }) => Promise<boolean>;
+  onConvertToListItem: (
+    taskId: string,
+    listId: string,
+    item: {
+      title: string;
+      dueDate: string | null;
+      priority: ListItem['priority'];
+      vacationEligible: boolean;
+    }
+  ) => Promise<boolean>;
   canReorder: boolean;
   isDragging: boolean;
   dropPlacement: TaskDropPlacement | null;
   onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   onMouseDown: (event: ReactMouseEvent<HTMLElement>) => void;
   showTypeBadge: boolean;
-  selectionMode: boolean;
-  isSelected: boolean;
-  onToggleSelection: () => void;
   isHighlighted: boolean;
 }) {
   const { t } = useI18n();
@@ -2916,7 +2829,6 @@ function TaskRow({
         !isPinned && !isOverdue && 'bg-transparent hover:bg-slate-800/25',
         task.followUpParent && 'ml-4 border-l-2 border-indigo-500/40',
         isCompleted && 'opacity-50',
-        isSelected && 'bg-indigo-950/35',
         isHighlighted &&
           'ring-2 ring-inset ring-amber-300 shadow-[0_0_18px_rgba(252,211,77,0.18)]'
       )}
@@ -2977,36 +2889,17 @@ function TaskRow({
             </button>
           </div>
         ) : null}
-        {selectionMode ? (
-          <label
-            className={clsx(
-              'flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border-2 transition-colors',
-              isSelected
-                ? 'border-indigo-300 bg-indigo-500/25 text-indigo-100'
-                : 'border-indigo-400/65 bg-indigo-950/35 text-indigo-200 hover:border-indigo-300 hover:bg-indigo-500/15'
-            )}
-          >
-            <input
-              type="checkbox"
-              checked={isSelected}
-              onChange={onToggleSelection}
-              aria-label={t('task.selectForBulk', { title: task.title })}
-              className="h-4 w-4 rounded border-2 border-indigo-200/80 bg-transparent accent-indigo-400"
-            />
-          </label>
-        ) : (
-          <CompletionButton
-            label={task.title}
-            isCompleted={task.status === TASK_STATUSES.COMPLETED}
-            isCompleting={isCompleting}
-            disabled={saving || isCompleting}
-            onClick={() =>
-              void updateStatus(
-                isCompleted ? TASK_STATUSES.ACTIVE : TASK_STATUSES.COMPLETED
-              )
-            }
-          />
-        )}
+        <CompletionButton
+          label={task.title}
+          isCompleted={task.status === TASK_STATUSES.COMPLETED}
+          isCompleting={isCompleting}
+          disabled={saving || isCompleting}
+          onClick={() =>
+            void updateStatus(
+              isCompleted ? TASK_STATUSES.ACTIVE : TASK_STATUSES.COMPLETED
+            )
+          }
+        />
         <div data-testid="task-row-content" className="min-w-0">
           {task.followUpParent && (
             <div className="mb-0.5">
@@ -3035,7 +2928,9 @@ function TaskRow({
             <TaskInlineProperties
               task={task}
               intentions={intentions}
+              lists={lists}
               onUpdate={onUpdate}
+              onConvertToListItem={onConvertToListItem}
               onOpenEditor={() => onEdit(task)}
               showIntention
               compact={false}
@@ -3053,7 +2948,7 @@ function TaskRow({
               size="sm"
               variant={isPinned ? 'primary' : 'secondary'}
               onClick={() => void updatePinned()}
-              disabled={saving || selectionMode}
+              disabled={saving}
               className="!rounded-full"
             >
               <FaThumbtack />
@@ -3065,7 +2960,7 @@ function TaskRow({
             size="sm"
             variant="secondary"
             onClick={() => onEdit(task)}
-            disabled={saving || selectionMode}
+            disabled={saving}
             className="!rounded-full"
           >
             <FaEdit />
@@ -3079,15 +2974,13 @@ function TaskRow({
     <>
       {isMobile ? (
         <MobileSwipeActionRow
-          disabled={saving || isCompleting || selectionMode}
+          disabled={saving || isCompleting}
           onComplete={
-            selectionMode || isCompleted
+            isCompleted
               ? undefined
               : () => void updateStatus(TASK_STATUSES.COMPLETED)
           }
-          onArchive={() => {
-            if (!selectionMode) setShowArchiveConfirm(true);
-          }}
+          onArchive={() => setShowArchiveConfirm(true)}
         >
           {row}
         </MobileSwipeActionRow>

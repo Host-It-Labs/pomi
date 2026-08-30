@@ -40,7 +40,7 @@ describe('authentication abuse controls', () => {
     );
 
     await expect(
-      service.authenticateUser('new-user', 'password', '203.0.113.4')
+      service.authenticateUser('new-user', 'twelve chars', '203.0.113.4')
     ).rejects.toBeInstanceOf(AuthRateLimitException);
     expect(createUser).not.toHaveBeenCalled();
   });

@@ -187,6 +187,7 @@ test('Task-to-List conversion snapshots and clears every Task-only field', async
     priority: 'high',
     status: 'active',
     timerType: 'break',
+    customDuration: 1_800_000,
     pinnedAt: new Date('2026-07-31T10:00:00Z'),
     intentionSlug: 'launch',
     subIntentionSlug: 'review',
@@ -252,6 +253,7 @@ test('Task-to-List conversion snapshots and clears every Task-only field', async
     importSourceTaskId: null,
     dueTime: '12:30',
     timerType: 'break',
+    customDuration: 1_800_000,
     pinnedAt: new Date('2026-07-31T10:00:00Z'),
     intentionSlug: 'launch',
     subIntentionSlug: 'review',
@@ -301,6 +303,70 @@ test('Task-to-List conversion rejects a currently focused Task', async () => {
     service.convertTaskToListItem('user-1', 'task-1', 'list-1', {}),
     BadRequestException
   );
+});
+
+test('List-item-to-Task conversion restores Task fields and applies the chosen Intention', async () => {
+  const item = {
+    id: 'item-1',
+    userId: 'user-1',
+    title: 'Tomatoes',
+    status: TASK_STATUSES.ACTIVE,
+    itemKind: 'listItem',
+    listId: 'list-1',
+    timerType: 'work',
+    intentionSlug: null,
+    subIntentionSlug: null,
+    taskRestoreState: {
+      description: 'Organic if possible',
+      timerType: 'break',
+      intentionSlug: 'old-intention',
+      itemKind: 'task',
+    },
+  };
+  const parent = {
+    id: 'intention-1',
+    userId: 'user-1',
+    slug: 'errands',
+    type: 'work',
+    allowsTasks: true,
+    isArchived: false,
+  };
+  const child = {
+    id: 'sub-intention-1',
+    userId: 'user-1',
+    slug: 'shopping',
+    parentIntentionId: parent.id,
+    isArchived: false,
+  };
+  const service = new ListsService(
+    {} as never,
+    {
+      findOne: async () => item,
+      save: async value => value,
+    } as never,
+    {
+      findOne: async ({ where }) =>
+        where.slug === parent.slug ? parent : child,
+    } as never,
+    {} as never,
+    { getCurrentTimer: async () => null } as never,
+    { emitTasksUpdate: () => undefined } as never
+  );
+
+  await service.convertListItemToTask(
+    'user-1',
+    item.id,
+    parent.slug,
+    child.slug
+  );
+
+  assert.equal(item.itemKind, 'task');
+  assert.equal(item.listId, null);
+  assert.equal(item.taskRestoreState, null);
+  assert.equal(item.description, 'Organic if possible');
+  assert.equal(item.timerType, 'work');
+  assert.equal(item.intentionSlug, parent.slug);
+  assert.equal(item.subIntentionSlug, child.slug);
 });
 
 test('Parent conversion aborts before its transaction for directly linked Tasks', async () => {

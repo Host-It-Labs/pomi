@@ -252,6 +252,30 @@ describe.runIf(hasInfrastructure)('Watch HTTP integration', () => {
     );
   });
 
+  it('returns independent break reset preferences to Wear', async () => {
+    const auth = await createSession('break_reset_preferences');
+
+    for (const [resetBreakOnFirstIntention, resetLongBreakOnFirstIntention] of [
+      [false, false],
+      [true, false],
+      [false, true],
+      [true, true],
+    ]) {
+      await updatePreferences(auth, {
+        resetBreakOnFirstIntention,
+        resetLongBreakOnFirstIntention,
+      });
+      const result = await status(auth, '');
+
+      expect(result.timerControls).toEqual(
+        expect.objectContaining({
+          resetBreakOnFirstIntention,
+          resetLongBreakOnFirstIntention,
+        })
+      );
+    }
+  });
+
   it('persists a new account language and keeps it authoritative on login', async () => {
     const username = `${USER_PREFIX}language`;
     const created = await request(app.getHttpServer())

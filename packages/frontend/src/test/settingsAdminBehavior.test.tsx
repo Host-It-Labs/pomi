@@ -169,20 +169,22 @@ beforeEach(() => {
 });
 
 describe('Settings and admin behavior replacements', () => {
-  it('documents timer extras ordering and enforces timer-extension dependency', async () => {
+  it('allows auto-start breaks and Timer extension to coexist', async () => {
     const updatePreference = vi.fn().mockResolvedValue(undefined);
-    const updatePreferences = vi.fn().mockResolvedValue(undefined);
     render(
       <TimerSettings
-        preferences={preferences({ timerExtension: true })}
+        preferences={preferences({
+          autoStartBreak: true,
+          timerExtension: true,
+        })}
         updatePreference={updatePreference}
-        updatePreferences={updatePreferences}
+        updatePreferences={vi.fn().mockResolvedValue(undefined)}
         workMinutes={25}
         breakMinutes={5}
       />
     );
 
-    expect(screen.getByLabelText('Auto-start breaks')).toBeDisabled();
+    expect(screen.getByLabelText('Auto-start timers')).not.toBeDisabled();
     const labels = [
       screen.getByText('Save time when skipping'),
       screen.getByText('Keep going after a timer'),
@@ -193,9 +195,7 @@ describe('Settings and admin behavior replacements', () => {
     ]);
 
     fireEvent.click(screen.getByLabelText('Keep going after a timer'));
-    expect(updatePreferences).toHaveBeenCalledWith({
-      timerExtension: false,
-    });
+    expect(updatePreference).toHaveBeenCalledWith('timerExtension', false);
   });
 
   it('documents General settings debug entry and durable preference intent', async () => {

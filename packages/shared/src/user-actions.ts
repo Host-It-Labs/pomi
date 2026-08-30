@@ -14,11 +14,7 @@ import type { TaskImportSource } from './constants';
  * worker is applying it. Terminal states are never replayed by a worker.
  */
 export type UserActionLifecycle =
-  | 'accepted'
-  | 'running'
-  | 'succeeded'
-  | 'failed'
-  | 'cancelled';
+  'accepted' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 export interface TimerUserAction {
   kind: 'timer';
@@ -43,10 +39,12 @@ export interface TimerUserAction {
   intentions?: string[];
   subIntentions?: Record<string, string>;
   focusedTaskId?: string;
+  customDuration?: number | null;
   taskId?: string;
   position?: number;
   extensionAction?: 'logElapsed' | 'addFiveMinutes';
   requestedLogMode?: 'none' | 'elapsed' | 'full';
+  resetOnFirstIntention?: boolean;
 }
 
 export type TaskImportUserActionRow = {
@@ -79,6 +77,7 @@ export interface TasksUserAction {
   dueTime?: string | null;
   priority?: TaskPriority;
   timerType?: TimerTypes;
+  customDuration?: number | null;
   pinned?: boolean;
   status?: TaskStatus;
   manualOrder?: number | null;
@@ -107,12 +106,7 @@ export interface TasksUserAction {
 export interface IntentionsUserAction {
   kind: 'intentions';
   operation:
-    | 'create'
-    | 'update'
-    | 'delete'
-    | 'archive'
-    | 'unarchive'
-    | 'reparent';
+    'create' | 'update' | 'delete' | 'archive' | 'unarchive' | 'reparent';
   slug?: string;
   title?: string;
   emoji?: string;
@@ -195,11 +189,13 @@ export interface ListsUserAction {
     | 'resetCompletedItems'
     | 'convertIntention'
     | 'convertToIntention'
-    | 'convertTaskToListItem';
+    | 'convertTaskToListItem'
+    | 'convertListItemToTask';
   intentionSlug?: string;
   listId?: string;
   itemId?: string;
   taskId?: string;
+  subIntentionSlug?: string | null;
   title?: string;
   emoji?: string | null;
   description?: string | null;

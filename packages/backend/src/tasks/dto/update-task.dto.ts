@@ -80,6 +80,12 @@ export class UpdateTaskDto {
   timerType?: TimerTypes;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  customDuration?: number | null;
+
+  @IsOptional()
   @IsBoolean()
   pinned?: boolean;
 

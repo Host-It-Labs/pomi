@@ -204,10 +204,7 @@ export function TimerActionButtons({
   const isExtensionTimer = !!timer?.isExtension;
   const showStartButton = !isTimerRunning;
   const showMinimizedExtensionButton =
-    !expanded &&
-    !!extensionState &&
-    timer?.status === TIMER_STATUSES.PAUSED &&
-    (timer.type === TIMER_TYPES.BREAK || timer.type === TIMER_TYPES.LONG_BREAK);
+    !expanded && !!extensionState && timer?.status === TIMER_STATUSES.PAUSED;
   const showLeftButtons =
     !compactMinimizedControls &&
     (preferences?.intentionExtension === false

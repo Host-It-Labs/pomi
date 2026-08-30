@@ -13,7 +13,7 @@ import {
 } from '../utils/batteryOptimization';
 import { stopAndroidForegroundSync } from '../utils/androidForegroundSync';
 import { notificationService } from '../utils/notificationUtils';
-import { isAndroid, isDesktop } from '../utils/osUtils';
+import { isAndroid, isDesktop, isMac } from '../utils/osUtils';
 import { CheckboxRow } from './notifications/CheckboxRow';
 import { TaskPriorityMultiSelect } from '../components/settings/TaskPriorityMultiSelect';
 import { NumberField } from '../components/ui/NumberField';
@@ -29,6 +29,7 @@ export const NotificationsSettings = ({
 }) => {
   const { t } = useI18n();
   const [hasGivenPermission, setHasGivenPermission] = useState(false);
+  const [macSettingsOpenFailed, setMacSettingsOpenFailed] = useState(false);
   const [isBatteryOptimized, setIsBatteryOptimized] = useState(false);
   const maxNotifyBeforeMinutes = Math.max(
     1,
@@ -48,6 +49,9 @@ export const NotificationsSettings = ({
       const permission = await notificationService.checkPermission();
       if (isActive) {
         setHasGivenPermission(permission);
+        if (permission) {
+          setMacSettingsOpenFailed(false);
+        }
       }
     };
     const checkBatteryStatus = async () => {
@@ -67,12 +71,12 @@ export const NotificationsSettings = ({
         checkBatteryStatus();
       }
     };
-    if (!isDesktop) {
+    if (isMac || !isDesktop) {
       document.addEventListener('visibilitychange', handleVisibilityChange);
     }
     return () => {
       isActive = false;
-      if (!isDesktop) {
+      if (isMac || !isDesktop) {
         document.removeEventListener(
           'visibilitychange',
           handleVisibilityChange
@@ -242,8 +246,44 @@ export const NotificationsSettings = ({
 
   return (
     <div className="space-y-4">
+      {isMac && !hasGivenPermission && (
+        <div
+          className="space-y-3"
+          data-testid="macos-notification-setup"
+          data-setting-id="notificationPermission"
+        >
+          <Alert variant="warning">
+            <p>{t('notifications.macPermissionRequired')}</p>
+            {macSettingsOpenFailed && (
+              <p className="mt-2 whitespace-pre-line text-xs text-amber-200/80">
+                {t('notifications.macSettingsInstructions')}
+              </p>
+            )}
+          </Alert>
+          <div className="flex justify-center">
+            <Button
+              onClick={async () => {
+                const granted =
+                  await notificationService.requestPermissionIfNeeded();
+                if (granted) {
+                  setHasGivenPermission(true);
+                  setMacSettingsOpenFailed(false);
+                  return;
+                }
+                const opened =
+                  await notificationService.openMacNotificationSettings();
+                setMacSettingsOpenFailed(!opened);
+              }}
+            >
+              {t('notifications.openMacSettings')}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {isAndroid && isBatteryOptimized && (
         <button
+          data-setting-id="notificationBackgroundUsage"
           onClick={async () => {
             const success = await requestBatteryOptimizationExemption();
 
@@ -283,7 +323,7 @@ export const NotificationsSettings = ({
               <>
                 <Separator />
 
-                <div>
+                <div data-setting-id="notificationMethod">
                   <h3 className="text-sm text-white font-medium mb-3">
                     {t('notifications.method')}
                   </h3>
@@ -318,7 +358,7 @@ export const NotificationsSettings = ({
 
       {notificationsEnabled && (
         <SettingsControlGroup title={t('notifications.personalize')}>
-          <div>
+          <div data-setting-id="timerFinishedNotifications">
             <h3 className="mb-3 text-sm font-medium text-white">
               {t('notifications.timerFinished')}
             </h3>
@@ -338,20 +378,22 @@ export const NotificationsSettings = ({
 
           <Separator />
 
-          <DurationSlider
-            label={t('notifications.notifyBeforeTimerEnds')}
-            value={notifyBeforeSliderValue}
-            min={0}
-            max={maxNotifyBeforeMinutes}
-            onChange={handleNotifyBeforeChange}
-            onLiveChange={minutes =>
-              setNotifyBeforeMinutes(
-                Math.max(0, Math.min(minutes, maxNotifyBeforeMinutes))
-              )
-            }
-            accentColor="indigo"
-            tickMarks={notifyBeforeTickMarks}
-          />
+          <div data-setting-id="notifyBeforeTimerEnds">
+            <DurationSlider
+              label={t('notifications.notifyBeforeTimerEnds')}
+              value={notifyBeforeSliderValue}
+              min={0}
+              max={maxNotifyBeforeMinutes}
+              onChange={handleNotifyBeforeChange}
+              onLiveChange={minutes =>
+                setNotifyBeforeMinutes(
+                  Math.max(0, Math.min(minutes, maxNotifyBeforeMinutes))
+                )
+              }
+              accentColor="indigo"
+              tickMarks={notifyBeforeTickMarks}
+            />
+          </div>
         </SettingsControlGroup>
       )}
 

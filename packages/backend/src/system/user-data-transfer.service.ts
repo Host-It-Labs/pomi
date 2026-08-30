@@ -331,6 +331,11 @@ export class UserDataTransferService {
     }
 
     const next = this.remapRowWithFreshId(row, userId, ids);
+    if (typeof row.sessionLongBreakAutoStart === 'boolean') {
+      next.autoStartBreak =
+        next.autoStartBreak === true || row.sessionLongBreakAutoStart;
+    }
+    delete next.sessionLongBreakAutoStart;
     if (next.language === null || next.language === undefined) {
       return [next];
     }
@@ -722,6 +727,8 @@ export class UserDataTransferService {
         next[key] = child
           .map(taskId => this.remapOptionalId(taskId, ids.tasks))
           .filter((taskId): taskId is string => taskId !== null);
+      } else if (key === 'originalTimerId') {
+        next[key] = this.remapRequiredId(child, ids.statistics, 'Statistic');
       } else {
         next[key] = this.rewriteRuntimeUserIds(child, userId, ids);
       }

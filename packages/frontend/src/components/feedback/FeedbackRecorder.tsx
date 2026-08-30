@@ -13,11 +13,7 @@ import { showToastFromStore } from '../toast/ToastContext';
 import { getLanguage, translate, useI18n } from '../../i18n';
 
 export type FeedbackRecordingStage =
-  | 'idle'
-  | 'starting'
-  | 'recording'
-  | 'sending'
-  | 'error';
+  'idle' | 'starting' | 'recording' | 'sending' | 'error';
 
 type FeedbackRecorderState = {
   stage: FeedbackRecordingStage;
@@ -281,10 +277,10 @@ export function FeedbackRecorder() {
 
   useLayoutEffect(() => {
     const slotId = !expanded
-      ? 'feedback-session-slot-compact'
+      ? 'assistant-session-slot-compact'
       : activeTab === 'timer'
-        ? 'feedback-session-slot-timer'
-        : 'feedback-session-slot-page';
+        ? 'assistant-session-slot-timer'
+        : 'assistant-session-slot-page';
     setPortalTarget(document.getElementById(slotId));
   }, [activeTab, expanded, stage]);
 
@@ -292,7 +288,7 @@ export function FeedbackRecorder() {
 
   const control =
     stage === 'recording' ? (
-      <div className="relative z-[1100] flex items-center">
+      <div className="relative z-[2147483647] flex h-[38px] w-[38px] items-center">
         <button
           type="button"
           onClick={cancelRecording}
@@ -311,7 +307,7 @@ export function FeedbackRecorder() {
         </button>
         <span
           data-testid="feedback-recording-elapsed"
-          className="ml-1.5 whitespace-nowrap font-mono text-[10px] tabular-nums text-slate-300"
+          className="absolute left-1/2 top-full mt-0.5 -translate-x-1/2 whitespace-nowrap font-mono text-[10px] tabular-nums text-slate-300"
         >
           {formatDuration(seconds)}
         </span>
@@ -321,12 +317,12 @@ export function FeedbackRecorder() {
         role="status"
         aria-label={t('feedback.sending')}
         title={t('feedback.sending')}
-        className="relative z-[1100] flex h-[38px] w-[38px] items-center justify-center rounded-full border border-slate-700/40 bg-indigo-600/90 text-white shadow-sm shadow-indigo-950/30"
+        className="relative z-[2147483647] flex h-[38px] w-[38px] items-center justify-center rounded-full border border-slate-700/40 bg-indigo-600/90 text-white shadow-sm shadow-indigo-950/30"
       >
         <FaSpinner className="animate-spin" />
       </div>
     ) : (
-      <div className="relative z-[1100] flex h-[38px] w-[38px] items-center justify-center">
+      <div className="relative z-[2147483647] flex h-[38px] w-[38px] items-center justify-center">
         <button
           type="button"
           onClick={() => void startRecording()}

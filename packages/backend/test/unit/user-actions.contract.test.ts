@@ -58,6 +58,15 @@ describe('user action contract', () => {
         payload: { id: 'log-1', flagged: true },
       }).success
     ).toBe(true);
+    expect(
+      userActionSchema.safeParse({
+        kind: 'lists',
+        operation: 'convertListItemToTask',
+        itemId: 'item-1',
+        intentionSlug: 'focus',
+        subIntentionSlug: null,
+      }).success
+    ).toBe(true);
   });
 
   it('accepts Task-link and Vacation Coverage controls', () => {

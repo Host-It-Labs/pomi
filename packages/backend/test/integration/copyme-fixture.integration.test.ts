@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcrypt';
+import { addDays, format } from 'date-fns';
 import path from 'node:path';
 import { Client } from 'pg';
 import { test } from 'vitest';
@@ -89,7 +90,7 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
       [fixtureName]
     );
     assert.equal(marker.rows.length, 1);
-    assert.equal(marker.rows[0].seedVersion, 9);
+    assert.equal(marker.rows[0].seedVersion, 13);
     assert.equal(marker.rows[0].isAdmin, true);
     assert.match(marker.rows[0].credentialFingerprint, /^[a-f0-9]{64}$/);
     const firstUserId = marker.rows[0].id;
@@ -106,8 +107,12 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
     for (const key of [
       'assistantExtension',
       'assistantTaskTranscriptsEnabled',
+      'autoStartBreak',
+      'autoStartWork',
       'intentionExtension',
       'longBreakToBreakEnabled',
+      'resetBreakOnFirstIntention',
+      'resetWorkOnFirstIntention',
       'sessionShowEta',
       'sessionsExtension',
       'tasksExtension',
@@ -122,12 +127,12 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
       assert.equal(preference[key], true, `${key} should be enabled`);
     }
     for (const key of [
-      'autoStartBreak',
       'globalShortcut',
+      'autoStartLongBreak',
       'keepScreenAwake',
       'notifications',
+      'resetLongBreakOnFirstIntention',
       'pushNotifications',
-      'sessionLongBreakAutoStart',
       'soundNotifications',
       'tasksShowVacationCovered',
     ]) {
@@ -156,6 +161,7 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
          t.priority,
          t.status,
          t."timerType",
+         t."customDuration",
          t."dueDate",
          t."dueTime",
          t."recurrenceRule",
@@ -176,7 +182,8 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
          ON child."userId" = t."userId"
         AND child.type = t."timerType"
         AND child.slug = t."subIntentionSlug"
-       WHERE u.username = $1`,
+       WHERE u.username = $1
+         AND t."itemKind" = 'task'`,
       [username]
     );
 
@@ -202,6 +209,12 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
     assert.ok(tasks.rows.some(row => row.manualOrderOverride === true));
     assert.ok(tasks.rows.some(row => row.vacationEligible === true));
     assert.deepEqual(
+      tasks.rows
+        .filter(row => row.customDuration !== null)
+        .map(row => ({ title: row.title, customDuration: row.customDuration })),
+      [{ title: 'Plan next feature slice', customDuration: 1_800_000 }]
+    );
+    assert.deepEqual(
       new Set(tasks.rows.map(row => row.status)),
       new Set(['active', 'completed', 'archived'])
     );
@@ -215,6 +228,37 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
         assert.equal(task.childParentId, task.parentId);
       }
     }
+
+    const listItems = await client.query(
+      `SELECT l.title AS "listTitle", l.emoji, l."isFavorite",
+              t.title, t.priority, t.status, t."dueDate"::text AS "dueDate"
+       FROM lists l
+       INNER JOIN users u ON u.id = l."userId"
+       INNER JOIN tasks t ON t."listId" = l.id AND t."itemKind" = 'listItem'
+       WHERE u.username = $1
+       ORDER BY t.title`,
+      [username]
+    );
+    assert.deepEqual(listItems.rows, [
+      {
+        listTitle: 'Groceries',
+        emoji: '🛒',
+        isFavorite: true,
+        title: 'Buy oat milk',
+        priority: 'high',
+        status: 'active',
+        dueDate: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
+      },
+      {
+        listTitle: 'Groceries',
+        emoji: '🛒',
+        isFavorite: true,
+        title: 'Pick up fresh vegetables',
+        priority: 'normal',
+        status: 'active',
+        dueDate: null,
+      },
+    ]);
 
     const taskEvents = await client.query(
       `SELECT

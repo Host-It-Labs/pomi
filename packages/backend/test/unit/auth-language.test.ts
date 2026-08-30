@@ -38,7 +38,7 @@ describe('AuthService account language', () => {
 
     const result = await service.authenticateUser(
       'new-user',
-      'password',
+      'twelve chars',
       '127.0.0.1',
       'fr'
     );

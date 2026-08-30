@@ -1,9 +1,9 @@
 import clsx from 'clsx';
-import type { ReactNode } from 'react';
+import { type ReactNode, useLayoutEffect, useRef } from 'react';
 import { FaCheck, FaPowerOff } from 'react-icons/fa';
 import { useI18n } from '../../i18n';
 
-export function SettingsStickyNav({
+export function SettingsStickySearch({
   isDesktop,
   isIos,
   children,
@@ -14,7 +14,7 @@ export function SettingsStickyNav({
 }) {
   return (
     <div
-      data-settings-navigation
+      data-settings-search
       className={clsx(
         'sticky z-20 -mx-4 border-y border-slate-800/80 bg-slate-950/95 px-4 shadow-lg shadow-slate-950/40 backdrop-blur supports-backdrop-filter:bg-slate-950/85',
         isDesktop ? 'top-5' : isIos ? 'top-[env(safe-area-inset-top)]' : 'top-0'
@@ -25,10 +25,75 @@ export function SettingsStickyNav({
   );
 }
 
+export function SettingsSearchFilter({
+  active,
+  targetIds,
+  children,
+}: {
+  active: boolean;
+  targetIds: string[];
+  children: ReactNode;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    const targets = Array.from(
+      root.querySelectorAll<HTMLElement>('[data-setting-id]')
+    );
+    const visibleIds = new Set(targetIds);
+
+    targets.forEach(target => {
+      const containsVisibleTarget = targets.some(
+        candidate =>
+          candidate !== target &&
+          target.contains(candidate) &&
+          visibleIds.has(candidate.dataset.settingId ?? '')
+      );
+      const isInsideVisibleTarget = targets.some(
+        candidate =>
+          candidate !== target &&
+          candidate.contains(target) &&
+          visibleIds.has(candidate.dataset.settingId ?? '')
+      );
+      target.hidden =
+        active &&
+        !visibleIds.has(target.dataset.settingId ?? '') &&
+        !containsVisibleTarget &&
+        !isInsideVisibleTarget;
+    });
+
+    root
+      .querySelectorAll<HTMLElement>(
+        '[data-settings-control-group], [data-extras-section]'
+      )
+      .forEach(group => {
+        const groupTargets = Array.from(
+          group.querySelectorAll<HTMLElement>('[data-setting-id]')
+        );
+        group.hidden =
+          active &&
+          groupTargets.length > 0 &&
+          groupTargets.every(target => target.hidden);
+      });
+
+    root
+      .querySelectorAll<HTMLElement>('[data-settings-separator]')
+      .forEach(separator => {
+        separator.hidden = active;
+      });
+  }, [active, targetIds]);
+
+  return <div ref={rootRef}>{children}</div>;
+}
+
 type FeatureControl = {
   enabled: boolean;
   onToggle: () => void;
   unavailable?: boolean;
+  targetId?: string;
 };
 
 export function SettingsSectionFrame({
@@ -67,6 +132,7 @@ export function SettingsSectionFrame({
           <button
             type="button"
             disabled={feature.unavailable}
+            data-setting-id={feature.targetId}
             aria-label={`${feature.enabled ? t('common.disable') : t('common.enable')} ${title}`}
             onClick={feature.onToggle}
             className={clsx(
@@ -98,7 +164,10 @@ export function SettingsControlGroup({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-slate-800/70 bg-slate-950/20 p-4">
+    <section
+      data-settings-control-group
+      className="rounded-xl border border-slate-800/70 bg-slate-950/20 p-4"
+    >
       <h3 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
         {title}
       </h3>

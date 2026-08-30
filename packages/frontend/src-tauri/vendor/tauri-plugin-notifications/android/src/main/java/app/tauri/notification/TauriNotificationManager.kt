@@ -26,6 +26,7 @@ import org.json.JSONObject
 // Action constants
 const val NOTIFICATION_INTENT_KEY = "NotificationId"
 const val NOTIFICATION_OBJ_INTENT_KEY = "LocalNotficationObject"
+const val NOTIFICATION_TAG_INTENT_KEY = "NotificationTag"
 const val ACTION_INTENT_KEY = "NotificationUserAction"
 const val NOTIFICATION_IS_REMOVABLE_KEY = "NotificationRepeating"
 const val REMOTE_INPUT_KEY = "NotificationRemoteInput"
@@ -63,7 +64,10 @@ class TauriNotificationManager(
     val input = results?.getCharSequence(REMOTE_INPUT_KEY)
     dataJson.put("inputValue", input?.toString())
     val menuAction = data.getStringExtra(ACTION_INTENT_KEY)
-    dismissVisibleNotification(notificationId)
+    dismissVisibleNotification(
+      notificationId,
+      data.getStringExtra(NOTIFICATION_TAG_INTENT_KEY)
+    )
     dataJson.put("actionId", menuAction)
     var request: JSONObject? = null
     try {
@@ -109,7 +113,7 @@ class TauriNotificationManager(
   }
 
   private fun trigger(notificationManager: NotificationManagerCompat, notification: Notification): Int {
-    dismissVisibleNotification(notification.id)
+    dismissVisibleNotification(notification.id, notification.tag)
     buildNotification(notificationManager, notification)
 
     return notification.id
@@ -223,7 +227,11 @@ class TauriNotificationManager(
       return
     }
 
-    notificationManager.notify(notification.id, buildNotification)
+    if (notification.tag != null) {
+      notificationManager.notify(notification.tag, notification.id, buildNotification)
+    } else {
+      notificationManager.notify(notification.id, buildNotification)
+    }
     try {
       NotificationPlugin.triggerNotification(notification)
     } catch (e: JSONException) {
@@ -306,6 +314,7 @@ class TauriNotificationManager(
     intent.addCategory(Intent.CATEGORY_LAUNCHER)
     intent.flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
     intent.putExtra(NOTIFICATION_INTENT_KEY, notification.id)
+    intent.putExtra(NOTIFICATION_TAG_INTENT_KEY, notification.tag)
     intent.putExtra(ACTION_INTENT_KEY, action)
     intent.putExtra(NOTIFICATION_OBJ_INTENT_KEY, notification.sourceJson)
     val schedule = notification.schedule
@@ -315,16 +324,20 @@ class TauriNotificationManager(
 
   fun cancel(notifications: List<Int>) {
     for (id in notifications) {
-      dismissVisibleNotification(id)
+      dismissVisibleNotification(id, null)
       storage.deleteNotification(id.toString())
     }
   }
 
-  private fun dismissVisibleNotification(notificationId: Int) {
+  private fun dismissVisibleNotification(notificationId: Int, tag: String?) {
     val notificationManager = NotificationManagerCompat.from(
       context
     )
-    notificationManager.cancel(notificationId)
+    if (tag != null) {
+      notificationManager.cancel(tag, notificationId)
+    } else {
+      notificationManager.cancel(notificationId)
+    }
   }
 
   fun areNotificationsEnabled(): Boolean {
@@ -362,6 +375,20 @@ class TauriNotificationManager(
     }
     defaultSmallIconID = resId
     return resId
+  }
+
+  companion object {
+    fun showRemoteNotification(context: Context, notification: Notification) {
+      val applicationContext = context.applicationContext
+      val manager = TauriNotificationManager(
+        NotificationStorage(applicationContext, ObjectMapper()),
+        null,
+        applicationContext,
+        null
+      )
+      manager.createNotificationChannel()
+      manager.schedule(notification)
+    }
   }
 }
 

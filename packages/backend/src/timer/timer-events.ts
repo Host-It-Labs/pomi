@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   ClientNotificationType,
+  NotificationGroup,
   Timer,
   TimerExtensionState,
 } from '@pomi/shared';
@@ -23,6 +24,7 @@ export interface ClientNotificationEvent {
   notificationBody?: string;
   notificationPriority?: number;
   notificationTags?: string[];
+  notificationGroup?: NotificationGroup;
   task?: {
     id: string;
     title: string;

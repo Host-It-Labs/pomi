@@ -172,6 +172,52 @@ pomi_dependency_mismatches() {
   return "$mismatches"
 }
 
+pomi_node_modules_store_dir() {
+  local root_dir modules_file
+  root_dir="$1"
+  modules_file="$root_dir/node_modules/.modules.yaml"
+
+  [[ -f "$modules_file" ]] || return 1
+
+  node - "$modules_file" <<'NODE'
+const fs = require('node:fs');
+
+const modulesFile = process.argv[2];
+const metadata = fs.readFileSync(modulesFile, 'utf8');
+let storeDir;
+
+try {
+  storeDir = JSON.parse(metadata).storeDir;
+} catch {
+  // pnpm versions before v11 write this metadata as YAML.
+}
+
+if (typeof storeDir !== 'string' || storeDir.length === 0) {
+  const match = metadata.match(/^\s*storeDir\s*:\s*(.*?)\s*$/m);
+  if (match) {
+    storeDir = match[1].trim();
+    if (storeDir.startsWith('"') && storeDir.endsWith('"')) {
+      try {
+        storeDir = JSON.parse(storeDir);
+      } catch {
+        storeDir = undefined;
+      }
+    } else if (storeDir.startsWith("'") && storeDir.endsWith("'")) {
+      storeDir = storeDir.slice(1, -1).replace(/''/g, "'");
+    } else {
+      storeDir = storeDir.replace(/\s+#.*$/, '').trim();
+    }
+  }
+}
+
+if (typeof storeDir !== 'string' || storeDir.length === 0) {
+  process.exit(1);
+}
+
+process.stdout.write(storeDir);
+NODE
+}
+
 pomi_cargo_input_files_for_root() {
   local root_dir
   root_dir="$1"

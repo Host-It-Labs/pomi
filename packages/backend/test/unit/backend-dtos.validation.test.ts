@@ -228,6 +228,18 @@ describe('backend scalar and parameter DTO validation', () => {
     });
   });
 
+  it('keeps the password maximum independent from registration minimums', async () => {
+    await expectValid(AuthenticateDto, {
+      username: 'user',
+      password: 'a'.repeat(256),
+    });
+    await expectInvalid(
+      AuthenticateDto,
+      { username: 'user', password: 'a'.repeat(257) },
+      'password'
+    );
+  });
+
   it('accepts supported account languages and rejects unsupported locales', async () => {
     await expectValid(AuthenticateDto, {
       username: 'language-user',
@@ -602,7 +614,8 @@ describe('intentions and preferences DTO validation', () => {
       'workTimerLogsExtension',
       'sessionsExtension',
       'sessionHasLongBreak',
-      'sessionLongBreakAutoStart',
+      'resetBreakOnFirstIntention',
+      'resetLongBreakOnFirstIntention',
       'sessionShowLongBreakButton',
       'sessionShowEta',
       'sessionStackTimers',
@@ -766,6 +779,7 @@ describe('Task DTO validation', () => {
     dueTime: '00:00',
     priority: TASK_PRIORITIES.URGENT,
     timerType: TIMER_TYPES.WORK,
+    customDuration: '1800000',
     pinned: true,
     intentionSlug: 'pomi',
     subIntentionSlug: 'tests',
@@ -779,6 +793,7 @@ describe('Task DTO validation', () => {
     const created = await expectValid(CreateTaskDto, taskPayload);
     expect(created).toMatchObject({
       recurrenceInterval: 1.5,
+      customDuration: 1_800_000,
     });
     const updated = await expectValid(UpdateTaskDto, {
       ...taskPayload,
@@ -799,6 +814,24 @@ describe('Task DTO validation', () => {
     }
     await expectInvalid(UpdateTaskDto, { manualOrder: -1 }, 'manualOrder');
     await expectInvalid(UpdateTaskDto, { status: 'waiting' }, 'status');
+    for (const Dto of [CreateTaskDto, UpdateTaskDto]) {
+      await expectValid(Dto, { title: 'x', customDuration: null });
+      await expectInvalid(
+        Dto,
+        { title: 'x', customDuration: 0 },
+        'customDuration'
+      );
+      await expectInvalid(
+        Dto,
+        { title: 'x', customDuration: 1.5 },
+        'customDuration'
+      );
+      await expectInvalid(
+        Dto,
+        { title: 'x', customDuration: 'bad' },
+        'customDuration'
+      );
+    }
     for (const Dto of [CreateTaskDto, UpdateTaskDto]) {
       await expectInvalid(Dto, { title: 'x'.repeat(501) }, 'title');
       await expectInvalid(

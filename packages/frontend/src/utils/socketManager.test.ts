@@ -137,6 +137,20 @@ describe('socket manager reconnect contracts', () => {
     );
   });
 
+  it('lets an explicit retry replace a stuck reconnecting socket', async () => {
+    const { connectionState, forceReconnect, getOrCreateSocket } =
+      await import('./socketManager');
+
+    const existing = getOrCreateSocket();
+    connectionState.isReconnecting = true;
+
+    const replacement = forceReconnect(false);
+
+    expect(replacement).toBe(existing);
+    expect(socketHarness.socket.disconnect).toHaveBeenCalledOnce();
+    expect(io).toHaveBeenCalledTimes(2);
+  });
+
   it('disconnects the socket when the authenticated token is cleared', async () => {
     const { getOrCreateSocket } = await import('./socketManager');
 

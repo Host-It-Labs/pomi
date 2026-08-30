@@ -21,6 +21,7 @@ const LIFECYCLE_LABELS = new Set([
   'radar:accepted',
   'radar:in-progress',
   'radar:in-review',
+  'radar:already-implemented',
   'radar:ready-for-release',
   'radar:blocked',
   'radar:released',

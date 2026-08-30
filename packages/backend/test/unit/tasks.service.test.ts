@@ -425,6 +425,46 @@ test('direct Task creation preserves an absent due date and defaults to Work', a
   assert.equal(savedEvents[0].recurrenceAnchorModeSnapshot, 'planned');
 });
 
+test('Task custom duration persists on creation and update, including clearing', async () => {
+  const task = {
+    id: 'task-duration',
+    userId: 'user-1',
+    title: 'Timed task',
+    status: TASK_STATUSES.ACTIVE,
+    dueDate: null,
+    dueTime: null,
+    timerType: 'work',
+    customDuration: null,
+    pinnedAt: null,
+    intentionSlug: null,
+    subIntentionSlug: null,
+    recurrenceRule: null,
+    recurrenceInterval: null,
+    recurrenceAnchorMode: 'planned',
+  };
+  const { service, savedTasks } = createService(null);
+
+  await service.createTask({
+    userId: 'user-1',
+    title: 'Timed task',
+    customDuration: 1_800_000,
+    creationSource: TASK_CREATION_SOURCES.MANUAL,
+  });
+
+  assert.equal(savedTasks.at(-1).customDuration, 1_800_000);
+
+  const updateFixture = createService(task);
+  await updateFixture.service.updateTask('user-1', task.id, {
+    customDuration: 2_700_000,
+  });
+  assert.equal(updateFixture.savedTasks.at(-1).customDuration, 2_700_000);
+
+  await updateFixture.service.updateTask('user-1', task.id, {
+    customDuration: null,
+  });
+  assert.equal(updateFixture.savedTasks.at(-1).customDuration, null);
+});
+
 test('prepared Assistant Tasks reuse validation context during persistence', async () => {
   const { service, getPreferenceReads, savedEvents, savedTasks } =
     createService(null);

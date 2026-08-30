@@ -233,6 +233,30 @@ describe('authentication behavior migrated from legacy Playwright documentation'
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
   });
 
+  it('surfaces the new-account password validation message', async () => {
+    server.use(
+      http.post('http://localhost:3000/sessions', () =>
+        HttpResponse.json(
+          {
+            message:
+              'Password must be at least 12 characters and contain a non-whitespace character',
+          },
+          { status: 400 }
+        )
+      )
+    );
+    const user = userEvent.setup();
+    renderLogin();
+
+    await user.type(screen.getByLabelText('Username'), 'new-user');
+    await user.type(screen.getByLabelText('Password'), 'short');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Password must be at least 12 characters and contain a non-whitespace character'
+    );
+  });
+
   it('persists a normalized self-hosted URL and clears it when returning to hosted service', async () => {
     const user = userEvent.setup();
     renderLogin();
@@ -284,7 +308,7 @@ describe('feature setup behavior migrated from legacy Playwright documentation',
       pomodorosCount: 3,
       hasLongBreak: true,
       longBreakDuration: 20 * 60 * 1000,
-      longBreakAutoStart: false,
+      autoStartBreak: false,
     });
     expect(onClose).toHaveBeenCalledOnce();
   });

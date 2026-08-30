@@ -1,4 +1,4 @@
-import type { Intention, List, Task } from '@pomi/shared';
+import type { Intention, List, ListItem, Task } from '@pomi/shared';
 import {
   TASK_STATUSES,
   TIMER_TYPES,
@@ -7,7 +7,6 @@ import {
 import clsx from 'clsx';
 import {
   type TouchEvent,
-  type WheelEvent,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -65,15 +64,13 @@ import {
 } from '../utils/listRefresh';
 import { showToastFromStore } from './toast/ToastContext';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
-import { getWheelPageDirection } from '../utils/pagedGesture';
+import { mixTaskAndListItems } from '../utils/mixedTaskItems';
 
 const TASK_ACTION_BUTTON_BASE_CLASS =
   'group/task-action relative flex items-center justify-center overflow-visible rounded-full border border-slate-700/60 bg-slate-950/40 p-0 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-50';
 const TASK_ACTION_ICON_SIZE = 13;
 const MOBILE_TASK_PEEK_HEIGHT = 28;
 const MOBILE_TASK_GESTURE_THRESHOLD = 36;
-const MOBILE_TASK_WHEEL_THRESHOLD = 18;
-const MOBILE_TASK_WHEEL_LOCK_MS = 280;
 export const MOBILE_TASK_SCROLL_GUTTER_CLASS =
   'app-scrollbar -mr-3 h-full w-[calc(100%+0.75rem)] space-y-1 overflow-y-auto overscroll-contain pr-3';
 interface MinimizedTaskViewProps {
@@ -167,6 +164,7 @@ export function MinimizedTaskView({
   const taskEditRequestedId = useUiStore.use.taskEditRequestedId();
   const requestTaskEdit = useUiStore.use.requestTaskEdit();
   const clearTaskEditRequest = useUiStore.use.clearTaskEditRequest();
+  const requestTaskItemReveal = useUiStore.use.requestTaskItemReveal();
   const taskSearchFocusRequest = useUiStore.use.taskSearchFocusRequest();
   const [pageIndex, setPageIndex] = useState(0);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -183,6 +181,10 @@ export function MinimizedTaskView({
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const [intentions, setIntentions] = useState<Intention[]>([]);
   const [lists, setLists] = useState<List[]>([]);
+  const [listItems, setListItems] = useState<ListItem[]>([]);
+  const [completingListItemIds, setCompletingListItemIds] = useState<string[]>(
+    []
+  );
   const [taskDestinationId, setTaskDestinationId] = useState<string | null>(
     null
   );
@@ -198,7 +200,6 @@ export function MinimizedTaskView({
   const taskSearchFocusPendingRef = useRef(false);
   const lastTaskSearchFocusRequestRef = useRef(taskSearchFocusRequest);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const lastWheelPageChangeRef = useRef(0);
   const editingTask = tasks.find(task => task.id === editingTaskId);
   const tasksPerPage = Math.min(5, Math.max(1, Math.trunc(visibleRowLimit)));
   const hasTimerIntention =
@@ -247,11 +248,18 @@ export function MinimizedTaskView({
   const loadLists = useCallback(async () => {
     if (!preferences?.listsExtension) {
       setLists([]);
+      setListItems([]);
       return;
     }
-    const response = await apiClient.lists.list({ query: {} });
-    if (response.status === 200) {
-      setLists(response.body.filter(list => !list.isArchived));
+    const [listsResponse, itemsResponse] = await Promise.all([
+      apiClient.lists.list({ query: {} }),
+      apiClient.lists.items({ query: {} }),
+    ]);
+    if (listsResponse.status === 200) {
+      setLists(listsResponse.body.filter(list => !list.isArchived));
+    }
+    if (itemsResponse.status === 200) {
+      setListItems(itemsResponse.body);
     }
   }, [preferences?.listsExtension]);
 
@@ -321,6 +329,101 @@ export function MinimizedTaskView({
       }
     },
     [loadLists, loadTasks, t]
+  );
+
+  const updateListItem = useCallback(
+    async (
+      item: ListItem,
+      updates: {
+        dueDate?: string | null;
+        priority?: ListItem['priority'];
+      }
+    ) => {
+      try {
+        await submitUserMutation({
+          kind: 'lists',
+          label: t('lists.updateItem'),
+          payload: { operation: 'updateItem', itemId: item.id, ...updates },
+          reconcile: loadLists,
+        });
+        await loadLists();
+        requestListRefresh();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [loadLists, t]
+  );
+
+  const completeListItem = useCallback(
+    async (item: ListItem) => {
+      if (completingListItemIds.includes(item.id)) return;
+      setCompletingListItemIds(current => [...current, item.id]);
+      try {
+        await submitUserMutation({
+          kind: 'lists',
+          label: t('lists.completeItem'),
+          payload: {
+            operation: 'updateItem',
+            itemId: item.id,
+            status: TASK_STATUSES.COMPLETED,
+          },
+          reconcile: loadLists,
+        });
+        await loadLists();
+        requestListRefresh();
+      } finally {
+        setCompletingListItemIds(current =>
+          current.filter(itemId => itemId !== item.id)
+        );
+      }
+    },
+    [completingListItemIds, loadLists, t]
+  );
+
+  const convertListItemToTask = useCallback(
+    async (
+      itemId: string,
+      intentionSlug: string,
+      subIntentionSlug: string | null
+    ) => {
+      try {
+        await submitUserMutation({
+          kind: 'lists',
+          label: t('task.intentionOrList'),
+          payload: {
+            operation: 'convertListItemToTask',
+            itemId,
+            intentionSlug,
+            subIntentionSlug,
+          },
+          reconcile: async () => {
+            await Promise.all([loadTasks(), loadLists()]);
+          },
+        });
+        await Promise.all([loadTasks(), loadLists()]);
+        requestListRefresh();
+        showToastFromStore(t('task.updated'), 'success');
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [loadLists, loadTasks, t]
+  );
+
+  const openListItem = useCallback(
+    (item: ListItem) => {
+      setExpanded(true);
+      setActiveTab('tasks');
+      requestTaskItemReveal({
+        kind: 'listItem',
+        id: item.id,
+        listId: item.listId,
+      });
+    },
+    [requestTaskItemReveal, setActiveTab, setExpanded]
   );
 
   useEffect(() => {
@@ -440,7 +543,8 @@ export function MinimizedTaskView({
       tasks,
       query,
       taskViewTimer,
-      hideVacationCovered
+      hideVacationCovered,
+      intentions
     );
   }, [
     effectiveTaskSearchQuery,
@@ -448,7 +552,28 @@ export function MinimizedTaskView({
     taskView.tasks,
     taskViewTimer,
     tasks,
+    intentions,
   ]);
+  const displayListItems = useMemo(() => {
+    const query = effectiveTaskSearchQuery.trim();
+    if (!query && displayedTaskMode !== 'general') return [];
+    return searchMinimizedListItems(
+      listItems,
+      lists,
+      query,
+      hideVacationCovered
+    );
+  }, [
+    displayedTaskMode,
+    effectiveTaskSearchQuery,
+    hideVacationCovered,
+    listItems,
+    lists,
+  ]);
+  const displayEntries = useMemo(
+    () => mixTaskAndListItems(displayTasks, displayListItems, 'default'),
+    [displayListItems, displayTasks]
+  );
   const generalPreviewTasks = useMemo(
     () =>
       effectiveTaskSearchQuery.trim()
@@ -458,15 +583,31 @@ export function MinimizedTaskView({
           ),
     [effectiveTaskSearchQuery, taskView.generalPreviewTasks]
   );
-  const pageCount = Math.max(1, Math.ceil(displayTasks.length / tasksPerPage));
-  const visibleTasks = useMemo(() => {
-    if (mobileExpandedLayout) return displayTasks;
+  const pageCount = Math.max(
+    1,
+    Math.ceil(displayEntries.length / tasksPerPage)
+  );
+  const visibleEntries = useMemo(() => {
+    if (mobileExpandedLayout) return displayEntries;
     const normalizedPage = Math.min(pageIndex, pageCount - 1);
-    return displayTasks.slice(
+    return displayEntries.slice(
       normalizedPage * tasksPerPage,
       normalizedPage * tasksPerPage + tasksPerPage
     );
-  }, [displayTasks, mobileExpandedLayout, pageCount, pageIndex, tasksPerPage]);
+  }, [
+    displayEntries,
+    mobileExpandedLayout,
+    pageCount,
+    pageIndex,
+    tasksPerPage,
+  ]);
+  const visibleTasks = useMemo(
+    () =>
+      visibleEntries.flatMap(entry =>
+        entry.kind === 'task' ? [entry.task] : []
+      ),
+    [visibleEntries]
+  );
 
   useEffect(() => {
     setPageIndex(currentPage => Math.min(currentPage, pageCount - 1));
@@ -475,7 +616,9 @@ export function MinimizedTaskView({
   useLayoutEffect(() => {
     if (!taskDestinationId) return;
     const destinationPage = getTaskDestinationPageIndex(
-      displayTasks,
+      displayEntries.map(entry => ({
+        id: entry.kind === 'task' ? entry.task.id : entry.item.id,
+      })),
       taskDestinationId,
       tasksPerPage
     );
@@ -511,7 +654,7 @@ export function MinimizedTaskView({
       taskHighlightTimeoutRef.current = null;
     }, 1800);
   }, [
-    displayTasks,
+    displayEntries,
     mobileExpandedLayout,
     pageIndex,
     taskDestinationId,
@@ -581,7 +724,7 @@ export function MinimizedTaskView({
   }, [canUseTaskSearch, isTaskSearchOpen]);
 
   const openTaskCreate = useCallback(() => {
-    setIsQuickCreateOpen(true);
+    setIsQuickCreateOpen(current => !current);
   }, []);
 
   const openAdvancedTaskCreate = useCallback(
@@ -607,35 +750,6 @@ export function MinimizedTaskView({
       );
     },
     [pageCount]
-  );
-
-  const handleTaskWheel = useCallback(
-    (event: WheelEvent<HTMLDivElement>) => {
-      if (mobileExpandedLayout || pageCount <= 1) {
-        return;
-      }
-
-      const direction = getWheelPageDirection(
-        event.deltaX,
-        event.deltaY,
-        MOBILE_TASK_WHEEL_THRESHOLD
-      );
-      if (direction === null) return;
-      const canMove = direction > 0 ? pageIndex < pageCount - 1 : pageIndex > 0;
-      if (!canMove) {
-        return;
-      }
-
-      event.preventDefault();
-      const now = Date.now();
-      if (now - lastWheelPageChangeRef.current < MOBILE_TASK_WHEEL_LOCK_MS) {
-        return;
-      }
-
-      lastWheelPageChangeRef.current = now;
-      changePage(direction);
-    },
-    [changePage, mobileExpandedLayout, pageCount, pageIndex]
   );
 
   const handleTaskTouchStart = useCallback(
@@ -772,8 +886,8 @@ export function MinimizedTaskView({
   ]);
 
   const availableRows = [
-    ...visibleTasks,
-    ...(generalPreviewTasks.length > 0 && visibleTasks.length < tasksPerPage
+    ...visibleEntries,
+    ...(generalPreviewTasks.length > 0 && visibleEntries.length < tasksPerPage
       ? ['general-preview' as const]
       : []),
   ];
@@ -816,7 +930,6 @@ export function MinimizedTaskView({
         compact ? 'px-2 py-1' : 'px-4 py-2',
         className
       )}
-      onWheel={mobileExpandedLayout ? undefined : handleTaskWheel}
       onTouchStart={mobileExpandedLayout ? handleTaskTouchStart : undefined}
       onTouchEnd={mobileExpandedLayout ? handleTaskTouchEnd : undefined}
     >
@@ -834,7 +947,7 @@ export function MinimizedTaskView({
         ) : (
           <div className="flex items-center gap-2">
             {isTaskSearchOpen && canUseTaskSearch ? (
-              <label className="relative z-10 w-28 min-w-0 shrink-0">
+              <label className="relative z-10 min-w-0 flex-1">
                 <span className="sr-only">
                   {t('navigation.searchVisibleTasks')}
                 </span>
@@ -875,7 +988,13 @@ export function MinimizedTaskView({
               </div>
             )}
             {!mobileExpandedLayout && (
-              <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 justify-center">
+              <div
+                className={clsx(
+                  'flex justify-center',
+                  !isTaskSearchOpen &&
+                    'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'
+                )}
+              >
                 <PaginationControls
                   pageIndex={pageIndex}
                   pageCount={pageCount}
@@ -884,49 +1003,65 @@ export function MinimizedTaskView({
                   direction="vertical"
                   previousLabel={t('navigation.previousTaskPage')}
                   nextLabel={t('navigation.nextTaskPage')}
-                  className={isMobile ? 'gap-0.5' : 'gap-1'}
-                  buttonSizeClassName={isMobile ? 'h-7 w-7' : undefined}
+                  className={
+                    isTaskSearchOpen ? 'gap-0' : isMobile ? 'gap-0.5' : 'gap-1'
+                  }
+                  buttonSizeClassName={
+                    isTaskSearchOpen
+                      ? 'h-6 w-6'
+                      : isMobile
+                        ? 'h-7 w-7'
+                        : undefined
+                  }
                   buttonClassName="bg-transparent hover:bg-transparent"
                   countClassName={clsx(
-                    isMobile ? 'min-w-7 text-xs' : 'text-[10px]'
+                    isTaskSearchOpen
+                      ? 'min-w-6 text-[9px]'
+                      : isMobile
+                        ? 'min-w-7 text-xs'
+                        : 'text-[10px]'
                   )}
-                  iconSize={isMobile ? 15 : 16}
+                  iconSize={isTaskSearchOpen ? 12 : isMobile ? 15 : 16}
                   showSinglePageControls={!compact}
                 />
               </div>
             )}
             <div className="ml-auto flex shrink-0 items-center justify-end gap-1">
-              {canUseTaskSearch && (
+              {canUseTaskSearch && isTaskSearchOpen ? (
                 <CompactIconButton
-                  label={
-                    isTaskSearchOpen ? t('task.closeSearch') : t('task.search')
-                  }
-                  title={
-                    isTaskSearchOpen
-                      ? t('task.closeSearch')
-                      : t('task.searchShortcut')
-                  }
+                  label={t('task.closeSearch')}
+                  title={t('task.closeSearch')}
                   onClick={toggleTaskSearch}
-                  variant={isTaskSearchOpen ? 'primary' : 'secondary'}
+                  variant="secondary"
                 >
-                  {isTaskSearchOpen ? (
-                    <FaTimes size={9} />
-                  ) : (
-                    <FaSearch size={9} />
-                  )}
+                  <FaTimes size={9} />
                   <KeyboardShortcut text="K" showModIcon />
                 </CompactIconButton>
+              ) : (
+                <>
+                  {canUseTaskSearch && (
+                    <CompactIconButton
+                      label={t('task.search')}
+                      title={t('task.searchShortcut')}
+                      onClick={toggleTaskSearch}
+                      variant="secondary"
+                    >
+                      <FaSearch size={9} />
+                      <KeyboardShortcut text="K" showModIcon />
+                    </CompactIconButton>
+                  )}
+                  <CompactIconButton
+                    label={t('navigation.addTask')}
+                    title={t('navigation.addTask')}
+                    onClick={openTaskCreate}
+                    variant="primary"
+                    className={mobileExpandedLayout ? '!h-8 !w-8' : undefined}
+                  >
+                    <FaPlus size={mobileExpandedLayout ? 10 : 9} />
+                    <KeyboardShortcut text="N" showModIcon />
+                  </CompactIconButton>
+                </>
               )}
-              <CompactIconButton
-                label={t('navigation.addTask')}
-                title={t('navigation.addTask')}
-                onClick={openTaskCreate}
-                variant="primary"
-                className={mobileExpandedLayout ? '!h-8 !w-8' : undefined}
-              >
-                <FaPlus size={mobileExpandedLayout ? 10 : 9} />
-                <KeyboardShortcut text="N" showModIcon />
-              </CompactIconButton>
             </div>
           </div>
         )}
@@ -966,18 +1101,18 @@ export function MinimizedTaskView({
               {t('task.loading')}
             </div>
           )}
-          {!isLoading && displayTasks.length === 0 && (
-            <button
-              type="button"
-              onClick={openTaskCreate}
-              className="rounded-md border border-dashed border-slate-700/55 px-3 text-xs text-slate-400 transition hover:border-indigo-500/60 hover:text-slate-200"
-              style={{ gridRow: `span ${tasksPerPage}` }}
-            >
-              {taskSearchQuery.trim()
-                ? t('task.noMatching')
-                : t('navigation.addTask')}
-            </button>
-          )}
+          {!isLoading &&
+            displayEntries.length === 0 &&
+            generalPreviewTasks.length === 0 && (
+              <div
+                className="rounded-md border border-dashed border-slate-700/55 px-3 text-xs text-slate-400 transition hover:border-indigo-500/60 hover:text-slate-200"
+                style={{ gridRow: `span ${tasksPerPage}` }}
+              >
+                {effectiveTaskSearchQuery.trim()
+                  ? t('task.noMatching')
+                  : t('task.noTasks')}
+              </div>
+            )}
           {!isLoading &&
             visibleRows.map(row => {
               if (row === 'general-preview') {
@@ -990,7 +1125,25 @@ export function MinimizedTaskView({
                 );
               }
 
-              const task = row;
+              if (row.kind === 'listItem') {
+                return (
+                  <MinimizedListItemRow
+                    key={`list-item:${row.item.id}`}
+                    item={row.item}
+                    list={row.list}
+                    intentions={intentions}
+                    compact={compact}
+                    mobileExpandedLayout={mobileExpandedLayout}
+                    isCompleting={completingListItemIds.includes(row.item.id)}
+                    onComplete={completeListItem}
+                    onUpdate={updateListItem}
+                    onConvertToTask={convertListItemToTask}
+                    onOpen={openListItem}
+                  />
+                );
+              }
+
+              const task = row.task;
               const isPinned = task.pinnedAt !== null;
               const isPinning = pinningTaskIds.includes(task.id);
               const isCompleting = completingTaskIds.includes(task.id);
@@ -1080,7 +1233,9 @@ export function MinimizedTaskView({
                     <TaskInlineProperties
                       task={task}
                       intentions={intentions}
+                      lists={lists}
                       onUpdate={updateTaskWithDeferredOrder}
+                      onConvertToListItem={convertTaskToListItem}
                       onOpenEditor={() => {
                         if (compact) {
                           requestTaskEdit(task.id);
@@ -1292,15 +1447,127 @@ function GeneralPreviewStrip({
   );
 }
 
+function MinimizedListItemRow({
+  item,
+  list,
+  intentions,
+  compact,
+  mobileExpandedLayout,
+  isCompleting,
+  onComplete,
+  onUpdate,
+  onConvertToTask,
+  onOpen,
+}: {
+  item: ListItem;
+  list: List;
+  intentions: Intention[];
+  compact: boolean;
+  mobileExpandedLayout: boolean;
+  isCompleting: boolean;
+  onComplete: (item: ListItem) => Promise<void>;
+  onUpdate: (
+    item: ListItem,
+    updates: {
+      dueDate?: string | null;
+      priority?: ListItem['priority'];
+    }
+  ) => Promise<boolean>;
+  onConvertToTask: (
+    itemId: string,
+    intentionSlug: string,
+    subIntentionSlug: string | null
+  ) => Promise<boolean>;
+  onOpen: (item: ListItem) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div
+      data-testid="minimized-list-item-row"
+      data-list-item-id={item.id}
+      data-completing={isCompleting}
+      className={clsx(
+        'group/minimized-task relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 overflow-visible rounded-md border border-slate-800/70 bg-slate-950/35 transition-all duration-200 hover:border-slate-700/80 hover:bg-slate-900/55',
+        compact
+          ? 'min-h-7 px-1.5'
+          : mobileExpandedLayout
+            ? 'min-h-10 px-2.5 py-1'
+            : 'min-h-8 px-2',
+        isCompleting && 'opacity-45 line-through'
+      )}
+    >
+      <div
+        aria-hidden="true"
+        className={clsx(
+          'absolute inset-y-1 left-0 w-0.5 rounded-r-full',
+          getTaskPriorityAccentClass(item.priority)
+        )}
+      />
+      <CompletionButton
+        label={item.title}
+        isCompleted={false}
+        isCompleting={isCompleting}
+        disabled={isCompleting}
+        onClick={() => void onComplete(item)}
+        compact={!mobileExpandedLayout}
+      />
+      <div className="min-w-0">
+        <OverflowTaskTitle
+          title={item.title}
+          testId="minimized-list-item-title"
+          nativeOnly
+          className="text-xs font-medium text-slate-100"
+        />
+        <TaskInlineProperties
+          task={item}
+          intentions={intentions}
+          currentList={list}
+          onUpdate={update =>
+            onUpdate(item, {
+              ...(update.dueDate !== undefined
+                ? { dueDate: update.dueDate }
+                : {}),
+              ...(update.priority !== undefined
+                ? { priority: update.priority }
+                : {}),
+            })
+          }
+          onConvertListItemToTask={onConvertToTask}
+          onOpenEditor={() => onOpen(item)}
+          showIntention
+          compact
+          isOverdue={isTaskOverdue({
+            dueDate: item.dueDate,
+            dueTime: null,
+          })}
+        />
+      </div>
+      <button
+        type="button"
+        aria-label={t('task.editFor', { title: item.title })}
+        title={t('common.edit')}
+        onClick={() => onOpen(item)}
+        className={clsx(
+          TASK_ACTION_BUTTON_BASE_CLASS,
+          mobileExpandedLayout ? 'h-8 w-8' : 'h-7 w-7'
+        )}
+      >
+        <FaEdit size={mobileExpandedLayout ? 14 : TASK_ACTION_ICON_SIZE} />
+      </button>
+    </div>
+  );
+}
+
 export function searchMinimizedTasks(
   tasks: Task[],
   query: string,
   timer: TaskViewTimer | null | undefined,
-  hideVacationCovered: boolean
+  hideVacationCovered: boolean,
+  intentions: Intention[] = []
 ) {
   return tasks
     .filter(task => !hideVacationCovered || !task.vacationEligible)
-    .filter(task => doesTaskMatchMiniSearch(task, query))
+    .filter(task => doesTaskMatchMiniSearch(task, query, intentions))
     .sort(
       (a, b) =>
         Number(doesTaskMatchCurrentTimer(b, timer)) -
@@ -1310,15 +1577,73 @@ export function searchMinimizedTasks(
     );
 }
 
-function doesTaskMatchMiniSearch(task: Task, query: string) {
-  const normalizedQuery = query.trim().toLocaleLowerCase();
+export function searchMinimizedListItems(
+  items: ListItem[],
+  lists: List[],
+  query: string,
+  hideVacationCovered: boolean
+) {
+  const normalizedQuery = normalizeMiniSearchText(query);
+  const tokens = normalizedQuery.split(' ').filter(Boolean);
+  const listsById = new Map(lists.map(list => [list.id, list]));
+
+  return items
+    .filter(item => item.status === TASK_STATUSES.ACTIVE)
+    .filter(item => !hideVacationCovered || !item.vacationEligible)
+    .flatMap(item => {
+      const list = listsById.get(item.listId);
+      if (!list) return [];
+      const searchableText = normalizeMiniSearchText(
+        `${item.title} ${item.priority} ${list.title}`
+      );
+      return tokens.every(token => searchableText.includes(token))
+        ? [{ item, list }]
+        : [];
+    });
+}
+
+function doesTaskMatchMiniSearch(
+  task: Task,
+  query: string,
+  intentions: Intention[] = []
+) {
+  const normalizedQuery = normalizeMiniSearchText(query);
   if (!normalizedQuery) {
     return true;
   }
 
-  return [task.title, task.description ?? ''].some(value =>
-    value.toLocaleLowerCase().includes(normalizedQuery)
+  const linkedIntentions = intentions.filter(
+    intention =>
+      intention.type === task.timerType &&
+      (intention.slug === task.intentionSlug ||
+        intention.slug === task.subIntentionSlug)
   );
+  const searchableText = [
+    task.title,
+    task.description ?? '',
+    task.sourceTranscript ?? '',
+    task.priority,
+    task.timerType,
+    ...linkedIntentions.flatMap(intention => [
+      intention.title,
+      intention.emoji,
+    ]),
+  ]
+    .map(normalizeMiniSearchText)
+    .join(' ');
+  return normalizedQuery
+    .split(' ')
+    .every(token => searchableText.includes(token));
+}
+
+function normalizeMiniSearchText(value: string) {
+  return value
+    .toLocaleLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function doesTaskMatchCurrentTimer(

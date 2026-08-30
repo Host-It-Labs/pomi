@@ -12,7 +12,9 @@ type FocusTaskOnTimerOptions = {
     intention?: string,
     intentions?: string[],
     subIntentions?: Record<string, string>,
-    focusedTaskId?: string
+    focusedTaskId?: string,
+    resetOnFirstIntention?: boolean,
+    customDuration?: number | null
   ) => Promise<boolean>;
   updatePreferenceWithResult: (
     key: keyof Preferences,
@@ -88,12 +90,21 @@ export async function focusTaskOnTimer({
     delete nextSubIntentions[task.intentionSlug];
   }
 
+  const resetOnFirstIntention =
+    task.timerType === TIMER_TYPES.WORK
+      ? preferences?.resetWorkOnFirstIntention === true
+      : task.timerType === TIMER_TYPES.BREAK
+        ? preferences?.resetBreakOnFirstIntention === true
+        : preferences?.resetLongBreakOnFirstIntention === true;
+
   const didFocus = await createOrResumeTimer(
     task.timerType,
     nextIntentions[0],
     nextIntentions,
     nextSubIntentions,
-    task.id
+    task.id,
+    resetOnFirstIntention,
+    task.customDuration
   );
   if (!didFocus) return false;
   if (preferences?.tasksAutoSwitchToIntentionMode !== false) {

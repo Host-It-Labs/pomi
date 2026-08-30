@@ -33,6 +33,12 @@ export class VacationEntity {
   @Column({ type: 'date', nullable: true })
   endsOn: string | null;
 
+  @Column({ type: 'date', nullable: true })
+  lastProcessedOn: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  lastProcessedTimeZone: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

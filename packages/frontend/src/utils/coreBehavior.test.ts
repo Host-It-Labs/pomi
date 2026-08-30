@@ -69,6 +69,7 @@ function task(id: string, overrides: Partial<Task>): Task {
     priority: 'normal',
     status: 'active',
     timerType: 'work',
+    customDuration: null,
     pinnedAt: null,
     intentionSlug: null,
     subIntentionSlug: null,
@@ -489,10 +490,10 @@ describe('Task ordering rules', () => {
       'pinned-other',
       'matching-parent',
       'matching-sub',
-      'unlinked',
     ]);
     expect(view.generalPreviewTasks.map(value => value.id)).toEqual([
       'other-sub',
+      'unlinked',
       'other-intention',
     ]);
   });

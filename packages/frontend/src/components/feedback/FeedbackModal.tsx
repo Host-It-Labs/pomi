@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FaKeyboard, FaMicrophone, FaStop } from 'react-icons/fa';
+import { FaMicrophone } from 'react-icons/fa';
 import {
   submitFeedbackText,
   useFeedbackRecorderStore,
 } from './FeedbackRecorder';
 import { showToastFromStore } from '../toast/ToastContext';
 import { Button } from '../ui/Button';
+import { IconButton } from '../ui/IconButton';
 import { Modal } from '../ui/Modal';
 import { useI18n } from '../../i18n';
 
-type FeedbackMode = 'choice' | 'voice' | 'text';
 type TextFeedbackStage = 'ready' | 'sending' | 'error';
 
 export function FeedbackModal({
@@ -21,12 +21,10 @@ export function FeedbackModal({
 }) {
   const { t } = useI18n();
   const recordingStage = useFeedbackRecorderStore.use.stage();
-  const recordingSeconds = useFeedbackRecorderStore.use.seconds();
   const recordingError = useFeedbackRecorderStore.use.error();
   const startRecording = useFeedbackRecorderStore.use.startRecording();
   const stopRecording = useFeedbackRecorderStore.use.stopRecording();
   const cancelRecording = useFeedbackRecorderStore.use.cancelRecording();
-  const [mode, setMode] = useState<FeedbackMode>('choice');
   const [textStage, setTextStage] = useState<TextFeedbackStage>('ready');
   const [text, setText] = useState('');
   const [error, setError] = useState('');
@@ -34,20 +32,26 @@ export function FeedbackModal({
   const submissionRequestRef = useRef(0);
   const wasOpenRef = useRef(false);
   const previousRecordingStageRef = useRef(recordingStage);
+  const voiceStartRequestedRef = useRef(false);
+  const pendingVoiceStartRef = useRef(false);
 
   const hasActiveRecording =
     recordingStage === 'starting' || recordingStage === 'recording';
 
-  const resetAndClose = useCallback(() => {
-    submissionRequestRef.current += 1;
-    if (hasActiveRecording) cancelRecording();
-    setMode('choice');
-    setTextStage('ready');
-    setText('');
-    setError('');
-    setConfirmClose(false);
-    onClose();
-  }, [cancelRecording, hasActiveRecording, onClose]);
+  const resetAndClose = useCallback(
+    (cancelActiveRecording: boolean) => {
+      submissionRequestRef.current += 1;
+      voiceStartRequestedRef.current = false;
+      pendingVoiceStartRef.current = false;
+      if (cancelActiveRecording && hasActiveRecording) cancelRecording();
+      setTextStage('ready');
+      setText('');
+      setError('');
+      setConfirmClose(false);
+      onClose();
+    },
+    [cancelRecording, hasActiveRecording, onClose]
+  );
 
   const submitText = useCallback(
     async (feedback: string, request: number) => {
@@ -64,7 +68,7 @@ export function FeedbackModal({
         await submitFeedbackText(trimmed);
         if (request !== submissionRequestRef.current) return;
         showToastFromStore(t('feedback.sent'), 'success');
-        resetAndClose();
+        resetAndClose(true);
       } catch (submissionError) {
         if (request !== submissionRequestRef.current) return;
         setError(
@@ -83,34 +87,48 @@ export function FeedbackModal({
     previousRecordingStageRef.current = recordingStage;
     if (!isOpen) {
       wasOpenRef.current = false;
+      voiceStartRequestedRef.current = false;
+      pendingVoiceStartRef.current = false;
       return;
     }
     if (previousRecordingStage === 'sending' && recordingStage === 'idle') {
-      resetAndClose();
+      resetAndClose(true);
       return;
+    }
+    if (voiceStartRequestedRef.current && recordingStage === 'recording') {
+      voiceStartRequestedRef.current = false;
+      resetAndClose(false);
+      return;
+    }
+    if (voiceStartRequestedRef.current && recordingStage === 'error') {
+      voiceStartRequestedRef.current = false;
     }
     if (wasOpenRef.current) return;
     wasOpenRef.current = true;
-    setMode(recordingStage === 'idle' ? 'choice' : 'voice');
     setTextStage('ready');
     setText('');
     setError('');
     setConfirmClose(false);
   }, [isOpen, recordingStage, resetAndClose]);
 
-  const switchToText = () => {
-    if (hasActiveRecording) cancelRecording();
-    setMode('text');
-    setTextStage('ready');
-    setError('');
-  };
-
-  const requestClose = () => {
-    if (text.trim() || (mode === 'voice' && hasActiveRecording)) {
+  const requestVoiceStart = useCallback(() => {
+    if (recordingStage === 'starting' || recordingStage === 'sending') return;
+    if (text.trim()) {
+      pendingVoiceStartRef.current = true;
       setConfirmClose(true);
       return;
     }
-    resetAndClose();
+    voiceStartRequestedRef.current = true;
+    setError('');
+    void startRecording();
+  }, [recordingStage, startRecording, text]);
+
+  const requestClose = () => {
+    if (text.trim() || hasActiveRecording) {
+      setConfirmClose(true);
+      return;
+    }
+    resetAndClose(true);
   };
 
   return (
@@ -118,6 +136,22 @@ export function FeedbackModal({
       isOpen={isOpen}
       onClose={requestClose}
       title={t('feedback.title')}
+      headerActions={
+        <IconButton
+          label={t('feedback.record')}
+          onClick={requestVoiceStart}
+          disabled={
+            recordingStage === 'starting' ||
+            recordingStage === 'recording' ||
+            recordingStage === 'sending'
+          }
+          size="sm"
+          variant="secondary"
+          className="bg-transparent text-slate-400 hover:bg-transparent hover:text-white"
+        >
+          <FaMicrophone size={14} />
+        </IconButton>
+      }
       closeOnBackdropClick
       closeOnEscape
     >
@@ -130,8 +164,14 @@ export function FeedbackModal({
             <Button
               className="flex-1"
               onClick={() => {
+                if (pendingVoiceStartRef.current) {
+                  pendingVoiceStartRef.current = false;
+                  setConfirmClose(false);
+                  void submitText(text, ++submissionRequestRef.current);
+                  return;
+                }
                 setConfirmClose(false);
-                if (mode === 'voice') stopRecording();
+                if (hasActiveRecording && !text.trim()) stopRecording();
                 else void submitText(text, ++submissionRequestRef.current);
               }}
             >
@@ -140,86 +180,20 @@ export function FeedbackModal({
             <Button
               className="flex-1"
               variant="secondary"
-              onClick={resetAndClose}
+              onClick={() => {
+                if (pendingVoiceStartRef.current) {
+                  pendingVoiceStartRef.current = false;
+                  setConfirmClose(false);
+                  setText('');
+                  setError('');
+                  voiceStartRequestedRef.current = true;
+                  void startRecording();
+                  return;
+                }
+                resetAndClose(true);
+              }}
             >
               {t('common.discard')}
-            </Button>
-          </div>
-        </div>
-      ) : mode === 'choice' ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => {
-              setMode('voice');
-              void startRecording();
-            }}
-            className="group flex min-h-32 flex-col items-center justify-center gap-3 rounded-xl border border-indigo-500/25 bg-indigo-500/10 p-5 text-center transition hover:border-indigo-400/60 hover:bg-indigo-500/15"
-          >
-            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-indigo-500/20 text-indigo-200 transition group-hover:scale-105">
-              <FaMicrophone size={19} />
-            </span>
-            <span>
-              <span className="block text-sm font-semibold text-white">
-                {t('feedback.record')}
-              </span>
-              <span className="mt-1 block text-xs text-slate-400">
-                {t('feedback.recordDescription')}
-              </span>
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('text')}
-            className="group flex min-h-32 flex-col items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-900/70 p-5 text-center transition hover:border-slate-500 hover:bg-slate-800/80"
-          >
-            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-800 text-slate-200 transition group-hover:scale-105">
-              <FaKeyboard size={19} />
-            </span>
-            <span>
-              <span className="block text-sm font-semibold text-white">
-                {t('feedback.type')}
-              </span>
-              <span className="mt-1 block text-xs text-slate-400">
-                {t('feedback.typeDescription')}
-              </span>
-            </span>
-          </button>
-        </div>
-      ) : mode === 'voice' ? (
-        <div className="space-y-5 text-center">
-          <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-400/25">
-            {recordingStage === 'recording' ? (
-              <FaMicrophone size={34} />
-            ) : (
-              <FaStop size={28} />
-            )}
-          </div>
-          <p className="font-mono text-sm text-slate-300">
-            {recordingStage === 'recording'
-              ? `${String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:${String(recordingSeconds % 60).padStart(2, '0')}`
-              : recordingStage === 'sending'
-                ? t('feedback.sendingEllipsis')
-                : t('feedback.preparingMicrophone')}
-          </p>
-          {(error || recordingError) && (
-            <p className="text-sm text-red-300">{error || recordingError}</p>
-          )}
-          <div className="flex gap-2">
-            <Button
-              className="flex-1 gap-2"
-              disabled={recordingStage !== 'recording'}
-              onClick={stopRecording}
-            >
-              <FaStop size={11} /> {t('feedback.stopAndSend')}
-            </Button>
-            <Button
-              className="flex-1 gap-2"
-              variant="secondary"
-              disabled={recordingStage === 'sending'}
-              onClick={switchToText}
-            >
-              <FaKeyboard size={12} /> {t('feedback.type')}
             </Button>
           </div>
         </div>
@@ -234,7 +208,9 @@ export function FeedbackModal({
             placeholder={t('feedback.improve')}
             className="w-full resize-y rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25"
           />
-          {error && <p className="text-sm text-red-300">{error}</p>}
+          {(error || recordingError) && (
+            <p className="text-sm text-red-300">{error || recordingError}</p>
+          )}
           <Button
             className="w-full"
             disabled={textStage === 'sending' || !text.trim()}

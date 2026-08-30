@@ -9,6 +9,7 @@ import { TIMER_TYPES } from '@pomi/shared/src/constants';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { FaHistory, FaQuestionCircle, FaUndo } from 'react-icons/fa';
 import { BackButton } from '../components/BackButton';
+import { CenteredPageHeader } from '../components/CenteredPageHeader';
 import {
   IntentionAssignmentPicker,
   type IntentionAssignmentOption,
@@ -334,17 +335,10 @@ export function Statistics() {
           }
         >
           <div className="mb-3 space-y-2" data-testid="statistics-controls">
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-              <BackButton
-                targetTab="timer"
-                className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors cursor-pointer"
-                wrapperClassName="shrink-0"
-              />
-              <h1 className="text-sm font-semibold tracking-tight text-slate-100">
-                {t('statistics.title')}
-              </h1>
-              <div className="flex justify-end">
-                {(statsMode === 'tasks' ||
+            <CenteredPageHeader
+              title={t('statistics.title')}
+              action={
+                (statsMode === 'tasks' ||
                   preferences?.workTimerLogsExtension) && (
                   <IconButton
                     onClick={() =>
@@ -364,9 +358,9 @@ export function Statistics() {
                   >
                     <FaHistory size={12} />
                   </IconButton>
-                )}
-              </div>
-            </div>
+                )
+              }
+            />
 
             <div
               className="grid grid-cols-2 rounded-lg border border-slate-800/80 bg-slate-900/55 p-1 text-xs"

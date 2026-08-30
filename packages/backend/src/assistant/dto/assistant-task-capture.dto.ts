@@ -90,6 +90,10 @@ export class CreateAssistantTaskFromTextDto {
   text: string;
 
   @IsOptional()
+  @IsUUID()
+  listId?: string | null;
+
+  @IsOptional()
   @IsObject()
   @ValidateNested()
   @Type(() => AssistantTaskDefaultsDto)

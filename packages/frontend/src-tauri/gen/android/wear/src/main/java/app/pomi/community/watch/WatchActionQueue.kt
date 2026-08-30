@@ -26,6 +26,7 @@ data class PendingWatchAction(
     val assistantDebugLogId: String? = null,
     val intentionSlugs: List<String> = emptyList(),
     val subIntentions: Map<String, String> = emptyMap(),
+    val resetOnFirstIntention: Boolean?,
     val accountKey: String? = null
 ) {
     fun withoutAssistantInput(): PendingWatchAction = copy(
@@ -53,41 +54,48 @@ data class PendingWatchAction(
                 kind = "timer",
                 action = action,
                 timerType = timerType,
-                skipLogMode = skipLogMode
+                skipLogMode = skipLogMode,
+                resetOnFirstIntention = null
             )
 
         fun session(position: Int) = PendingWatchAction(
             kind = "session",
-            position = position
+            position = position,
+            resetOnFirstIntention = null
         )
 
         fun intentions(
             action: String,
             intentionSlugs: List<String>,
             subIntentions: Map<String, String>,
-            timerType: String?
+            timerType: String?,
+            resetOnFirstIntention: Boolean?
         ) = PendingWatchAction(
             kind = "intentions",
             action = action,
             timerType = timerType,
             intentionSlugs = intentionSlugs,
-            subIntentions = subIntentions
+            subIntentions = subIntentions,
+            resetOnFirstIntention = resetOnFirstIntention
         )
 
         fun completeTask(taskId: String) = PendingWatchAction(
             kind = "taskComplete",
-            taskId = taskId
+            taskId = taskId,
+            resetOnFirstIntention = null
         )
 
         fun assistantVoice(audioBase64: String, mimeType: String) = PendingWatchAction(
             kind = "assistantVoice",
             assistantAudioBase64 = audioBase64,
-            assistantAudioMimeType = mimeType
+            assistantAudioMimeType = mimeType,
+            resetOnFirstIntention = null
         )
 
         fun assistantVoiceChunks(chunks: List<WatchAudioChunk>) = PendingWatchAction(
             kind = "assistantVoice",
-            assistantAudioChunks = chunks
+            assistantAudioChunks = chunks,
+            resetOnFirstIntention = null
         )
 
         fun assistantTranscript(
@@ -98,7 +106,8 @@ data class PendingWatchAction(
             kind = "assistantVoice",
             assistantTranscript = transcript,
             assistantTranscriptionCostUsd = transcriptionCostUsd,
-            assistantDebugLogId = debugLogId
+            assistantDebugLogId = debugLogId,
+            resetOnFirstIntention = null
         )
     }
 }

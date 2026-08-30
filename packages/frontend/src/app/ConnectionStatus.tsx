@@ -7,6 +7,7 @@ import { useConnectionStatusUi } from '../stores/connectionStatusUiStore';
 import { useTimerStore } from '../stores/timerStore';
 import { useUiStore } from '../stores/uiStore';
 import { useUserActionQueue } from '../utils/userActionQueue';
+import { requestBackendConnectionRecovery } from '../utils/backendConnectionRecovery';
 import { useI18n } from '../i18n';
 
 const CONNECTION_STATUS_DELAY_MS = 1000;
@@ -38,6 +39,7 @@ export function ConnectionStatus() {
 
   const isDisconnected =
     connectionStatus.isReconnecting || !connectionStatus.isConnected;
+  const canRetryConnection = isDisconnected || isNetworkBlocked;
   const isInitialConnection =
     isAuthenticated &&
     !hasConnectedRef.current &&
@@ -196,7 +198,7 @@ export function ConnectionStatus() {
             <div className="absolute left-0 top-full mt-2">
               <ActionQueueDetails
                 actions={actions}
-                isNetworkBlocked={isNetworkBlocked}
+                canRetryConnection={canRetryConnection}
               />
             </div>
           )}
@@ -287,14 +289,17 @@ export function ConnectionStatus() {
             <div className="absolute bottom-full left-1/2 mb-2 -translate-x-1/2">
               <ActionQueueDetails
                 actions={actions}
-                isNetworkBlocked={isNetworkBlocked}
+                canRetryConnection={canRetryConnection}
               />
             </div>
           )}
-          {isNetworkBlocked && actions.length === 0 && (
+          {canRetryConnection && actions.length === 0 && (
             <button
               type="button"
-              onClick={() => retry()}
+              onClick={() => {
+                retry();
+                requestBackendConnectionRecovery();
+              }}
               className="mt-2 block w-full rounded bg-black/20 px-2 py-1 text-xs font-medium hover:bg-black/30 focus:outline-none focus:ring-2 focus:ring-white/80"
             >
               {t('connection.retry')}

@@ -141,6 +141,8 @@ const preferencesSchema = z.object({
   workTimerDuration: z.number().int(),
   breakTimerDuration: z.number().int(),
   autoStartBreak: z.boolean(),
+  autoStartWork: z.boolean().optional(),
+  autoStartLongBreak: z.boolean().optional(),
   notifications: z.boolean(),
   notifyOnWorkComplete: z.boolean(),
   notifyOnBreakComplete: z.boolean(),
@@ -165,7 +167,9 @@ const preferencesSchema = z.object({
   sessionPomodorosCount: z.number().int(),
   sessionHasLongBreak: z.boolean(),
   sessionLongBreakDuration: z.number().int(),
-  sessionLongBreakAutoStart: z.boolean(),
+  resetBreakOnFirstIntention: z.boolean(),
+  resetLongBreakOnFirstIntention: z.boolean(),
+  resetWorkOnFirstIntention: z.boolean().optional(),
   sessionShowLongBreakButton: z.boolean(),
   sessionShowEta: z.boolean(),
   sessionStackTimers: z.boolean(),
@@ -411,6 +415,7 @@ const taskSchema = z.object({
   priority: taskPrioritySchema,
   status: taskStatusSchema,
   timerType: timerTypeSchema,
+  customDuration: z.number().int().min(1).nullable(),
   pinnedAt: z.string().nullable(),
   intentionSlug: z.string().nullable(),
   subIntentionSlug: z.string().nullable(),
@@ -484,6 +489,7 @@ const taskCreateSchema = z.object({
   dueTime: taskDueTimeSchema.nullable().optional(),
   priority: taskPrioritySchema.optional(),
   timerType: timerTypeSchema.optional(),
+  customDuration: z.number().int().min(1).nullable().optional(),
   pinned: z.boolean().optional(),
   intentionSlug: z.string().max(TASK_SLUG_MAX_LENGTH).nullable().optional(),
   subIntentionSlug: z.string().max(TASK_SLUG_MAX_LENGTH).nullable().optional(),
@@ -575,6 +581,7 @@ const taskUpdateSchema = z.object({
   manualOrderOverride: z.boolean().optional(),
   priority: taskPrioritySchema.optional(),
   timerType: timerTypeSchema.optional(),
+  customDuration: z.number().int().min(1).nullable().optional(),
   pinned: z.boolean().optional(),
   status: taskStatusSchema.optional(),
   intentionSlug: z.string().max(TASK_SLUG_MAX_LENGTH).nullable().optional(),
@@ -697,6 +704,7 @@ const assistantTaskDefaultsSchema = taskCreateSchema.omit({
 
 const assistantTaskFromTextSchema = z.object({
   text: z.string().min(1).max(1_000_000),
+  listId: z.string().uuid().nullable().optional(),
   defaults: assistantTaskDefaultsSchema.optional(),
   debugLogId: z.string().uuid().nullable().optional(),
 });
@@ -957,6 +965,9 @@ const watchStatusSchema = z.object({
     advancedSkip: z.boolean(),
     sessionsEnabled: z.boolean(),
     canStartLongBreak: z.boolean(),
+    resetBreakOnFirstIntention: z.boolean(),
+    resetLongBreakOnFirstIntention: z.boolean(),
+    resetWorkOnFirstIntention: z.boolean().optional(),
   }),
   tasks: z.array(watchTaskSummarySchema),
   totalVisibleTasks: z.number().int(),
@@ -1056,10 +1067,12 @@ const userActionSchema = z
       intentions: z.array(z.string()).optional(),
       subIntentions: z.record(z.string()).optional(),
       focusedTaskId: z.string().optional(),
+      customDuration: z.number().int().min(1).nullable().optional(),
       taskId: z.string().optional(),
       position: z.number().int().optional(),
       extensionAction: z.enum(['logElapsed', 'addFiveMinutes']).optional(),
       requestedLogMode: z.enum(['none', 'elapsed', 'full']).optional(),
+      resetOnFirstIntention: z.boolean().optional(),
     }),
     z.object({
       kind: z.literal('tasks'),
@@ -1083,6 +1096,7 @@ const userActionSchema = z
       dueTime: taskDueTimeSchema.nullable().optional(),
       priority: taskPrioritySchema.optional(),
       timerType: timerTypeSchema.optional(),
+      customDuration: z.number().int().min(1).nullable().optional(),
       pinned: z.boolean().optional(),
       status: taskStatusSchema.optional(),
       manualOrder: z.number().int().min(0).nullable().optional(),
@@ -1211,11 +1225,13 @@ const userActionSchema = z
           'convertIntention',
           'convertToIntention',
           'convertTaskToListItem',
+          'convertListItemToTask',
         ]),
         intentionSlug: z.string().optional(),
         listId: z.string().optional(),
         itemId: z.string().optional(),
         taskId: z.string().optional(),
+        subIntentionSlug: z.string().nullable().optional(),
         title: z.string().trim().min(1).max(500).optional(),
         emoji: z.string().max(16).nullable().optional(),
         description: z.string().max(1000).nullable().optional(),
@@ -1243,6 +1259,16 @@ const userActionSchema = z
             code: z.ZodIssueCode.custom,
             path: ['taskId'],
             message: 'Task and List are required',
+          });
+        }
+        if (
+          action.operation === 'convertListItemToTask' &&
+          (!action.itemId || !action.intentionSlug)
+        ) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['itemId'],
+            message: 'List item and Intention are required',
           });
         }
       }),

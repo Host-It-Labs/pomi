@@ -257,6 +257,7 @@ class NotificationTest {
         notification.largeIcon = "large_icon"
         notification.iconColor = "#FF0000"
         notification.actionTypeId = "action_type"
+        notification.tag = "tag"
         notification.group = "group"
         notification.inboxLines = listOf("Line 1", "Line 2")
         notification.isGroupSummary = true
@@ -280,6 +281,7 @@ class NotificationTest {
         assertEquals("large_icon", notification.largeIcon)
         assertEquals("#FF0000", notification.iconColor)
         assertEquals("action_type", notification.actionTypeId)
+        assertEquals("tag", notification.tag)
         assertEquals("group", notification.group)
         assertEquals(2, notification.inboxLines?.size)
         assertTrue(notification.isGroupSummary)
@@ -343,6 +345,8 @@ class NotificationTest {
         notification.body = "Push Body"
         notification.channelId = "test-channel"
         notification.sound = "default"
+        notification.tag = "pomi-timer"
+        notification.group = "pomi-timer"
         notification.isGroupSummary = true
         notification.extra = JSObject().apply {
             put("key", "value")
@@ -376,6 +380,8 @@ class NotificationTest {
         assertEquals("Push Body", parsed.getString("body"))
         assertEquals("test-channel", parsed.getString("channelId"))
         assertEquals("default", parsed.getString("sound"))
+        assertEquals("pomi-timer", parsed.getString("tag"))
+        assertEquals("pomi-timer", parsed.getString("group"))
         assertTrue(parsed.getBoolean("groupSummary"))
         assertFalse(parsed.has("ongoing"))
         assertFalse(parsed.has("autoCancel"))

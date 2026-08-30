@@ -19,7 +19,6 @@ import {
 import { createHash } from 'node:crypto';
 import { Intention } from '../intentions/intentions.entity';
 import { IntentionsService } from '../intentions/intentions.service';
-import { ListEntity } from '../lists/lists.entity';
 import { ListsService } from '../lists/lists.service';
 import { PreferencesService } from '../preferences/preferences.service';
 import { TaskEntity } from '../tasks/tasks.entity';
@@ -40,8 +39,10 @@ import {
   AssistantModelRequestError,
   type AssistantModelRequestOptions,
 } from './assistant-input-types';
+import { AssistantListRoutingService } from './assistant-list-routing.service';
 import { elapsedMs } from './assistant-timing';
 import { AssistantService } from './assistant.service';
+import { AssistantVoiceReadbackService } from './assistant-voice-readback.service';
 import { translateAssistant } from '../i18n/assistant-localization';
 import {
   type AssistantVoicePreparationInput,
@@ -77,22 +78,26 @@ export class AssistantCaptureService {
     private readonly intentionsService: IntentionsService,
     private readonly assistantDebugService: AssistantDebugService,
     private readonly taskPreparationStore: AssistantPreparationStore,
-    private readonly listsService: ListsService
+    private readonly listsService: ListsService,
+    private readonly assistantListRoutingService: AssistantListRoutingService,
+    private readonly assistantVoiceReadbackService: AssistantVoiceReadbackService
   ) {}
 
   async createTaskFromText(
     userId: string,
     text: string,
     defaults?: AssistantTaskDefaults,
-    debugLogId?: string | null
+    debugLogId?: string | null,
+    listId?: string | null
   ): Promise<AssistantTaskCreationResult> {
     const prepared = await this.prepareTaskCapture(
       userId,
       text,
       defaults,
-      debugLogId
+      debugLogId,
+      listId
     );
-    return this.commitTaskCapture(userId, prepared);
+    return this.commitTaskCapture(userId, prepared, listId);
   }
 
   async prepareTaskFromText(
@@ -100,7 +105,8 @@ export class AssistantCaptureService {
     preparationId: string,
     text: string,
     defaults?: AssistantTaskDefaults,
-    debugLogId?: string | null
+    debugLogId?: string | null,
+    listId?: string | null
   ): Promise<{ preparationId: string }> {
     const normalizedText = this.normalizeUserText(text);
     if (!normalizedText) {
@@ -112,29 +118,42 @@ export class AssistantCaptureService {
     await this.taskPreparationStore.getOrCreateTask(
       userId,
       preparationId,
-      { text: normalizedText, defaults, debugLogId: debugLogId ?? null },
+      {
+        text: normalizedText,
+        listId,
+        defaults,
+        debugLogId: debugLogId ?? null,
+      },
       () =>
-        this.prepareTaskCapture(userId, normalizedText, defaults, debugLogId)
+        this.prepareTaskCapture(
+          userId,
+          normalizedText,
+          defaults,
+          debugLogId,
+          listId
+        )
     );
     return { preparationId };
   }
 
   async commitPreparedTaskFromText(
     userId: string,
-    preparationId: string
+    preparationId: string,
+    listId?: string | null
   ): Promise<AssistantTaskCreationResult> {
     const prepared = await this.taskPreparationStore.requireTask(
       userId,
       preparationId
     );
-    return this.commitTaskCapture(userId, prepared);
+    return this.commitTaskCapture(userId, prepared, listId);
   }
 
   private async prepareTaskCapture(
     userId: string,
     text: string,
     defaults?: AssistantTaskDefaults,
-    debugLogId?: string | null
+    debugLogId?: string | null,
+    listId?: string | null
   ): Promise<PreparedAssistantTaskCapture> {
     const normalizedText = this.normalizeUserText(text);
     if (!normalizedText) {
@@ -190,13 +209,22 @@ export class AssistantCaptureService {
       });
       Object.assign(timings, interpreted.timings);
       modelCalls = interpreted.modelCalls;
+      const routedTaskDrafts = listId
+        ? this.assistantListRoutingService.routeSelectedListItems(
+            interpreted.tasks,
+            normalizedText,
+            listId,
+            preferences.listsExtension ? lists : [],
+            preferences.language
+          )
+        : this.assistantListRoutingService.routeExplicitListItems(
+            interpreted.tasks,
+            normalizedText,
+            preferences.listsExtension ? lists : [],
+            preferences.language
+          );
       const taskDrafts = this.applyDefaultDueDates(
-        this.routeExplicitListItems(
-          interpreted.tasks,
-          normalizedText,
-          preferences.listsExtension ? lists : [],
-          preferences.language
-        ),
+        routedTaskDrafts,
         preferences,
         runtime.today
       );
@@ -205,6 +233,7 @@ export class AssistantCaptureService {
       await Promise.all(usagePersistence);
       return {
         normalizedText,
+        listId,
         responseLanguage: interpreted.responseLanguage,
         debugLogId: debugLogId ?? null,
         taskDrafts,
@@ -245,7 +274,8 @@ export class AssistantCaptureService {
 
   private async commitTaskCapture(
     userId: string,
-    prepared: PreparedAssistantTaskCapture
+    prepared: PreparedAssistantTaskCapture,
+    listId?: string | null
   ): Promise<AssistantTaskCreationResult> {
     const commitStartedAt = performance.now();
     const timings = { ...prepared.timings };
@@ -254,6 +284,29 @@ export class AssistantCaptureService {
       const messageLanguage =
         normalizeAppLanguage(prepared.responseLanguage) ?? preferences.language;
       const listsEnabled = preferences.listsExtension === true;
+      const preparedListId = prepared.listId ?? null;
+      const requestedListId = listId ?? null;
+      if (preparedListId !== requestedListId) {
+        throw new BadRequestException(
+          translateAssistant(preferences.language, 'listDestinationUnavailable')
+        );
+      }
+      if (
+        !listsEnabled &&
+        prepared.taskDrafts.some(draft => Boolean(draft.listId))
+      ) {
+        throw new BadRequestException(
+          translateAssistant(preferences.language, 'listDestinationUnavailable')
+        );
+      }
+      if (
+        preparedListId &&
+        prepared.taskDrafts.some(draft => draft.listId !== preparedListId)
+      ) {
+        throw new BadRequestException(
+          translateAssistant(preferences.language, 'listDestinationUnavailable')
+        );
+      }
       const taskDrafts = prepared.taskDrafts
         .filter(draft => !draft.listId || !listsEnabled)
         .map(draft => (listsEnabled ? draft : { ...draft, listId: null }));
@@ -768,13 +821,15 @@ export class AssistantCaptureService {
         prepared.interpretation
       );
       Object.assign(timings, interpreted.timings);
-      const taskDrafts = this.applyDefaultDueDates(
-        this.routeExplicitListItems(
+      const routedTaskDrafts =
+        this.assistantListRoutingService.routeExplicitListItems(
           interpreted.tasks,
           prepared.transcript,
           preferences.listsExtension ? lists : [],
           preferences.language
-        ),
+        );
+      const taskDrafts = this.applyDefaultDueDates(
+        routedTaskDrafts,
         preferences,
         runtime.today
       );
@@ -822,7 +877,15 @@ export class AssistantCaptureService {
           if (tasks.length > 0) {
             actions.push('createTask');
             messages.push(
-              this.formatTasksCreatedMessage(tasks, messageLanguage)
+              this.assistantVoiceReadbackService.formatVoiceTasksCreatedMessage(
+                tasks,
+                regularDrafts,
+                prepared.interpretation.rawTasks,
+                prepared.transcript,
+                intentions,
+                messageLanguage,
+                runtime.today
+              )
             );
           }
           if (listItems.length > 0) {
@@ -1016,53 +1079,6 @@ export class AssistantCaptureService {
     );
   }
 
-  private routeExplicitListItems(
-    drafts: ParsedTaskDraft[],
-    sourceText: string,
-    lists: Array<Pick<ListEntity, 'id' | 'title'>>,
-    language: string | null | undefined
-  ) {
-    const normalizedSource = this.normalizeRoutingText(sourceText).trim();
-    const matchedLists = lists.filter(list => {
-      const title = this.normalizeRoutingText(list.title).trim();
-      const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const ambiguousForTarget = new RegExp(
-        '(?:^|\\s)for (?:the )?' + escapedTitle + '$',
-        'u'
-      ).test(normalizedSource);
-      if (ambiguousForTarget) return false;
-      return new RegExp(
-        `(?:^|\\s)(?:to|in|into|on|under|within|for|a|ao|aos|à|au|aux|dans|sur|pour|en|на|в|для|у|के लिए|में|पर|को|para|em|no|na|nos|nas|di|ke|dalam|untuk|di dalam|إلى|في|على|من أجل|إلى قائمة|في قائمة|إلى القائمة|في القائمة|إلى لیست|میں) (?:the |la |le |les |el |la |los |las |a |o |os |as |der |die |das |den |den |de |da |do |dos |das |um |uma |列表|列表中的 |قائمة |सूची |তালিকা |daftar |فہرست )?(?:${escapedTitle}(?: list| liste| lista| liste| قائمة| सूची| তালিকা| daftar| فہرست)?|list ${escapedTitle}|liste ${escapedTitle}|lista ${escapedTitle}|قائمة ${escapedTitle}|सूची ${escapedTitle}|তালিকা ${escapedTitle}|daftar ${escapedTitle}|فہرست ${escapedTitle})$`,
-        'u'
-      ).test(normalizedSource);
-    });
-    if (matchedLists.length !== 1) return drafts;
-    if (drafts.some(draft => this.hasUnsupportedListItemMetadata(draft))) {
-      throw new BadRequestException(
-        translateAssistant(language, 'listMetadataUnsupported')
-      );
-    }
-    return drafts.map(draft => ({ ...draft, listId: matchedLists[0].id }));
-  }
-
-  private hasUnsupportedListItemMetadata(draft: ParsedTaskDraft) {
-    return Boolean(
-      draft.description?.trim() ||
-      draft.dueTime ||
-      draft.recurrenceRule ||
-      draft.recurrenceInterval ||
-      (draft.timerType && draft.timerType !== TIMER_TYPES.WORK)
-    );
-  }
-
-  private normalizeRoutingText(value: string) {
-    return ` ${value
-      .toLowerCase()
-      .normalize('NFKC')
-      .replace(/[^\p{L}\p{N}]+/gu, ' ')
-      .trim()} `;
-  }
-
   private formatListItem(item: TaskEntity): ListItem {
     return {
       id: item.id,
@@ -1101,7 +1117,9 @@ export class AssistantCaptureService {
     language: string | null | undefined
   ) {
     return items.length === 1
-      ? translateAssistant(language, 'listItemAdded')
+      ? translateAssistant(language, 'listItemAdded', {
+          title: items[0].title,
+        })
       : translateAssistant(language, 'listItemsAdded', { count: items.length });
   }
 

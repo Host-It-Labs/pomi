@@ -95,6 +95,22 @@ describe('TimerCompletionNotificationWorkerService', () => {
     expect(harness.markProcessed).not.toHaveBeenCalled();
   });
 
+  it('keeps transient failures retryable after repeated attempts', async () => {
+    const harness = createHarness();
+    harness.emitCompleted.mockRejectedValueOnce(new Error('provider down'));
+
+    await harness.processJob(job({ attempts: 5 }));
+
+    expect(harness.release).toHaveBeenCalledWith(
+      'outbox-1',
+      'claim-1',
+      expect.objectContaining({ message: 'provider down' }),
+      80_000
+    );
+    expect(harness.markFailed).not.toHaveBeenCalled();
+    expect(harness.markProcessed).not.toHaveBeenCalled();
+  });
+
   it('does not dispatch after losing its database lease', async () => {
     const harness = createHarness();
     harness.renewLease.mockResolvedValueOnce(false);

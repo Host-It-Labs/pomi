@@ -110,6 +110,10 @@ export class WatchService {
           preferences.sessionShowLongBreakButton &&
           (timer?.type === TIMER_TYPES.WORK ||
             timer?.type === TIMER_TYPES.BREAK),
+        resetBreakOnFirstIntention: preferences.resetBreakOnFirstIntention,
+        resetLongBreakOnFirstIntention:
+          preferences.resetLongBreakOnFirstIntention,
+        resetWorkOnFirstIntention: preferences.resetWorkOnFirstIntention,
       },
       tasks,
       totalVisibleTasks: visibleTasks.length,
