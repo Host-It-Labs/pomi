@@ -291,7 +291,10 @@ export class AssistantCaptureService {
           translateAssistant(preferences.language, 'listDestinationUnavailable')
         );
       }
-      if (preparedListId && !listsEnabled) {
+      if (
+        !listsEnabled &&
+        prepared.taskDrafts.some(draft => Boolean(draft.listId))
+      ) {
         throw new BadRequestException(
           translateAssistant(preferences.language, 'listDestinationUnavailable')
         );

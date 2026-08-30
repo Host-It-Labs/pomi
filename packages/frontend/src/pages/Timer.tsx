@@ -26,6 +26,7 @@ import { MinimizedTaskView } from '../components/MinimizedTaskView';
 import { TaskImportModal } from '../components/tasks/TaskImportModal';
 import { Button } from '../components/ui/Button';
 import { IconButton } from '../components/ui/IconButton';
+import { IntentionEmojiPair } from '../components/ui/IntentionEmojiPair';
 import { KeyboardShortcut } from '../components/ui/KeyboardShortcut';
 import { Modal } from '../components/ui/Modal';
 import { useAssistantStore } from '../stores/assistantStore';
@@ -37,6 +38,7 @@ import { isDesktop, isIos, isLinux } from '../utils/osUtils';
 import { apiClient } from '../utils/apiClient';
 import { getDisplayedSessionPosition } from '../utils/sessionDisplay';
 import { shouldShowIntentionsPicker } from '../utils/intentionsPickerVisibility';
+import { getAdditionalSelectedIntentionsCount } from '../utils/timerIntentions';
 import { getLongBreakSwitchAction } from '../utils/longBreakSwitch';
 import { ExpandedIntentionsPicker } from './timer/ExpandedIntentionsPicker';
 import { TimeRemainingCircle } from './timer/TimeRemainingCircle';
@@ -107,7 +109,10 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
   const topNavigationRef = useRef<HTMLDivElement | null>(null);
   const expandedPickerRef = useRef<HTMLDivElement | null>(null);
   const expandedTasksRef = useRef<HTMLDivElement | null>(null);
+  const additionalIntentionsCount = getAdditionalSelectedIntentionsCount(timer);
   const displayedSessionPosition = getDisplayedSessionPosition(timer);
+  const activeIntentionLabel =
+    timer?.subIntentionTitle ?? timer?.intentionTitle ?? timer?.intention;
   const undoActionSource = getHistorySource(
     latestUndoSource,
     undoVisible,
@@ -905,6 +910,26 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
                 {t('task.add')}
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {expanded && timer?.isExtension && timer.intention && (
+        <div className="absolute bottom-0 left-0 right-0 z-10 flex w-full justify-center pb-6">
+          <div className="flex items-center gap-2 rounded-full border border-slate-700/50 bg-slate-800/60 px-4 py-2">
+            {(timer.intentionEmoji || timer.subIntentionEmoji) && (
+              <IntentionEmojiPair
+                parentEmoji={timer.intentionEmoji}
+                subEmoji={timer.subIntentionEmoji}
+                size="sm"
+              />
+            )}
+            <span className="text-xs font-medium text-slate-300">
+              {activeIntentionLabel}
+              {additionalIntentionsCount > 0
+                ? ` +${additionalIntentionsCount}`
+                : ''}
+            </span>
           </div>
         </div>
       )}

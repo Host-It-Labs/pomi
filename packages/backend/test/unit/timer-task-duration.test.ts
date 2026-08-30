@@ -22,7 +22,8 @@ function timer(overrides: Partial<Timer> = {}): Timer {
 
 function createService(
   existingTimer: Timer | null,
-  intentionDuration?: number
+  intentionDuration?: number,
+  preferenceOverrides: Record<string, unknown> = {}
 ) {
   const committedTimers: Timer[] = [];
   const preferences = {
@@ -36,6 +37,9 @@ function createService(
     workTimerDuration: WORK_DURATION,
     breakTimerDuration: 5 * 60_000,
     sessionLongBreakDuration: 15 * 60_000,
+    resetBreakOnFirstIntention: false,
+    resetLongBreakOnFirstIntention: false,
+    ...preferenceOverrides,
   };
   const service = Object.assign(Object.create(TimerService.prototype), {
     timerStore: {
@@ -180,4 +184,42 @@ describe('Task-specific Timer durations', () => {
     expect(result.duration).toBe(TASK_DURATION);
     expect(result.remainingTime).toBe(TASK_DURATION);
   });
+
+  it.each([TIMER_TYPES.BREAK, TIMER_TYPES.LONG_BREAK])(
+    'applies a focused Task duration when resetting an auto-started %s',
+    async type => {
+      vi.useFakeTimers();
+      vi.setSystemTime(601_000);
+      const existing = timer({
+        type,
+        status: TIMER_STATUSES.RUNNING,
+        startTime: 1_000,
+        duration: 300_000,
+        remainingTime: 240_000,
+        isAutoStarted: true,
+      });
+      const { service } = createService(existing, INTENTION_DURATION, {
+        resetBreakOnFirstIntention: true,
+        resetLongBreakOnFirstIntention: true,
+        intentionShowBreakIntentionsInLongBreak: true,
+      });
+
+      const result = await service.createOrResumeTimer('user-1', {
+        type,
+        intention: 'focus',
+        intentions: ['focus'],
+        focusedTaskId: 'task-1',
+        customDuration: TASK_DURATION,
+        resetOnFirstIntention: true,
+      });
+
+      expect(result).toMatchObject({
+        duration: TASK_DURATION,
+        remainingTime: TASK_DURATION,
+        startTime: 601_000,
+        focusedTaskIds: ['task-1'],
+        hasConsumedFirstIntentionReset: true,
+      });
+    }
+  );
 });

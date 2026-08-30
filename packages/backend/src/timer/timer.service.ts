@@ -993,6 +993,15 @@ export class TimerService implements OnModuleInit {
       }
     }
 
+    const buildSkipExtensionCandidate = (extensionNextTimerType: TimerTypes) =>
+      shouldLogDuration && logDuration > 0
+        ? this.buildExtensionCandidate(
+            timer,
+            preferences,
+            extensionNextTimerType
+          )
+        : undefined;
+
     void undoMetadata;
     const statisticBeforeSnapshots = await this.snapshotStatistics(
       userId,
@@ -1082,9 +1091,7 @@ export class TimerService implements OnModuleInit {
                 isAutoStarted:
                   timer.status !== TIMER_STATUSES.PAUSED &&
                   preferences.autoStartBreak,
-                extensionCandidate: this.buildExtensionCandidate(
-                  timer,
-                  preferences,
+                extensionCandidate: buildSkipExtensionCandidate(
                   TIMER_TYPES.LONG_BREAK
                 ),
                 expectedVersion,
@@ -1126,9 +1133,7 @@ export class TimerService implements OnModuleInit {
               isAutoStarted:
                 timer.status !== TIMER_STATUSES.PAUSED &&
                 preferences.autoStartBreak,
-              extensionCandidate: this.buildExtensionCandidate(
-                timer,
-                preferences,
+              extensionCandidate: buildSkipExtensionCandidate(
                 TIMER_TYPES.BREAK
               ),
               stackedSessions: timer.stackedSessions,
@@ -1193,11 +1198,7 @@ export class TimerService implements OnModuleInit {
           preferences.autoStartBreak,
         extensionCandidate:
           nextType === TIMER_TYPES.BREAK
-            ? this.buildExtensionCandidate(
-                timer,
-                preferences,
-                TIMER_TYPES.BREAK
-              )
+            ? buildSkipExtensionCandidate(TIMER_TYPES.BREAK)
             : undefined,
         isResetOrSkip: shouldResetSession,
         stackedSessions:
@@ -1971,6 +1972,16 @@ export class TimerService implements OnModuleInit {
         const timerNotStarted =
           !wasRunning && existingTimer.remainingTime === existingTimer.duration;
 
+        const shouldResetOnFirstIntention =
+          wasRunning &&
+          this.shouldResetAutoStartedBreakOnFirstIntention(
+            existingTimer,
+            existingIntentions,
+            incomingIntentions,
+            preferences,
+            options.resetOnFirstIntention
+          );
+
         if (!wasRunning) {
           existingTimer.status = TIMER_STATUSES.RUNNING;
           const elapsedBeforePause =
@@ -1997,7 +2008,7 @@ export class TimerService implements OnModuleInit {
             this.applySelectedIntentionsToTimer(existingTimer, []);
 
             if (
-              timerNotStarted &&
+              (timerNotStarted || shouldResetOnFirstIntention) &&
               (preferences.intentionCustomDurations ||
                 options.customDuration != null)
             ) {
@@ -2027,7 +2038,7 @@ export class TimerService implements OnModuleInit {
             );
 
             if (
-              timerNotStarted &&
+              (timerNotStarted || shouldResetOnFirstIntention) &&
               (preferences.intentionCustomDurations ||
                 options.customDuration != null)
             ) {
@@ -2048,16 +2059,6 @@ export class TimerService implements OnModuleInit {
             }
           }
         }
-
-        const shouldResetOnFirstIntention =
-          wasRunning &&
-          this.shouldResetAutoStartedBreakOnFirstIntention(
-            existingTimer,
-            existingIntentions,
-            incomingIntentions,
-            preferences,
-            options.resetOnFirstIntention
-          );
 
         if (wasRunning) {
           existingTimer.remainingTime = Math.max(

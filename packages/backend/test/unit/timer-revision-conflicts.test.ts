@@ -1175,7 +1175,7 @@ describe('TimerService revision conflicts', () => {
       pushTimerHistory: vi.fn(async () => undefined),
     }) as TimerService;
 
-    await service.skipTimer('user-1');
+    await service.skipTimer('user-1', 'elapsed');
 
     expect(createOrResumeTimer).toHaveBeenCalledWith(
       'user-1',
@@ -1188,6 +1188,52 @@ describe('TimerService revision conflicts', () => {
           originalDuration: timer.duration,
           extensionNextTimerType: TIMER_TYPES.BREAK,
         }),
+      })
+    );
+  });
+
+  it('does not arm extension for a skipped Work Timer that was not logged', async () => {
+    const timer = currentTimer({
+      type: TIMER_TYPES.WORK,
+      status: TIMER_STATUSES.RUNNING,
+      startTime: Date.now() - 60_000,
+    });
+    const nextTimer = currentTimer({
+      id: 'timer-next',
+      type: TIMER_TYPES.BREAK,
+      status: TIMER_STATUSES.RUNNING,
+      startTime: Date.now(),
+    });
+    const createOrResumeTimer = vi.fn(async () => nextTimer);
+    const service = Object.assign(Object.create(TimerService.prototype), {
+      timerStore: { getCurrentTimer: vi.fn(async () => timer) },
+      preferencesService: {
+        getPreferences: vi.fn(async () => ({
+          advancedSkip: true,
+          sessionsExtension: false,
+          intentionExtension: false,
+          intentionRequireSelection: false,
+          autoStartBreak: true,
+          timerExtension: true,
+          breakTimerDuration: 5 * 60_000,
+        })),
+      },
+      statisticsService: { recordCompletedTimer: vi.fn() },
+      snapshotRuntime: vi.fn(async () => ({})),
+      snapshotStatistics: vi.fn(async () => new Map()),
+      createOrResumeTimer,
+      buildHistoryEntry: vi.fn(async () => ({})),
+      pushTimerHistory: vi.fn(async () => undefined),
+    }) as TimerService;
+
+    await service.skipTimer('user-1');
+
+    expect(createOrResumeTimer).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        type: TIMER_TYPES.BREAK,
+        isAutoStarted: true,
+        extensionCandidate: undefined,
       })
     );
   });
