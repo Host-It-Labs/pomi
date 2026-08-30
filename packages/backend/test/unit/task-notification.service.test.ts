@@ -41,13 +41,20 @@ function createTask(overrides: Record<string, unknown> = {}): TaskRecord {
 function createService(
   tasks: TaskRecord[],
   preferences = createPreferences(),
-  getPreferences?: (
-    userId: string
-  ) => Promise<ReturnType<typeof createPreferences>>,
-  notificationOverrides: Record<string, unknown> = {}
+  getPreferencesOrNotificationOverrides:
+    | ((userId: string) => Promise<ReturnType<typeof createPreferences>>)
+    | Record<string, unknown> = {}
 ) {
   const sent: TaskRecord[] = [];
   const clientEvents: TaskRecord[] = [];
+  const getPreferences =
+    typeof getPreferencesOrNotificationOverrides === 'function'
+      ? getPreferencesOrNotificationOverrides
+      : undefined;
+  const notificationOverrides =
+    typeof getPreferencesOrNotificationOverrides === 'function'
+      ? {}
+      : getPreferencesOrNotificationOverrides;
   const getPreferencesMock = vi.fn(
     getPreferences ?? (async (_userId: string) => preferences)
   );
@@ -229,7 +236,7 @@ describe('TaskNotificationService', () => {
   it('emits the client reminder even when push delivery fails', async () => {
     const tasks = [createTask({ priority: TASK_PRIORITIES.HIGH })];
     const sendTaskNotification = vi.fn(async () => false);
-    const fixture = createService(tasks, createPreferences(), undefined, {
+    const fixture = createService(tasks, createPreferences(), {
       sendTaskNotification,
     });
 
@@ -244,7 +251,7 @@ describe('TaskNotificationService', () => {
   it('keeps urgent repeats on the client path when push delivery fails', async () => {
     const tasks = [createTask()];
     const sendTaskNotification = vi.fn(async () => false);
-    const fixture = createService(tasks, createPreferences(), undefined, {
+    const fixture = createService(tasks, createPreferences(), {
       sendTaskNotification,
     });
 
