@@ -41,6 +41,13 @@ Keep file-shaped credentials in `config/secrets/` and set their corresponding
 path variables in the appropriate profile. All three profiles and the secrets
 directory are copied into Codex worktrees through `.worktreeinclude`.
 
+Codex-created worktrees run `scripts/setup-development-environment.sh` during
+their setup. It installs the locked Node workspace dependencies, reusing the
+primary checkout's pnpm content-addressable store when compatible, but does
+not start Docker, tmux, migrations, or the application. The worktree is ready
+for the Node test suites; database, browser, Rust, and Wear tests still need
+their respective local services or toolchains.
+
 The standard credential paths are:
 
 - `config/secrets/pomi-radar.private-key.pem` for the Pomi Radar GitHub App;

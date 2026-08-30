@@ -172,6 +172,33 @@ pomi_dependency_mismatches() {
   return "$mismatches"
 }
 
+pomi_node_modules_store_dir() {
+  local root_dir modules_file
+  root_dir="$1"
+  modules_file="$root_dir/node_modules/.modules.yaml"
+
+  [[ -f "$modules_file" ]] || return 1
+
+  node - "$modules_file" <<'NODE'
+const fs = require('node:fs');
+
+const modulesFile = process.argv[2];
+let modules;
+
+try {
+  modules = JSON.parse(fs.readFileSync(modulesFile, 'utf8'));
+} catch {
+  process.exit(1);
+}
+
+if (typeof modules.storeDir !== 'string' || modules.storeDir.length === 0) {
+  process.exit(1);
+}
+
+process.stdout.write(modules.storeDir);
+NODE
+}
+
 pomi_cargo_input_files_for_root() {
   local root_dir
   root_dir="$1"

@@ -5,7 +5,7 @@ name = "Pomi Worktree Dev"
 [setup]
 script = '''
 cd "$CODEX_WORKTREE_PATH"
-true
+./scripts/setup-development-environment.sh --require-worktree
 '''
 
 [[actions]]
