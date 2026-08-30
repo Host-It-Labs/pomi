@@ -14,7 +14,7 @@ describe('backend production startup', () => {
 
     expect(entrypoint).not.toMatch(/\b(?:corepack|npm|pnpm)\b/);
     expect(entrypoint).toContain(
-      'node node_modules/.bin/wait-on tcp:${DB_HOST:-db}:${DB_PORT:-5432} -t 60000'
+      './node_modules/.bin/wait-on tcp:${DB_HOST:-db}:${DB_PORT:-5432} -t 60000'
     );
     expect(entrypoint).toContain(
       'node node_modules/typeorm/cli-ts-node-commonjs.js migration:run -d data-source.ts'

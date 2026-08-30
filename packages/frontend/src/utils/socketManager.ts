@@ -327,8 +327,9 @@ export const forceReconnect = (skipIfConnected = false): Socket | null => {
   }
 
   // Focus, visibility, and failed HTTP reads can request recovery together.
-  // Keep the active socket so those requests cannot restart its handshake.
-  if (connectionState.isReconnecting && socket) {
+  // Keep the active socket for coalesced recovery, while an explicit retry
+  // replaces a socket whose application-level ready event was missed.
+  if (skipIfConnected && connectionState.isReconnecting && socket) {
     return socket;
   }
 

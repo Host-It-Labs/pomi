@@ -727,6 +727,8 @@ export class UserDataTransferService {
         next[key] = child
           .map(taskId => this.remapOptionalId(taskId, ids.tasks))
           .filter((taskId): taskId is string => taskId !== null);
+      } else if (key === 'originalTimerId') {
+        next[key] = this.remapRequiredId(child, ids.statistics, 'Statistic');
       } else {
         next[key] = this.rewriteRuntimeUserIds(child, userId, ids);
       }

@@ -900,6 +900,9 @@ export function Settings() {
   useEffect(() => {
     clearSettingsSearchHighlights();
     if (!normalizedSearchQuery) {
+      if (focusSearchResult) {
+        setFocusSearchResult(false);
+      }
       return;
     }
 
@@ -948,6 +951,10 @@ export function Settings() {
         }
       });
     });
+
+    if (!focusSearchResult) {
+      return clearSettingsSearchHighlights;
+    }
 
     const firstTarget = matchedTargets[0];
     if (!firstTarget) {
