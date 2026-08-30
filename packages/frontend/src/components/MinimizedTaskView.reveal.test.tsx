@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   requestTaskCreate: vi.fn(),
   requestTaskEdit: vi.fn(),
   clearTaskEditRequest: vi.fn(),
+  requestTaskItemReveal: vi.fn(),
   showToastFromStore: vi.fn(),
 }));
 
@@ -78,6 +79,7 @@ vi.mock('../stores/uiStore', () => ({
       taskEditRequestedId: () => null,
       requestTaskEdit: () => mocks.requestTaskEdit,
       clearTaskEditRequest: () => mocks.clearTaskEditRequest,
+      requestTaskItemReveal: () => mocks.requestTaskItemReveal,
       taskSearchFocusRequest: () => 0,
     },
   },
