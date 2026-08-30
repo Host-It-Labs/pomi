@@ -752,6 +752,11 @@ const english: TranslationCatalog = {
   'task.create': 'Create task',
   'task.created': 'Task created',
   'task.creationFailed': 'Failed to create task',
+  'task.customDuration': 'Custom duration',
+  'task.customDurationHelp':
+    'Leave blank to use the Intention or timer default for a fresh timer.',
+  'task.customDurationInvalid':
+    'Custom duration must be a positive whole number of minutes.',
   'task.descriptionTitle': 'Task description',
   'task.dictate': 'Dictate task',
   'task.dontAskAgain': 'Do not ask again',

@@ -39,6 +39,7 @@ export interface TimerUserAction {
   intentions?: string[];
   subIntentions?: Record<string, string>;
   focusedTaskId?: string;
+  customDuration?: number | null;
   taskId?: string;
   position?: number;
   extensionAction?: 'logElapsed' | 'addFiveMinutes';
@@ -76,6 +77,7 @@ export interface TasksUserAction {
   dueTime?: string | null;
   priority?: TaskPriority;
   timerType?: TimerTypes;
+  customDuration?: number | null;
   pinned?: boolean;
   status?: TaskStatus;
   manualOrder?: number | null;

@@ -636,6 +636,7 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           intentions: action.intentions,
           subIntentions: action.subIntentions,
           focusedTaskId: action.focusedTaskId,
+          customDuration: action.customDuration,
           resetOnFirstIntention: action.resetOnFirstIntention,
         });
       case 'selectIntention':
@@ -789,6 +790,7 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           dueTime: action.dueTime,
           priority: action.priority,
           timerType: action.timerType,
+          customDuration: action.customDuration,
           pinned: action.pinned,
           intentionSlug: action.intentionSlug,
           subIntentionSlug: action.subIntentionSlug,

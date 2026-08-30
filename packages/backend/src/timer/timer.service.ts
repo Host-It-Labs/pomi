@@ -60,7 +60,7 @@ type CreateOrResumeTimerOptions = {
   isResetOrSkip?: boolean;
   preserveSessionState?: boolean;
   stackedSessions?: number;
-  customDuration?: number;
+  customDuration?: number | null;
   isAutoStarted?: boolean;
   extensionCandidate?: TimerExtensionCandidate;
   resetOnFirstIntention?: boolean;
@@ -1996,9 +1996,14 @@ export class TimerService implements OnModuleInit {
           if (isIntentionExplicitlyCleared) {
             this.applySelectedIntentionsToTimer(existingTimer, []);
 
-            if (timerNotStarted && preferences.intentionCustomDurations) {
-              existingTimer.duration = defaultDuration;
-              existingTimer.remainingTime = defaultDuration;
+            if (
+              timerNotStarted &&
+              (preferences.intentionCustomDurations ||
+                options.customDuration != null)
+            ) {
+              existingTimer.duration =
+                options.customDuration ?? defaultDuration;
+              existingTimer.remainingTime = existingTimer.duration;
             }
           } else {
             const selection = await this.resolveIntentionSelection(
@@ -2021,15 +2026,18 @@ export class TimerService implements OnModuleInit {
               selection.subIntentionEmojis
             );
 
-            if (timerNotStarted && preferences.intentionCustomDurations) {
-              if (selection.customDuration) {
-                existingTimer.duration = selection.customDuration;
-                existingTimer.remainingTime = selection.customDuration;
-              } else {
-                existingTimer.duration = defaultDuration;
-                existingTimer.remainingTime = defaultDuration;
-              }
+            if (
+              timerNotStarted &&
+              (preferences.intentionCustomDurations ||
+                options.customDuration != null)
+            ) {
+              existingTimer.duration =
+                options.customDuration ??
+                selection.customDuration ??
+                defaultDuration;
+              existingTimer.remainingTime = existingTimer.duration;
             } else if (
+              !options.focusedTaskId &&
               selection.customDurationSource === 'sub' &&
               selection.customDuration
             ) {
@@ -2147,7 +2155,8 @@ export class TimerService implements OnModuleInit {
     let subIntentionTitle: string | undefined;
     let intentionEmojis: Record<string, string> = {};
     let subIntentionEmojis: Record<string, string> = {};
-    let customDuration: number | undefined = options.customDuration;
+    let customDuration: number | undefined =
+      options.customDuration ?? undefined;
     let selectedSubIntentions: Record<string, string> = {};
 
     if (
@@ -2170,7 +2179,7 @@ export class TimerService implements OnModuleInit {
       subIntentionEmojis = selection.subIntentionEmojis;
       subIntentionTitle = selection.primarySubTitle;
 
-      if (selection.customDuration) {
+      if (selection.customDuration && options.customDuration == null) {
         customDuration = selection.customDuration;
       }
     }

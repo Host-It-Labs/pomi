@@ -13,7 +13,8 @@ type FocusTaskOnTimerOptions = {
     intentions?: string[],
     subIntentions?: Record<string, string>,
     focusedTaskId?: string,
-    resetOnFirstIntention?: boolean
+    resetOnFirstIntention?: boolean,
+    customDuration?: number | null
   ) => Promise<boolean>;
   updatePreferenceWithResult: (
     key: keyof Preferences,
@@ -102,7 +103,8 @@ export async function focusTaskOnTimer({
     nextIntentions,
     nextSubIntentions,
     task.id,
-    resetOnFirstIntention
+    resetOnFirstIntention,
+    task.customDuration
   );
   if (!didFocus) return false;
   if (preferences?.tasksAutoSwitchToIntentionMode !== false) {

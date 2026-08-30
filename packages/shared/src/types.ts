@@ -395,6 +395,7 @@ export interface Task {
   priority: TaskPriority;
   status: TaskStatus;
   timerType: TimerTypes;
+  customDuration: number | null;
   pinnedAt: string | null;
   intentionSlug: string | null;
   subIntentionSlug: string | null;

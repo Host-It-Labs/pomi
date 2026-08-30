@@ -155,6 +155,7 @@ export class ListsService {
       priority: input.priority ?? TASK_PRIORITIES.NORMAL,
       status: TASK_STATUSES.ACTIVE,
       timerType: TIMER_TYPES.WORK,
+      customDuration: null,
       pinnedAt: null,
       intentionSlug: null,
       subIntentionSlug: null,
@@ -456,6 +457,7 @@ export class ListsService {
       importSourceTaskId: task.importSourceTaskId,
       dueTime: task.dueTime,
       timerType: task.timerType,
+      customDuration: task.customDuration,
       pinnedAt: task.pinnedAt,
       intentionSlug: task.intentionSlug,
       subIntentionSlug: task.subIntentionSlug,
@@ -478,6 +480,7 @@ export class ListsService {
     task.sourceTranscript = null;
     task.dueTime = null;
     task.timerType = TIMER_TYPES.WORK;
+    task.customDuration = null;
     task.pinnedAt = null;
     task.intentionSlug = null;
     task.subIntentionSlug = null;

@@ -89,7 +89,7 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
       [fixtureName]
     );
     assert.equal(marker.rows.length, 1);
-    assert.equal(marker.rows[0].seedVersion, 10);
+    assert.equal(marker.rows[0].seedVersion, 11);
     assert.equal(marker.rows[0].isAdmin, true);
     assert.match(marker.rows[0].credentialFingerprint, /^[a-f0-9]{64}$/);
     const firstUserId = marker.rows[0].id;
@@ -157,6 +157,7 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
          t.priority,
          t.status,
          t."timerType",
+         t."customDuration",
          t."dueDate",
          t."dueTime",
          t."recurrenceRule",
@@ -202,6 +203,12 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
     assert.ok(tasks.rows.some(row => Number(row.recurrenceInterval) % 1 !== 0));
     assert.ok(tasks.rows.some(row => row.manualOrderOverride === true));
     assert.ok(tasks.rows.some(row => row.vacationEligible === true));
+    assert.deepEqual(
+      tasks.rows
+        .filter(row => row.customDuration !== null)
+        .map(row => ({ title: row.title, customDuration: row.customDuration })),
+      [{ title: 'Plan next feature slice', customDuration: 1_800_000 }]
+    );
     assert.deepEqual(
       new Set(tasks.rows.map(row => row.status)),
       new Set(['active', 'completed', 'archived'])

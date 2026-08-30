@@ -15,7 +15,7 @@ import {
   TIMER_TYPES,
 } from '@pomi/shared/src/constants';
 import clsx from 'clsx';
-import { FaArchive } from 'react-icons/fa';
+import { FaArchive, FaClock } from 'react-icons/fa';
 import {
   type FormEvent,
   type ReactNode,
@@ -30,6 +30,7 @@ import { Modal } from '../ui/Modal';
 import { UnsavedChangesDialog } from '../ui/UnsavedChangesDialog';
 import { showToastFromStore } from '../toast/ToastContext';
 import { useI18n } from '../../i18n';
+import { MILLISECONDS_PER_MINUTE } from '../../constants/time';
 import {
   buildSimpleTaskRecurrence,
   parseSimpleTaskRecurrence,
@@ -64,6 +65,26 @@ const getDefaultDueDate = (preferences: Preferences | null | undefined) => {
   return date.toLocaleDateString('en-CA');
 };
 
+const getDefaultTimerDurationMinutes = (
+  preferences: Preferences | null | undefined,
+  timerType: TimerTypes
+) => {
+  const duration =
+    timerType === TIMER_TYPES.WORK
+      ? preferences?.workTimerDuration
+      : timerType === TIMER_TYPES.BREAK
+        ? preferences?.breakTimerDuration
+        : preferences?.sessionLongBreakDuration;
+  return Math.round(
+    (duration ??
+      (timerType === TIMER_TYPES.WORK
+        ? 25 * MILLISECONDS_PER_MINUTE
+        : timerType === TIMER_TYPES.BREAK
+          ? 5 * MILLISECONDS_PER_MINUTE
+          : 15 * MILLISECONDS_PER_MINUTE)) / MILLISECONDS_PER_MINUTE
+  );
+};
+
 type ListItemFormPayload = {
   title: string;
   dueDate: string | null;
@@ -77,6 +98,7 @@ type TaskFormPayload = {
   dueTime?: string | null;
   priority?: TaskPriority;
   timerType?: TimerTypes;
+  customDuration?: number | null;
   intentionSlug?: string | null;
   subIntentionSlug?: string | null;
   recurrenceRule?: string | null;
@@ -158,6 +180,7 @@ export function TaskFormModal({
   const [timerType, setTimerType] = useState<TimerTypes>(
     defaultTimerType ?? TIMER_TYPES.WORK
   );
+  const [customDurationMinutes, setCustomDurationMinutes] = useState('');
   const [intentionSlug, setIntentionSlug] = useState('');
   const [subIntentionSlug, setSubIntentionSlug] = useState('');
   const [selectedListId, setSelectedListId] = useState('');
@@ -309,6 +332,11 @@ export function TaskFormModal({
       setDueTime(task.dueTime ?? '');
       setPriority(task.priority);
       setTimerType(task.timerType);
+      setCustomDurationMinutes(
+        task.customDuration
+          ? String(Math.round(task.customDuration / MILLISECONDS_PER_MINUTE))
+          : ''
+      );
       setIntentionSlug(task.intentionSlug ?? '');
       setSubIntentionSlug(task.subIntentionSlug ?? '');
       setSelectedListId('');
@@ -342,6 +370,9 @@ export function TaskFormModal({
           dueTime: task.dueTime ?? '',
           priority: task.priority,
           timerType: task.timerType,
+          customDurationMinutes: task.customDuration
+            ? String(Math.round(task.customDuration / MILLISECONDS_PER_MINUTE))
+            : '',
           intentionSlug: task.intentionSlug ?? '',
           subIntentionSlug: task.subIntentionSlug ?? '',
           recurrenceInterval: recurrence.interval,
@@ -407,6 +438,7 @@ export function TaskFormModal({
     setDueTime('');
     setPriority(TASK_PRIORITIES.NORMAL);
     setTimerType(nextTimerType);
+    setCustomDurationMinutes('');
     setIntentionSlug(hasDefaultIntention ? defaultIntention : '');
     setSubIntentionSlug(defaultSubIntention);
     setSelectedListId('');
@@ -440,6 +472,7 @@ export function TaskFormModal({
         dueTime: '',
         priority: TASK_PRIORITIES.NORMAL,
         timerType: nextTimerType,
+        customDurationMinutes: '',
         intentionSlug: hasDefaultIntention ? defaultIntention : '',
         subIntentionSlug: defaultSubIntention,
         recurrenceInterval: '',
@@ -564,6 +597,21 @@ export function TaskFormModal({
       );
       return;
     }
+    const parsedCustomDurationMinutes = customDurationMinutes.trim()
+      ? Number(customDurationMinutes)
+      : null;
+    if (
+      parsedCustomDurationMinutes !== null &&
+      (!Number.isInteger(parsedCustomDurationMinutes) ||
+        parsedCustomDurationMinutes < 1)
+    ) {
+      showToastFromStore(t('task.customDurationInvalid'), 'error');
+      return;
+    }
+    const customDuration =
+      parsedCustomDurationMinutes === null
+        ? null
+        : parsedCustomDurationMinutes * MILLISECONDS_PER_MINUTE;
     const taskPayload = {
       title: title.trim(),
       description: description.trim() || null,
@@ -571,6 +619,7 @@ export function TaskFormModal({
       dueTime: dueTime || null,
       priority,
       timerType,
+      customDuration,
       intentionSlug: intentionSlug || null,
       subIntentionSlug: subIntentionSlug || null,
       recurrenceRule: recurrence.rule,
@@ -621,6 +670,7 @@ export function TaskFormModal({
     dueTime,
     priority,
     timerType,
+    customDurationMinutes,
     intentionSlug,
     subIntentionSlug,
     recurrenceInterval,
@@ -829,6 +879,36 @@ export function TaskFormModal({
                         {t('common.longBreak')}
                       </option>
                     </select>
+                  </Field>
+                )}
+
+                {!isListDestination && (
+                  <Field
+                    label={t('task.customDuration')}
+                    help={t('task.customDurationHelp')}
+                  >
+                    <div className="flex items-center gap-2">
+                      <FaClock className="text-slate-500" size={12} />
+                      <Input
+                        aria-label={t('task.customDuration')}
+                        type="number"
+                        min={1}
+                        max={240}
+                        step={1}
+                        value={customDurationMinutes}
+                        disabled={saving}
+                        onChange={event =>
+                          setCustomDurationMinutes(event.target.value)
+                        }
+                        placeholder={String(
+                          getDefaultTimerDurationMinutes(preferences, timerType)
+                        )}
+                        className="w-20 text-center"
+                      />
+                      <span className="text-xs text-slate-400">
+                        {t('common.min')}
+                      </span>
+                    </div>
                   </Field>
                 )}
 
@@ -1249,6 +1329,7 @@ function serializeTaskFormState(state: {
   dueTime: string;
   priority: TaskPriority;
   timerType: TimerTypes;
+  customDurationMinutes: string;
   intentionSlug: string;
   subIntentionSlug: string;
   recurrenceInterval: string;

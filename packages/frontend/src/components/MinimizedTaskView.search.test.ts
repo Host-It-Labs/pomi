@@ -23,6 +23,7 @@ function task(id: string, overrides: Partial<Task> = {}): Task {
     priority: 'normal',
     status: 'active',
     timerType: 'work',
+    customDuration: null,
     pinnedAt: null,
     intentionSlug: null,
     subIntentionSlug: null,
