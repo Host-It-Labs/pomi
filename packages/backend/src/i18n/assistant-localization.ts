@@ -423,7 +423,7 @@ const ENGLISH: Record<AssistantKey, AssistantTemplate> = {
   tasksCreated: values => `${values.count} Tasks created.`,
   taskReadbackDetails: values =>
     formatTaskReadbackDetails(values, TASK_READBACK_LABELS.en),
-  listItemAdded: 'Added 1 item to the List.',
+  listItemAdded: values => `List item added: ${values.title}`,
   listItemsAdded: values => `Added ${values.count} items to the List.`,
   timerStarted: 'Timer started.',
   breakTimerStarted: 'Break timer started.',
@@ -471,7 +471,7 @@ export const ASSISTANT_TRANSLATIONS = {
     tasksCreated: values => `已创建 ${values.count} 个任务。`,
     taskReadbackDetails: values =>
       formatTaskReadbackDetails(values, TASK_READBACK_LABELS['zh-Hans']),
-    listItemAdded: '已向列表添加 1 项。',
+    listItemAdded: values => `已添加列表项：${values.title}`,
     listItemsAdded: values => `已向列表添加 ${values.count} 项。`,
     timerStarted: '计时器已开始。',
     breakTimerStarted: '休息计时器已开始。',
@@ -521,7 +521,7 @@ export const ASSISTANT_TRANSLATIONS = {
     tasksCreated: values => `${values.count} कार्य बनाए गए।`,
     taskReadbackDetails: values =>
       formatTaskReadbackDetails(values, TASK_READBACK_LABELS.hi),
-    listItemAdded: 'सूची में 1 आइटम जोड़ा गया।',
+    listItemAdded: values => `सूची आइटम जोड़ा गया: ${values.title}`,
     listItemsAdded: values => `सूची में ${values.count} आइटम जोड़े गए।`,
     timerStarted: 'टाइमर शुरू हो गया।',
     breakTimerStarted: 'ब्रेक टाइमर शुरू हो गया।',
@@ -576,7 +576,7 @@ export const ASSISTANT_TRANSLATIONS = {
     tasksCreated: values => `Se crearon ${values.count} tareas.`,
     taskReadbackDetails: values =>
       formatTaskReadbackDetails(values, TASK_READBACK_LABELS.es),
-    listItemAdded: 'Se añadió 1 elemento a la lista.',
+    listItemAdded: values => `Elemento de lista añadido: ${values.title}`,
     listItemsAdded: values =>
       `Se añadieron ${values.count} elementos a la lista.`,
     timerStarted: 'Temporizador iniciado.',
@@ -626,7 +626,7 @@ export const ASSISTANT_TRANSLATIONS = {
     tasksCreated: values => `تم إنشاء ${values.count} مهام.`,
     taskReadbackDetails: values =>
       formatTaskReadbackDetails(values, TASK_READBACK_LABELS.ar),
-    listItemAdded: 'تمت إضافة عنصر واحد إلى القائمة.',
+    listItemAdded: values => `تمت إضافة عنصر القائمة: ${values.title}`,
     listItemsAdded: values => `تمت إضافة ${values.count} عناصر إلى القائمة.`,
     timerStarted: 'بدأ المؤقت.',
     breakTimerStarted: 'بدأ مؤقت الاستراحة.',
@@ -680,7 +680,7 @@ export const ASSISTANT_TRANSLATIONS = {
     tasksCreated: values => `${values.count} tâches créées.`,
     taskReadbackDetails: values =>
       formatTaskReadbackDetails(values, TASK_READBACK_LABELS.fr),
-    listItemAdded: '1 élément ajouté à la liste.',
+    listItemAdded: values => `Élément de liste ajouté : ${values.title}`,
     listItemsAdded: values => `${values.count} éléments ajoutés à la liste.`,
     timerStarted: 'Minuteur démarré.',
     breakTimerStarted: 'Minuteur de pause démarré.',
@@ -731,7 +731,7 @@ export const ASSISTANT_TRANSLATIONS = {
     tasksCreated: values => `${values.count}টি কাজ তৈরি হয়েছে।`,
     taskReadbackDetails: values =>
       formatTaskReadbackDetails(values, TASK_READBACK_LABELS.bn),
-    listItemAdded: 'তালিকায় ১টি আইটেম যোগ করা হয়েছে।',
+    listItemAdded: values => `তালিকার আইটেম যোগ করা হয়েছে: ${values.title}`,
     listItemsAdded: values =>
       `তালিকায় ${values.count}টি আইটেম যোগ করা হয়েছে।`,
     timerStarted: 'টাইমার শুরু হয়েছে।',
@@ -787,7 +787,7 @@ export const ASSISTANT_TRANSLATIONS = {
     tasksCreated: values => `${values.count} tarefas criadas.`,
     taskReadbackDetails: values =>
       formatTaskReadbackDetails(values, TASK_READBACK_LABELS['pt-BR']),
-    listItemAdded: '1 item adicionado à lista.',
+    listItemAdded: values => `Item de lista adicionado: ${values.title}`,
     listItemsAdded: values => `${values.count} itens adicionados à lista.`,
     timerStarted: 'Temporizador iniciado.',
     breakTimerStarted: 'Temporizador de pausa iniciado.',
@@ -837,7 +837,7 @@ export const ASSISTANT_TRANSLATIONS = {
     tasksCreated: values => `${values.count} tugas dibuat.`,
     taskReadbackDetails: values =>
       formatTaskReadbackDetails(values, TASK_READBACK_LABELS.id),
-    listItemAdded: '1 item ditambahkan ke Daftar.',
+    listItemAdded: values => `Item Daftar ditambahkan: ${values.title}`,
     listItemsAdded: values => `${values.count} item ditambahkan ke Daftar.`,
     timerStarted: 'Timer dimulai.',
     breakTimerStarted: 'Timer istirahat dimulai.',
@@ -886,7 +886,7 @@ export const ASSISTANT_TRANSLATIONS = {
     tasksCreated: values => `${values.count} کام بنا دیے گئے۔`,
     taskReadbackDetails: values =>
       formatTaskReadbackDetails(values, TASK_READBACK_LABELS.ur),
-    listItemAdded: 'فہرست میں 1 آئٹم شامل کر دیا گیا۔',
+    listItemAdded: values => `فہرست کا آئٹم شامل کر دیا گیا: ${values.title}`,
     listItemsAdded: values =>
       `فہرست میں ${values.count} آئٹمز شامل کر دیے گئے۔`,
     timerStarted: 'ٹائمر شروع ہو گیا۔',

@@ -97,7 +97,10 @@ export const GeneralSettings = ({
 
         <Separator />
 
-        <div className="flex items-center justify-between gap-4">
+        <div
+          className="flex items-center justify-between gap-4"
+          data-setting-id="settings-language"
+        >
           <div>
             <label
               htmlFor="settings-language"

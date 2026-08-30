@@ -12,6 +12,9 @@ import { createSelectors } from './createSelectors';
 export type TaskMode = 'intention' | 'general';
 export type HistorySource = 'timer' | 'task';
 export type HistoryActionId = string;
+export type TaskItemRevealRequest =
+  | { kind: 'task'; id: string }
+  | { kind: 'listItem'; id: string; listId: string };
 
 type HistoryMarker = {
   id: HistoryActionId;
@@ -41,6 +44,9 @@ interface UiState {
   taskEditRequestedId: string | null;
   requestTaskEdit: (taskId: string) => void;
   clearTaskEditRequest: () => void;
+  taskItemRevealRequest: TaskItemRevealRequest | null;
+  requestTaskItemReveal: (request: TaskItemRevealRequest) => void;
+  clearTaskItemRevealRequest: () => void;
   intentionCreateRequested: boolean;
   requestIntentionCreate: () => void;
   clearIntentionCreateRequest: () => void;
@@ -171,6 +177,9 @@ const useUiStoreBase = create<UiState>((set, state) => ({
   taskEditRequestedId: null,
   requestTaskEdit: (taskId: string) => set({ taskEditRequestedId: taskId }),
   clearTaskEditRequest: () => set({ taskEditRequestedId: null }),
+  taskItemRevealRequest: null,
+  requestTaskItemReveal: request => set({ taskItemRevealRequest: request }),
+  clearTaskItemRevealRequest: () => set({ taskItemRevealRequest: null }),
   intentionCreateRequested: false,
   requestIntentionCreate: () => set({ intentionCreateRequested: true }),
   clearIntentionCreateRequest: () => set({ intentionCreateRequested: false }),

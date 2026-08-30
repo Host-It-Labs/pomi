@@ -189,11 +189,13 @@ export interface ListsUserAction {
     | 'resetCompletedItems'
     | 'convertIntention'
     | 'convertToIntention'
-    | 'convertTaskToListItem';
+    | 'convertTaskToListItem'
+    | 'convertListItemToTask';
   intentionSlug?: string;
   listId?: string;
   itemId?: string;
   taskId?: string;
+  subIntentionSlug?: string | null;
   title?: string;
   emoji?: string | null;
   description?: string | null;

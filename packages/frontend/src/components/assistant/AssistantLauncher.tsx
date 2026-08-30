@@ -65,7 +65,8 @@ type AssistantVoiceResult = {
   message: string;
   spokenAudioBase64: string | null;
   spokenAudioMimeType: string | null;
-  tasks: unknown[];
+  tasks: Array<{ id: string }>;
+  listItems: Array<{ id: string; listId: string }>;
 };
 
 function normalizeVoiceResponse(result: unknown): {
@@ -109,6 +110,9 @@ export function AssistantLauncher() {
   const recordingStartedAtRef = useRef<number | null>(null);
   const expanded = useUiStore.use.expanded();
   const activeTab = useUiStore.use.activeTab();
+  const setExpanded = useUiStore.use.setExpanded();
+  const setActiveTab = useUiStore.use.setActiveTab();
+  const requestTaskItemReveal = useUiStore.use.requestTaskItemReveal();
   const authToken = useAuthStore.use.token();
 
   const configuredMaxRecordingMinutes = (
@@ -334,9 +338,30 @@ export function AssistantLauncher() {
 
       setMessage(response.body.message);
       setStage('result');
+      const createdTask = response.body.tasks[0];
+      const createdListItem = response.body.listItems[0];
       showToastFromStore(
         response.body.message || t('assistant.completed'),
-        'success'
+        'success',
+        5000,
+        createdTask || createdListItem
+          ? {
+              label: t('task.viewUpdated'),
+              onClick: () => {
+                setExpanded(true);
+                setActiveTab('tasks');
+                requestTaskItemReveal(
+                  createdTask
+                    ? { kind: 'task', id: createdTask.id }
+                    : {
+                        kind: 'listItem',
+                        id: createdListItem.id,
+                        listId: createdListItem.listId,
+                      }
+                );
+              },
+            }
+          : undefined
       );
       const audioFinished =
         response.body.spokenAudioBase64 && response.body.spokenAudioMimeType

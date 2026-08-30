@@ -417,6 +417,9 @@ export function Settings() {
             [
               t('timerSettings.autoStartBreaks'),
               t('timerSettings.autoStartBreaksDescription'),
+              t('common.work'),
+              t('common.break'),
+              t('common.longBreak'),
             ],
             'autoStartBreak'
           ),
@@ -426,6 +429,9 @@ export function Settings() {
               t('timerSettings.resetBreakOnFirstIntentionDescription'),
               t('timerSettings.resetLongBreakOnFirstIntention'),
               t('timerSettings.resetLongBreakOnFirstIntentionDescription'),
+              t('common.work'),
+              t('common.break'),
+              t('common.longBreak'),
             ],
             'resetBreakOnFirstIntention'
           ),
@@ -948,7 +954,7 @@ export function Settings() {
             </div>
           )}
 
-          <div className="space-y-8 pt-5">
+          <div className="space-y-8">
             {filteredSections.map(section => (
               <section
                 key={section.key}

@@ -82,6 +82,8 @@ vi.mock('../stores/uiStore', () => ({
       intentionPickerOpenRequest: () => 0,
       taskSearchFocusRequest: () => 0,
       taskQuickCreateFocusRequest: () => 0,
+      taskItemRevealRequest: () => null,
+      clearTaskItemRevealRequest: () => vi.fn(),
     },
   },
 }));

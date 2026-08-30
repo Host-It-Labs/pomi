@@ -152,7 +152,7 @@ export class AssistantListRoutingService {
     }
 
     const matches = lists.flatMap(list =>
-      this.findListRouteMatches(sourceTokens, list)
+      this.findListRouteMatches(sourceTokens, list, drafts)
     );
     const strongestMatches = matches.filter(
       match =>
@@ -216,7 +216,15 @@ export class AssistantListRoutingService {
         )
       );
     }
-    return drafts.map(draft => ({ ...draft, listId: match.listId }));
+    const matchedList = lists.find(list => list.id === match.listId);
+    return drafts.map(draft => ({
+      ...draft,
+      title:
+        match.lead === 'implicit-trailing-list' && matchedList
+          ? this.stripTrailingListTitle(draft.title, matchedList.title)
+          : draft.title,
+      listId: match.listId,
+    }));
   }
 
   routeSelectedListItems(
@@ -263,7 +271,8 @@ export class AssistantListRoutingService {
 
   private findListRouteMatches(
     sourceTokens: string[],
-    list: Pick<ListEntity, 'id' | 'title'>
+    list: Pick<ListEntity, 'id' | 'title'>,
+    drafts: ParsedTaskDraft[]
   ): ListRouteMatch[] {
     const titleTokens = this.normalizeRoutingText(list.title)
       .trim()
@@ -280,24 +289,48 @@ export class AssistantListRoutingService {
       if (!this.tokensMatch(sourceTokens, titleStart, titleTokens)) continue;
 
       const prefix = this.findListRoutePrefix(sourceTokens, titleStart);
-      if (!prefix) continue;
+      const isImplicitTrailingMatch =
+        !prefix &&
+        drafts.length > 0 &&
+        titleStart > 0 &&
+        titleStart + titleTokens.length === sourceTokens.length;
+      if (!prefix && !isImplicitTrailingMatch) continue;
 
       const markerAfterTitle = this.listMarkerSuffixLength(
         sourceTokens.slice(titleStart + titleTokens.length)
       );
-      const hasListMarker = prefix.hasMarkerBeforeTitle || markerAfterTitle > 0;
-      if (prefix.lead === 'for' && !hasListMarker) continue;
+      const hasListMarker =
+        Boolean(prefix?.hasMarkerBeforeTitle) || markerAfterTitle > 0;
+      if (prefix?.lead === 'for' && !hasListMarker) continue;
 
       matches.push({
         listId: list.id,
         titleStart,
         titleTokenCount: titleTokens.length,
         end: titleStart + titleTokens.length + markerAfterTitle,
-        lead: prefix.lead,
-        hasMarkerBeforeTitle: prefix.hasMarkerBeforeTitle,
+        lead: prefix?.lead ?? 'implicit-trailing-list',
+        hasMarkerBeforeTitle: prefix?.hasMarkerBeforeTitle ?? false,
       });
     }
     return matches;
+  }
+
+  private stripTrailingListTitle(taskTitle: string, listTitle: string) {
+    const taskParts = taskTitle.trim().split(/\s+/);
+    const listTokenCount = this.normalizeRoutingText(listTitle)
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean).length;
+    if (taskParts.length <= listTokenCount) return taskTitle;
+
+    const suffix = taskParts.slice(-listTokenCount).join(' ');
+    if (
+      this.normalizeRoutingText(suffix).trim() !==
+      this.normalizeRoutingText(listTitle).trim()
+    ) {
+      return taskTitle;
+    }
+    return taskParts.slice(0, -listTokenCount).join(' ');
   }
 
   private findListRoutePrefix(sourceTokens: string[], titleStart: number) {

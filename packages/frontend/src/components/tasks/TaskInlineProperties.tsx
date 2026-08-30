@@ -1,6 +1,7 @@
 import type {
   Intention,
   List,
+  ListItem,
   Task,
   TaskPriority,
   TaskRecurrenceAnchorMode,
@@ -49,9 +50,10 @@ type TaskInlineUpdate = {
 };
 
 type Props = {
-  task: Task;
+  task: Task | ListItem;
   intentions: Intention[];
   lists?: List[];
+  currentList?: List;
   onUpdate: (update: TaskInlineUpdate) => Promise<boolean>;
   onConvertToListItem?: (
     taskId: string,
@@ -62,6 +64,11 @@ type Props = {
       priority: TaskPriority;
       vacationEligible: boolean;
     }
+  ) => Promise<boolean>;
+  onConvertListItemToTask?: (
+    itemId: string,
+    intentionSlug: string,
+    subIntentionSlug: string | null
   ) => Promise<boolean>;
   onOpenEditor: () => void;
   showIntention: boolean;
@@ -76,21 +83,50 @@ export function TaskInlineProperties({
   task,
   intentions,
   lists = [],
+  currentList,
   onUpdate,
   onConvertToListItem,
+  onConvertListItemToTask,
   onOpenEditor,
   showIntention,
   compact,
   isOverdue,
 }: Props) {
+  const inlineTask = useMemo<Task>(
+    () =>
+      task.itemKind === 'task'
+        ? task
+        : {
+            ...task,
+            description: null,
+            sourceTranscript: null,
+            creationSource: 'manual',
+            importSource: null,
+            importSourceTaskId: null,
+            dueTime: null,
+            timerType: 'work',
+            customDuration: null,
+            pinnedAt: null,
+            intentionSlug: null,
+            subIntentionSlug: null,
+            recurrenceRule: null,
+            recurrenceInterval: null,
+            recurrenceAnchorMode: 'planned',
+            followUpTaskId: null,
+            followUpDelayDays: null,
+            followUpSourceTaskId: null,
+            itemKind: 'task',
+          },
+    [task]
+  );
   const recurrenceLabel = formatTaskRecurrence(
-    task.recurrenceRule,
-    task.recurrenceAnchorMode,
-    task.recurrenceInterval
+    inlineTask.recurrenceRule,
+    inlineTask.recurrenceAnchorMode,
+    inlineTask.recurrenceInterval
   );
   const compactRecurrenceLabel = formatCompactTaskRecurrence(
-    task.recurrenceRule,
-    task.recurrenceInterval
+    inlineTask.recurrenceRule,
+    inlineTask.recurrenceInterval
   );
 
   return (
@@ -104,23 +140,25 @@ export function TaskInlineProperties({
     >
       {showIntention ? (
         <TaskIntentionControl
-          task={task}
+          task={inlineTask}
           intentions={intentions}
           lists={lists}
+          currentList={currentList}
           onUpdate={onUpdate}
           onConvertToListItem={onConvertToListItem}
+          onConvertListItemToTask={onConvertListItemToTask}
           compact={compact}
         />
       ) : null}
       <TaskDueDateControl
-        task={task}
+        task={inlineTask}
         onUpdate={onUpdate}
         compact={compact}
         isOverdue={isOverdue}
       />
       {compactRecurrenceLabel && recurrenceLabel ? (
         <TaskRecurrenceControl
-          task={task}
+          task={inlineTask}
           label={compactRecurrenceLabel}
           detail={recurrenceLabel}
           onUpdate={onUpdate}
@@ -128,7 +166,11 @@ export function TaskInlineProperties({
           compact={compact}
         />
       ) : null}
-      <TaskPriorityControl task={task} onUpdate={onUpdate} compact={compact} />
+      <TaskPriorityControl
+        task={inlineTask}
+        onUpdate={onUpdate}
+        compact={compact}
+      />
     </div>
   );
 }
@@ -551,15 +593,19 @@ function TaskIntentionControl({
   task,
   intentions,
   lists,
+  currentList,
   onUpdate,
   onConvertToListItem,
+  onConvertListItemToTask,
   compact,
 }: {
   task: Task;
   intentions: Intention[];
   lists: List[];
+  currentList?: List;
   onUpdate: Props['onUpdate'];
   onConvertToListItem: Props['onConvertToListItem'];
+  onConvertListItemToTask: Props['onConvertListItemToTask'];
   compact: boolean;
 }) {
   const { t } = useI18n();
@@ -647,6 +693,18 @@ function TaskIntentionControl({
       return;
     }
     const choice = choices.find(item => item.value === draft);
+    if (currentList && onConvertListItemToTask) {
+      if (!choice) return;
+      setSaving(true);
+      const didSave = await onConvertListItemToTask(
+        task.id,
+        choice.intentionSlug,
+        choice.subIntentionSlug
+      );
+      setSaving(false);
+      if (didSave) setIsOpen(false);
+      return;
+    }
     setSaving(true);
     const didSave = await onUpdate({
       id: task.id,
@@ -667,11 +725,18 @@ function TaskIntentionControl({
         setIsPickerOpen(next);
       }}
       trigger={
-        <TaskIntentionBadge
-          parentEmoji={displayChoice.parentEmoji}
-          subEmoji={displayChoice.subEmoji}
-          compact={compact}
-        />
+        currentList ? (
+          <span className="inline-flex h-5 max-w-28 items-center gap-1 rounded-full border border-indigo-500/25 bg-indigo-500/10 px-1.5 text-[10px] text-indigo-200/85">
+            <span aria-hidden="true">{currentList.emoji ?? '📋'}</span>
+            <span className="truncate">{currentList.title}</span>
+          </span>
+        ) : (
+          <TaskIntentionBadge
+            parentEmoji={displayChoice.parentEmoji}
+            subEmoji={displayChoice.subEmoji}
+            compact={compact}
+          />
+        )
       }
       triggerLabel={`${t('task.intentionOrList')}: ${task.title}`}
       triggerTitle={t('task.intentionOrList')}

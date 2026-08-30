@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   prepareTaskFromText: vi.fn(),
   submitUserMutation: vi.fn(),
   showToast: vi.fn(),
+  setExpanded: vi.fn(),
+  setActiveTab: vi.fn(),
+  requestTaskItemReveal: vi.fn(),
 }));
 
 vi.mock('../../stores/assistantStore', () => ({
@@ -32,6 +35,16 @@ vi.mock('../../stores/tasksStore', () => ({
     use: {
       createTask: () => mocks.createTask,
       mergeTasks: () => mocks.mergeTasks,
+    },
+  },
+}));
+
+vi.mock('../../stores/uiStore', () => ({
+  useUiStore: {
+    use: {
+      setExpanded: () => mocks.setExpanded,
+      setActiveTab: () => mocks.setActiveTab,
+      requestTaskItemReveal: () => mocks.requestTaskItemReveal,
     },
   },
 }));
@@ -70,6 +83,9 @@ describe('TaskQuickCreateRow assistant errors', () => {
     });
     mocks.submitUserMutation.mockReset();
     mocks.showToast.mockReset();
+    mocks.setExpanded.mockReset();
+    mocks.setActiveTab.mockReset();
+    mocks.requestTaskItemReveal.mockReset();
   });
 
   it('shows the backend feedback when assistant capture is rejected', async () => {
@@ -94,7 +110,7 @@ describe('TaskQuickCreateRow assistant errors', () => {
       tasks: [],
       listItems: [],
       usedFallback: false,
-      message: 'Added 1 item to the List.',
+      message: 'List item added: Buy milk',
       costUsd: 0,
     };
     mocks.submitUserMutation.mockResolvedValue({ status: 201, body: capture });
@@ -127,6 +143,50 @@ describe('TaskQuickCreateRow assistant errors', () => {
       })
     );
     expect(mocks.createTask).not.toHaveBeenCalled();
+  });
+
+  it('shows the List item title and a View action after Assistant capture', async () => {
+    const listItem = {
+      id: 'item-1',
+      listId: 'list-1',
+      title: 'Buy milk',
+    };
+    mocks.submitUserMutation.mockResolvedValue({
+      status: 201,
+      body: {
+        tasks: [],
+        listItems: [listItem],
+        usedFallback: false,
+        message: 'List item added: Buy milk',
+        costUsd: 0,
+      },
+    });
+
+    render(<TaskQuickCreateRow listId="list-1" />);
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'Buy milk' },
+    });
+    fireEvent.submit(screen.getByRole('textbox').closest('form')!);
+
+    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledOnce());
+    expect(mocks.showToast).toHaveBeenCalledWith(
+      'List item added: Buy milk',
+      'success',
+      5000,
+      expect.objectContaining({ label: 'View' })
+    );
+
+    const viewAction = mocks.showToast.mock.calls[0][3] as {
+      onClick: () => void;
+    };
+    viewAction.onClick();
+    expect(mocks.setExpanded).toHaveBeenCalledWith(true);
+    expect(mocks.setActiveTab).toHaveBeenCalledWith('tasks');
+    expect(mocks.requestTaskItemReveal).toHaveBeenCalledWith({
+      kind: 'listItem',
+      id: 'item-1',
+      listId: 'list-1',
+    });
   });
 
   it('does not enqueue Assistant work after cancellation invalidates preparation', async () => {
@@ -191,7 +251,7 @@ describe('TaskQuickCreateRow assistant errors', () => {
         tasks: [],
         listItems: [],
         usedFallback: false,
-        message: 'Added 1 item to the List.',
+        message: 'List item added: Buy milk',
         costUsd: 0,
       },
     });

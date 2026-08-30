@@ -349,6 +349,68 @@ export class ListsService {
     return saved;
   }
 
+  async convertListItemToTask(
+    userId: string,
+    itemId: string,
+    intentionSlug: string,
+    subIntentionSlug?: string | null
+  ) {
+    const [item, intention] = await Promise.all([
+      this.tasksRepository.findOne({
+        where: { id: itemId, userId, itemKind: 'listItem' },
+      }),
+      this.intentionsRepository.findOne({
+        where: {
+          userId,
+          slug: intentionSlug,
+          type: TIMER_TYPES.WORK,
+          isArchived: false,
+        },
+      }),
+    ]);
+    if (!item) throw new NotFoundException('List item not found');
+    if (!intention || !intention.allowsTasks) {
+      throw new BadRequestException('Intention is unavailable for Tasks');
+    }
+    const subIntention = subIntentionSlug
+      ? await this.intentionsRepository.findOne({
+          where: {
+            userId,
+            slug: subIntentionSlug,
+            type: TIMER_TYPES.WORK,
+            isArchived: false,
+          },
+        })
+      : null;
+    if (
+      subIntentionSlug &&
+      (!subIntention || subIntention.parentIntentionId !== intention.id)
+    ) {
+      throw new BadRequestException('Sub-intention is unavailable for Tasks');
+    }
+
+    await this.assertNoRunningFocusedItem(userId, [item.id]);
+    const restore = (item.taskRestoreState ?? {}) as Partial<TaskEntity>;
+    Object.assign(item, restore, {
+      itemKind:
+        restore.itemKind === 'followUp'
+          ? ('followUp' as const)
+          : ('task' as const),
+      listId: null,
+      taskRestoreState: null,
+      timerType: intention.type,
+      intentionSlug: intention.slug,
+      subIntentionSlug: subIntention?.slug ?? null,
+    });
+    if (item.status !== TASK_STATUSES.ACTIVE) {
+      item.recurrenceRule = null;
+      item.recurrenceInterval = null;
+    }
+    const saved = await this.tasksRepository.save(item);
+    this.realtimeEvents.emitTasksUpdate(userId);
+    return saved;
+  }
+
   async convertToIntention(userId: string, listId: string) {
     const list = await this.requireList(userId, listId);
     const items = await this.tasksRepository.find({

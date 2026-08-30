@@ -3,6 +3,33 @@ import { AssistantCaptureService } from '../../src/assistant/assistant-capture.s
 import type { PreparedAssistantTaskCapture } from '../../src/assistant/assistant-task-preparation.store';
 
 describe('Assistant task capture commit', () => {
+  it('includes the List item title in the creation confirmation', () => {
+    const service = new AssistantCaptureService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never
+    );
+    const formatListItemsCreatedMessage = (
+      service as unknown as {
+        formatListItemsCreatedMessage(
+          items: Array<{ title: string }>,
+          language: string
+        ): string;
+      }
+    ).formatListItemsCreatedMessage.bind(service);
+
+    expect(formatListItemsCreatedMessage([{ title: 'Buy milk' }], 'en')).toBe(
+      'List item added: Buy milk'
+    );
+  });
+
   it('rejects prepared List drafts when Lists were disabled after preparation', async () => {
     const recordLog = vi.fn(async () => undefined);
     const service = new AssistantCaptureService(

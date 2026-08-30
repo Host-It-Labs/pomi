@@ -89,6 +89,41 @@ describe('Minimized task search', () => {
     expect(results.map(value => value.id)).toEqual(['visible']);
   });
 
+  it('matches normalized Task details and linked Intention names', () => {
+    const linkedTask = task('linked', {
+      title: 'Préparer résumé',
+      priority: 'urgent',
+      intentionSlug: 'client-work',
+    });
+    const intention = {
+      id: 'intention-1',
+      userId: 'user-1',
+      title: 'Client Work',
+      emoji: '💼',
+      slug: 'client-work',
+      type: 'work' as const,
+      parentIntentionId: null,
+      hasCustomDuration: false,
+      keepScreenAwake: false,
+      isHabit: false,
+      isArchived: false,
+      isFavorite: false,
+      allowsTasks: true,
+      usageCount: 0,
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    };
+
+    expect(
+      searchMinimizedTasks([linkedTask], 'preparer', null, false, [intention])
+    ).toEqual([linkedTask]);
+    expect(
+      searchMinimizedTasks([linkedTask], 'client work', null, false, [
+        intention,
+      ])
+    ).toEqual([linkedTask]);
+  });
+
   it('does not expose contextual follow-ups through pin shortcuts', () => {
     const parent = task('parent');
     const followUp = task('follow-up', {

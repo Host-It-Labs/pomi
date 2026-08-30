@@ -86,6 +86,45 @@ describe('Assistant explicit List routing', () => {
     ).toEqual([{ title: 'Buy milk', listId: 'groceries-id' }]);
   });
 
+  it('routes shorthand ending with an exact List name', () => {
+    expect(
+      routeListItems.call(
+        routingService,
+        [{ title: 'Tomatoes' }],
+        'tomatoes groceries',
+        lists
+      )
+    ).toEqual([{ title: 'Tomatoes', listId: 'groceries-id' }]);
+  });
+
+  it('routes spoken shorthand even when the transcript includes the List name', () => {
+    expect(
+      routeListItems.call(
+        routingService,
+        [{ title: 'Tomatoes', sourceTranscript: 'tomatoes groceries' }],
+        'tomatoes groceries',
+        lists
+      )
+    ).toEqual([
+      {
+        title: 'Tomatoes',
+        sourceTranscript: 'tomatoes groceries',
+        listId: 'groceries-id',
+      },
+    ]);
+  });
+
+  it('removes an implicit trailing List name from the extracted item title', () => {
+    expect(
+      routeListItems.call(
+        routingService,
+        [{ title: 'Review groceries' }],
+        'review groceries',
+        lists
+      )
+    ).toEqual([{ title: 'Review', listId: 'groceries-id' }]);
+  });
+
   it('rejects mixed requests after an explicit List target', () => {
     const drafts = [{ title: 'Milk' }, { title: 'Call Mum' }];
 

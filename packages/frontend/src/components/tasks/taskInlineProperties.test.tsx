@@ -1,4 +1,4 @@
-import type { Intention, List, Task } from '@pomi/shared';
+import type { Intention, List, ListItem, Task } from '@pomi/shared';
 import {
   cleanup,
   fireEvent,
@@ -177,6 +177,53 @@ describe('inline Task properties', () => {
         priority: 'normal',
         vacationEligible: false,
       }
+    );
+  });
+
+  it('uses the same controls to move a List item back to an Intention', async () => {
+    const user = userEvent.setup();
+    const onConvertListItemToTask = vi.fn().mockResolvedValue(true);
+    const listItem: ListItem = {
+      id: 'item-tomatoes',
+      userId: 'user-1',
+      listId: lists[0].id,
+      title: 'Tomatoes',
+      dueDate: null,
+      priority: 'normal',
+      status: 'active',
+      manualOrder: null,
+      manualOrderOverride: false,
+      itemKind: 'listItem',
+      vacationEligible: false,
+      createdAt: '2026-07-26T08:00:00.000Z',
+      updatedAt: '2026-07-26T08:00:00.000Z',
+    };
+
+    render(
+      <TaskInlineProperties
+        task={listItem}
+        intentions={intentions}
+        currentList={lists[0]}
+        onUpdate={vi.fn().mockResolvedValue(true)}
+        onConvertListItemToTask={onConvertListItemToTask}
+        onOpenEditor={vi.fn()}
+        showIntention
+        compact={false}
+        isOverdue={false}
+      />
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: 'Intention / List: Tomatoes' })
+    );
+    await user.click(screen.getByRole('option', { name: /Release$/ }));
+    await user.click(screen.getByRole('button', { name: /documentation/i }));
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+
+    expect(onConvertListItemToTask).toHaveBeenCalledWith(
+      'item-tomatoes',
+      'release',
+      'documentation'
     );
   });
 

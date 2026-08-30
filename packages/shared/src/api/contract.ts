@@ -1225,11 +1225,13 @@ const userActionSchema = z
           'convertIntention',
           'convertToIntention',
           'convertTaskToListItem',
+          'convertListItemToTask',
         ]),
         intentionSlug: z.string().optional(),
         listId: z.string().optional(),
         itemId: z.string().optional(),
         taskId: z.string().optional(),
+        subIntentionSlug: z.string().nullable().optional(),
         title: z.string().trim().min(1).max(500).optional(),
         emoji: z.string().max(16).nullable().optional(),
         description: z.string().max(1000).nullable().optional(),
@@ -1257,6 +1259,16 @@ const userActionSchema = z
             code: z.ZodIssueCode.custom,
             path: ['taskId'],
             message: 'Task and List are required',
+          });
+        }
+        if (
+          action.operation === 'convertListItemToTask' &&
+          (!action.itemId || !action.intentionSlug)
+        ) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['itemId'],
+            message: 'List item and Intention are required',
           });
         }
       }),

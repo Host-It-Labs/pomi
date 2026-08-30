@@ -723,6 +723,17 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
         }
       );
     }
+    if (action.operation === 'convertListItemToTask') {
+      if (!action.itemId || !action.intentionSlug) {
+        throw new BadRequestException('List item and Intention are required');
+      }
+      return this.listsService.convertListItemToTask(
+        userId,
+        action.itemId,
+        action.intentionSlug,
+        action.subIntentionSlug
+      );
+    }
     if (action.operation === 'create') {
       return this.listsService.create(userId, {
         title: action.title ?? '',

@@ -116,6 +116,10 @@ vi.mock('../pages/GeneralSettings', () => ({
   GeneralSettings: ({ adminContent }: { adminContent?: React.ReactNode }) => (
     <div>
       <div data-setting-id="general-account">General controls</div>
+      <div data-setting-id="settings-language">
+        <label htmlFor="mock-language">Language</label>
+        <select id="mock-language" aria-label="Language" />
+      </div>
       <div data-setting-id="undoAlerts">
         Undo alerts Show what undo or redo changed.
       </div>
@@ -130,9 +134,15 @@ vi.mock('../pages/GeneralSettings', () => ({
 }));
 vi.mock('../pages/TimerSettings', () => ({
   TimerSettings: () => (
-    <div data-setting-id="focusLength">
-      <button type="button">Focus length</button>
-      <span>Length of each focus block.</span>
+    <div>
+      <div data-setting-id="focusLength">
+        <button type="button">Focus length</button>
+        <span>Length of each focus block.</span>
+      </div>
+      <div data-setting-id="autoStartBreak">Auto-start timers</div>
+      <div data-setting-id="resetBreakOnFirstIntention">
+        Reset timer on first Intention
+      </div>
     </div>
   ),
 }));
@@ -284,6 +294,28 @@ describe('Settings experience', () => {
 
     expect(sectionKeys()).toEqual(['notifications', 'tasks']);
     expect(screen.queryByRole('navigation')).toBeNull();
+  });
+
+  it('keeps badge-matched timer controls and the Language control visible', async () => {
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    const search = screen.getByRole('searchbox', { name: 'Search' });
+    await user.type(search, 'break');
+
+    expect(screen.getByText('Auto-start timers')).toBeVisible();
+    expect(screen.getByText('Reset timer on first Intention')).toBeVisible();
+
+    await user.clear(search);
+    await user.type(search, 'work');
+    expect(screen.getByText('Auto-start timers')).toBeVisible();
+    expect(screen.getByText('Reset timer on first Intention')).toBeVisible();
+
+    await user.clear(search);
+    await user.type(search, 'language');
+
+    expect(sectionKeys()).toEqual(['general']);
+    expect(screen.getByLabelText('Language')).toBeVisible();
   });
 
   it('uses only the native search clear affordance', async () => {

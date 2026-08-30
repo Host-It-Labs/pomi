@@ -153,6 +153,9 @@ export function Tasks() {
   const taskSearchFocusRequest = useUiStore.use.taskSearchFocusRequest();
   const taskQuickCreateFocusRequest =
     useUiStore.use.taskQuickCreateFocusRequest();
+  const taskItemRevealRequest = useUiStore.use.taskItemRevealRequest();
+  const clearTaskItemRevealRequest =
+    useUiStore.use.clearTaskItemRevealRequest();
   const [intentions, setIntentions] = useState<Intention[]>([]);
   const [lists, setLists] = useState<List[]>([]);
   const [listItems, setListItems] = useState<ListItem[]>([]);
@@ -660,6 +663,36 @@ export function Tasks() {
     [loadLists, loadTasks, t]
   );
 
+  const convertListItemToTask = useCallback(
+    async (
+      itemId: string,
+      intentionSlug: string,
+      subIntentionSlug: string | null
+    ) => {
+      try {
+        await submitUserMutation({
+          kind: 'lists',
+          label: t('task.intentionOrList'),
+          payload: {
+            operation: 'convertListItemToTask',
+            itemId,
+            intentionSlug,
+            subIntentionSlug,
+          },
+          reconcile: async () => {
+            await Promise.all([loadTasks(), loadLists()]);
+          },
+        });
+        await Promise.all([loadTasks(), loadLists()]);
+        showToastFromStore(t('task.updated'), 'success');
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [loadLists, loadTasks, t]
+  );
+
   const resetSelectedList = useCallback(async () => {
     if (!selectedList) return;
     await submitUserMutation({
@@ -753,6 +786,18 @@ export function Tasks() {
     resetFilters: resetUpdatedTaskFilters,
     setDestinationTaskId: setUpdatedTaskDestinationId,
   });
+  useEffect(() => {
+    if (!taskItemRevealRequest) return;
+    if (taskItemRevealRequest.kind === 'listItem') {
+      setTaskSearchQuery('');
+      setSelectedIntentionFilter(null);
+      setPropertyFilters(EMPTY_TASK_PROPERTY_FILTERS);
+      setSelectedListId(taskItemRevealRequest.listId);
+    } else {
+      revealUpdatedTask(taskItemRevealRequest.id);
+    }
+    clearTaskItemRevealRequest();
+  }, [clearTaskItemRevealRequest, revealUpdatedTask, taskItemRevealRequest]);
   const createTaskWithViewFeedback = useCallback(
     async (input: Parameters<typeof createTask>[0]) => {
       const existingTaskIds = new Set(
@@ -1246,6 +1291,7 @@ export function Tasks() {
           {selectedList ? (
             <SelectedListItems
               list={selectedList}
+              intentions={intentions}
               activeItems={activeListItems}
               completedItems={completedListItems}
               archivedItems={archivedListItems}
@@ -1257,6 +1303,8 @@ export function Tasks() {
                 updateListItem(item, { status: TASK_STATUSES.ACTIVE })
               }
               onReset={() => setIsResetListOpen(true)}
+              onUpdate={updateListItem}
+              onConvertToTask={convertListItemToTask}
             />
           ) : null}
 
@@ -1304,6 +1352,8 @@ export function Tasks() {
               onEditListItem={setEditingListItem}
               onCompleteListItem={completeListItem}
               onArchiveListItem={setArchivingListItem}
+              onUpdateListItem={updateListItem}
+              onConvertListItemToTask={convertListItemToTask}
               onOpenDescription={setDescriptionTask}
               onUpdate={updateTaskWithPositionFeedback}
               onConvertToListItem={convertTaskToListItem}
@@ -1935,6 +1985,7 @@ function TaskArchiveModal({
 
 function SelectedListItems({
   list,
+  intentions,
   activeItems,
   completedItems,
   archivedItems,
@@ -1944,8 +1995,11 @@ function SelectedListItems({
   onArchive,
   onRestore,
   onReset,
+  onUpdate,
+  onConvertToTask,
 }: {
   list: List;
+  intentions: Intention[];
   activeItems: ListItem[];
   completedItems: ListItem[];
   archivedItems: ListItem[];
@@ -1955,22 +2009,45 @@ function SelectedListItems({
   onArchive: (item: ListItem) => void;
   onRestore: (item: ListItem) => Promise<void>;
   onReset: () => void;
+  onUpdate: (
+    item: ListItem,
+    updates: {
+      dueDate?: string | null;
+      priority?: ListItem['priority'];
+    }
+  ) => Promise<void>;
+  onConvertToTask: (
+    itemId: string,
+    intentionSlug: string,
+    subIntentionSlug: string | null
+  ) => Promise<boolean>;
 }) {
   const { t } = useI18n();
   return (
     <div className="space-y-4" data-testid="selected-list-items">
-      <div className="space-y-2.5">
-        {activeItems.map(item => (
-          <ListItemTaskRow
-            key={item.id}
-            item={item}
-            list={list}
-            isCompleting={completingItemIds.includes(item.id)}
-            onEdit={onEdit}
-            onComplete={onComplete}
-            onArchive={onArchive}
-          />
-        ))}
+      <div>
+        {activeItems.length > 0 && (
+          <div className="overflow-visible rounded-xl border border-slate-800/75 bg-slate-900/30 shadow-sm shadow-black/15">
+            {activeItems.map(item => (
+              <div
+                key={item.id}
+                className="border-b border-slate-800/65 last:border-b-0"
+              >
+                <ListItemTaskRow
+                  item={item}
+                  list={list}
+                  intentions={intentions}
+                  isCompleting={completingItemIds.includes(item.id)}
+                  onEdit={onEdit}
+                  onComplete={onComplete}
+                  onArchive={onArchive}
+                  onUpdate={onUpdate}
+                  onConvertToTask={onConvertToTask}
+                />
+              </div>
+            ))}
+          </div>
+        )}
         {activeItems.length === 0 && (
           <div className="rounded-xl border border-dashed border-slate-700/70 px-5 py-8 text-center text-sm text-slate-500">
             {t('task.noActiveItemsInList', { title: list.title })}
@@ -1994,10 +2071,13 @@ function SelectedListItems({
                 key={item.id}
                 item={item}
                 list={list}
+                intentions={intentions}
                 onEdit={onEdit}
                 onComplete={onComplete}
                 onArchive={onArchive}
                 onRestore={onRestore}
+                onUpdate={onUpdate}
+                onConvertToTask={onConvertToTask}
               />
             ))}
           </div>
@@ -2015,10 +2095,13 @@ function SelectedListItems({
                 key={item.id}
                 item={item}
                 list={list}
+                intentions={intentions}
                 onEdit={onEdit}
                 onComplete={onComplete}
                 onArchive={onArchive}
                 onRestore={onRestore}
+                onUpdate={onUpdate}
+                onConvertToTask={onConvertToTask}
               />
             ))}
           </div>
@@ -2031,19 +2114,35 @@ function SelectedListItems({
 function ListItemTaskRow({
   item,
   list,
+  intentions,
   isCompleting,
   onEdit,
   onComplete,
   onArchive,
   onRestore,
+  onUpdate,
+  onConvertToTask,
 }: {
   item: ListItem;
   list: List;
+  intentions: Intention[];
   isCompleting?: boolean;
   onEdit: (item: ListItem) => void;
   onComplete: (item: ListItem) => Promise<void>;
   onArchive: (item: ListItem) => void;
   onRestore?: (item: ListItem) => Promise<void>;
+  onUpdate: (
+    item: ListItem,
+    updates: {
+      dueDate?: string | null;
+      priority?: ListItem['priority'];
+    }
+  ) => Promise<void>;
+  onConvertToTask: (
+    itemId: string,
+    intentionSlug: string,
+    subIntentionSlug: string | null
+  ) => Promise<boolean>;
 }) {
   const { t } = useI18n();
   const isActive = item.status === TASK_STATUSES.ACTIVE;
@@ -2055,46 +2154,79 @@ function ListItemTaskRow({
       data-list-item-id={item.id}
       data-completing={isCompletionPending}
       className={clsx(
-        'group/list-item relative flex min-h-14 items-center gap-3 border-l-2 border-indigo-400/70 bg-slate-900/75 px-3 py-2 transition-all duration-200',
+        'group/task-row relative transition-all duration-200 hover:bg-slate-800/25',
         (isCompleted || isCompletionPending) && 'opacity-50'
       )}
     >
-      <CompletionButton
-        label={item.title}
-        isCompleted={!isActive}
-        isCompleting={isCompletionPending}
-        disabled={isCompletionPending}
-        onClick={() => void (isActive ? onComplete(item) : onRestore?.(item))}
-        compact
+      <div
+        aria-hidden="true"
+        className={clsx(
+          'absolute inset-y-2 left-0 w-0.5 rounded-r-full',
+          getTaskPriorityAccentClass(item.priority)
+        )}
       />
-      <div className="min-w-0 flex-1">
-        <p
-          className={clsx(
-            'truncate text-sm font-medium text-slate-100',
-            (isCompleted || isCompletionPending) &&
-              'text-slate-500 line-through'
-          )}
-        >
-          {item.title}
-        </p>
-        <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-500">
-          <span className="truncate text-indigo-200/75">
-            {list.emoji ?? '📋'} {list.title}
-          </span>
-          <span>{t(`common.${item.priority}`)}</span>
-          {item.dueDate && <time data-swipe-start>{item.dueDate}</time>}
+      <div className="grid min-h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 py-2 pl-3 pr-2.5">
+        <CompletionButton
+          label={item.title}
+          isCompleted={!isActive}
+          isCompleting={isCompletionPending}
+          disabled={isCompletionPending}
+          onClick={() => void (isActive ? onComplete(item) : onRestore?.(item))}
+        />
+        <div className="min-w-0">
+          <p
+            className={clsx(
+              'truncate text-[13px] font-semibold text-slate-100',
+              (isCompleted || isCompletionPending) &&
+                'text-slate-500 line-through'
+            )}
+          >
+            {item.title}
+          </p>
+          <div className="mt-1">
+            <TaskInlineProperties
+              task={item}
+              intentions={intentions}
+              currentList={list}
+              onUpdate={async update => {
+                try {
+                  await onUpdate(item, {
+                    ...(update.dueDate !== undefined
+                      ? { dueDate: update.dueDate }
+                      : {}),
+                    ...(update.priority !== undefined
+                      ? { priority: update.priority }
+                      : {}),
+                  });
+                  return true;
+                } catch {
+                  return false;
+                }
+              }}
+              onConvertListItemToTask={onConvertToTask}
+              onOpenEditor={() => onEdit(item)}
+              showIntention
+              compact={false}
+              isOverdue={isTaskOverdue({
+                dueDate: item.dueDate,
+                dueTime: null,
+              })}
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-0.5 opacity-80 transition-opacity group-hover/task-row:opacity-100 group-focus-within/task-row:opacity-100">
+          <IconButton
+            label={t('task.editFor', { title: item.title })}
+            title={t('common.edit')}
+            size="sm"
+            variant="secondary"
+            onClick={() => onEdit(item)}
+            className="!rounded-full"
+          >
+            <FaEdit />
+          </IconButton>
         </div>
       </div>
-      <IconButton
-        label={t('task.editFor', { title: item.title })}
-        title={t('common.edit')}
-        size="sm"
-        variant="secondary"
-        onClick={() => onEdit(item)}
-        className="!rounded-full opacity-80 transition-opacity group-hover/list-item:opacity-100 group-focus-within/list-item:opacity-100"
-      >
-        <FaEdit />
-      </IconButton>
     </div>
   );
   return isMobile && isActive ? (
@@ -2263,6 +2395,8 @@ function MixedTaskList({
   onEditListItem,
   onCompleteListItem,
   onArchiveListItem,
+  onUpdateListItem,
+  onConvertListItemToTask,
   onOpenDescription,
   onUpdate,
   onConvertToListItem,
@@ -2281,6 +2415,18 @@ function MixedTaskList({
   onEditListItem: (item: ListItem) => void;
   onCompleteListItem: (item: ListItem) => Promise<void>;
   onArchiveListItem: (item: ListItem) => void;
+  onUpdateListItem: (
+    item: ListItem,
+    updates: {
+      dueDate?: string | null;
+      priority?: ListItem['priority'];
+    }
+  ) => Promise<void>;
+  onConvertListItemToTask: (
+    itemId: string,
+    intentionSlug: string,
+    subIntentionSlug: string | null
+  ) => Promise<boolean>;
   onOpenDescription: (task: Task) => void;
   onUpdate: (task: {
     id: string;
@@ -2525,10 +2671,13 @@ function MixedTaskList({
                 <ListItemTaskRow
                   item={entry.item}
                   list={entry.list}
+                  intentions={intentions}
                   isCompleting={isCompleting}
                   onEdit={onEditListItem}
                   onComplete={onCompleteListItem}
                   onArchive={onArchiveListItem}
+                  onUpdate={onUpdateListItem}
+                  onConvertToTask={onConvertListItemToTask}
                 />
               </motion.div>
             );

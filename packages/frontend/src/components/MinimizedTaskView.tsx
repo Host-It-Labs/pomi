@@ -435,7 +435,8 @@ export function MinimizedTaskView({
       tasks,
       query,
       taskViewTimer,
-      hideVacationCovered
+      hideVacationCovered,
+      intentions
     );
   }, [
     effectiveTaskSearchQuery,
@@ -443,6 +444,7 @@ export function MinimizedTaskView({
     taskView.tasks,
     taskViewTimer,
     tasks,
+    intentions,
   ]);
   const generalPreviewTasks = useMemo(
     () =>
@@ -1285,11 +1287,12 @@ export function searchMinimizedTasks(
   tasks: Task[],
   query: string,
   timer: TaskViewTimer | null | undefined,
-  hideVacationCovered: boolean
+  hideVacationCovered: boolean,
+  intentions: Intention[] = []
 ) {
   return tasks
     .filter(task => !hideVacationCovered || !task.vacationEligible)
-    .filter(task => doesTaskMatchMiniSearch(task, query))
+    .filter(task => doesTaskMatchMiniSearch(task, query, intentions))
     .sort(
       (a, b) =>
         Number(doesTaskMatchCurrentTimer(b, timer)) -
@@ -1299,15 +1302,46 @@ export function searchMinimizedTasks(
     );
 }
 
-function doesTaskMatchMiniSearch(task: Task, query: string) {
-  const normalizedQuery = query.trim().toLocaleLowerCase();
+function doesTaskMatchMiniSearch(
+  task: Task,
+  query: string,
+  intentions: Intention[] = []
+) {
+  const normalize = (value: string) =>
+    value
+      .toLocaleLowerCase()
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  const normalizedQuery = normalize(query);
   if (!normalizedQuery) {
     return true;
   }
 
-  return [task.title, task.description ?? ''].some(value =>
-    value.toLocaleLowerCase().includes(normalizedQuery)
+  const linkedIntentions = intentions.filter(
+    intention =>
+      intention.type === task.timerType &&
+      (intention.slug === task.intentionSlug ||
+        intention.slug === task.subIntentionSlug)
   );
+  const searchableText = [
+    task.title,
+    task.description ?? '',
+    task.sourceTranscript ?? '',
+    task.priority,
+    task.timerType,
+    ...linkedIntentions.flatMap(intention => [
+      intention.title,
+      intention.emoji,
+    ]),
+  ]
+    .map(normalize)
+    .join(' ');
+  return normalizedQuery
+    .split(' ')
+    .every(token => searchableText.includes(token));
 }
 
 function doesTaskMatchCurrentTimer(

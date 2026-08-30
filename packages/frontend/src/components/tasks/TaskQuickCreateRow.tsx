@@ -25,6 +25,7 @@ import {
 } from 'react-icons/fa';
 import { useAssistantStore } from '../../stores/assistantStore';
 import { useTasksStore } from '../../stores/tasksStore';
+import { useUiStore } from '../../stores/uiStore';
 import { apiClient } from '../../utils/apiClient';
 import { submitUserMutation } from '../../utils/userActionQueue';
 import { requestListRefresh } from '../../utils/listRefresh';
@@ -86,6 +87,9 @@ export function TaskQuickCreateRow({
   const { t } = useI18n();
   const createTask = useTasksStore.use.createTask();
   const mergeTasks = useTasksStore.use.mergeTasks();
+  const setExpanded = useUiStore.use.setExpanded();
+  const setActiveTab = useUiStore.use.setActiveTab();
+  const requestTaskItemReveal = useUiStore.use.requestTaskItemReveal();
   const assistantStatus = useAssistantStore.use.status();
   const loadAssistantStatus = useAssistantStore.use.loadStatus();
   const [text, setText] = useState('');
@@ -480,9 +484,30 @@ export function TaskQuickCreateRow({
         }
 
         reset();
+        const createdTask = response.body.tasks[0];
+        const createdListItem = response.body.listItems[0];
         showToastFromStore(
           response.body.message,
-          response.body.usedFallback ? 'warning' : 'success'
+          response.body.usedFallback ? 'warning' : 'success',
+          5000,
+          createdTask || createdListItem
+            ? {
+                label: t('task.viewUpdated'),
+                onClick: () => {
+                  setExpanded(true);
+                  setActiveTab('tasks');
+                  requestTaskItemReveal(
+                    createdTask
+                      ? { kind: 'task', id: createdTask.id }
+                      : {
+                          kind: 'listItem',
+                          id: createdListItem.id,
+                          listId: createdListItem.listId,
+                        }
+                  );
+                },
+              }
+            : undefined
         );
         onCreated?.();
         return;

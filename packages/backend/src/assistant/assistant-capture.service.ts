@@ -1117,7 +1117,9 @@ export class AssistantCaptureService {
     language: string | null | undefined
   ) {
     return items.length === 1
-      ? translateAssistant(language, 'listItemAdded')
+      ? translateAssistant(language, 'listItemAdded', {
+          title: items[0].title,
+        })
       : translateAssistant(language, 'listItemsAdded', { count: items.length });
   }
 
