@@ -102,6 +102,7 @@ export function ciCheckProblems(checks) {
 
     if (status && status !== 'COMPLETED') {
       problems.push(name + ' is not completed (' + status + ').');
+      return;
     }
     if (!PASSING_CHECK_CONCLUSIONS.has(conclusion)) {
       problems.push(
