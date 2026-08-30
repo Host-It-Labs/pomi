@@ -43,6 +43,7 @@ Single-context repo: use root `CONTEXT.md` and root `docs/adr/`. See `docs/agent
 - PR bodies should contain only a concise summary and important notes when needed; omit testing or verification sections.
 - After pushing PR changes from a new or previously unpushed branch, wait for the CI e2e check to pass and for the automatic Codex review; address review comments if it leaves any, while a thumbs-up means no action is needed.
 - If the worktree is already on an active pushed branch with a linked PR, do not wait for CI or Codex reviews after pushing; report the current check/review status instead.
+- After a PR is ready, its automatic review comments are resolved or explicitly dispositioned, and all CI checks are green, run `./scripts/cleanup-worktree-after-pr.sh` to remove only that worktree's Node dependencies and local pnpm store. The command verifies those conditions against GitHub before deleting anything; use `--check-only` to verify without deleting.
 
 ### Governing Intent And Review Feedback
 
