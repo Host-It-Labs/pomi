@@ -5,6 +5,12 @@ automations: three planning parents and three implementation children. The
 Codex automation records remain the runtime schedules; when a prompt changes,
 update its matching file here in the same change.
 
+The shared runtime safety contract is `GLOBAL.md`, reinforced by the
+Scheduled Automation Contract section in the repository root `AGENTS.md`.
+Every scheduled prompt reads both before lifecycle work, repository research,
+external mutation, or file writing. Track prompts contain only their
+track-specific scope and workflow additions.
+
 Prompt synchronization is manual in both directions. Editing a prompt in this
 repository does not update the installed Codex automation, and editing an
 installed automation does not update its Markdown backup. Before handing a
@@ -19,8 +25,9 @@ project IDs and environment-file paths remain in Codex and are intentionally not
 required to restore the prompt text.
 
 Planning parents use `gpt-5.6-sol` with high reasoning. Implementation children
-use `gpt-5.6-luna` with max reasoning. All six schedules remain paused until
-their App and track preflight gates are green.
+use `gpt-5.6-luna` with max reasoning. Activation is controlled by the Codex
+automation records; every run must still pass its App and track preflight
+gates.
 
 ## Worktree ownership
 

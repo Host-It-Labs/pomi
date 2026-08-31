@@ -19,6 +19,11 @@ Single-context repo: use root `CONTEXT.md` and root `docs/adr/`. See `docs/agent
 - For any end-to-end testing work, including writing, updating, running, debugging, or reviewing Playwright tests, read `skills/end-to-end-testing/SKILL.md` before planning, editing, or running tests.
 - Interactive local-development configuration belongs in the ignored root `.env.local`; scheduled automation configuration belongs in the ignored `config/pomi-automation.env`; and local release configuration belongs in the ignored `config/pomi-release.env`. Do not create package-local environment files. `POMI_CURRENT_WORK_SLUG` is optional and may be overridden in the process environment for a specific worktree.
 
+## Scheduled Automation Contract
+
+- Every Pomi Radar scheduled automation must read `docs/agents/automations/GLOBAL.md` before lifecycle work, repository research, external mutation, or file writing. It is the canonical shared safety contract; track-specific automation prompts may add requirements but may not weaken it.
+- Keep the versioned policy and installed prompt records synchronized when either changes. The six parent/child Radar prompts already read `AGENTS.md`; their runtime records are documented in `docs/agents/automations/README.md`.
+
 ## Package And Build
 
 - Use `pnpm`; do not introduce npm or yarn workflows unless explicitly justified.
