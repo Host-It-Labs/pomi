@@ -24,11 +24,14 @@ their App and track preflight gates are green.
 
 ## Worktree ownership
 
-Each run has one mutable worktree owner. Parent and child schedules must not
-overlap in the same path unless the scheduler provides an explicit
-non-overlap guarantee; the one-hour cadence offset is not a lock. Before
-reactivating a schedule, verify its runtime worktree assignment and pause or
-reconfigure any conflicting pair.
+Each run has one mutable worktree owner. A parent and its implementation child
+may share a path when the automation contract explicitly defines a sequential
+handoff and the expected run duration fits the cadence gap. The Feature/Bug,
+Performance, and Security pipelines use a one-hour parent-to-child offset for
+that handoff; it is not a general lock for unrelated or overlapping runs. If a
+run is still active when its child window begins, stop before concurrent
+mutation and report the overlap. Before reactivating a schedule, verify its
+runtime worktree assignment and the intended cadence.
 
 Never use a same-directory or shared-environment fork for a coding or
 file-writing subagent. Writer subagents use separate git worktrees and
