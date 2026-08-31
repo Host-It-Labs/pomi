@@ -7,6 +7,27 @@ file before lifecycle work, repository research, external mutation, or file
 writing. Track-specific prompts may add scope and workflow requirements, but
 must not weaken this contract.
 
+## Startup synchronization
+
+The first phase of every run is startup synchronization. Each installed prompt
+contains this bootstrap sequence so it can be followed before opening the
+versioned lifecycle and policy files:
+
+- Take only the required read-only snapshot of `pwd -P`, the exact expected
+  branch, complete `git status --porcelain --untracked-files=all`, and
+  `git worktree list --porcelain`. A wrong path, branch, or dirty entry is a
+  hard stop.
+- Acquire the durable per-worktree lock before any Git mutation. If acquisition
+  reports an existing owner, stop without reading or changing the checkout.
+- While holding the lock, use the GitHub App helper to fetch both the
+  automation branch's remote-tracking ref and `origin/main` without writing the
+  shared `FETCH_HEAD`. Fast-forward the local branch when it is behind its own
+  remote; preserve an ahead-only branch; stop on divergence. Merge `origin/main`
+  when it is not already an ancestor, and stop on conflict.
+- Recheck the exact worktree, branch, and empty status. Only after this gate
+  succeeds may the run read `AGENTS.md`, this file, lifecycle files, or source
+  code, run preflight, research, delegate, build, or write.
+
 ## Worktree ownership and handoff
 
 - Work only in the dedicated worktree and branch named by the track-specific

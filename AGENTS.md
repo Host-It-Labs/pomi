@@ -22,6 +22,7 @@ Single-context repo: use root `CONTEXT.md` and root `docs/adr/`. See `docs/agent
 ## Scheduled Automation Contract
 
 - Every Pomi Radar scheduled automation must read `docs/agents/automations/GLOBAL.md` before lifecycle work, repository research, external mutation, or file writing. It is the canonical shared safety contract; track-specific automation prompts may add requirements but may not weaken it.
+- The first run phase is startup synchronization: after the required read-only path, branch, status, and worktree snapshot, acquire the per-worktree lock, then synchronize the dedicated branch with its remote-tracking branch and `origin/main` before reading lifecycle files or doing research. Fast-forward when behind, preserve ahead-only work, and stop on divergence or conflict.
 - Keep the versioned policy and installed prompt records synchronized when either changes. The six parent/child Radar prompts already read `AGENTS.md`; their runtime records are documented in `docs/agents/automations/README.md`.
 
 ## Package And Build

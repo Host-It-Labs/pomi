@@ -24,8 +24,10 @@ its child and hands off through the canonical GitHub issue state. Machine-local
 project IDs and environment-file paths remain in Codex and are intentionally not
 required to restore the prompt text.
 
-Every runtime prompt must acquire the durable per-worktree lock before branch
-synchronization and release it on every successful exit. The lock helper and
+Every runtime prompt must begin with startup synchronization: acquire the
+durable per-worktree lock, synchronize its own remote branch and `origin/main`,
+then verify the clean handoff checkout before reading lifecycle files or doing
+other run work. Release the lock on every successful exit. The lock helper and
 its recovery procedure are defined in `GLOBAL.md` and covered by the operations
 tests.
 
