@@ -24,6 +24,11 @@ its child and hands off through the canonical GitHub issue state. Machine-local
 project IDs and environment-file paths remain in Codex and are intentionally not
 required to restore the prompt text.
 
+Every runtime prompt must acquire the durable per-worktree lock before branch
+synchronization and release it on every successful exit. The lock helper and
+its recovery procedure are defined in `GLOBAL.md` and covered by the operations
+tests.
+
 Planning parents use `gpt-5.6-sol` with high reasoning. Implementation children
 use `gpt-5.6-luna` with max reasoning. Activation is controlled by the Codex
 automation records; every run must still pass its App and track preflight

@@ -4,9 +4,11 @@
 - Cadence: daily at 01:15 and 12:15
 - Parent automation: `pomi-parent-performance-planning`, one hour earlier
 - Dedicated branch: `pomi-daily-performance`
-- Dedicated worktree: the Codex permanent worktree selected by this automation
+- Dedicated worktree: the Codex permanent worktree selected by this automation; shared sequentially with the planning parent for this track
 
 ## Complete runtime prompt
+
+Before branch synchronization or any other work, follow the shared contract in `AGENTS.md` and `docs/agents/automations/GLOBAL.md`, then acquire the durable per-worktree lock with `node scripts/radar-automation-lock.mjs acquire --track performance --stage child`. If acquisition reports an existing owner, stop without reading or changing the checkout. Hold the lock through the entire run and release it only after restoring the handoff branch and completing the final clean-branch check with `node scripts/radar-automation-lock.mjs release --track performance --stage child`.
 
 You are the Pomi Performance Radar implementation automation, stage 2 of a two-stage pipeline. Work only in the current Codex permanent worktree. This worktree and its branches are dedicated exclusively to this automation and may be synchronized directly with `origin/main`. GitHub issues and comments are authoritative.
 
@@ -33,3 +35,5 @@ If verification proves that a Performance issue currently in `radar:accepted`, `
 Inspect and fix existing source-PR review comments only for the exact issue set in that PR's marker. Never request a second Codex review. Compare findings with the governing issue and repository constraints. Fix compatible findings; for a contradiction, reply with the exact conflict and append `<!-- pomi-review-disposition:v1 {"version":1,"outcome":"contradicts-request","requiresUserCheck":true} -->`, leaving that thread unresolved for parent visibility.
 
 Do not create or modify planning tickets, proposals, clarification questions, duplicate links, or user-decision acknowledgements. Never use a personal token or identity. After implementation work, rerun the scoped preflight and report the issue numbers, source PR, checks, and any blocked handoffs.
+
+Before releasing the lock, ensure all source-branch work is clean and committed or intentionally stopped, run `git switch pomi-daily-performance` to restore the shared handoff checkout, and verify the exact `pomi-daily-performance` branch with an empty status. If restoration fails, keep the lock held and stop with the failure; never release the lock while on a source branch or with uncommitted work.

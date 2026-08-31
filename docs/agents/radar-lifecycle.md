@@ -147,8 +147,13 @@ their automation contract explicitly defines a sequential handoff and the
 expected run duration fits the cadence gap. The Feature/Bug, Performance, and
 Security pipelines use a one-hour parent-to-child offset as that handoff
 contract; the offset is not a general lock for unrelated or overlapping runs.
-If a run is still active when its child window begins, stop before concurrent
-mutation and report the overlap. Never use a same-directory or
+Before branch synchronization, acquire the durable per-worktree lock with
+`node scripts/radar-automation-lock.mjs acquire --track <track> --stage
+<parent|child>`. If it reports an existing owner, stop without reading or
+changing the checkout. Hold the lock until the final clean-branch check and
+release it with the matching `release` command. If a run is still active when
+its child window begins, the lock prevents concurrent mutation; report the
+overlap rather than taking it over. Never use a same-directory or
 shared-environment fork for a coding or file-writing subagent. Writer
 subagents use separate git worktrees and branches; read-only subagents must be
 explicitly labeled and must not edit, generate artifacts, install dependencies,

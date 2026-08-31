@@ -11,6 +11,14 @@ must not weaken this contract.
 
 - Work only in the dedicated worktree and branch named by the track-specific
   prompt.
+- Before branch synchronization or any other run work, acquire the durable
+  per-worktree lock with `node scripts/radar-automation-lock.mjs acquire --track
+  <track> --stage <parent|child>`. If acquisition reports an existing owner,
+  stop without reading or changing the checkout. Hold the lock for the entire
+  run and release it only after the final clean-branch check with `node
+  scripts/radar-automation-lock.mjs release --track <track> --stage
+  <parent|child>`. Recover a lock only after verifying that no run is active,
+  using the explicit `recover --confirm` command.
 - Before lifecycle work, research, delegation, synchronization, or writing,
   capture `pwd -P`, the exact branch, complete
   `git status --porcelain --untracked-files=all`, and
@@ -27,6 +35,10 @@ must not weaken this contract.
   shared-environment fork for a coding or file-writing subagent. Writer
   subagents need separate worktrees and branches; read-only subagents must be
   explicitly labeled and have no file-writing side effects.
+- Every exit path after successful acquisition must release the lock. For an
+  early no-work or checkout-gate stop, make no checkout changes, report the
+  gate, and release the lock; if restoration cannot be completed, keep the
+  lock held for manual recovery instead.
 
 ## Synchronization, credentials, and external writes
 
@@ -42,7 +54,10 @@ must not weaken this contract.
   discard commits or silently repair a checkout.
 - Parents plan and hand off through canonical GitHub issues. Children implement
   only accepted work and own source branches, PRs, tests, CI, and compatible
-  review fixes. Do not cross those ownership boundaries.
+  review fixes. Before releasing the lock, implementation children must return
+  the shared checkout to the exact handoff branch named by their prompt and
+  verify an empty status. Do not release the lock while on a source branch or
+  with uncommitted work. Do not cross those ownership boundaries.
 
 ## Verification and reporting
 
