@@ -5,6 +5,12 @@ automations: three planning parents and three implementation children. The
 Codex automation records remain the runtime schedules; when a prompt changes,
 update its matching file here in the same change.
 
+The shared runtime safety contract is `GLOBAL.md`, reinforced by the
+Scheduled Automation Contract section in the repository root `AGENTS.md`.
+Every scheduled prompt reads both before lifecycle work, repository research,
+external mutation, or file writing. Track prompts contain only their
+track-specific scope and workflow additions.
+
 Prompt synchronization is manual in both directions. Editing a prompt in this
 repository does not update the installed Codex automation, and editing an
 installed automation does not update its Markdown backup. Before handing a
@@ -18,17 +24,26 @@ its child and hands off through the canonical GitHub issue state. Machine-local
 project IDs and environment-file paths remain in Codex and are intentionally not
 required to restore the prompt text.
 
+Every runtime prompt must acquire the durable per-worktree lock before branch
+synchronization and release it on every successful exit. The lock helper and
+its recovery procedure are defined in `GLOBAL.md` and covered by the operations
+tests.
+
 Planning parents use `gpt-5.6-sol` with high reasoning. Implementation children
-use `gpt-5.6-luna` with max reasoning. All six schedules remain paused until
-their App and track preflight gates are green.
+use `gpt-5.6-luna` with max reasoning. Activation is controlled by the Codex
+automation records; every run must still pass its App and track preflight
+gates.
 
 ## Worktree ownership
 
-Each run has one mutable worktree owner. Parent and child schedules must not
-overlap in the same path unless the scheduler provides an explicit
-non-overlap guarantee; the one-hour cadence offset is not a lock. Before
-reactivating a schedule, verify its runtime worktree assignment and pause or
-reconfigure any conflicting pair.
+Each run has one mutable worktree owner. A parent and its implementation child
+may share a path when the automation contract explicitly defines a sequential
+handoff and the expected run duration fits the cadence gap. The Feature/Bug,
+Performance, and Security pipelines use a one-hour parent-to-child offset for
+that handoff; it is not a general lock for unrelated or overlapping runs. If a
+run is still active when its child window begins, stop before concurrent
+mutation and report the overlap. Before reactivating a schedule, verify its
+runtime worktree assignment and the intended cadence.
 
 Never use a same-directory or shared-environment fork for a coding or
 file-writing subagent. Writer subagents use separate git worktrees and

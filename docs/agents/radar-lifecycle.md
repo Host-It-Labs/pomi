@@ -142,14 +142,22 @@ record the remaining choice and recommended assumption, move to
 ## Scheduled preflight
 
 Worktree ownership is a hard concurrency gate. Each automation run has one
-mutable worktree owner. Parent and child automations may share a path only when
-the scheduler guarantees that their runs cannot overlap; a one-hour offset is
-not itself a lock. If two active automations are configured for the same path
-without that guarantee, pause or reconfigure them before running. Never use a
-same-directory or shared-environment fork for a coding or file-writing
-subagent. Writer subagents use separate git worktrees and branches; read-only
-subagents must be explicitly labeled and must not edit, generate artifacts,
-install dependencies, or run commands with file-writing side effects.
+mutable worktree owner. Parent and child automations may share a path when
+their automation contract explicitly defines a sequential handoff and the
+expected run duration fits the cadence gap. The Feature/Bug, Performance, and
+Security pipelines use a one-hour parent-to-child offset as that handoff
+contract; the offset is not a general lock for unrelated or overlapping runs.
+Before branch synchronization, acquire the durable per-worktree lock with
+`node scripts/radar-automation-lock.mjs acquire --track <track> --stage
+<parent|child>`. If it reports an existing owner, stop without reading or
+changing the checkout. Hold the lock until the final clean-branch check and
+release it with the matching `release` command. If a run is still active when
+its child window begins, the lock prevents concurrent mutation; report the
+overlap rather than taking it over. Never use a same-directory or
+shared-environment fork for a coding or file-writing subagent. Writer
+subagents use separate git worktrees and branches; read-only subagents must be
+explicitly labeled and must not edit, generate artifacts, install dependencies,
+or run commands with file-writing side effects.
 
 Before lifecycle preflight, verify the automation is in its dedicated worktree
 and expected branch, and require a clean worktree. Capture the resolved current
