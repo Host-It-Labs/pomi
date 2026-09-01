@@ -1,8 +1,15 @@
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class UpdatePushTokenDto {
   @IsString()
   @IsOptional()
+  @IsNotEmpty()
   @MaxLength(4096)
   token: string | null;
 

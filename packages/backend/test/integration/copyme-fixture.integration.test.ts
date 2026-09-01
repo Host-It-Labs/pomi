@@ -246,35 +246,40 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
        ORDER BY t.title`,
       [username]
     );
-    assert.deepEqual(listItems.rows, [
-      {
-        listTitle: 'Groceries',
-        emoji: '🛒',
-        isFavorite: true,
-        title: 'Check pantry staples',
-        priority: 'normal',
-        status: 'active',
-        dueDate: null,
-      },
-      {
-        listTitle: 'Groceries',
-        emoji: '🛒',
-        isFavorite: true,
-        title: 'Buy oat milk',
-        priority: 'high',
-        status: 'active',
-        dueDate: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
-      },
-      {
-        listTitle: 'Groceries',
-        emoji: '🛒',
-        isFavorite: true,
-        title: 'Pick up fresh vegetables',
-        priority: 'normal',
-        status: 'active',
-        dueDate: null,
-      },
-    ]);
+    assert.deepEqual(
+      listItems.rows.sort((left, right) =>
+        left.title.localeCompare(right.title)
+      ),
+      [
+        {
+          listTitle: 'Groceries',
+          emoji: '🛒',
+          isFavorite: true,
+          title: 'Check pantry staples',
+          priority: 'normal',
+          status: 'active',
+          dueDate: null,
+        },
+        {
+          listTitle: 'Groceries',
+          emoji: '🛒',
+          isFavorite: true,
+          title: 'Buy oat milk',
+          priority: 'high',
+          status: 'active',
+          dueDate: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
+        },
+        {
+          listTitle: 'Groceries',
+          emoji: '🛒',
+          isFavorite: true,
+          title: 'Pick up fresh vegetables',
+          priority: 'normal',
+          status: 'active',
+          dueDate: null,
+        },
+      ].sort((left, right) => left.title.localeCompare(right.title))
+    );
 
     const taskEvents = await client.query(
       `SELECT

@@ -991,6 +991,14 @@ describe('timer, user-action, user, and Watch DTO validation', () => {
       platform: 'android',
     });
     await expectValid(UpdatePushTokenDto, { token: 'token', platform: 'ios' });
+    await expectValid(UpdatePushTokenDto, {
+      token: 'token',
+      platform: 'ios-live-activity',
+    });
+    await expectValid(UpdatePushTokenDto, {
+      token: null,
+      platform: 'ios-live-activity',
+    });
     await expectInvalid(
       UpdatePushTokenDto,
       { token: '', platform: 'web' },
