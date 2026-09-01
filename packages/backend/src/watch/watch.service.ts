@@ -20,9 +20,11 @@ import {
 import { AssistantService } from '../assistant/assistant.service';
 import { Intention } from '../intentions/intentions.entity';
 import { IntentionsService } from '../intentions/intentions.service';
+import { PomiLogger } from '../logging/pomi-logger';
 import { PreferencesService } from '../preferences/preferences.service';
 import { TaskEntity } from '../tasks/tasks.entity';
 import { TasksService } from '../tasks/tasks.service';
+import type { WatchTaskQueryResult } from '../tasks/tasks.service';
 import { TimerService } from '../timer/timer.service';
 
 const DEFAULT_TASK_LIMIT = 4;
@@ -38,6 +40,8 @@ const PRIORITY_RANK: Record<TaskPriority, number> = {
 
 @Injectable()
 export class WatchService {
+  private readonly logger = new PomiLogger(WatchService.name);
+
   constructor(
     private readonly timerService: TimerService,
     private readonly tasksService: TasksService,
@@ -52,37 +56,32 @@ export class WatchService {
   ): Promise<WatchStatus> {
     const taskMode = options.taskMode ?? 'intention';
     const limit = this.normalizeTaskLimit(options.limit);
-    const [timer, preferences, assistantStatus, activeTasks] =
-      await Promise.all([
-        this.timerService.getTimerByUserId(userId),
-        this.preferencesService.getPreferences(userId),
-        this.assistantService.getStatus(userId),
-        this.tasksService.getActiveTasks(userId),
-      ]);
+    const [timer, preferences, assistantStatus] = await Promise.all([
+      this.timerService.getTimerByUserId(userId),
+      this.preferencesService.getPreferences(userId),
+      this.assistantService.getStatus(userId),
+    ]);
+    const now = this.getNow();
+    const taskSnapshot = preferences.tasksExtension
+      ? await this.getWatchTaskSnapshot(
+          userId,
+          timer,
+          preferences,
+          taskMode,
+          limit,
+          now
+        )
+      : this.emptyWatchTaskSnapshot();
+    const activeTasks = taskSnapshot.tasks;
     const intentionsBySlug = await this.loadIntentionsBySlug(
       userId,
       timer,
       activeTasks
     );
-    const currentTaskType = timer?.type ?? TIMER_TYPES.WORK;
-    const activeTasksForTimer = activeTasks.filter(
-      task => task.timerType === currentTaskType
-    );
     const timerSummary = this.formatTimer(timer, intentionsBySlug);
-    const visibleTasks = preferences.tasksExtension
-      ? this.buildTaskView(activeTasksForTimer, timer, preferences, taskMode)
-      : [];
-    const tasks = visibleTasks
-      .slice(0, limit)
-      .map(task =>
-        this.formatTask(
-          task,
-          timer,
-          preferences,
-          intentionsBySlug,
-          this.getNow()
-        )
-      );
+    const tasks = activeTasks.map(task =>
+      this.formatTask(task, timer, preferences, intentionsBySlug, now)
+    );
     const requiresIntentionSelection =
       await this.requiresIntentionSelectionForStart(userId, timer, preferences);
 
@@ -116,10 +115,141 @@ export class WatchService {
         resetWorkOnFirstIntention: preferences.resetWorkOnFirstIntention,
       },
       tasks,
+      totalVisibleTasks: taskSnapshot.totalVisibleTasks,
+      totalActiveTasks: taskSnapshot.totalActiveTasks,
+    };
+  }
+
+  private async getWatchTaskSnapshot(
+    userId: string,
+    timer: Timer | null,
+    preferences: Preferences,
+    taskMode: WatchTaskMode,
+    limit: number,
+    now: Date
+  ): Promise<WatchTaskQueryResult> {
+    const currentTaskType = timer?.type ?? TIMER_TYPES.WORK;
+    const options = {
+      timerType: currentTaskType,
+      taskMode,
+      timerIntentions: this.getTimerIntentions(timer).map(slug => ({
+        slug,
+        subIntentionSlug: this.getTimerSubIntention(timer, slug) ?? null,
+      })),
+      limit,
+      now,
+      timeZone: preferences.timeZone,
+    };
+    const legacy = () =>
+      this.getLegacyWatchTaskSnapshot(
+        userId,
+        timer,
+        preferences,
+        taskMode,
+        limit,
+        now
+      );
+
+    const queryMode = this.getWatchTaskQueryMode();
+    if (queryMode === 'legacy') return legacy();
+
+    if (queryMode === 'shadow') {
+      try {
+        const [bounded, legacySnapshot] = await Promise.all([
+          this.tasksService.getWatchTaskSnapshot(userId, options),
+          legacy(),
+        ]);
+        if (!this.watchTaskSnapshotsMatch(bounded, legacySnapshot)) {
+          this.logger.warn(
+            `Bounded Watch Task query differs from legacy results for user ${userId}`
+          );
+        }
+        return bounded;
+      } catch (error) {
+        this.logger.warn(
+          `Bounded Watch Task query failed during shadow comparison; using legacy results: ${error}`
+        );
+        return legacy();
+      }
+    }
+
+    try {
+      return await this.tasksService.getWatchTaskSnapshot(userId, options);
+    } catch (error) {
+      this.logger.warn(
+        `Bounded Watch Task query failed; using legacy results: ${error}`
+      );
+      return legacy();
+    }
+  }
+
+  private async getLegacyWatchTaskSnapshot(
+    userId: string,
+    timer: Timer | null,
+    preferences: Preferences,
+    taskMode: WatchTaskMode,
+    limit: number,
+    now: Date
+  ): Promise<WatchTaskQueryResult> {
+    const activeTasks = await this.tasksService.getActiveTasks(userId);
+    const currentTaskType = timer?.type ?? TIMER_TYPES.WORK;
+    const activeTasksForTimer = activeTasks.filter(
+      task => task.timerType === currentTaskType
+    );
+    const visibleTasks = this.buildTaskView(
+      activeTasksForTimer,
+      timer,
+      preferences,
+      taskMode,
+      now
+    );
+    return {
+      tasks: visibleTasks.slice(0, limit),
       totalVisibleTasks: visibleTasks.length,
-      totalActiveTasks: preferences.tasksExtension
-        ? activeTasksForTimer.length
-        : 0,
+      totalActiveTasks: activeTasksForTimer.length,
+    };
+  }
+
+  private emptyWatchTaskSnapshot(): WatchTaskQueryResult {
+    return { tasks: [], totalVisibleTasks: 0, totalActiveTasks: 0 };
+  }
+
+  private getWatchTaskQueryMode(): 'bounded' | 'legacy' | 'shadow' {
+    const mode = process.env.POMI_WATCH_STATUS_TASK_QUERY_MODE;
+    return mode === 'legacy' || mode === 'shadow' ? mode : 'bounded';
+  }
+
+  private watchTaskSnapshotsMatch(
+    bounded: WatchTaskQueryResult,
+    legacy: WatchTaskQueryResult
+  ) {
+    if (
+      bounded.totalActiveTasks !== legacy.totalActiveTasks ||
+      bounded.totalVisibleTasks !== legacy.totalVisibleTasks
+    ) {
+      return false;
+    }
+
+    return (
+      JSON.stringify(bounded.tasks.map(task => this.watchTaskKey(task))) ===
+      JSON.stringify(legacy.tasks.map(task => this.watchTaskKey(task)))
+    );
+  }
+
+  private watchTaskKey(task: TaskEntity) {
+    return {
+      id: task.id,
+      title: task.title,
+      priority: task.priority,
+      timerType: task.timerType,
+      dueDate: task.dueDate,
+      dueTime: task.dueTime,
+      manualOrder: task.manualOrder,
+      manualOrderOverride: task.manualOrderOverride,
+      pinnedAt: task.pinnedAt?.toISOString() ?? null,
+      intentionSlug: task.intentionSlug,
+      subIntentionSlug: task.subIntentionSlug,
+      followUpParent: task.followUpParent ?? null,
     };
   }
 
@@ -295,7 +425,8 @@ export class WatchService {
     tasks: TaskEntity[],
     timer: Timer | null,
     preferences: Preferences,
-    mode: WatchTaskMode
+    mode: WatchTaskMode,
+    now: Date
   ) {
     const focusedOrder = this.getPinnedOrder(tasks);
     const hasTimerFilter = this.getTimerIntentions(timer).length > 0;
@@ -309,8 +440,6 @@ export class WatchService {
               !task.intentionSlug
           );
     const sortMode = mode === 'intention' && hasTimerFilter ? mode : 'general';
-    const now = this.getNow();
-
     return this.applyManualOverrides(
       [...filteredTasks].sort((a, b) =>
         this.compareTasksForView(
@@ -545,7 +674,9 @@ export class WatchService {
     return timer?.intentionSlugs ?? (timer?.intention ? [timer.intention] : []);
   }
 
-  private getTimerSubIntention(timer: Timer, slug: string) {
+  private getTimerSubIntention(timer: Timer | null, slug: string) {
+    if (!timer) return undefined;
+
     return (
       timer.subIntentions?.[slug] ??
       (timer.intention === slug ? timer.subIntention : undefined)

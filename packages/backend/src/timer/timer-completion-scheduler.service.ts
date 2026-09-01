@@ -9,11 +9,12 @@ import {
 
 const SCHEDULER_LEASE_MS = 10_000;
 const LEADER_RETRY_MS = 1_000;
-const LEGACY_MODE_POLL_MS = 1_000;
-const ACTIVE_POLL_MS = 100;
+const SCHEDULER_RENEWAL_BOUND_MS = SCHEDULER_LEASE_MS / 2;
+const SCHEDULE_FALLBACK_POLL_MS = 5_000;
 const CLAIM_BATCH_SIZE = 100;
 const CLAIM_CONCURRENCY = 20;
 const RECONCILE_SCAN_SIZE = 250;
+type SchedulerWakeMode = 'pubsub' | 'poll';
 
 @Injectable()
 export class TimerCompletionSchedulerService
@@ -25,18 +26,32 @@ export class TimerCompletionSchedulerService
   private stopping = false;
   private loopPromise: Promise<void> | null = null;
   private leaderToken: string | null = null;
+  private scheduleWakeRequested = false;
+  private scheduleWakeResolver: (() => void) | null = null;
 
   constructor(
     private readonly timerStore: TimerStore,
     private readonly preferencesService: PreferencesService
   ) {}
 
-  onModuleInit(): void {
+  async onModuleInit(): Promise<void> {
+    if (this.getScheduleWakeMode() === 'pubsub') {
+      try {
+        await this.timerStore.startTimerScheduleWakeListener(() =>
+          this.requestScheduleWake()
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to subscribe to Timer schedule wakeups; using bounded fallback: ${error}`
+        );
+      }
+    }
     this.loopPromise = this.runLoop();
   }
 
   async onModuleDestroy(): Promise<void> {
     this.stopping = true;
+    this.requestScheduleWake();
     if (this.leaderToken) {
       await this.timerStore
         .releaseTimerCompletionScheduler(this.leaderToken)
@@ -45,6 +60,9 @@ export class TimerCompletionSchedulerService
         });
       this.leaderToken = null;
     }
+    await this.timerStore.stopTimerScheduleWakeListener().catch(error => {
+      this.logger.warn(`Failed to stop Timer scheduler wakeups: ${error}`);
+    });
     if (!this.loopPromise) return;
     let timeout: NodeJS.Timeout | undefined;
     const gracePeriod = new Promise<void>(resolve => {
@@ -58,15 +76,16 @@ export class TimerCompletionSchedulerService
     while (!this.stopping) {
       try {
         if (!(await this.ensureLeadership())) {
-          await this.wait(LEADER_RETRY_MS);
+          await this.waitForScheduleWake(LEADER_RETRY_MS);
           continue;
         }
         if (!(await this.ensureScheduleReady())) {
-          await this.wait(LEADER_RETRY_MS);
+          await this.waitForScheduleWake(LEADER_RETRY_MS);
           continue;
         }
         const redisNow = await this.timerStore.getRedisTimeMs();
-        if ((await this.timerStore.getIdleDetectionMode()) === 'durable') {
+        const idleMode = await this.timerStore.getIdleDetectionMode();
+        if (idleMode === 'durable') {
           const dueIdle = await this.timerStore.getDueIdleDetections(
             redisNow,
             CLAIM_BATCH_SIZE
@@ -76,20 +95,19 @@ export class TimerCompletionSchedulerService
             continue;
           }
         }
-        if ((await this.timerStore.getTimerCompletionMode()) !== 'stream') {
-          await this.wait(LEGACY_MODE_POLL_MS);
-          continue;
+        const completionMode = await this.timerStore.getTimerCompletionMode();
+        if (completionMode === 'stream') {
+          const due = await this.timerStore.getDueTimerCompletions(
+            redisNow,
+            CLAIM_BATCH_SIZE
+          );
+          if (due.length > 0) {
+            await this.processWithConcurrency(due);
+            continue;
+          }
         }
 
-        const due = await this.timerStore.getDueTimerCompletions(
-          redisNow,
-          CLAIM_BATCH_SIZE
-        );
-        if (due.length === 0) {
-          await this.wait(ACTIVE_POLL_MS);
-          continue;
-        }
-        await this.processWithConcurrency(due);
+        await this.waitForNextSchedule(redisNow, completionMode, idleMode);
       } catch (error) {
         if (this.stopping) return;
         this.logger.error(
@@ -97,7 +115,7 @@ export class TimerCompletionSchedulerService
           error
         );
         this.leaderToken = null;
-        await this.wait(LEADER_RETRY_MS);
+        await this.waitForScheduleWake(LEADER_RETRY_MS);
       }
     }
   }
@@ -320,7 +338,61 @@ export class TimerCompletionSchedulerService
     }
   }
 
-  private wait(delayMs: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, delayMs));
+  private async waitForNextSchedule(
+    redisNow: number,
+    completionMode: 'legacy' | 'stream',
+    idleMode: 'legacy' | 'durable'
+  ): Promise<void> {
+    const [completionDeadline, idleDeadline] = await Promise.all([
+      completionMode === 'stream'
+        ? this.timerStore.getNextTimerCompletionDeadline()
+        : Promise.resolve(null),
+      idleMode === 'durable'
+        ? this.timerStore.getNextIdleDetectionDeadline()
+        : Promise.resolve(null),
+    ]);
+    const deadlines = [completionDeadline, idleDeadline].filter(
+      (deadline): deadline is number => deadline !== null
+    );
+    const nextDeadline = deadlines.length > 0 ? Math.min(...deadlines) : null;
+    const untilDeadline =
+      nextDeadline === null
+        ? SCHEDULE_FALLBACK_POLL_MS
+        : Math.max(0, nextDeadline - redisNow);
+    await this.waitForScheduleWake(
+      Math.min(untilDeadline, SCHEDULER_RENEWAL_BOUND_MS)
+    );
+  }
+
+  private getScheduleWakeMode(): SchedulerWakeMode {
+    return process.env.POMI_TIMER_SCHEDULER_WAKE_MODE === 'poll'
+      ? 'poll'
+      : 'pubsub';
+  }
+
+  private waitForScheduleWake(delayMs: number): Promise<void> {
+    if (this.stopping || this.scheduleWakeRequested || delayMs <= 0) {
+      this.scheduleWakeRequested = false;
+      return Promise.resolve();
+    }
+
+    return new Promise(resolve => {
+      let timeout: NodeJS.Timeout | undefined;
+      const finish = () => {
+        if (timeout) clearTimeout(timeout);
+        if (this.scheduleWakeResolver === finish) {
+          this.scheduleWakeResolver = null;
+        }
+        this.scheduleWakeRequested = false;
+        resolve();
+      };
+      this.scheduleWakeResolver = finish;
+      timeout = setTimeout(finish, delayMs);
+    });
+  }
+
+  private requestScheduleWake(): void {
+    this.scheduleWakeRequested = true;
+    this.scheduleWakeResolver?.();
   }
 }

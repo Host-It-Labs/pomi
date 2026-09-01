@@ -116,6 +116,15 @@ describe('TimerCompletionSchedulerService', () => {
     ).toBeNull();
   });
 
+  it('wakes an idle scheduler before its bounded fallback timeout', async () => {
+    const service = createService();
+    const waiting = internals(service).waitForScheduleWake(60_000);
+
+    internals(service).requestScheduleWake();
+
+    await expect(waiting).resolves.toBeUndefined();
+  });
+
   it('reconciles Timer keys before marking the schedule ready', async () => {
     const reconcile = vi.fn(async () => 'scheduled');
     const markReady = vi.fn(async () => true);
@@ -194,6 +203,12 @@ describe('TimerCompletionSchedulerService', () => {
         claimTimerCompletionScheduler: vi.fn(async () => 'leader-1'),
         renewTimerCompletionScheduler: vi.fn(async () => true),
         releaseTimerCompletionScheduler: vi.fn(async () => true),
+        startTimerScheduleWakeListener: vi.fn(async () => undefined),
+        stopTimerScheduleWakeListener: vi.fn(async () => undefined),
+        getIdleDetectionMode: vi.fn(async () => 'legacy'),
+        getTimerCompletionMode: vi.fn(async () => 'legacy'),
+        getNextTimerCompletionDeadline: vi.fn(async () => null),
+        getNextIdleDetectionDeadline: vi.fn(async () => null),
         claimScheduledTimerCompletion: vi.fn(async () => ({ kind: 'claimed' })),
         removeMalformedTimerCompletion: vi.fn(async () => true),
         isTimerCompletionScheduleReady: vi.fn(async () => true),
@@ -251,6 +266,8 @@ describe('TimerCompletionSchedulerService', () => {
         },
         leaderToken: string
       ): Promise<void>;
+      waitForScheduleWake(delayMs: number): Promise<void>;
+      requestScheduleWake(): void;
     };
   }
 });

@@ -33,6 +33,7 @@ export const TIMER_COMPLETION_SCHEDULE_READY_KEY =
   'pomi:timer-schedules:completion:ready:v1';
 export const TIMER_COMPLETION_SCHEDULE_QUARANTINE_KEY =
   'pomi:timer-schedules:completion:quarantine:v1';
+export const TIMER_SCHEDULE_WAKE_CHANNEL = 'pomi:timer-schedules:wake:v1';
 export const TIMER_IDLE_SCHEDULE_KEY = 'pomi:timer-schedules:idle:v1';
 export const TIMER_IDLE_SCHEDULE_READY_KEY =
   'pomi:timer-schedules:idle:ready:v1';
@@ -797,9 +798,69 @@ export class TimerStore {
   private readonly redis: Redis;
   private readonly currentTimerPattern = 'user:*:current_timer';
   private readonly lastCompletionPattern = 'user:*:last_timer_completion';
+  private scheduleWakeSubscriber: Redis | null = null;
+  private scheduleWakeListener: (() => void) | null = null;
+  private scheduleWakeMessageHandler:
+    ((channel: string, message: string) => void) | null = null;
+  private scheduleWakeErrorHandler: (() => void) | null = null;
 
   constructor(@Inject(REDIS_CLIENT) redis: Redis) {
     this.redis = redis;
+  }
+
+  async startTimerScheduleWakeListener(onWake: () => void): Promise<void> {
+    this.scheduleWakeListener = onWake;
+    if (this.scheduleWakeSubscriber) return;
+
+    const subscriber = this.redis.duplicate();
+    const onMessage = (channel: string) => {
+      if (channel === TIMER_SCHEDULE_WAKE_CHANNEL) {
+        this.scheduleWakeListener?.();
+      }
+    };
+    const onError = () => this.scheduleWakeListener?.();
+    this.scheduleWakeSubscriber = subscriber;
+    this.scheduleWakeMessageHandler = onMessage;
+    this.scheduleWakeErrorHandler = onError;
+    subscriber.on('message', onMessage);
+    subscriber.on('error', onError);
+
+    try {
+      await subscriber.subscribe(TIMER_SCHEDULE_WAKE_CHANNEL);
+    } catch (error) {
+      subscriber.off('message', onMessage);
+      subscriber.off('error', onError);
+      this.scheduleWakeSubscriber = null;
+      this.scheduleWakeMessageHandler = null;
+      this.scheduleWakeErrorHandler = null;
+      this.scheduleWakeListener = null;
+      subscriber.disconnect();
+      throw error;
+    }
+  }
+
+  async stopTimerScheduleWakeListener(): Promise<void> {
+    const subscriber = this.scheduleWakeSubscriber;
+    if (!subscriber) {
+      this.scheduleWakeListener = null;
+      return;
+    }
+
+    const onMessage = this.scheduleWakeMessageHandler;
+    const onError = this.scheduleWakeErrorHandler;
+    this.scheduleWakeSubscriber = null;
+    this.scheduleWakeMessageHandler = null;
+    this.scheduleWakeErrorHandler = null;
+    this.scheduleWakeListener = null;
+    if (onMessage) subscriber.off('message', onMessage);
+    if (onError) subscriber.off('error', onError);
+
+    try {
+      await subscriber.unsubscribe(TIMER_SCHEDULE_WAKE_CHANNEL);
+    } catch {
+      // Disconnect below also handles a subscriber whose Redis connection is down.
+    }
+    subscriber.disconnect();
   }
 
   async getCurrentTimer(userId: string): Promise<Timer | null> {
@@ -909,6 +970,7 @@ export class TimerStore {
     }
 
     const committed = JSON.parse(raw[1] as string) as Timer;
+    await this.notifyTimerScheduleWake();
     return { kind: 'updated', timer: committed };
   }
 
@@ -977,6 +1039,7 @@ export class TimerStore {
         current: raw[1] ? (JSON.parse(raw[1]) as Timer) : null,
       };
     }
+    if (raw[0] === 1) await this.notifyTimerScheduleWake();
     return {
       kind: raw[0] === 1 ? 'applied' : 'already-applied',
       timer: JSON.parse(raw[1] as string) as Timer,
@@ -1072,6 +1135,7 @@ export class TimerStore {
       randomUUID(),
       this.completionScheduleMember(userId)
     )) as string | null;
+    if (raw) await this.notifyTimerScheduleWake();
     return raw ? (JSON.parse(raw) as Timer) : null;
   }
 
@@ -1110,6 +1174,7 @@ export class TimerStore {
     if (!raw) {
       return null;
     }
+    await this.notifyTimerScheduleWake();
     return {
       timer: JSON.parse(raw[0]) as Timer,
       mode: raw[1],
@@ -1198,6 +1263,10 @@ export class TimerStore {
     return due;
   }
 
+  async getNextTimerCompletionDeadline(): Promise<number | null> {
+    return this.getNextScheduleDeadline(TIMER_COMPLETION_SCHEDULE_KEY);
+  }
+
   async getDueIdleDetections(
     now: number,
     limit: number
@@ -1226,6 +1295,10 @@ export class TimerStore {
       }
     }
     return due;
+  }
+
+  async getNextIdleDetectionDeadline(): Promise<number | null> {
+    return this.getNextScheduleDeadline(TIMER_IDLE_SCHEDULE_KEY);
   }
 
   async scheduleIdleDetection(
@@ -1321,6 +1394,7 @@ export class TimerStore {
       JSON.stringify(currentTimer),
       runtimeRevision
     )) as 'scheduled' | 'stale' | 'lost-leader';
+    if (result !== 'lost-leader') await this.notifyTimerScheduleWake();
     return result;
   }
 
@@ -1345,6 +1419,7 @@ export class TimerStore {
       this.idleScheduleMember(userId)
     )) as number;
     if (removed === -1) return false;
+    await this.notifyTimerScheduleWake();
     return true;
   }
 
@@ -1386,6 +1461,7 @@ export class TimerStore {
       leaderToken,
       this.completionScheduleMember(userId)
     )) as string[];
+    if (raw[0] !== 'lost-leader') await this.notifyTimerScheduleWake();
     if (raw[0] !== 'claimed') {
       return {
         kind: raw[0] as Exclude<
@@ -1453,6 +1529,7 @@ export class TimerStore {
       this.idleScheduleMember(userId),
       randomUUID()
     )) as number;
+    if (claimed === 1) await this.notifyTimerScheduleWake();
     return claimed === 1;
   }
 
@@ -1477,6 +1554,7 @@ export class TimerStore {
       expectedDeadline,
       leaderToken
     )) as number;
+    if (removed === 1) await this.notifyTimerScheduleWake();
     return removed === 1;
   }
 
@@ -1564,6 +1642,7 @@ export class TimerStore {
       .del(TIMER_IDLE_SCHEDULE_READY_KEY)
       .incr(TIMER_IDLE_SCHEDULE_GENERATION_KEY)
       .exec();
+    await this.notifyTimerScheduleWake();
   }
 
   async markIdleDetectionScheduleReady(
@@ -1669,6 +1748,7 @@ export class TimerStore {
       TIMER_STATUSES.RUNNING,
       userId
     )) as TimerScheduleReconcileResult;
+    if (raw !== 'lost-leader') await this.notifyTimerScheduleWake();
     return raw;
   }
 
@@ -1695,6 +1775,7 @@ export class TimerStore {
       expectedDeadline,
       leaderToken
     )) as number;
+    if (removed === 1) await this.notifyTimerScheduleWake();
     return removed === 1;
   }
 
@@ -1730,6 +1811,7 @@ export class TimerStore {
       userId,
       leaderToken
     )) as string[];
+    if (raw[0] !== 'lost-leader') await this.notifyTimerScheduleWake();
     if (raw[0] !== 'claimed') {
       return {
         kind: raw[0] as Exclude<
@@ -1906,6 +1988,7 @@ export class TimerStore {
     multi.set(this.runtimeRevisionKey(userId), randomUUID());
 
     await multi.exec();
+    await this.notifyTimerScheduleWake();
   }
 
   private async importUserDataIfCurrentTimerMatches(
@@ -2112,6 +2195,20 @@ export class TimerStore {
     return Array.from(keys);
   }
 
+  private async getNextScheduleDeadline(key: string): Promise<number | null> {
+    const raw = await this.redis.zrange(key, 0, 0, 'WITHSCORES');
+    const deadline = Number(raw[1]);
+    return Number.isSafeInteger(deadline) && deadline >= 0 ? deadline : null;
+  }
+
+  private async notifyTimerScheduleWake(): Promise<void> {
+    try {
+      await this.redis.publish(TIMER_SCHEDULE_WAKE_CHANNEL, 'changed');
+    } catch {
+      // The scheduler's bounded fallback scan keeps a lost wakeup safe.
+    }
+  }
+
   private async getTimerHistory(key: string): Promise<TimerHistoryEntry[]> {
     const entries = await this.redis.lrange(key, 0, -1);
     return entries.map(entry => JSON.parse(entry) as TimerHistoryEntry);
@@ -2179,6 +2276,7 @@ export class TimerStore {
       .incr(TIMER_IDLE_SCHEDULE_GENERATION_KEY)
       .set(this.runtimeRevisionKey(userId), randomUUID())
       .exec();
+    await this.notifyTimerScheduleWake();
   }
 
   async clearLastCompletionTimestamp(userId: string): Promise<void> {
@@ -2188,6 +2286,7 @@ export class TimerStore {
       .zrem(TIMER_IDLE_SCHEDULE_KEY, this.idleScheduleMember(userId))
       .set(this.runtimeRevisionKey(userId), randomUUID())
       .exec();
+    await this.notifyTimerScheduleWake();
   }
 
   async isIdleDetected(userId: string): Promise<boolean> {
@@ -2203,6 +2302,7 @@ export class TimerStore {
       .zrem(TIMER_IDLE_SCHEDULE_KEY, this.idleScheduleMember(userId))
       .set(this.runtimeRevisionKey(userId), randomUUID())
       .exec();
+    await this.notifyTimerScheduleWake();
   }
 
   async clearIdleDetected(userId: string): Promise<void> {
