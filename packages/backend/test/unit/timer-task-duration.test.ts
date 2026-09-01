@@ -58,6 +58,8 @@ function createService(
       emitExtensionStateUpdate: vi.fn(),
     },
     snapshotRuntime: vi.fn(async () => null),
+    buildHistoryEntry: vi.fn(async () => ({})),
+    pushTimerHistory: vi.fn(async () => undefined),
     resolveIntentionSelection: vi.fn(async () => ({
       intentionData: {},
       subIntentions: {},
@@ -243,5 +245,23 @@ describe('Task-specific Timer durations', () => {
     ).rejects.toThrow(
       'Task custom duration requires its confirmed Intention selection'
     );
+  });
+
+  it('resets a selected Intention using its custom duration', async () => {
+    const existing = timer({
+      intention: 'focus',
+      intentionSlugs: ['focus'],
+      duration: INTENTION_DURATION,
+      remainingTime: INTENTION_DURATION / 2,
+    });
+    const { service } = createService(existing, INTENTION_DURATION);
+
+    const result = await service.resetTimer('user-1');
+
+    expect(result).toMatchObject({
+      intention: 'focus',
+      duration: INTENTION_DURATION,
+      remainingTime: INTENTION_DURATION,
+    });
   });
 });

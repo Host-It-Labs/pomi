@@ -76,6 +76,25 @@ describe('redactSentryEvent', () => {
     ).toEqual(['pomi-client', 'unknown', 'unknown', 'unknown', 'unknown']);
   });
 
+  it('removes Vite content hashes from fallback frame origins', () => {
+    const fingerprintFor = (filename: string) =>
+      getSafeSentryFingerprint({
+        exception: {
+          values: [
+            {
+              type: 'TypeError',
+              stacktrace: { frames: [{ filename, in_app: true }] },
+            },
+          ],
+        },
+      });
+
+    expect(fingerprintFor('/assets/Modal-Dgs3xT92.js')).toEqual(
+      fingerprintFor('/assets/Modal-A1b2C3d4.js')
+    );
+    expect(fingerprintFor('/assets/Modal-Dgs3xT92.js')[3]).toBe('Modal.js');
+  });
+
   it('removes credentials, personal fields, and request payloads', () => {
     const event = redactSentryEvent({
       request: {

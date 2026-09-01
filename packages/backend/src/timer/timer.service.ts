@@ -844,24 +844,6 @@ export class TimerService implements OnModuleInit {
 
     const selectedIntentions = this.getTimerIntentions(timer);
     const selectedSubIntentions = this.getTimerSubIntentions(timer);
-    const preferences = await this.preferencesService.getPreferences(userId);
-    let customDuration: number | undefined;
-
-    if (
-      selectedIntentions.length > 0 &&
-      preferences.intentionCustomDurations &&
-      this.canTimerUseIntentions(timer.type, preferences)
-    ) {
-      const selection = await this.resolveIntentionSelection(
-        userId,
-        timer.type,
-        selectedIntentions,
-        selectedSubIntentions,
-        preferences
-      );
-      customDuration = selection.customDuration;
-    }
-
     const result = await this.createOrResumeTimer(userId, {
       type: timer.type,
       intention: this.getPrimaryIntention(selectedIntentions),
@@ -870,7 +852,6 @@ export class TimerService implements OnModuleInit {
       startPaused: timer.status === TIMER_STATUSES.PAUSED,
       isResetOrSkip: true,
       preserveSessionState: true,
-      customDuration,
       expectedVersion,
       sessionState: resetSessionState,
     });

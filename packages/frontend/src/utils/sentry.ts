@@ -17,6 +17,10 @@ function safeFingerprintSegment(value: unknown): string {
     : UNKNOWN_FINGERPRINT_SEGMENT;
 }
 
+function normalizeBundledAssetName(value: string): string {
+  return value.replace(/-[A-Za-z0-9_-]{8,}(?=\.[^.]+$)/, '');
+}
+
 function getSafeFrameOrigin(value: Record<string, unknown>): string {
   const stacktrace = value.stacktrace;
   if (!stacktrace || typeof stacktrace !== 'object') {
@@ -33,7 +37,9 @@ function getSafeFrameOrigin(value: Record<string, unknown>): string {
     if (module !== UNKNOWN_FINGERPRINT_SEGMENT) return module;
     if (typeof candidate.filename === 'string') {
       const assetName = candidate.filename.split(/[?#]/, 1)[0].split('/').pop();
-      const safeAssetName = safeFingerprintSegment(assetName);
+      const safeAssetName = safeFingerprintSegment(
+        assetName ? normalizeBundledAssetName(assetName) : undefined
+      );
       if (safeAssetName !== UNKNOWN_FINGERPRINT_SEGMENT) return safeAssetName;
     }
   }

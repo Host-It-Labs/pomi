@@ -373,6 +373,10 @@ jobs:
         working-directory: packages/frontend
         env:
           NODE_ENV: production
+          POMI_UPLOAD_SENTRY_SOURCEMAPS: 'true'
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ env.SENTRY_ORG }}
+          SENTRY_FRONTEND_PROJECT: ${{ env.SENTRY_FRONTEND_PROJECT }}
           VITE_BACKEND_URL: ${{ vars.PROD_BACKEND_URL }}
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
           VITE_SENTRY_RELEASE: ${{ env.FRONTEND_SENTRY_RELEASE }}
@@ -380,6 +384,14 @@ jobs:
           VITE_RENDER_SYSTEM_TRAY_ICON: 'true'
           VITE_DEBUG_PANEL_ENABLED: 'false'
         run: pnpm tauri android build
+
+      - name: Verify Android private source maps were removed
+        run: |
+          set -euo pipefail
+          if find packages/frontend/dist -type f -name '*.map' -print -quit | grep -q .; then
+            echo 'Frontend source maps must not remain in packaged Android assets.' >&2
+            exit 1
+          fi
 
       - name: Build Wear OS app
         working-directory: packages/frontend/src-tauri/gen/android
