@@ -13,7 +13,7 @@ import {
 } from '../utils/batteryOptimization';
 import { stopAndroidForegroundSync } from '../utils/androidForegroundSync';
 import { notificationService } from '../utils/notificationUtils';
-import { isAndroid, isDesktop, isMac, isMobile } from '../utils/osUtils';
+import { isAndroid, isDesktop, isIos, isMac, isMobile } from '../utils/osUtils';
 import { CheckboxRow } from './notifications/CheckboxRow';
 import { TaskPriorityMultiSelect } from '../components/settings/TaskPriorityMultiSelect';
 import { NumberField } from '../components/ui/NumberField';
@@ -235,7 +235,7 @@ export const NotificationsSettings = ({
     await setDeviceLiveTimerPreferences(next, timer);
   };
 
-  if (!isDesktop && !hasGivenPermission) {
+  if (!isDesktop && !isIos && !hasGivenPermission) {
     return (
       <>
         <Alert variant="warning">{t('notifications.permissionRequired')}</Alert>

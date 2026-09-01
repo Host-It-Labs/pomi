@@ -54,7 +54,7 @@ class AndroidTimerSyncForegroundService : Service() {
 
     if (AndroidTimerAction.fromIntentAction(intent?.action) != null) {
       handleTimerAction(intent)
-      return START_STICKY
+      return START_NOT_STICKY
     }
 
     intent?.getStringExtra(EXTRA_TIMER_PROJECTION)?.let { rawProjection ->
@@ -64,7 +64,12 @@ class AndroidTimerSyncForegroundService : Service() {
       updateForegroundNotification()
     }
 
-    return START_STICKY
+    return START_NOT_STICKY
+  }
+
+  override fun onTimeout(startId: Int, fgsType: Int) {
+    ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+    stopSelf(startId)
   }
 
   override fun onDestroy() {

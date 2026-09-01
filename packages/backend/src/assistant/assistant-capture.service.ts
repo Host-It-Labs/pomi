@@ -318,7 +318,10 @@ export class AssistantCaptureService {
           .map(draft => draft.listId)
           .filter((draftListId): draftListId is string => Boolean(draftListId))
       );
-      if (taskDrafts.length > 0 || listIds.size > 1) {
+      if (
+        (taskDrafts.length > 0 && listDrafts.length > 0) ||
+        listIds.size > 1
+      ) {
         throw new BadRequestException(
           translateAssistant(messageLanguage, 'listDestinationAmbiguous')
         );

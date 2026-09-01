@@ -283,6 +283,7 @@ export const NOTIFICATION_KEY_VALUES = Object.values(NOTIFICATION_KEYS) as [
 export const PUSH_PLATFORMS = {
   ANDROID: 'android',
   IOS: 'ios',
+  IOS_LIVE_ACTIVITY: 'ios-live-activity',
 } as const;
 
 export type PushPlatform = (typeof PUSH_PLATFORMS)[keyof typeof PUSH_PLATFORMS];

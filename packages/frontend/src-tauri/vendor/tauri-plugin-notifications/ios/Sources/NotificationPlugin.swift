@@ -160,6 +160,7 @@ struct TimerProjectionArgs: Decodable {
 class NotificationPlugin: Plugin {
   let notificationHandler = NotificationHandler()
   let notificationManager = NotificationManager()
+  private var liveActivityPushTokenObserver: NSObjectProtocol?
 
   #if ENABLE_PUSH_NOTIFICATIONS
     // Completion handler for push token registration
@@ -177,6 +178,21 @@ class NotificationPlugin: Plugin {
   public override func load(webview: WKWebView) {
     super.load(webview: webview)
 
+    liveActivityPushTokenObserver = NotificationCenter.default.addObserver(
+      forName: Notification.Name("PomiLiveActivityPushToken"),
+      object: nil,
+      queue: .main
+    ) { [weak self] notification in
+      guard let activityID = notification.userInfo?["activityID"] as? String,
+            let token = notification.userInfo?["token"] as? String else {
+        return
+      }
+      try? self?.trigger(
+        "liveActivityPushToken",
+        data: ["activityId": activityID, "token": token]
+      )
+    }
+
     #if ENABLE_PUSH_NOTIFICATIONS
       // Store reference to this plugin for event triggering
       AppDelegateSwizzler.plugin = self
@@ -184,6 +200,12 @@ class NotificationPlugin: Plugin {
       // swizzle UIApplicationDelegate push methods
       AppDelegateSwizzler.swizzlePushCallbacks()
     #endif
+  }
+
+  deinit {
+    if let liveActivityPushTokenObserver {
+      NotificationCenter.default.removeObserver(liveActivityPushTokenObserver)
+    }
   }
 
   @objc public func show(_ invoke: Invoke) throws {

@@ -297,6 +297,14 @@ export class AssistantTaskPolicy {
       .split(/\s*,\s*/)
       .map(part => part.trim())
       .filter(Boolean);
+    const repeatedActionPattern = new RegExp(
+      `\\s+(?:and|or)\\s+${action.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+      'i'
+    );
+    const repeatedActionPrefixPattern = new RegExp(
+      `^${action.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+`,
+      'i'
+    );
     let items = commaParts;
     if (commaParts.length > 1) {
       const last = commaParts.pop() ?? '';
@@ -306,10 +314,14 @@ export class AssistantTaskPolicy {
         .map(part => part.trim())
         .filter(Boolean);
       items = [...commaParts, ...lastItems];
-    } else if (explicitMarker || /\s+(?:and|or)\s+/i.test(listHead)) {
+    } else if (explicitMarker || repeatedActionPattern.test(listHead)) {
       items = listHead
         .split(/\s+(?:and|or)\s+/i)
-        .map(part => part.trim())
+        .map((part, index) =>
+          index === 0
+            ? part.trim()
+            : part.trim().replace(repeatedActionPrefixPattern, '')
+        )
         .filter(Boolean);
     }
 

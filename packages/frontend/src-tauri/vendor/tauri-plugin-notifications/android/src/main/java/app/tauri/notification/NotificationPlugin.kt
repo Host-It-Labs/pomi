@@ -104,7 +104,7 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
   // Click listener tracking for cold-start support
   private var hasClickedListener = false
   private var pendingNotificationClick: JSObject? = null
-  private var pendingTimerAction: JSObject? = null
+  private val pendingTimerActions = ArrayDeque<JSObject>()
 
   companion object {
     var instance: NotificationPlugin? = null
@@ -287,19 +287,21 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
   }
 
   private fun triggerTimerAction(intent: Intent) {
+    val projection = AndroidTimerSyncForegroundService.readProjection(activity) ?: return
+    val action = AndroidTimerAction.parse(intent.getStringExtra(EXTRA_TIMER_ACTION)) ?: return
+    if (!isCurrentTimerAction(projection, intent, action)) return
+
     val data = JSObject()
-    intent.getStringExtra(EXTRA_TIMER_ID)?.let { data.put("timerId", it) }
-    intent.getStringExtra(EXTRA_TIMER_ACTION)?.let { data.put("action", it) }
-    intent.getStringExtra(EXTRA_TIMER_ACTION_ID)?.let { data.put("actionId", it) }
-    if (intent.hasExtra(EXTRA_TIMER_EXPECTED_REVISION)) {
-      data.put("expectedRevision", intent.getStringExtra(EXTRA_TIMER_EXPECTED_REVISION))
-    }
-    intent.getStringExtra(EXTRA_TIMER_TYPE)?.let { data.put("timerType", it) }
+    data.put("timerId", projection.timerId)
+    data.put("action", action.wireValue)
+    data.put("actionId", intent.getStringExtra(EXTRA_TIMER_ACTION_ID))
+    data.put("expectedRevision", projection.revision)
+    data.put("timerType", projection.timerType)
 
     if (hasClickedListener) {
       trigger("timerAction", data)
     } else {
-      pendingTimerAction = data
+      pendingTimerActions.addLast(data)
     }
   }
 
@@ -633,9 +635,10 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
       trigger("notificationClicked", pendingNotificationClick!!)
       pendingNotificationClick = null
     }
-    if (args.active && pendingTimerAction != null) {
-      trigger("timerAction", pendingTimerAction!!)
-      pendingTimerAction = null
+    if (args.active) {
+      while (pendingTimerActions.isNotEmpty()) {
+        trigger("timerAction", pendingTimerActions.removeFirst())
+      }
     }
 
     invoke.resolve()

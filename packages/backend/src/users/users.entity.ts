@@ -26,6 +26,9 @@ export class UserEntity {
   @Column({ type: 'varchar', nullable: true })
   apnToken?: string | null;
 
+  @Column({ type: 'varchar', nullable: true })
+  liveActivityToken?: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

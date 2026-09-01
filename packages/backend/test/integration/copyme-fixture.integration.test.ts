@@ -211,14 +211,15 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
     assert.deepEqual(
       tasks.rows
         .filter(row => row.customDuration !== null)
-        .map(row => ({ title: row.title, customDuration: row.customDuration })),
+        .map(row => ({ title: row.title, customDuration: row.customDuration }))
+        .sort((left, right) => left.title.localeCompare(right.title)),
       [
-        { title: 'Plan next feature slice', customDuration: 1_800_000 },
         {
           title: 'Take a focused breathing break',
           customDuration: 480_000,
         },
-      ]
+        { title: 'Plan next feature slice', customDuration: 1_800_000 },
+      ].sort((left, right) => left.title.localeCompare(right.title))
     );
     assert.deepEqual(
       new Set(tasks.rows.map(row => row.status)),

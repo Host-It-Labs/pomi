@@ -10,6 +10,8 @@ import { translateCurrent } from '../i18n';
 import { isAndroid, isIos, isMobile, isTauri } from './osUtils';
 import { waitForAuthoritativeTimer } from './socketManager';
 import { submitUserMutation } from './userActionQueue';
+import { apiClient } from './apiClient';
+import { useAuthStoreBase } from '../stores/authStore';
 
 const ENABLED_KEY = 'pomi_live_timer_enabled';
 const SHOW_TITLES_KEY = 'pomi_live_timer_show_intention_titles';
@@ -94,6 +96,7 @@ export async function clearLiveTimerProjection(): Promise<void> {
   }
   try {
     await invoke('plugin:notifications|clear_timer_projection');
+    await syncLiveActivityPushToken(null);
   } catch (error) {
     console.error('[LiveTimerSurface] Projection clear failed:', error);
   }
@@ -130,6 +133,14 @@ export async function registerLiveTimerActionListeners(): Promise<() => void> {
     'timerAction',
     payload => void handleNativeLiveTimerAction(payload)
   );
+  const liveTokenListener = await addPluginListener<{
+    activityId: string;
+    token: string;
+  }>('notifications', 'liveActivityPushToken', payload => {
+    if (payload.activityId && payload.token) {
+      void syncLiveActivityPushToken(payload.token);
+    }
+  });
   await invoke('plugin:notifications|set_click_listener_active', {
     active: true,
   });
@@ -146,11 +157,22 @@ export async function registerLiveTimerActionListeners(): Promise<() => void> {
 
   return () => {
     void pluginListener.unregister();
+    void liveTokenListener.unregister();
     unlistenDeepLinks();
     void invoke('plugin:notifications|set_click_listener_active', {
       active: false,
     });
   };
+}
+
+async function syncLiveActivityPushToken(token: string | null): Promise<void> {
+  if (!isIos || !isTauri) return;
+  const userId = useAuthStoreBase.getState().user?.id;
+  if (!userId) return;
+  await apiClient.users.updatePushToken({
+    params: { userId },
+    body: { token, platform: 'ios-live-activity' },
+  });
 }
 
 export function nativeActionFromUrl(

@@ -1484,10 +1484,16 @@ const userActionStatusSchema = z.object({
 
 export { userActionIdSchema, userActionSchema, userActionStatusSchema };
 
-const pushTokenUpdateSchema = z.object({
-  token: z.string().min(1),
-  platform: z.enum(['android', 'ios']),
-});
+const pushTokenUpdateSchema = z.discriminatedUnion('platform', [
+  z.object({
+    token: z.string().min(1),
+    platform: z.enum(['android', 'ios']),
+  }),
+  z.object({
+    token: z.string().min(1).nullable(),
+    platform: z.literal('ios-live-activity'),
+  }),
+]);
 
 export const apiContract = c.router({
   userActions: c.router({

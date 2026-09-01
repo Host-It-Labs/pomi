@@ -539,3 +539,65 @@ describe('Android timer notifications', () => {
     expect(fcmPayloads).toHaveLength(1);
   });
 });
+
+describe('iOS Live Activity updates', () => {
+  it('sends privacy-safe update and end payloads to the activity token', async () => {
+    const sent: Array<{ pushType: string; options: Record<string, unknown> }> =
+      [];
+    const service = new NotificationService(
+      {
+        get: (key: string, fallback: unknown) =>
+          key === 'APN_BUNDLE_ID' ? 'app.pomi.community' : fallback,
+      } as never,
+      {
+        getLiveActivityToken: async () => 'activity-token',
+        clearPushToken: vi.fn(async () => undefined),
+      } as never
+    );
+    Object.assign(service, {
+      apnProvider: {
+        send: vi.fn(async notification => {
+          sent.push({
+            pushType: notification.pushType,
+            options: notification.options,
+          });
+        }),
+      },
+    });
+    const timer = createTimer({
+      userId: 'user-1',
+      status: TIMER_STATUSES.RUNNING,
+      scheduleRevision: 'revision-1',
+      startTime: 1_000,
+      duration: 60_000,
+      remainingTime: 60_000,
+      intentionTitle: 'Private plan',
+      intentionEmoji: '🎯',
+    });
+
+    await service.sendLiveActivityTimerUpdate('user-1', timer as never);
+    await service.sendLiveActivityTimerUpdate('user-1', {
+      ...timer,
+      status: TIMER_STATUSES.COMPLETED,
+    } as never);
+
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).toMatchObject({
+      pushType: 'liveactivity',
+      options: {
+        topic: 'app.pomi.community.push-type.liveactivity',
+        aps: {
+          event: 'update',
+          'content-state': {
+            timerRevision: 'revision-1',
+            intentionTitle: null,
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(sent)).not.toContain('Private plan');
+    expect(sent[1]).toMatchObject({
+      options: { aps: { event: 'end', 'dismissal-date': expect.any(Number) } },
+    });
+  });
+});

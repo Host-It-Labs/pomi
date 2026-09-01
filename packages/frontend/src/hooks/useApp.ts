@@ -43,11 +43,19 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
 
   useEffect(() => {
     if (pauseBootstrap || !isAuthenticated || !isMobile) return;
+    let cancelled = false;
     let unregister: (() => void) | undefined;
     void registerLiveTimerActionListeners().then(cleanup => {
+      if (cancelled) {
+        cleanup();
+        return;
+      }
       unregister = cleanup;
     });
-    return () => unregister?.();
+    return () => {
+      cancelled = true;
+      unregister?.();
+    };
   }, [isAuthenticated, pauseBootstrap]);
 
   useEffect(() => {
