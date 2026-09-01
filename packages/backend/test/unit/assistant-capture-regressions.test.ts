@@ -452,3 +452,38 @@ test('caps independently expanded lists at the Assistant task limit', async () =
   assert.equal(result.tasks[0].title, 'Add item-1');
   assert.equal(result.tasks.at(-1).title, 'Add item-25');
 });
+
+test('rejects overlapping source ownership instead of creating a fallback Task', async () => {
+  const interpreter = new AssistantInputInterpreter();
+  const extraction = {
+    tasks: [
+      {
+        title: 'Buy milk',
+        sourceSegments: ['Buy milk'],
+        outcomeKey: 'milk',
+      },
+      {
+        title: 'Buy milk today',
+        sourceSegments: ['Buy milk today'],
+        outcomeKey: 'milk-today',
+      },
+    ],
+    ...confidence,
+  };
+  const responses = [extraction, extraction];
+
+  await assert.rejects(
+    interpreter.interpret({
+      mode: 'taskCapture',
+      text: 'Buy milk today',
+      today: '2026-07-22',
+      intentions: [],
+      requestJson: async () => ({
+        content: JSON.stringify(responses.shift()),
+        costUsd: 0,
+      }),
+    }),
+    /Assistant source evidence was invalid/
+  );
+  assert.equal(responses.length, 0);
+});

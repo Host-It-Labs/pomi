@@ -13,12 +13,17 @@ import {
 } from '../utils/batteryOptimization';
 import { stopAndroidForegroundSync } from '../utils/androidForegroundSync';
 import { notificationService } from '../utils/notificationUtils';
-import { isAndroid, isDesktop, isMac } from '../utils/osUtils';
+import { isAndroid, isDesktop, isMac, isMobile } from '../utils/osUtils';
 import { CheckboxRow } from './notifications/CheckboxRow';
 import { TaskPriorityMultiSelect } from '../components/settings/TaskPriorityMultiSelect';
 import { NumberField } from '../components/ui/NumberField';
 import { SettingsControlGroup } from '../components/settings/SettingsExperience';
 import { useI18n } from '../i18n';
+import {
+  getDeviceLiveTimerPreferences,
+  setDeviceLiveTimerPreferences,
+} from '../utils/liveTimerSurface';
+import { useTimerStore } from '../stores/timerStore';
 
 export const NotificationsSettings = ({
   preferences,
@@ -31,6 +36,10 @@ export const NotificationsSettings = ({
   const [hasGivenPermission, setHasGivenPermission] = useState(false);
   const [macSettingsOpenFailed, setMacSettingsOpenFailed] = useState(false);
   const [isBatteryOptimized, setIsBatteryOptimized] = useState(false);
+  const timer = useTimerStore.use.timer();
+  const [liveTimerPreferences, setLiveTimerPreferences] = useState(
+    getDeviceLiveTimerPreferences
+  );
   const maxNotifyBeforeMinutes = Math.max(
     1,
     Math.round(preferences.workTimerDuration / MILLISECONDS_PER_MINUTE)
@@ -218,6 +227,14 @@ export const NotificationsSettings = ({
     }
   };
 
+  const updateLiveTimerPreference = async (
+    updates: Partial<typeof liveTimerPreferences>
+  ) => {
+    const next = { ...liveTimerPreferences, ...updates };
+    setLiveTimerPreferences(next);
+    await setDeviceLiveTimerPreferences(next, timer);
+  };
+
   if (!isDesktop && !hasGivenPermission) {
     return (
       <>
@@ -310,6 +327,38 @@ export const NotificationsSettings = ({
         </button>
       )}
       <SettingsControlGroup title={t('intention.essentials')}>
+        {isMobile && (
+          <>
+            <ToggleField
+              id="liveTimerSurface"
+              checked={liveTimerPreferences.enabled}
+              onChange={value =>
+                void updateLiveTimerPreference({ enabled: value })
+              }
+              label={t('notifications.liveTimerSurface')}
+              description={t('notifications.liveTimerSurfaceDescription')}
+            />
+            {liveTimerPreferences.enabled && (
+              <>
+                <Separator />
+                <ToggleField
+                  id="liveTimerIntentionTitles"
+                  checked={liveTimerPreferences.showIntentionTitles}
+                  onChange={value =>
+                    void updateLiveTimerPreference({
+                      showIntentionTitles: value,
+                    })
+                  }
+                  label={t('notifications.liveTimerIntentionTitles')}
+                  description={t(
+                    'notifications.liveTimerIntentionTitlesDescription'
+                  )}
+                />
+              </>
+            )}
+            <Separator />
+          </>
+        )}
         {isDesktop && (
           <>
             <ToggleField

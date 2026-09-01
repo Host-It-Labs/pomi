@@ -313,6 +313,16 @@ export class AssistantCaptureService {
       const listDrafts = listsEnabled
         ? prepared.taskDrafts.filter(draft => draft.listId)
         : [];
+      const listIds = new Set(
+        listDrafts
+          .map(draft => draft.listId)
+          .filter((draftListId): draftListId is string => Boolean(draftListId))
+      );
+      if (taskDrafts.length > 0 || listIds.size > 1) {
+        throw new BadRequestException(
+          translateAssistant(messageLanguage, 'listDestinationAmbiguous')
+        );
+      }
       const preparedTasks = await this.measureDebugStage(
         timings,
         'validationMs',
@@ -335,7 +345,8 @@ export class AssistantCaptureService {
           this.createListItems(
             userId,
             listDrafts,
-            TASK_CREATION_SOURCES.ASSISTANT
+            TASK_CREATION_SOURCES.ASSISTANT,
+            messageLanguage
           )
       );
       timings.totalMs = prepared.preparationMs + elapsedMs(commitStartedAt);
@@ -870,7 +881,8 @@ export class AssistantCaptureService {
               this.createListItems(
                 userId,
                 listDrafts,
-                TASK_CREATION_SOURCES.VOICE
+                TASK_CREATION_SOURCES.VOICE,
+                messageLanguage
               )
             ))
           );
@@ -1065,17 +1077,33 @@ export class AssistantCaptureService {
   private createListItems(
     userId: string,
     drafts: ParsedTaskDraft[],
-    creationSource: TaskCreationSource
+    creationSource: TaskCreationSource,
+    language: string | null | undefined
   ) {
-    return Promise.all(
-      drafts.map(draft =>
-        this.listsService.createItem(userId, draft.listId!, {
-          title: draft.title,
-          dueDate: draft.dueDate ?? null,
-          priority: draft.priority,
-          creationSource,
-        })
-      )
+    if (drafts.length === 0) return Promise.resolve([] as TaskEntity[]);
+
+    const listIds = new Set(drafts.map(draft => draft.listId));
+    if (listIds.size !== 1) {
+      throw new BadRequestException(
+        translateAssistant(language, 'listDestinationAmbiguous')
+      );
+    }
+
+    const [listId] = [...listIds];
+    if (!listId) {
+      throw new BadRequestException(
+        translateAssistant(language, 'listDestinationAmbiguous')
+      );
+    }
+    return this.listsService.createItems(
+      userId,
+      listId,
+      drafts.map(draft => ({
+        title: draft.title,
+        dueDate: draft.dueDate ?? null,
+        priority: draft.priority,
+        creationSource,
+      }))
     );
   }
 

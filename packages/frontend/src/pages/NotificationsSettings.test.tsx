@@ -13,6 +13,20 @@ vi.mock('../utils/osUtils', () => ({
   isAndroid: false,
   isDesktop: true,
   isMac: true,
+  isMobile: false,
+  isTauri: false,
+}));
+
+vi.mock('../utils/liveTimerSurface', () => ({
+  getDeviceLiveTimerPreferences: () => ({
+    enabled: false,
+    showIntentionTitles: false,
+  }),
+  setDeviceLiveTimerPreferences: vi.fn(),
+}));
+
+vi.mock('../stores/timerStore', () => ({
+  useTimerStore: { use: { timer: () => null } },
 }));
 
 vi.mock('../utils/notificationUtils', () => ({

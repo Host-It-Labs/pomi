@@ -386,6 +386,12 @@ const english: TranslationCatalog = {
   'notifications.personalize': 'Personalize',
   'notifications.timerFinished': 'Timer finished',
   'notifications.notifyBeforeTimerEnds': 'Notify before timer ends',
+  'notifications.liveTimerSurface': 'Show Timer on lock screen',
+  'notifications.liveTimerSurfaceDescription':
+    'Keep one confirmed Timer visible on this phone without opening Pomi.',
+  'notifications.liveTimerIntentionTitles': 'Show Intention titles',
+  'notifications.liveTimerIntentionTitlesDescription':
+    'Allow private Intention titles on this phone’s lock screen. Emoji and Timer type remain visible when off.',
 
   'connection.connecting': 'Connecting to server',
   'connection.dismiss': 'Dismiss connection status',
@@ -982,6 +988,10 @@ const english: TranslationCatalog = {
   'task.skipFor': 'Skip {{title}}',
   'task.keepFor': 'Keep {{title}}',
   'task.capture': 'Capture a Task',
+  'task.batchCaptureHelp':
+    'List multiple tasks or items explicitly in one prompt to create them together.',
+  'task.captureInProgress':
+    'Adding… Your submitted text is locked until this capture is confirmed.',
   'task.noTasks': 'No tasks',
   'intention.changeFor': 'Change intention for {{title}}',
   'intention.setForUnlinkedTask':
@@ -6747,6 +6757,34 @@ const auditedGeneratedPhraseRows: Array<[string, GeneratedPhraseTargets]> = [
       'Abrir configurações de notificações',
       'Buka Pengaturan Notifikasi',
       'اطلاعات کی ترتیبات کھولیں',
+    ],
+  ],
+  [
+    'List multiple tasks or items explicitly in one prompt to create them together.',
+    [
+      '在一个提示中明确列出多个任务或项目，即可一起创建。',
+      'एक ही प्रॉम्प्ट में कई कार्य या आइटम स्पष्ट रूप से लिखकर उन्हें साथ में बनाएँ।',
+      'Escribe varias tareas o elementos explícitamente en un solo mensaje para crearlos juntos.',
+      'اكتب عدة مهام أو عناصر بوضوح في طلب واحد لإنشائها معًا.',
+      'Énumérez explicitement plusieurs tâches ou éléments dans une seule demande pour les créer ensemble.',
+      'একটি প্রম্পটে একাধিক কাজ বা আইটেম স্পষ্টভাবে লিখলে সেগুলো একসঙ্গে তৈরি হবে।',
+      'Liste várias tarefas ou itens explicitamente em um único prompt para criá-los juntos.',
+      'Cantumkan beberapa tugas atau item secara jelas dalam satu prompt untuk membuatnya sekaligus.',
+      'ایک ہی پرامپٹ میں متعدد کام یا آئٹمز واضح طور پر لکھیں تاکہ وہ ایک ساتھ بن جائیں۔',
+    ],
+  ],
+  [
+    'Adding… Your submitted text is locked until this capture is confirmed.',
+    [
+      '正在添加… 在此次捕获得到确认前，已提交的文字会保持锁定。',
+      'जोड़ा जा रहा है… इस कैप्चर की पुष्टि होने तक आपका भेजा गया पाठ लॉक रहेगा।',
+      'Añadiendo… El texto enviado permanecerá bloqueado hasta confirmar esta captura.',
+      'جارٍ الإضافة… سيظل النص الذي أرسلته مقفلاً حتى تأكيد هذا الالتقاط.',
+      'Ajout en cours… Le texte envoyé reste verrouillé jusqu’à confirmation de cette saisie.',
+      'যোগ করা হচ্ছে… এই ক্যাপচার নিশ্চিত না হওয়া পর্যন্ত আপনার পাঠানো লেখা লক থাকবে।',
+      'Adicionando… O texto enviado fica bloqueado até esta captura ser confirmada.',
+      'Menambahkan… Teks yang dikirim terkunci sampai tangkapan ini dikonfirmasi.',
+      'شامل کیا جا رہا ہے… اس کیپچر کی تصدیق تک آپ کا بھیجا ہوا متن مقفل رہے گا۔',
     ],
   ],
 ];

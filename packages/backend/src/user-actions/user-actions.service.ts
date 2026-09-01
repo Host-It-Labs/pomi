@@ -32,6 +32,7 @@ import {
   TimerService,
 } from '../timer/timer.service';
 import type { TestNotificationRequest } from '../timer/timer-notification.service';
+import type { TimerVersion } from '../timer/timer-store';
 import { UserDataTransferService } from '../system/user-data-transfer.service';
 import { UsersService } from '../users/users.service';
 import { FeedbackService } from '../feedback/feedback.service';
@@ -619,6 +620,7 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async executeTimerAction(userId: string, action: TimerUserAction) {
+    const expectedVersion = this.expectedTimerVersion(action);
     switch (action.operation) {
       case 'createOrResume':
         if (!action.timerType)
@@ -628,7 +630,7 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           !action.intention &&
           !(action.intentions && action.intentions.length > 0)
         ) {
-          return this.timerService.startLongBreakTimer(userId);
+          return this.timerService.startLongBreakTimer(userId, expectedVersion);
         }
         return this.timerService.createOrResumeTimer(userId, {
           type: action.timerType,
@@ -638,6 +640,7 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           focusedTaskId: action.focusedTaskId,
           customDuration: action.customDuration,
           resetOnFirstIntention: action.resetOnFirstIntention,
+          expectedVersion,
         });
       case 'selectIntention':
         if (!action.intention)
@@ -660,13 +663,17 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           action.resetOnFirstIntention
         );
       case 'pause':
-        return this.timerService.pauseTimer(userId);
+        return this.timerService.pauseTimer(userId, expectedVersion);
       case 'reset':
         return this.timerService.resetTimer(userId);
       case 'skip':
-        return this.timerService.skipTimer(userId, action.requestedLogMode);
+        return this.timerService.skipTimer(
+          userId,
+          action.requestedLogMode,
+          expectedVersion
+        );
       case 'addFiveMinutes':
-        return this.timerService.addFiveMinutesTimer(userId);
+        return this.timerService.addFiveMinutesTimer(userId, expectedVersion);
       case 'undo':
         return this.timerService.undoLastTimerAction(userId);
       case 'redo':
@@ -695,6 +702,26 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
       case 'convertLongBreakToBreak':
         return this.timerService.convertLongBreakToBreak(userId);
     }
+  }
+
+  private expectedTimerVersion(
+    action: TimerUserAction
+  ): TimerVersion | undefined {
+    if (
+      action.expectedTimerId === undefined &&
+      action.expectedScheduleRevision === undefined
+    ) {
+      return undefined;
+    }
+    if (!action.expectedTimerId || !action.expectedScheduleRevision) {
+      throw new BadRequestException(
+        'Expected Timer ID and revision are required together'
+      );
+    }
+    return {
+      timerId: action.expectedTimerId,
+      scheduleRevision: action.expectedScheduleRevision,
+    };
   }
 
   private executeListsAction(userId: string, action: ListsUserAction) {

@@ -77,6 +77,12 @@ const MULTILINGUAL_TIMER_ONLY_PATTERNS = [
 
 type RawTask = Record<string, unknown>;
 
+type SourceSpan = {
+  taskIndex: number;
+  start: number;
+  end: number;
+};
+
 export class AssistantTaskPolicy {
   private readonly intentionResolver = new AssistantIntentionResolver();
 
@@ -300,7 +306,7 @@ export class AssistantTaskPolicy {
         .map(part => part.trim())
         .filter(Boolean);
       items = [...commaParts, ...lastItems];
-    } else if (explicitMarker) {
+    } else if (explicitMarker || /\s+(?:and|or)\s+/i.test(listHead)) {
       items = listHead
         .split(/\s+(?:and|or)\s+/i)
         .map(part => part.trim())
@@ -771,6 +777,13 @@ export class AssistantTaskPolicy {
   }
 
   needsReview(rawTasks: unknown[], sourceText?: string) {
+    if (
+      sourceText !== undefined &&
+      this.hasAmbiguousSourceOwnership(rawTasks, sourceText)
+    ) {
+      return true;
+    }
+
     return rawTasks.some(rawTask => {
       const task = toRecord(rawTask);
       const title = normalizeOptionalString(task.title);
@@ -834,6 +847,47 @@ export class AssistantTaskPolicy {
         )
       );
     });
+  }
+
+  hasAmbiguousSourceOwnership(rawTasks: unknown[], sourceText: string) {
+    const ownershipTasks = this.expandIndependentListTasks(
+      rawTasks,
+      sourceText
+    );
+    const spans: SourceSpan[] = [];
+    for (const [taskIndex, rawTask] of ownershipTasks.entries()) {
+      const sourceSegments = toRecord(rawTask).sourceSegments;
+      if (!Array.isArray(sourceSegments)) continue;
+
+      for (const segment of sourceSegments) {
+        if (typeof segment !== 'string' || !segment.trim()) continue;
+        const matches = this.findSourceSegmentMatches(segment, sourceText);
+        if (matches.length !== 1) return true;
+        const [match] = matches;
+        if (
+          spans.some(
+            span =>
+              span.taskIndex === taskIndex &&
+              span.start === match.start &&
+              span.end === match.end
+          )
+        ) {
+          continue;
+        }
+        spans.push({ taskIndex, start: match.start, end: match.end });
+      }
+    }
+
+    return spans.some((span, index) =>
+      spans
+        .slice(index + 1)
+        .some(
+          other =>
+            span.taskIndex !== other.taskIndex &&
+            span.start < other.end &&
+            other.start < span.end
+        )
+    );
   }
 
   hasUnassignedSourceUrls(rawTasks: unknown[], sourceText: string) {
@@ -1589,31 +1643,80 @@ export class AssistantTaskPolicy {
     return this.findSourceSegmentWithIndex(candidate, sourceText)?.text ?? null;
   }
 
-  private findSourceSegmentWithIndex(
+  private findSourceSegmentMatches(
     candidate: string,
     sourceText: string
-  ): { text: string; index: number } | null {
+  ): Array<{ text: string; index: number; start: number; end: number }> {
     const normalizedCandidate = candidate.trim();
-    if (!normalizedCandidate) return null;
-    const directIndex = sourceText.indexOf(normalizedCandidate);
-    if (directIndex >= 0) {
-      return {
-        text: sourceText.slice(
-          directIndex,
-          directIndex + normalizedCandidate.length
-        ),
-        index: directIndex,
-      };
+    if (!normalizedCandidate) return [];
+
+    const matches: Array<{
+      text: string;
+      index: number;
+      start: number;
+      end: number;
+    }> = [];
+    let directIndex = sourceText.indexOf(normalizedCandidate);
+    while (directIndex >= 0) {
+      const end = directIndex + normalizedCandidate.length;
+      if (this.isStandaloneSourceMatch(sourceText, directIndex, end)) {
+        matches.push({
+          text: sourceText.slice(directIndex, end),
+          index: directIndex,
+          start: directIndex,
+          end,
+        });
+      }
+      directIndex = sourceText.indexOf(
+        normalizedCandidate,
+        directIndex + normalizedCandidate.length
+      );
     }
+
     const tokens = normalizedCandidate
       .split(/\s+/)
       .map(token => this.escapeRegExp(token))
       .join('\\s+');
-    const match = sourceText.match(new RegExp(tokens, 'i'));
-    if (match?.[0] && match.index !== undefined) {
-      return { text: match[0], index: match.index };
+    for (const match of sourceText.matchAll(new RegExp(tokens, 'gi'))) {
+      if (match.index === undefined || !match[0]) continue;
+      const end = match.index + match[0].length;
+      if (!this.isStandaloneSourceMatch(sourceText, match.index, end)) {
+        continue;
+      }
+      if (
+        !matches.some(item => item.index === match.index && item.end === end)
+      ) {
+        matches.push({
+          text: match[0],
+          index: match.index,
+          start: match.index,
+          end,
+        });
+      }
     }
-    return null;
+
+    return matches.sort((left, right) => left.index - right.index);
+  }
+
+  private isStandaloneSourceMatch(
+    sourceText: string,
+    start: number,
+    end: number
+  ) {
+    const isWordCharacter = (value: string | undefined) =>
+      value !== undefined && /[\p{L}\p{N}]/u.test(value);
+    return (
+      !isWordCharacter(sourceText[start - 1]) &&
+      !isWordCharacter(sourceText[end])
+    );
+  }
+
+  private findSourceSegmentWithIndex(
+    candidate: string,
+    sourceText: string
+  ): { text: string; index: number } | null {
+    const [match] = this.findSourceSegmentMatches(candidate, sourceText);
+    return match ? { text: match.text, index: match.index } : null;
   }
 
   private sourceHasPriorityQualifier(sourceText: string, priority: string) {

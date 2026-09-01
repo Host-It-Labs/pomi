@@ -877,7 +877,10 @@ export class TimerService implements OnModuleInit {
     return result;
   }
 
-  async pauseTimer(userId: string): Promise<Timer | null> {
+  async pauseTimer(
+    userId: string,
+    expectedVersion?: TimerVersion
+  ): Promise<Timer | null> {
     if (!userId) {
       throw new BadRequestException('User ID is required');
     }
@@ -885,6 +888,7 @@ export class TimerService implements OnModuleInit {
     if (!timer) {
       return null;
     }
+    this.assertExpectedTimerVersion(timer, expectedVersion);
     if (timer.status !== TIMER_STATUSES.RUNNING) {
       if (
         timer.status === TIMER_STATUSES.PAUSED &&
@@ -896,7 +900,7 @@ export class TimerService implements OnModuleInit {
       return timer;
     }
 
-    const expected = timerVersion(timer);
+    const expected = expectedVersion ?? timerVersion(timer);
     const pauseTimestamp = Date.now();
     timer.status = TIMER_STATUSES.PAUSED;
     const elapsedTime = pauseTimestamp - timer.startTime;
@@ -936,13 +940,15 @@ export class TimerService implements OnModuleInit {
 
   async skipTimer(
     userId: string,
-    requestedLogMode?: TimerSkipLogMode
+    requestedLogMode?: TimerSkipLogMode,
+    expectedVersion?: TimerVersion
   ): Promise<Timer | null> {
     const timer = await this.timerStore.getCurrentTimer(userId);
     if (!timer) {
       return null;
     }
-    const expectedVersion = timerVersion(timer);
+    this.assertExpectedTimerVersion(timer, expectedVersion);
+    const committedExpectedVersion = expectedVersion ?? timerVersion(timer);
     const before = await this.snapshotRuntime(userId);
 
     const selectedIntentions = this.getTimerIntentions(timer);
@@ -1220,17 +1226,21 @@ export class TimerService implements OnModuleInit {
         isResetOrSkip: shouldResetSession,
         stackedSessions:
           nextType === TIMER_TYPES.BREAK ? timer.stackedSessions : undefined,
-        expectedVersion,
+        expectedVersion: committedExpectedVersion,
       })
     );
   }
 
-  async addFiveMinutesTimer(userId: string): Promise<Timer | null> {
+  async addFiveMinutesTimer(
+    userId: string,
+    expectedVersion?: TimerVersion
+  ): Promise<Timer | null> {
     const timer = await this.timerStore.getCurrentTimer(userId);
     if (!timer) {
       return null;
     }
-    const expected = timerVersion(timer);
+    this.assertExpectedTimerVersion(timer, expectedVersion);
+    const expected = expectedVersion ?? timerVersion(timer);
     const preferences = await this.preferencesService.getPreferences(userId);
 
     const before = await this.snapshotRuntime(userId);
@@ -1269,13 +1279,18 @@ export class TimerService implements OnModuleInit {
     return timer;
   }
 
-  async startLongBreakTimer(userId: string): Promise<Timer> {
+  async startLongBreakTimer(
+    userId: string,
+    expectedVersion?: TimerVersion
+  ): Promise<Timer> {
     const current = await this.timerStore.getCurrentTimer(userId);
-    const expectedVersion = current ? timerVersion(current) : null;
+    if (current) this.assertExpectedTimerVersion(current, expectedVersion);
+    const committedExpectedVersion =
+      expectedVersion ?? (current ? timerVersion(current) : null);
     const before = await this.snapshotRuntime(userId);
     const timer = await this.createOrResumeTimer(userId, {
       type: TIMER_TYPES.LONG_BREAK,
-      expectedVersion,
+      expectedVersion: committedExpectedVersion,
       sessionState: null,
     });
     const entry = await this.buildHistoryEntry(
@@ -1926,6 +1941,19 @@ export class TimerService implements OnModuleInit {
       originalDuration: timer.duration,
       extensionNextTimerType,
     };
+  }
+
+  private assertExpectedTimerVersion(
+    timer: Timer,
+    expectedVersion: TimerVersion | undefined
+  ): void {
+    if (
+      expectedVersion &&
+      (timer.id !== expectedVersion.timerId ||
+        timer.scheduleRevision !== expectedVersion.scheduleRevision)
+    ) {
+      throw new ConflictException('Timer changed before action was applied');
+    }
   }
 
   async createOrResumeTimer(

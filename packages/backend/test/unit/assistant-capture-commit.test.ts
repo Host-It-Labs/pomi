@@ -79,4 +79,60 @@ describe('Assistant task capture commit', () => {
     );
     expect(recordLog).toHaveBeenCalledOnce();
   });
+
+  it('rejects a malformed mixed task and List batch before creating anything', async () => {
+    const recordLog = vi.fn(async () => undefined);
+    const createPreparedTasks = vi.fn();
+    const createItems = vi.fn();
+    const service = new AssistantCaptureService(
+      {} as never,
+      {
+        getPreferences: vi.fn(async () => ({
+          language: 'en',
+          listsExtension: true,
+        })),
+      } as never,
+      { createPreparedTasks } as never,
+      {} as never,
+      {} as never,
+      { recordLog } as never,
+      {} as never,
+      { createItems } as never,
+      {} as never,
+      {} as never
+    );
+    const prepared: PreparedAssistantTaskCapture = {
+      normalizedText: 'Create a Task and add milk to Groceries',
+      listId: null,
+      responseLanguage: 'en',
+      debugLogId: null,
+      taskDrafts: [
+        { title: 'Create a Task' },
+        { title: 'Milk', listId: 'list-1' },
+      ],
+      usedFallback: false,
+      invalidParserOutput: null,
+      interpretationError: null,
+      resolutionNotes: [],
+      modelCalls: [],
+      timings: {},
+      preparationMs: 0,
+      costUsd: 0,
+    };
+    const commitTaskCapture = (
+      service as unknown as {
+        commitTaskCapture(
+          userId: string,
+          capture: PreparedAssistantTaskCapture,
+          listId?: string | null
+        ): Promise<unknown>;
+      }
+    ).commitTaskCapture.bind(service);
+
+    await expect(commitTaskCapture('user-1', prepared)).rejects.toThrow(
+      'Choose one List destination before saving'
+    );
+    expect(createPreparedTasks).not.toHaveBeenCalled();
+    expect(createItems).not.toHaveBeenCalled();
+  });
 });

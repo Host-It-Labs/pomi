@@ -250,6 +250,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::delete_channel,
             commands::list_channels,
             commands::get_android_foreground_sync_status,
+            commands::set_timer_projection,
+            commands::clear_timer_projection,
             commands::start_android_foreground_sync,
             commands::stop_android_foreground_sync,
             #[cfg(desktop)]

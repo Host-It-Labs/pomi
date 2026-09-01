@@ -87,6 +87,11 @@ const COPYME_LIST_ITEMS = [
     dueOffsetDays: null,
     priority: TASK_PRIORITIES.NORMAL,
   },
+  {
+    title: 'Check pantry staples',
+    dueOffsetDays: null,
+    priority: TASK_PRIORITIES.NORMAL,
+  },
 ] as const;
 
 type SeedUserFixtureOptions = {
@@ -430,6 +435,20 @@ const baseSeedTasks: SeedTask[] = [
     timerType: TIMER_TYPES.BREAK,
     intentionTitle: 'Hydrate',
     recurrenceRule: 'FREQ=DAILY;INTERVAL=1',
+    recurrenceAnchorMode: 'planned',
+  },
+  {
+    title: 'Take a focused breathing break',
+    description:
+      'Pinned Break example where the selected Breathe Intention duration takes precedence over the Task duration.',
+    dueOffsetDays: 0,
+    dueTime: null,
+    priority: TASK_PRIORITIES.NORMAL,
+    status: TASK_STATUSES.ACTIVE,
+    timerType: TIMER_TYPES.BREAK,
+    customDuration: 8 * 60 * 1000,
+    intentionTitle: 'Breathe',
+    recurrenceRule: null,
     recurrenceAnchorMode: 'planned',
   },
   {

@@ -44,6 +44,10 @@ import { createSelectors } from './createSelectors';
 import { usePreferencesStore } from './preferencesStore';
 import { useTasksStore } from './tasksStore';
 import { requestListRefresh } from '../utils/listRefresh';
+import {
+  clearLiveTimerProjection,
+  publishLiveTimerProjection,
+} from '../utils/liveTimerSurface';
 import { type HistoryActionId, useUiStore } from './uiStore';
 
 let localTimerInterval: NodeJS.Timeout | null = null;
@@ -173,7 +177,8 @@ const useTimerStoreBase = create<TimerState>((set, get) => ({
     });
 
     registerSocketEventHandler(SOCKET_EVENTS.TIMER_UPDATE, (data: unknown) => {
-      const updatedTimer = data as Timer;
+      const confirmedTimer = { ...(data as Timer) };
+      const updatedTimer = { ...confirmedTimer };
       const previousTimer = get().timer;
       if (updatedTimer.status === TIMER_STATUSES.RUNNING) {
         lastSyncTime = Date.now();
@@ -182,6 +187,7 @@ const useTimerStoreBase = create<TimerState>((set, get) => ({
       }
 
       set({ timer: { ...updatedTimer } });
+      void publishLiveTimerProjection(confirmedTimer);
 
       if (
         hasReceivedInitialTimer &&
@@ -618,5 +624,6 @@ useAuthStoreBase.subscribe((state, prevState) => {
 
   if (!state.token && prevState.token) {
     useTimerStoreBase.getState().clearUndoVisible();
+    void clearLiveTimerProjection();
   }
 });

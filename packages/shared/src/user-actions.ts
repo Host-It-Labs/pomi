@@ -45,6 +45,8 @@ export interface TimerUserAction {
   extensionAction?: 'logElapsed' | 'addFiveMinutes';
   requestedLogMode?: 'none' | 'elapsed' | 'full';
   resetOnFirstIntention?: boolean;
+  expectedTimerId?: string;
+  expectedScheduleRevision?: string;
 }
 
 export type TaskImportUserActionRow = {

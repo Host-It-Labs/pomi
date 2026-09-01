@@ -12,26 +12,59 @@
 		1513404CBCE441D169E27FE7 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6AE84BC04F1BF72818AB7978 /* MetalKit.framework */; };
 		219C0FAA16F03A33FFED5CC8 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3272EC4FB41016BFB87D5F95 /* Security.framework */; };
 		2624E2CEFEB67345B4AB3FBA /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 876CD6369CC6E4BD7F378FF1 /* Metal.framework */; };
+		2EE98AA52E4591F7507118A2 /* PomiLiveActivityModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81868753F4D8895AD922A8FF /* PomiLiveActivityModel.swift */; };
 		519EB8D65BE72BF7EC54EF92 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 59A20CE9045E437E207A2423 /* UIKit.framework */; };
 		67B65435107C08EE73DF8458 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A9B8476C01DD3161F356BE62 /* QuartzCore.framework */; };
+		7E58590E4DE087D67B37E395 /* PomiLiveActivityBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02DB1E68FE5D2ECBBB9B98CC /* PomiLiveActivityBridge.swift */; };
+		8D895C0E2C1C9BD9423423A3 /* PomiLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C21D6AF6E0D166E93B464DCF /* PomiLiveActivity.swift */; };
 		A6A836B3402DF26726E271F5 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DEA45ADB0E51E0FB0DF64670 /* CoreGraphics.framework */; };
 		B0E43737C4861387F8885269 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = A5505A38C1B1A6F92D18262B /* assets */; };
+		B4EEE2E68F12D0BC3C3C2860 /* PomiLiveActivityModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81868753F4D8895AD922A8FF /* PomiLiveActivityModel.swift */; };
 		B502CE54BA10A09F5E5643F5 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 19512CF8B45A8C2BD81FA248 /* LaunchScreen.storyboard */; };
+		C35B479321AA84DBAADE04C1 /* PomiLiveActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 46521894B67C42981CA629D7 /* PomiLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		C9849DBF0729134569F32974 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 820C81E175A60309BA45CC29 /* Assets.xcassets */; };
 		CF06BDD7D8C0A3CDBFD942D8 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4B15DF8B00CFA8520FB4874D /* WebKit.framework */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		00059A535B7F2F389CE2DDCD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 04B22093E32C0332F61B447C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A53136A25220EA6093714003;
+			remoteInfo = PomiLiveActivity;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C9A12E29C1569B6ED9AAA93A /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C35B479321AA84DBAADE04C1 /* PomiLiveActivity.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		000C10B636FEF532BFB66E9C /* lib.rs */ = {isa = PBXFileReference; path = lib.rs; sourceTree = "<group>"; };
 		00D281B453CF3329FEA9AC45 /* main.rs */ = {isa = PBXFileReference; path = main.rs; sourceTree = "<group>"; };
+		02DB1E68FE5D2ECBBB9B98CC /* PomiLiveActivityBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomiLiveActivityBridge.swift; sourceTree = "<group>"; };
 		1407EF055FBEC3BF6BF06C7D /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
 		19512CF8B45A8C2BD81FA248 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		24F5A04594EDE78BD9CB0C6F /* pomi_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = pomi_iOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2A5FBA8C942B86E35331D952 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		3272EC4FB41016BFB87D5F95 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		34EC40778DA88C58D8E931D4 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
+		46521894B67C42981CA629D7 /* PomiLiveActivity.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PomiLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		4B15DF8B00CFA8520FB4874D /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
 		59A20CE9045E437E207A2423 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		6AE84BC04F1BF72818AB7978 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		81868753F4D8895AD922A8FF /* PomiLiveActivityModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomiLiveActivityModel.swift; sourceTree = "<group>"; };
 		820C81E175A60309BA45CC29 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		876CD6369CC6E4BD7F378FF1 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		8F71B634C0BF57B835515F98 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -39,6 +72,7 @@
 		A3DCBD8EE5F40D3B634D945A /* pomi_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = pomi_iOS.entitlements; sourceTree = "<group>"; };
 		A5505A38C1B1A6F92D18262B /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
 		A9B8476C01DD3161F356BE62 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		C21D6AF6E0D166E93B464DCF /* PomiLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomiLiveActivity.swift; sourceTree = "<group>"; };
 		DEA45ADB0E51E0FB0DF64670 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -65,9 +99,20 @@
 			isa = PBXGroup;
 			children = (
 				A18CB1144B2052719A64D842 /* main.mm */,
+				02DB1E68FE5D2ECBBB9B98CC /* PomiLiveActivityBridge.swift */,
+				81868753F4D8895AD922A8FF /* PomiLiveActivityModel.swift */,
 				272AFA6205B4CDCB19670400 /* bindings */,
 			);
 			path = pomi;
+			sourceTree = "<group>";
+		};
+		1532AC8CA7038966F8A95744 /* PomiLiveActivity */ = {
+			isa = PBXGroup;
+			children = (
+				2A5FBA8C942B86E35331D952 /* Info.plist */,
+				C21D6AF6E0D166E93B464DCF /* PomiLiveActivity.swift */,
+			);
+			path = PomiLiveActivity;
 			sourceTree = "<group>";
 		};
 		246C67FC9729BFA859F6E6E8 = {
@@ -78,6 +123,7 @@
 				19512CF8B45A8C2BD81FA248 /* LaunchScreen.storyboard */,
 				43154CB3C14AB639E2E51342 /* Externals */,
 				E5EA754A2D0EA254BAFB912A /* pomi_iOS */,
+				1532AC8CA7038966F8A95744 /* PomiLiveActivity */,
 				3CA2F47ACE2AD9E80BC64F78 /* Sources */,
 				AA87D3068A9A268C9989D626 /* src */,
 				4F4A6552A5650CBB497EB343 /* Frameworks */,
@@ -127,6 +173,7 @@
 			isa = PBXGroup;
 			children = (
 				24F5A04594EDE78BD9CB0C6F /* pomi_iOS.app */,
+				46521894B67C42981CA629D7 /* PomiLiveActivity.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -150,6 +197,20 @@
 			path = pomi_iOS;
 			sourceTree = "<group>";
 		};
+		"TEMP_756E8C0D-FB4A-49EE-88F7-F9E368A96973" /* x86_64 */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = x86_64;
+			sourceTree = "<group>";
+		};
+		"TEMP_DA0AAC12-14D4-43C9-8FBF-0E62C602DC6B" /* arm64 */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = arm64;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -161,10 +222,12 @@
 				8F3D49FFD0867D104722C1A9 /* Sources */,
 				AB2F5DD10BCA68B8BDEB1612 /* Resources */,
 				46703433228468C97C6962AF /* Frameworks */,
+				C9A12E29C1569B6ED9AAA93A /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				188ABD97CCF5E7BAD4CE5E2E /* PBXTargetDependency */,
 			);
 			name = pomi_iOS;
 			packageProductDependencies = (
@@ -172,6 +235,23 @@
 			productName = pomi_iOS;
 			productReference = 24F5A04594EDE78BD9CB0C6F /* pomi_iOS.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A53136A25220EA6093714003 /* PomiLiveActivity */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 509FB447DBAF969AE89DEEEB /* Build configuration list for PBXNativeTarget "PomiLiveActivity" */;
+			buildPhases = (
+				9291273E063FF8735BF9BF8B /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PomiLiveActivity;
+			packageProductDependencies = (
+			);
+			productName = PomiLiveActivity;
+			productReference = 46521894B67C42981CA629D7 /* PomiLiveActivity.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -196,6 +276,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				A53136A25220EA6093714003 /* PomiLiveActivity */,
 				1AE994F5F64BF36575CE962F /* pomi_iOS */,
 			);
 		};
@@ -243,11 +324,30 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7E58590E4DE087D67B37E395 /* PomiLiveActivityBridge.swift in Sources */,
+				2EE98AA52E4591F7507118A2 /* PomiLiveActivityModel.swift in Sources */,
 				125808C29D8DD1867921483D /* main.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		9291273E063FF8735BF9BF8B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8D895C0E2C1C9BD9423423A3 /* PomiLiveActivity.swift in Sources */,
+				B4EEE2E68F12D0BC3C3C2860 /* PomiLiveActivityModel.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		188ABD97CCF5E7BAD4CE5E2E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A53136A25220EA6093714003 /* PomiLiveActivity */;
+			targetProxy = 00059A535B7F2F389CE2DDCD /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		090C937AB209862445AEE79A /* debug */ = {
@@ -337,10 +437,28 @@
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				PRODUCT_BUNDLE_IDENTIFIER = app.pomi.community;
-				PRODUCT_NAME = "pomi";
+				PRODUCT_NAME = pomi;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;
+			};
+			name = release;
+		};
+		24B63DC39EE2D8459ADC5D55 /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				INFOPLIST_FILE = PomiLiveActivity/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.pomi.community.PomiLiveActivity;
+				PRODUCT_NAME = PomiLiveActivity;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = release;
 		};
@@ -368,7 +486,7 @@
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				PRODUCT_BUNDLE_IDENTIFIER = app.pomi.community;
-				PRODUCT_NAME = "pomi";
+				PRODUCT_NAME = pomi;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;
@@ -431,9 +549,36 @@
 			};
 			name = release;
 		};
+		A1A1E4611E649B40769D1E7E /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				INFOPLIST_FILE = PomiLiveActivity/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.pomi.community.PomiLiveActivity;
+				PRODUCT_NAME = PomiLiveActivity;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		509FB447DBAF969AE89DEEEB /* Build configuration list for PBXNativeTarget "PomiLiveActivity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1A1E4611E649B40769D1E7E /* debug */,
+				24B63DC39EE2D8459ADC5D55 /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
 		5146D4F6F86D5D5D8C93DFB0 /* Build configuration list for PBXProject "pomi" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
