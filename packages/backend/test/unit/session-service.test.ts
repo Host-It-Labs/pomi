@@ -82,6 +82,26 @@ describe('SessionService', () => {
     ).toBe(refreshSecret);
   });
 
+  it('encrypts browser refresh cookies and rejects tampered values', async () => {
+    const { service } = createService();
+    const created = await service.createSession(
+      '00000000-0000-4000-8000-000000000010',
+      'web'
+    );
+    const protectedCookie = service.protectRefreshCookie(created.refreshToken);
+
+    expect(protectedCookie).not.toContain(created.refreshToken);
+    expect(service.readProtectedRefreshCookie(protectedCookie)).toBe(
+      created.refreshToken
+    );
+    const replacement = protectedCookie.endsWith('A') ? 'B' : 'A';
+    expect(
+      service.readProtectedRefreshCookie(
+        `${protectedCookie.slice(0, -1)}${replacement}`
+      )
+    ).toBeNull();
+  });
+
   it('rotates refresh secrets and tolerates one concurrent retry', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-01T12:00:00.000Z'));

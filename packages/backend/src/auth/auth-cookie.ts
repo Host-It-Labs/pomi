@@ -3,7 +3,9 @@ import type { Request, Response } from 'express';
 export const REFRESH_COOKIE_NAME = 'pomi_refresh';
 export const REFRESH_COOKIE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
 
-export function getRefreshTokenCookie(request: Request): string | undefined {
+export function getRefreshTokenCookieValue(
+  request: Request
+): string | undefined {
   const header = request.headers.cookie;
   if (!header) return undefined;
 
@@ -35,12 +37,12 @@ function cookieOptions(request: Request) {
   };
 }
 
-export function setRefreshTokenCookie(
+export function setRefreshTokenCookieValue(
   response: Response,
   request: Request,
-  refreshToken: string
+  encryptedRefreshToken: string
 ): void {
-  response.cookie(REFRESH_COOKIE_NAME, refreshToken, {
+  response.cookie(REFRESH_COOKIE_NAME, encryptedRefreshToken, {
     ...cookieOptions(request),
     maxAge: REFRESH_COOKIE_MAX_AGE_MS,
   });

@@ -180,7 +180,7 @@ POMI_FRONTEND_PORT=<resolved-frontend-port> POMI_BACKEND_PORT=<resolved-backend-
 ## Scenario Pitfalls
 
 - For cross-page same-user scenarios, do not re-login on a second page. Re-login can invalidate or replace session behavior and make assertions misleading.
-- Prefer opening a second page in the same context and cloning auth localStorage state when needed.
+- Prefer opening a second page from a browser context whose `storageState` includes the same Secure HttpOnly refresh cookie. Never clone bearer authentication through localStorage; create an isolated user's session from that user's destination context so cookies cannot overwrite another test client.
 - Creating an intention from `IntentionsManager` can auto-start and navigate back to timer when timer is not running.
 - If setup needs a neutral state, seed baseline intentions through authenticated API calls instead of UI creation.
 - Timer running state can hide intention controls.

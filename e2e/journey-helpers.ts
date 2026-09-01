@@ -1,6 +1,6 @@
 import type { Locator, TestInfo } from '@playwright/test';
 import { expect, type Page } from './test';
-import { getApiAuthContext, TestHelpers } from './helpers';
+import { getApiAuthContext, getApiBackendOrigin, TestHelpers } from './helpers';
 
 declare global {
   interface Window {
@@ -285,13 +285,10 @@ export async function createSession(
   username: string,
   password: string
 ) {
-  const context = await apiContext(page);
-  const response = await page.request.post(
-    `${context.backendOrigin}/sessions`,
-    {
-      data: { username, password },
-    }
-  );
+  const backendOrigin = await getApiBackendOrigin(page);
+  const response = await page.request.post(`${backendOrigin}/sessions`, {
+    data: { username, password },
+  });
   expect(response.ok()).toBeTruthy();
   return response.json() as Promise<Record<string, any>>;
 }

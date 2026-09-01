@@ -17,8 +17,8 @@ import { AuthRateLimitException } from './auth-rate-limit.exception';
 import { AuthService } from './auth.service';
 import {
   clearRefreshTokenCookie,
-  getRefreshTokenCookie,
-  setRefreshTokenCookie,
+  getRefreshTokenCookieValue,
+  setRefreshTokenCookieValue,
 } from './auth-cookie';
 import { AuthenticateDto } from './dto/authenticate.dto';
 import { LogoutDto } from './dto/logout.dto';
@@ -74,7 +74,9 @@ export class AuthController {
     return tsRestHandler(apiContract.sessions.refresh, async () => {
       const platform = body.platform ?? 'web';
       const refreshToken =
-        platform === 'web' ? getRefreshTokenCookie(request) : body.refreshToken;
+        platform === 'web'
+          ? this.readRefreshTokenCookie(request)
+          : body.refreshToken;
       if (!refreshToken) {
         throw new UnauthorizedException('Invalid session');
       }
@@ -128,7 +130,7 @@ export class AuthController {
       if (typeof sessionId === 'string' && typeof userId === 'string') {
         await this.sessionService.revokeAccessSession(sessionId, userId);
       }
-      const refreshToken = getRefreshTokenCookie(request);
+      const refreshToken = this.readRefreshTokenCookie(request);
       if (refreshToken) {
         await this.sessionService.revokeRefreshSession(refreshToken);
       }
@@ -164,7 +166,11 @@ export class AuthController {
     };
 
     if ((platform ?? 'web') === 'web') {
-      setRefreshTokenCookie(response, request, result.refreshToken);
+      setRefreshTokenCookieValue(
+        response,
+        request,
+        this.sessionService.protectRefreshCookie(result.refreshToken)
+      );
       delete sessionBody.refreshToken;
     }
 
@@ -172,5 +178,11 @@ export class AuthController {
       status: 200 as const,
       body: sessionBody,
     };
+  }
+
+  private readRefreshTokenCookie(request: Request): string | undefined {
+    const value = getRefreshTokenCookieValue(request);
+    if (!value) return undefined;
+    return this.sessionService.readProtectedRefreshCookie(value) ?? undefined;
   }
 }

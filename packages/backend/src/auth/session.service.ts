@@ -36,6 +36,7 @@ const REFRESH_TOKEN_BYTES = 32;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const REFRESH_SECRET_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const REFRESH_COOKIE_KEY_CONTEXT = ':pomi-refresh-cookie-v1';
 
 @Injectable()
 export class SessionService {
@@ -189,6 +190,24 @@ export class SessionService {
       { id: parsed.sessionId, revokedAt: IsNull() },
       { revokedAt: new Date(), revocationReason: 'logout' }
     );
+  }
+
+  protectRefreshCookie(refreshToken: string): string {
+    return encryptRefreshSecret(
+      refreshToken,
+      `${this.jwtSecret}${REFRESH_COOKIE_KEY_CONTEXT}`
+    );
+  }
+
+  readProtectedRefreshCookie(value: string): string | null {
+    try {
+      return decryptRefreshSecret(
+        value,
+        `${this.jwtSecret}${REFRESH_COOKIE_KEY_CONTEXT}`
+      );
+    } catch {
+      return null;
+    }
   }
 
   async isAccessSessionActive(
