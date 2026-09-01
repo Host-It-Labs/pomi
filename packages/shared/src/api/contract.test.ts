@@ -203,6 +203,22 @@ describe('accepted-action schemas', () => {
 
   it('validates every conditional timer action requirement', () => {
     expectActionInvalid(
+      {
+        kind: 'timer',
+        operation: 'pause',
+        expectedTimerId: 'timer-1',
+      },
+      'expectedTimerId'
+    );
+    expectActionInvalid(
+      {
+        kind: 'timer',
+        operation: 'pause',
+        expectedScheduleRevision: 'revision-1',
+      },
+      'expectedTimerId'
+    );
+    expectActionInvalid(
       { kind: 'timer', operation: 'createOrResume' },
       'timerType'
     );
@@ -700,5 +716,33 @@ describe('accepted-action schemas', () => {
     expect(
       preparationBody.safeParse({ kind: 'chunks', preparationId }).success
     ).toBe(true);
+  });
+
+  it('validates standard and Live Activity push-token updates', () => {
+    const pushTokenBody = apiContract.users.updatePushToken.body;
+
+    for (const platform of ['android', 'ios'] as const) {
+      expect(
+        pushTokenBody.safeParse({ token: 'token', platform }).success
+      ).toBe(true);
+      expect(pushTokenBody.safeParse({ token: null, platform }).success).toBe(
+        false
+      );
+    }
+
+    expect(
+      pushTokenBody.safeParse({
+        token: 'activity-token',
+        platform: 'ios-live-activity',
+      }).success
+    ).toBe(true);
+    expect(
+      pushTokenBody.safeParse({ token: null, platform: 'ios-live-activity' })
+        .success
+    ).toBe(true);
+    expect(
+      pushTokenBody.safeParse({ token: '', platform: 'ios-live-activity' })
+        .success
+    ).toBe(false);
   });
 });
