@@ -52,8 +52,14 @@ class WatchLanguageTest {
     @Test
     fun storedLanguageWrapsActivityResourcesWithoutChangingTheBaseContext() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val store = WatchSessionStore(context)
-        store.saveSession("localhost:3000", "person", "token", "fr")
+        val store = WatchSessionStore(context, InMemoryRefreshTokenVault(), Unit)
+        store.saveSession(
+            "http://localhost:3000",
+            "person",
+            "token",
+            "refresh",
+            "fr"
+        )
 
         val localized = context.withWatchLanguage()
         assertEquals("fr", localized.resources.configuration.locales[0].language)
@@ -66,7 +72,7 @@ class WatchLanguageTest {
     @Test
     fun accountLanguageChangesNotifyLiveActivityBindingsOnlyWhenTheValueChanges() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val store = WatchSessionStore(context)
+        val store = WatchSessionStore(context, InMemoryRefreshTokenVault(), Unit)
         store.saveLanguage("en")
         val observed = mutableListOf<String>()
         val remove = WatchLanguageCoordinator.addListener { observed += it }
@@ -102,5 +108,19 @@ class WatchLanguageTest {
 
         assertEquals("Normal", task.localizedPriorityLabel(context.withWatchLanguage("en")))
         assertEquals("Normale", task.localizedPriorityLabel(context.withWatchLanguage("fr")))
+    }
+}
+
+private class InMemoryRefreshTokenVault : RefreshTokenVault {
+    private var value: String? = null
+
+    override fun read(): String? = value
+
+    override fun write(value: String) {
+        this.value = value
+    }
+
+    override fun delete() {
+        value = null
     }
 }

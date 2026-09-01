@@ -17,11 +17,19 @@ describe('isolated store factories', () => {
   it('shares concurrent system bootstrap requests', async () => {
     let resolveRequest!: (value: {
       status: number;
-      body: { hostingMode: 'self-hosted'; selfHosted: true };
+      body: {
+        hostingMode: 'self-hosted';
+        selfHosted: true;
+        requiresAdminBootstrapToken: false;
+      };
     }) => void;
     const response = new Promise<{
       status: number;
-      body: { hostingMode: 'self-hosted'; selfHosted: true };
+      body: {
+        hostingMode: 'self-hosted';
+        selfHosted: true;
+        requiresAdminBootstrapToken: false;
+      };
     }>(resolve => {
       resolveRequest = resolve;
     });
@@ -34,7 +42,11 @@ describe('isolated store factories', () => {
 
     resolveRequest({
       status: 200,
-      body: { hostingMode: 'self-hosted', selfHosted: true },
+      body: {
+        hostingMode: 'self-hosted',
+        selfHosted: true,
+        requiresAdminBootstrapToken: false,
+      },
     });
     await Promise.all([first, second]);
     expect(store.getState().systemInfo?.selfHosted).toBe(true);

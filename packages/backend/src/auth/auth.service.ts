@@ -12,10 +12,22 @@ import { SystemService } from '../system/system.service';
 import { UsersService } from '../users/users.service';
 import type { UserEntity } from '../users/users.entity';
 import { AuthAttemptStore } from './auth-attempt.store';
+import type {
+  AuthPlatform,
+  CreatedSession,
+  RefreshedSession,
+} from './session.service';
+import { SessionService } from './session.service';
 
 const MIN_REGISTRATION_PASSWORD_LENGTH = 12;
 const DUMMY_PASSWORD_HASH =
   '$2b$10$RGiLuMQiskoi294uyu4BIeBXLazhtQKBxwBaFXWi3uTlTQYSMT.zW';
+
+export type AuthenticationOptions = {
+  platform?: AuthPlatform;
+  deviceId?: string;
+  bootstrapToken?: string;
+};
 
 @Injectable()
 export class AuthService {
@@ -24,10 +36,16 @@ export class AuthService {
     private jwtService: JwtService,
     private preferencesService: PreferencesService,
     private systemService: SystemService,
-    private authAttemptStore: AuthAttemptStore
+    private authAttemptStore: AuthAttemptStore,
+    private sessionService: SessionService
   ) {}
 
-  async signUp(username: string, password: string, language?: AppLanguage) {
+  async signUp(
+    username: string,
+    password: string,
+    language?: AppLanguage,
+    options?: AuthenticationOptions
+  ) {
     if (!username || !password) {
       throw new BadRequestException('Username and password are required');
     }
@@ -38,20 +56,25 @@ export class AuthService {
       throw new ConflictException('Username already exists');
     }
 
-    const shouldAssignAdmin =
+    const shouldClaimFirstAdmin =
       this.systemService.isSelfHosted() &&
       (await this.usersService.countAdmins()) === 0;
+    if (shouldClaimFirstAdmin) {
+      this.usersService.assertFirstAdminBootstrapToken(options?.bootstrapToken);
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     let user;
     try {
       user = await this.usersService.createUser({
         username,
         password: hashedPassword,
-        isAdmin: shouldAssignAdmin,
+        isAdmin: shouldClaimFirstAdmin,
+        adminBootstrapToken: options?.bootstrapToken,
       });
     } catch (error: any) {
       if (error?.code === '23505') {
-        return await this.login(username, password, requestedLanguage);
+        return await this.login(username, password, requestedLanguage, options);
       }
       throw error;
     }
@@ -61,21 +84,20 @@ export class AuthService {
       requestedLanguage
     );
 
-    const token = this.jwtService.sign({
-      sub: user.id,
-      username: user.username,
-    });
-
-    const { password: _, ...userWithoutPassword } = user;
-    return {
-      user: userWithoutPassword,
-      token,
-      isNewUser: true,
-      language: preferences.language,
-    };
+    return await this.createSessionResult(
+      user,
+      preferences.language,
+      true,
+      options
+    );
   }
 
-  async login(username: string, password: string, language?: AppLanguage) {
+  async login(
+    username: string,
+    password: string,
+    language?: AppLanguage,
+    options?: AuthenticationOptions
+  ) {
     if (!username || !password) {
       throw new BadRequestException('Username and password are required');
     }
@@ -85,13 +107,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid username or password');
     }
 
-    return await this.loginWithUser(user, password, language);
+    return await this.loginWithUser(user, password, language, options);
   }
 
   private async loginWithUser(
     user: UserEntity,
     password: string,
-    language?: AppLanguage
+    language?: AppLanguage,
+    options?: AuthenticationOptions
   ) {
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) {
@@ -103,25 +126,20 @@ export class AuthService {
       this.normalizeLanguage(language)
     );
 
-    const token = this.jwtService.sign({
-      sub: user.id,
-      username: user.username,
-    });
-
-    const { password: _, ...userWithoutPassword } = user;
-    return {
-      user: userWithoutPassword,
-      token,
-      isNewUser: false,
-      language: preferences.language,
-    };
+    return await this.createSessionResult(
+      user,
+      preferences.language,
+      false,
+      options
+    );
   }
 
   async authenticateUser(
     username: string,
     password: string,
     origin: string,
-    language?: AppLanguage
+    language?: AppLanguage,
+    options?: AuthenticationOptions
   ) {
     if (!username || !password) {
       throw new BadRequestException('Username and password are required');
@@ -140,13 +158,14 @@ export class AuthService {
       }
       this.assertRegistrationPassword(password);
       await this.authAttemptStore.assertRegistrationAllowed(origin);
-      return await this.signUp(username, password, requestedLanguage);
+      return await this.signUp(username, password, requestedLanguage, options);
     }
     try {
       return await this.loginWithUser(
         existingUser,
         password,
-        requestedLanguage
+        requestedLanguage,
+        options
       );
     } catch (error) {
       if (
@@ -157,6 +176,47 @@ export class AuthService {
       }
       throw error;
     }
+  }
+
+  async createSessionForUser(
+    user: UserEntity,
+    options?: AuthenticationOptions
+  ) {
+    const preferences = await this.preferencesService.getPreferences(user.id);
+    const session = await this.sessionService.createSession(
+      user.id,
+      options?.platform ?? 'web',
+      options?.deviceId
+    );
+    return await this.formatSessionResult(
+      user,
+      preferences.language,
+      false,
+      session
+    );
+  }
+
+  async refreshSession(
+    rawRefreshToken: string,
+    options?: AuthenticationOptions
+  ) {
+    const refreshed = await this.sessionService.refreshSession(
+      rawRefreshToken,
+      options?.platform ?? 'web'
+    );
+    const user = await this.usersService.findUserById(refreshed.userId);
+    if (!user) {
+      await this.sessionService.revokeRefreshSession(rawRefreshToken);
+      throw new UnauthorizedException('Invalid session');
+    }
+
+    const preferences = await this.preferencesService.getPreferences(user.id);
+    return await this.formatSessionResult(
+      user,
+      preferences.language,
+      false,
+      refreshed
+    );
   }
 
   private assertRegistrationPassword(password: string): void {
@@ -180,5 +240,41 @@ export class AuthService {
       throw new BadRequestException('Unsupported language');
     }
     return normalized;
+  }
+
+  private async createSessionResult(
+    user: UserEntity,
+    language: AppLanguage,
+    isNewUser: boolean,
+    options?: AuthenticationOptions
+  ) {
+    const session = await this.sessionService.createSession(
+      user.id,
+      options?.platform ?? 'web',
+      options?.deviceId
+    );
+    return await this.formatSessionResult(user, language, isNewUser, session);
+  }
+
+  private formatSessionResult(
+    user: UserEntity,
+    language: AppLanguage,
+    isNewUser: boolean,
+    session: CreatedSession | RefreshedSession
+  ) {
+    const token = this.jwtService.sign({
+      sub: user.id,
+      username: user.username,
+      sid: session.sessionId,
+    });
+
+    const { password: _, ...userWithoutPassword } = user;
+    return {
+      user: userWithoutPassword,
+      token,
+      refreshToken: session.refreshToken,
+      isNewUser,
+      language,
+    };
   }
 }

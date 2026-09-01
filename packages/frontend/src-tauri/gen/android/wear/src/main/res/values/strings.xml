@@ -15,6 +15,7 @@
     <string name="all_fields_required">All fields required</string>
     <string name="connecting">Connecting</string>
     <string name="login_failed">Login failed</string>
+    <string name="unsafe_backend_removed">Unsafe saved backend removed. Use HTTPS.</string>
     <string name="done">Done</string>
     <string name="cancel">Cancel</string>
     <string name="back">Back</string>

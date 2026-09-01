@@ -52,6 +52,12 @@ describe('backend Docker secret boundary', () => {
 
     expect(compose).toContain('JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}');
     expect(compose).toContain(
+      'POMI_ADMIN_BOOTSTRAP_TOKEN: ${POMI_ADMIN_BOOTSTRAP_TOKEN:?Set POMI_ADMIN_BOOTSTRAP_TOKEN}'
+    );
+    expect(compose).toContain(
+      'POMI_LEGACY_JWT_MIGRATION_UNTIL: ${POMI_LEGACY_JWT_MIGRATION_UNTIL:-}'
+    );
+    expect(compose).toContain(
       'POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}'
     );
     expect(compose).toContain(
@@ -66,6 +72,11 @@ describe('backend Docker secret boundary', () => {
     expect(compose).toContain('pgdata18:/var/lib/postgresql');
     expect(compose).toContain('image: redis:8-alpine');
     expect(compose).toContain('--requirepass');
+
+    const productionEnvironment = repositoryFile(
+      'packages/backend/.env.production.example'
+    );
+    expect(productionEnvironment).toContain('POMI_ADMIN_BOOTSTRAP_TOKEN=');
 
     const redisService = compose.slice(compose.indexOf('\n  redis:'));
     expect(redisService).not.toMatch(/\n\s+ports:/);

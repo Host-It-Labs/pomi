@@ -5,16 +5,6 @@ import { requestBackendConnectionRecovery } from './backendConnectionRecovery';
 import { getBackendOrigin } from './backendUrl';
 import { startServerResponseWatch } from './serverResponseMonitor';
 
-const getAuthFromStorage = () => {
-  try {
-    const authData = localStorage.getItem('pomi-auth-storage');
-    return authData ? JSON.parse(authData) : {};
-  } catch (error) {
-    console.error('Failed to parse auth data from localStorage:', error);
-    return {};
-  }
-};
-
 export const baseUrl = () => {
   return getBackendOrigin();
 };
@@ -24,27 +14,25 @@ const rawClient = initClient(apiContract, {
   baseHeaders: {
     'Content-Type': 'application/json',
     Authorization: () => {
-      const authData = getAuthFromStorage();
-      const token = authData.state?.token;
+      const token = useAuthStore.getState().token;
       return token ? `Bearer ${token}` : '';
     },
   },
+  credentials: 'include',
   validateResponse: true,
 });
 
-const withAuthHandling = <T>(response: T) => {
-  if (
-    response &&
-    typeof response === 'object' &&
-    'status' in response &&
-    (response as { status: number }).status === 401 &&
-    window.location.pathname !== '/login'
-  ) {
-    useAuthStore.getState().expireSession();
-  }
+const responseStatus = (response: unknown): number | null =>
+  response && typeof response === 'object' && 'status' in response
+    ? Number((response as { status: unknown }).status)
+    : null;
 
-  return response;
-};
+const SESSION_ROUTES = new Set([
+  'sessions.create',
+  'sessions.deleteCurrent',
+  'sessions.migrate',
+  'sessions.refresh',
+]);
 
 const withDynamicBaseUrl = (request: unknown) => {
   const overrideClientOptions = { baseUrl: baseUrl() };
@@ -153,10 +141,21 @@ const wrapClientWithPath = <T extends object>(
             const response = READ_RECOVERY_ROUTES.has(routePath)
               ? await retryReadOnce(call, request)
               : await call(withDynamicBaseUrl(request));
-            if (routePath === 'sessions.deleteCurrent') {
-              return response;
+            if (
+              responseStatus(response) === 401 &&
+              !SESSION_ROUTES.has(routePath)
+            ) {
+              const refreshed = await useAuthStore.getState().refreshSession();
+              if (refreshed) {
+                const retryResponse = await call(withDynamicBaseUrl(request));
+                if (responseStatus(retryResponse) === 401) {
+                  useAuthStore.getState().expireSession();
+                }
+                return retryResponse;
+              }
+              useAuthStore.getState().expireSession();
             }
-            return withAuthHandling(response);
+            return response;
           } finally {
             stopWatchingServer?.();
           }

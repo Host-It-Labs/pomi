@@ -23,6 +23,8 @@ import { isTransientDependencyError } from '../logging/dependency-errors';
 import { formatSafeError } from '../logging/sanitize-log';
 import type { UserEntity } from '../users/users.entity';
 import { UsersService } from '../users/users.service';
+import type { SessionPayload } from '../auth/session.service';
+import { SessionService } from '../auth/session.service';
 import { ClientNotificationEvent } from './timer-events';
 import { TimerService } from './timer.service';
 
@@ -30,11 +32,13 @@ const MAX_SOCKET_EXPIRY_TIMEOUT_MS = 2_147_000_000;
 
 type VerifiedSocketPayload = {
   sub: string;
+  sid?: string;
   exp?: number;
 };
 
 @WebSocketGateway({
   cors: {
+    credentials: true,
     origin: (
       origin: string | undefined,
       callback: (error: Error | null, allowed?: boolean) => void
@@ -67,6 +71,7 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private timerService: TimerService,
     private jwtService: JwtService,
     private usersService: UsersService,
+    private sessionService: SessionService,
     @Inject(forwardRef(() => PreferencesService))
     private preferencesService: PreferencesService,
     private realtimeEvents: RealtimeEvents
@@ -203,12 +208,13 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
     );
   }
 
-  private getUserIdFromSocket(client: Socket): string {
+  private async getUserIdFromSocket(client: Socket): Promise<string> {
     if (typeof client.data?.userId === 'string') {
       return client.data.userId;
     }
     try {
       const decoded = this.verifySocketTokenPayload(client);
+      await this.assertSocketSessionActive(decoded);
       this.scheduleSocketExpiry(client, decoded.exp);
       return decoded.sub;
     } catch (error) {
@@ -220,9 +226,10 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  private verifySocketToken(client: Socket): string {
+  private async verifySocketToken(client: Socket): Promise<string> {
     try {
       const decoded = this.verifySocketTokenPayload(client);
+      await this.assertSocketSessionActive(decoded);
       this.scheduleSocketExpiry(client, decoded.exp);
       return decoded.sub;
     } catch (error) {
@@ -234,7 +241,7 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private async authorizeSocketUser(client: Socket): Promise<UserEntity> {
-    const userId = this.getUserIdFromSocket(client);
+    const userId = await this.getUserIdFromSocket(client);
     const user = await this.usersService.findUserById(userId);
     if (!user) {
       throw new UnauthorizedException('User no longer exists');
@@ -250,6 +257,7 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const decoded = this.jwtService.verify<{
       sub?: unknown;
+      sid?: unknown;
       exp?: unknown;
     }>(token);
     if (
@@ -261,13 +269,38 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
       throw new UnauthorizedException('Invalid token payload');
     }
 
+    if (decoded.sid !== undefined && typeof decoded.sid !== 'string') {
+      throw new UnauthorizedException('Invalid token payload');
+    }
+
     return {
       sub: decoded.sub,
+      sid: typeof decoded.sid === 'string' ? decoded.sid : undefined,
       exp:
         typeof decoded.exp === 'number' && Number.isFinite(decoded.exp)
           ? decoded.exp
           : undefined,
     };
+  }
+
+  private async assertSocketSessionActive(
+    payload: VerifiedSocketPayload
+  ): Promise<void> {
+    if (payload.sid) {
+      if (
+        !(await this.sessionService.isAccessSessionActive(
+          payload.sid,
+          payload.sub
+        ))
+      ) {
+        throw new UnauthorizedException('Session is no longer active');
+      }
+      return;
+    }
+
+    if (!this.sessionService.isLegacyTokenAllowed(payload as SessionPayload)) {
+      throw new UnauthorizedException('Legacy session is no longer allowed');
+    }
   }
 
   private scheduleSocketExpiry(client: Socket, expiresAtSeconds?: number) {
@@ -308,7 +341,7 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private installSocketAuthorizationMiddleware(client: Socket): void {
     client.use(async (_event, next) => {
       try {
-        const userId = this.verifySocketToken(client);
+        const userId = await this.verifySocketToken(client);
         if (client.data?.userId !== userId) {
           throw new UnauthorizedException('Socket identity changed');
         }
@@ -466,7 +499,7 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage(SOCKET_EVENTS.GET_CURRENT_TIMER)
   async handleGetCurrentTimer(@ConnectedSocket() client: Socket) {
-    const userId = this.getUserIdFromSocket(client);
+    const userId = await this.getUserIdFromSocket(client);
     const [timer, extensionState] = await Promise.all([
       this.timerService.getTimerByUserId(userId),
       this.timerService.getExtensionState(userId),

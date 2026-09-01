@@ -83,6 +83,7 @@ const userSchema = z.object({
 const systemInfoSchema = z.object({
   hostingMode: z.enum(['hosted', 'self-hosted']),
   selfHosted: z.boolean(),
+  requiresAdminBootstrapToken: z.boolean(),
 });
 
 const userDataTransferRowSchema = z.record(z.unknown());
@@ -334,6 +335,18 @@ const sessionCreateSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
   language: appLanguageSchema.optional(),
+  platform: platformSchema.optional(),
+  bootstrapToken: z.string().min(1).max(256).optional(),
+  deviceId: z.string().min(1).max(128).optional(),
+});
+
+const sessionRefreshSchema = z.object({
+  platform: platformSchema.optional(),
+  refreshToken: z.string().min(1).optional(),
+});
+
+const sessionMigrationSchema = z.object({
+  platform: platformSchema.optional(),
 });
 
 const sessionResponseSchema = z.object({
@@ -341,6 +354,7 @@ const sessionResponseSchema = z.object({
   token: z.string(),
   isNewUser: z.boolean(),
   language: appLanguageSchema,
+  refreshToken: z.string().optional(),
 });
 
 const intentionsQuerySchema = z.object({
@@ -1548,6 +1562,24 @@ export const apiContract = c.router({
         401: errorSchema,
         409: errorSchema,
         429: errorSchema,
+      },
+    },
+    refresh: {
+      method: 'POST',
+      path: '/sessions/refresh',
+      body: sessionRefreshSchema,
+      responses: {
+        200: sessionResponseSchema,
+        401: errorSchema,
+      },
+    },
+    migrate: {
+      method: 'POST',
+      path: '/sessions/migrate',
+      body: sessionMigrationSchema,
+      responses: {
+        200: sessionResponseSchema,
+        401: errorSchema,
       },
     },
     deleteCurrent: {

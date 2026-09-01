@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
 import { apiClient } from '../utils/apiClient';
 import { clearStoredBackendUrl } from '../utils/backendUrlStorage';
+import { sessionPlatform } from '../utils/sessionPlatform';
 
 let devAutoLoginInFlight = false;
 
@@ -15,8 +16,10 @@ const isMobileSimulatorFrame = () =>
 
 export function useDevAutoLogin() {
   const isAuthenticated = useAuthStore.use.isAuthenticated();
+  const isAuthLoading = useAuthStore.use.isLoading();
   const token = useAuthStore.use.token();
   const hasExplicitlySignedOut = useAuthStore.use.hasExplicitlySignedOut();
+  const acceptSession = useAuthStore.use.acceptSession();
   const setUser = useAuthStore.use.setUser();
   const setToken = useAuthStore.use.setToken();
   const setActiveTab = useUiStore.use.setActiveTab();
@@ -37,6 +40,8 @@ export function useDevAutoLogin() {
       setIsPending(false);
       return;
     }
+
+    if (isAuthLoading) return;
 
     clearStoredBackendUrl();
 
@@ -67,9 +72,10 @@ export function useDevAutoLogin() {
         body: {
           username,
           password,
+          platform: sessionPlatform,
         },
       })
-      .then(response => {
+      .then(async response => {
         if (response.status !== 200) {
           console.error('Dev auto-login failed:', response.status);
           setActiveTab('login');
@@ -83,8 +89,7 @@ export function useDevAutoLogin() {
         };
         successfulTokenRef.current = data.token;
         attemptedForUserRef.current = null;
-        setToken(data.token);
-        setUser(data.user);
+        await acceptSession(data);
         setHasLoggedIn(true);
         setActiveTab('timer');
       })
@@ -97,6 +102,8 @@ export function useDevAutoLogin() {
         setIsPending(false);
       });
   }, [
+    acceptSession,
+    isAuthLoading,
     isAuthenticated,
     hasExplicitlySignedOut,
     password,

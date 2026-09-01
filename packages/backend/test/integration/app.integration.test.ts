@@ -13,6 +13,7 @@ import { clearAuthRateLimitKeys } from './auth-rate-limit-cleanup';
 
 const require = createRequire(import.meta.url);
 const { AppModule } = require('../../dist/src/app.module.js');
+const ADMIN_BOOTSTRAP_TOKEN = 'pomi-development-admin-bootstrap-token';
 
 const hasInfrastructure = Boolean(
   process.env.DATABASE_URL && process.env.REDIS_URL
@@ -41,6 +42,7 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
     const session = await request(app.getHttpServer()).post('/sessions').send({
       username: usernames[0],
       password: 'vitest-password',
+      bootstrapToken: ADMIN_BOOTSTRAP_TOKEN,
     });
     token = session.body.token;
   });
@@ -110,6 +112,7 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
     const response = await request(app.getHttpServer()).post('/sessions').send({
       username: usernames[1],
       password: 'vitest-password',
+      bootstrapToken: ADMIN_BOOTSTRAP_TOKEN,
     });
 
     expect(response.status).toBe(200);
@@ -117,11 +120,40 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
     expect(response.body.token).toEqual(expect.any(String));
   });
 
+  it('rotates the HttpOnly refresh cookie and renews access', async () => {
+    const created = await request(app.getHttpServer()).post('/sessions').send({
+      username: usernames[0],
+      password: 'vitest-password',
+    });
+    const createdCookie = created.headers['set-cookie']?.[0];
+
+    expect(created.status).toBe(200);
+    expect(created.body.refreshToken).toBeUndefined();
+    expect(createdCookie).toContain('pomi_refresh=');
+    expect(createdCookie).toContain('HttpOnly');
+    if (!createdCookie) throw new Error('Missing refresh cookie');
+
+    const refreshed = await request(app.getHttpServer())
+      .post('/sessions/refresh')
+      .set('cookie', createdCookie)
+      .send({ platform: 'web' });
+
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.body.token).toEqual(expect.any(String));
+    expect(refreshed.body.refreshToken).toBeUndefined();
+    expect(refreshed.headers['set-cookie']?.[0]).toContain('pomi_refresh=');
+    expect(refreshed.headers['set-cookie']?.[0]).not.toBe(createdCookie);
+  });
+
   it('bounds repeated credentials and returns retry guidance', async () => {
     const username = usernames[2];
     await request(app.getHttpServer())
       .post('/sessions')
-      .send({ username, password: 'vitest-password' })
+      .send({
+        username,
+        password: 'vitest-password',
+        bootstrapToken: ADMIN_BOOTSTRAP_TOKEN,
+      })
       .expect(200);
 
     for (let attempt = 0; attempt < 9; attempt += 1) {
@@ -210,5 +242,10 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
       .delete('/sessions/current?platform=web')
       .set('authorization', `Bearer ${token}`)
       .expect(200, { success: true });
+
+    await request(app.getHttpServer())
+      .get('/preferences')
+      .set('authorization', `Bearer ${token}`)
+      .expect(401);
   });
 });

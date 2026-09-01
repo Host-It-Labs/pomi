@@ -1,7 +1,4 @@
-import {
-  backendUrlHasProtocol,
-  getStoredBackendUrl,
-} from '../utils/backendUrlStorage';
+import { getStoredBackendUrl } from '../utils/backendUrlStorage';
 import { isAndroid, isTauri } from '../utils/osUtils';
 
 const ANDROID_EMULATOR_HOST = '10.0.2.2';
@@ -19,7 +16,7 @@ export const isDevAutoLoginEnabled =
 
 const getAndroidReachableBackendUrl = (backendUrl: string): string => {
   const trimmedUrl = backendUrl.trim();
-  const hasProtocol = backendUrlHasProtocol(trimmedUrl);
+  const hasProtocol = /^https?:\/\//i.test(trimmedUrl);
 
   try {
     const parsedUrl = new URL(

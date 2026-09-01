@@ -3,6 +3,7 @@ import { SOCKET_EVENTS } from '@pomi/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthGuard } from '../../src/auth/auth.guard';
 import { TimerGateway } from '../../src/timer/timer.gateway';
+import { createSessionServiceStub } from './auth-session-test-stubs';
 
 function createExecutionContext(request: Record<string, unknown>) {
   return {
@@ -19,7 +20,8 @@ describe('stale-user authentication', () => {
     const request = { headers: { authorization: 'Bearer valid-token' } };
     const guard = new AuthGuard(
       { verifyAsync: async () => ({ sub: 'deleted-user' }) } as never,
-      { userExists: async () => false } as never
+      { userExists: async () => false } as never,
+      createSessionServiceStub()
     );
 
     await expect(
@@ -35,7 +37,8 @@ describe('stale-user authentication', () => {
     };
     const guard = new AuthGuard(
       { verifyAsync: async () => payload } as never,
-      { userExists: async () => true } as never
+      { userExists: async () => true } as never,
+      createSessionServiceStub()
     );
 
     await expect(
@@ -67,6 +70,7 @@ describe('stale-user authentication', () => {
           return false;
         },
       } as never,
+      createSessionServiceStub(),
       { onPreferencesUpdate: createEventSource() } as never,
       {
         onTasksUpdate: createEventSource(),
@@ -93,8 +97,7 @@ describe('stale-user authentication', () => {
     let userLookupCount = 0;
     let disconnectCalls = 0;
     let packetMiddleware:
-      | ((packet: unknown[], next: (error?: Error) => void) => void)
-      | undefined;
+      ((packet: unknown[], next: (error?: Error) => void) => void) | undefined;
     const gateway = new TimerGateway(
       {
         onTimerUpdate: createEventSource(),
@@ -120,6 +123,7 @@ describe('stale-user authentication', () => {
         },
         hasPushToken: async () => true,
       } as never,
+      createSessionServiceStub(),
       { onPreferencesUpdate: createEventSource() } as never,
       {
         onTasksUpdate: createEventSource(),
@@ -156,8 +160,7 @@ describe('stale-user authentication', () => {
     let verifyCalls = 0;
     let disconnectCalls = 0;
     let packetMiddleware:
-      | ((packet: unknown[], next: (error?: Error) => void) => void)
-      | undefined;
+      ((packet: unknown[], next: (error?: Error) => void) => void) | undefined;
     const gateway = new TimerGateway(
       {
         onTimerUpdate: createEventSource(),
@@ -181,6 +184,7 @@ describe('stale-user authentication', () => {
         userExists: async () => true,
         hasPushToken: async () => false,
       } as never,
+      createSessionServiceStub(),
       { onPreferencesUpdate: createEventSource() } as never,
       {
         onTasksUpdate: createEventSource(),
@@ -249,6 +253,7 @@ describe('stale-user authentication', () => {
           findUserById: async () => ({ id: 'active-user' }),
           hasPushToken: async () => false,
         } as never,
+        createSessionServiceStub(),
         { onPreferencesUpdate: createEventSource() } as never,
         {
           onTasksUpdate: createEventSource(),

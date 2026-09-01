@@ -2,12 +2,12 @@
 
 ## Production backend
 
-Copy `packages/backend/.env.production.example` to a private path. Set only the
-three required secrets: `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, and
-`JWT_SECRET`. Generate them with a cryptographically secure password generator;
-do not use the development values.
+Copy `packages/backend/.env.production.example` to a private path. Set the four
+required secrets: `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `JWT_SECRET`, and
+`POMI_ADMIN_BOOTSTRAP_TOKEN`. Generate them with a cryptographically secure
+password generator; do not use the development values.
 
-Generate each secret separately so the three services do not share a value:
+Generate each secret separately so credentials are not shared:
 
 ```bash
 openssl rand -hex 32
@@ -19,6 +19,11 @@ openssl rand -hex 32
 - `REDIS_PASSWORD` protects the private Redis instance. Compose passes the same
   value to both Redis and the backend.
 - `JWT_SECRET` signs authentication tokens. Changing it signs every user out.
+- `POMI_ADMIN_BOOTSTRAP_TOKEN` protects the first self-hosted administrator
+  claim. It must contain at least 32 characters and must be different from the
+  other secrets. The first account-creation form asks for this value. Once an
+  administrator exists, later registrations do not use it, but keep it private
+  for disaster recovery unless your operational policy rotates it.
 - `CORS_ORIGINS` is not a secret. Native clients use the provided defaults. Add
   a hosted web frontend as an exact origin such as `https://pomi.example.com`,
   without a trailing slash or path.
@@ -40,8 +45,12 @@ build the checked-out source locally instead, set
 `POMI_BACKEND_IMAGE=pomi-backend:local` and use `up -d --build`.
 
 The backend binds to `127.0.0.1:3000` by default. Put an HTTPS reverse proxy in
-front of it. Native Tauri origins are allowed by default; a separately hosted
-web frontend must set `CORS_ORIGINS` to its exact comma-separated origins.
+front of it and configure `TRUST_PROXY_HOPS` to the exact number of trusted
+proxy hops. Remote clients reject plaintext HTTP backends. Native Tauri origins
+are allowed by default; a separately hosted web frontend must set
+`CORS_ORIGINS` to its exact comma-separated origins. Origins include scheme,
+host, and optional port only—never paths, wildcards, credentials, queries, or
+fragments.
 PostgreSQL and Redis are isolated on an internal Docker network and must not be
 published to the internet.
 
@@ -70,6 +79,27 @@ its versioned cluster below `/var/lib/postgresql`, so the volume intentionally
 mounts that parent directory. Never attach the old `pgdata17` volume or a
 PostgreSQL 17 data directory to the PostgreSQL 18 service. Redis is not the
 durable user-data backup.
+
+### Upgrade authentication sessions
+
+Deploy the database migration and backend before updating web, desktop, mobile,
+or Wear clients. The backend accepts the new short-lived access tokens and
+rotating refresh sessions as soon as the `auth_sessions` migration has run.
+
+Existing bearer-only clients can migrate without prompting the user again only
+during an explicitly bounded compatibility window. Set
+`POMI_LEGACY_JWT_MIGRATION_UNTIL` to an ISO-8601 UTC timestamp, for example
+`2026-09-08T12:00:00Z`, before deploying the upgraded backend. Upgrade every
+client before that deadline, then remove the variable. Leave it blank for new
+deployments. Do not extend the window merely to preserve abandoned sessions;
+users can sign in again after it closes.
+
+Web and mobile-webview clients keep refresh credentials in Secure, HttpOnly
+cookies. Desktop clients use the operating-system keyring, and Wear OS uses
+Android Keystore. Access tokens remain short-lived and process-memory-only.
+Saved custom backend values that are not exact secure origins are quarantined
+before old authentication data can be reused; affected users must enter a valid
+HTTPS origin and sign in again.
 
 ### Upgrade PostgreSQL 17 to 18
 

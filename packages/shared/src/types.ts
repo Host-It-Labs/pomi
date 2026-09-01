@@ -108,6 +108,7 @@ export interface User {
 export interface SystemInfo {
   hostingMode: 'hosted' | 'self-hosted';
   selfHosted: boolean;
+  requiresAdminBootstrapToken: boolean;
 }
 
 export type UserDataTransferRow = Record<string, unknown>;

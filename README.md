@@ -38,7 +38,8 @@ pnpm test:native
 
 The production Compose stack runs the backend, PostgreSQL, and Redis. Copy the
 production environment example, set `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, and
-`JWT_SECRET`, then start it:
+`JWT_SECRET`, and a separate 32-character-or-longer
+`POMI_ADMIN_BOOTSTRAP_TOKEN`, then start it:
 
 ```bash
 cp packages/backend/.env.production.example pomi.env
@@ -47,8 +48,9 @@ docker compose --env-file pomi.env -f packages/backend/docker-compose.yml up -d 
 
 It binds to `127.0.0.1:3000` by default. Put an HTTPS reverse proxy in front of
 it. Web deployments must also set their exact frontend origin in
-`CORS_ORIGINS`. See [the self-hosting guide](docs/self-hosting.md) for upgrades
-and optional integrations.
+`CORS_ORIGINS`. The first account must provide the administrator bootstrap
+token. See [the self-hosting guide](docs/self-hosting.md) for session upgrades,
+client rollout order, and optional integrations.
 
 ## Optional services
 
