@@ -4,7 +4,7 @@
   "description": "Pomi self-hosted API and realtime backend.",
   "main": "dist/src/main",
   "scripts": {
-    "build": "cd ../.. && packages/backend/node_modules/.bin/nest build --config packages/backend/nest-cli.json --path packages/backend/tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node ../../scripts/rewrite-backend-paths.mjs dist",
     "start:dev": "cd ../.. && packages/backend/node_modules/.bin/nest start --watch --config packages/backend/nest-cli.json --path packages/backend/tsconfig.build.json",
     "start:prod": "node .",
     "openapi:generate": "TS_NODE_COMPILER=../../node_modules/typescript ts-node src/openapi.ts",
