@@ -1,7 +1,10 @@
 import { Body, Controller, Get, Request, UseGuards } from '@nestjs/common';
 import { apiContract, type UserDataExport } from '@pomi/shared';
 import * as Sentry from '@sentry/nestjs';
-import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
+import {
+  TsRestHandler,
+  tsRestHandler,
+} from '../validation/ts-rest-zod4.adapter';
 import { Request as ExpressRequest } from 'express';
 import { AdminGuard } from '../auth/admin.guard';
 import { AuthGuard } from '../auth/auth.guard';

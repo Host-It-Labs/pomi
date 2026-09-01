@@ -6,7 +6,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { apiContract } from '@pomi/shared';
-import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
+import {
+  TsRestHandler,
+  tsRestHandler,
+} from '../validation/ts-rest-zod4.adapter';
 import { AuthGuard } from '../auth/auth.guard';
 import { UpdatePushTokenDto } from './dto/update-push-token.dto';
 import { UserIdParamDto } from './dto/user-id.param';

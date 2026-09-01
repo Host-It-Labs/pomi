@@ -7,7 +7,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { apiContract, TASK_CREATION_SOURCES } from '@pomi/shared';
-import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
+import {
+  TsRestHandler,
+  tsRestHandler,
+} from '../validation/ts-rest-zod4.adapter';
 import { AuthGuard } from '../auth/auth.guard';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { ReorderTasksDto } from './dto/reorder-tasks.dto';
@@ -15,6 +18,7 @@ import { TaskImportDto } from './dto/task-import.dto';
 import { TaskLogsQueryDto } from './dto/task-logs-query.dto';
 import { TaskStatisticsQueryDto } from './dto/task-statistics-query.dto';
 import { TaskEventLogParamDto } from './dto/task-event-log-param.dto';
+import { TaskArchiveQueryDto } from './dto/task-archive-query.dto';
 import { TaskIdParamDto } from './dto/task-id.param';
 import { TasksQueryDto } from './dto/tasks-query.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -131,6 +135,27 @@ export class TasksController {
       return {
         status: 200,
         body: tasks.map(task => this.formatTask(task)),
+      };
+    });
+  }
+
+  @TsRestHandler(apiContract.tasks.archive)
+  async listTaskArchive(
+    @Request() req,
+    @Query() query: TaskArchiveQueryDto
+  ): Promise<unknown> {
+    return tsRestHandler(apiContract.tasks.archive, async () => {
+      const page = await this.tasksService.getTaskArchivePage(
+        req.user.sub,
+        query.limit ?? 50,
+        query.cursor
+      );
+      return {
+        status: 200,
+        body: {
+          items: page.items.map(task => this.formatTask(task)),
+          nextCursor: page.nextCursor,
+        },
       };
     });
   }

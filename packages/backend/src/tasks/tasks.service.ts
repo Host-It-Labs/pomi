@@ -87,6 +87,7 @@ type TaskStatisticsPeriodKey =
   | 'previousYear';
 type TaskStatisticsPeriodRange = { start: Date; end?: Date };
 type TaskStatisticsPeriodCounts = Record<TaskStatisticsPeriodKey, number>;
+type TaskArchiveCursor = { updatedAt: string; id: string };
 
 type ImportTaskRow = {
   sourceId: string;
@@ -166,6 +167,68 @@ export class TasksService {
     });
     await this.attachFollowUpParents(userId, tasks, this.tasksRepository);
     return tasks;
+  }
+
+  async getTaskArchivePage(userId: string, limit: number, cursor?: string) {
+    const query = this.tasksRepository
+      .createQueryBuilder('task')
+      .where('task.userId = :userId', { userId })
+      .andWhere('task.status IN (:...statuses)', {
+        statuses: [TASK_STATUSES.COMPLETED, TASK_STATUSES.ARCHIVED],
+      })
+      .andWhere('task.itemKind IN (:...itemKinds)', {
+        itemKinds: ['task', 'followUp'],
+      })
+      .orderBy('task.updatedAt', 'DESC')
+      .addOrderBy('task.id', 'DESC')
+      .take(limit + 1);
+
+    if (cursor) {
+      const decoded = this.decodeTaskArchiveCursor(cursor);
+      query.andWhere(
+        '(task.updatedAt < :updatedAt OR (task.updatedAt = :updatedAt AND task.id < :id))',
+        decoded
+      );
+    }
+
+    const tasks = await query.getMany();
+    const hasNextPage = tasks.length > limit;
+    const items = hasNextPage ? tasks.slice(0, limit) : tasks;
+    await this.attachFollowUpParents(userId, items, this.tasksRepository);
+    const lastTask = items[items.length - 1];
+    return {
+      items,
+      nextCursor:
+        hasNextPage && lastTask ? this.encodeTaskArchiveCursor(lastTask) : null,
+    };
+  }
+
+  private encodeTaskArchiveCursor(task: TaskEntity): string {
+    return Buffer.from(
+      JSON.stringify({
+        updatedAt: task.updatedAt.toISOString(),
+        id: task.id,
+      } satisfies TaskArchiveCursor)
+    ).toString('base64url');
+  }
+
+  private decodeTaskArchiveCursor(cursor: string): TaskArchiveCursor {
+    try {
+      const value = JSON.parse(
+        Buffer.from(cursor, 'base64url').toString('utf8')
+      ) as Partial<TaskArchiveCursor>;
+      const updatedAt = new Date(value.updatedAt ?? '');
+      if (
+        !value.id ||
+        typeof value.id !== 'string' ||
+        !Number.isFinite(updatedAt.getTime())
+      ) {
+        throw new Error('Invalid archive cursor');
+      }
+      return { updatedAt: updatedAt.toISOString(), id: value.id };
+    } catch {
+      throw new BadRequestException('Invalid task archive cursor');
+    }
   }
 
   private async attachFollowUpParents(

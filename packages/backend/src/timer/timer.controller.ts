@@ -10,7 +10,10 @@ import {
   CLIENT_NOTIFICATION_TYPES,
   TIMER_TYPES,
 } from '@pomi/shared';
-import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
+import {
+  TsRestHandler,
+  tsRestHandler,
+} from '../validation/ts-rest-zod4.adapter';
 import { Request as ExpressRequest } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { DebugGuard } from '../auth/debug.guard';

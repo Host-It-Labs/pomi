@@ -7,7 +7,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { apiContract, TIMER_TYPES } from '@pomi/shared';
-import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
+import {
+  TsRestHandler,
+  tsRestHandler,
+} from '../validation/ts-rest-zod4.adapter';
 import { AuthGuard } from '../auth/auth.guard';
 import { CreateIntentionDto } from './dto/create-intention.dto';
 import { IntentionsQueryDto } from './dto/intentions-query.dto';

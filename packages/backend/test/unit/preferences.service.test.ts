@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { PreferencesService } from '../../src/preferences/preferences.service';
 
+const store = {
+  getOrLoad: async (
+    _userId: string,
+    loader: () => Promise<never>
+  ): Promise<never> => loader(),
+  writeThrough: async (
+    _userId: string,
+    writer: () => Promise<never>
+  ): Promise<never> => writer(),
+} as never;
+
 describe('PreferencesService', () => {
   it('does not write a stale snapshot while reading existing preferences', async () => {
     const saved: unknown[] = [];
@@ -10,14 +21,17 @@ describe('PreferencesService', () => {
       intentionExtension: true,
       tasksExtension: true,
     };
-    const service = new PreferencesService({
-      findOne: async () => existingPreferences,
-      create: (entity: unknown) => entity,
-      save: async (entity: unknown) => {
-        saved.push(entity);
-        return entity;
-      },
-    } as never);
+    const service = new PreferencesService(
+      {
+        findOne: async () => existingPreferences,
+        create: (entity: unknown) => entity,
+        save: async (entity: unknown) => {
+          saved.push(entity);
+          return entity;
+        },
+      } as never,
+      store
+    );
 
     await expect(service.getPreferences('user-1')).resolves.toBe(
       existingPreferences
@@ -39,11 +53,14 @@ describe('PreferencesService', () => {
       orIgnore: () => builder,
       execute: async () => undefined,
     };
-    const service = new PreferencesService({
-      findOne: async () => stored,
-      create: (entity: Record<string, unknown>) => entity,
-      createQueryBuilder: () => builder,
-    } as never);
+    const service = new PreferencesService(
+      {
+        findOne: async () => stored,
+        create: (entity: Record<string, unknown>) => entity,
+        createQueryBuilder: () => builder,
+      } as never,
+      store
+    );
 
     await expect(service.getPreferences('user-2', 'fr')).resolves.toMatchObject(
       {
@@ -65,13 +82,16 @@ describe('PreferencesService', () => {
       language: null,
     };
     const saved: unknown[] = [];
-    const service = new PreferencesService({
-      findOne: async () => existingPreferences,
-      save: async (entity: unknown) => {
-        saved.push(entity);
-        return entity;
-      },
-    } as never);
+    const service = new PreferencesService(
+      {
+        findOne: async () => existingPreferences,
+        save: async (entity: unknown) => {
+          saved.push(entity);
+          return entity;
+        },
+      } as never,
+      store
+    );
 
     await expect(service.getPreferences('user-3', 'ar')).resolves.toMatchObject(
       {
@@ -89,13 +109,16 @@ describe('PreferencesService', () => {
       autoStartBreak: false,
       timerExtension: false,
     };
-    const service = new PreferencesService({
-      findOne: async () => existingPreferences,
-      save: async (entity: Record<string, unknown>) => {
-        saved.push(entity);
-        return entity;
-      },
-    } as never);
+    const service = new PreferencesService(
+      {
+        findOne: async () => existingPreferences,
+        save: async (entity: Record<string, unknown>) => {
+          saved.push(entity);
+          return entity;
+        },
+      } as never,
+      store
+    );
 
     await service.updatePreferences('user-4', {
       autoStartBreak: true,

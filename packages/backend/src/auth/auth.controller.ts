@@ -8,7 +8,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { apiContract } from '@pomi/shared';
-import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
+import {
+  TsRestHandler,
+  tsRestHandler,
+} from '../validation/ts-rest-zod4.adapter';
 import { Request, Response } from 'express';
 import { UsersService } from '../users/users.service';
 import { TimerService } from '../timer/timer.service';
