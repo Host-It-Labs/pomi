@@ -24,7 +24,7 @@ import { AuthenticateDto } from './dto/authenticate.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { MigrateSessionDto } from './dto/migrate-session.dto';
 import { RefreshSessionDto } from './dto/refresh-session.dto';
-import { SessionService } from './session.service';
+import { SessionPayload, SessionService } from './session.service';
 
 @Controller()
 export class AuthController {
@@ -96,8 +96,13 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response
   ): Promise<unknown> {
     return tsRestHandler(apiContract.sessions.migrate, async () => {
-      const userId = request['user']?.sub;
-      if (typeof userId !== 'string') {
+      const payload = request['user'] as SessionPayload | undefined;
+      const userId = payload?.sub;
+      if (
+        !payload ||
+        typeof userId !== 'string' ||
+        !this.sessionService.isLegacyTokenAllowed(payload)
+      ) {
         throw new UnauthorizedException();
       }
       const user = await this.usersService.findUserById(userId);

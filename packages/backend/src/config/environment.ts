@@ -72,7 +72,8 @@ export function validateEnvironment(
     environment,
     'POMI_ADMIN_BOOTSTRAP_TOKEN'
   );
-  const selfHosted = readString(environment, 'POMI_HOSTING_MODE') !== 'hosted';
+  const selfHosted =
+    readString(environment, 'POMI_HOSTING_MODE')?.toLowerCase() !== 'hosted';
   const databaseUrl = resolveDatabaseUrl(environment);
   const redisUrl = resolveRedisUrl(environment);
 

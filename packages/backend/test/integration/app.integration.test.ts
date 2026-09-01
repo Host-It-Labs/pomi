@@ -145,6 +145,58 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
     expect(refreshed.headers['set-cookie']?.[0]).not.toBe(createdCookie);
   });
 
+  it('commits refresh-family revocation before rejecting a replay', async () => {
+    const created = await request(app.getHttpServer()).post('/sessions').send({
+      username: usernames[0],
+      password: 'vitest-password',
+    });
+    const originalCookie = created.headers['set-cookie']?.[0];
+    if (!originalCookie) throw new Error('Missing refresh cookie');
+
+    const rotated = await request(app.getHttpServer())
+      .post('/sessions/refresh')
+      .set('cookie', originalCookie)
+      .send({ platform: 'web' })
+      .expect(200);
+    const currentCookie = rotated.headers['set-cookie']?.[0];
+    if (!currentCookie) throw new Error('Missing rotated refresh cookie');
+
+    const tokenPayload = JSON.parse(
+      Buffer.from(created.body.token.split('.')[1], 'base64url').toString()
+    ) as { sid: string };
+    const dataSource = app.get(DataSource);
+    const sessionMetadata = dataSource.entityMetadatas.find(
+      candidate => candidate.tableName === 'auth_sessions'
+    );
+    if (!sessionMetadata) throw new Error('Missing auth_sessions metadata');
+    const sessions = dataSource.getRepository(sessionMetadata.target);
+    await sessions.update(tokenPayload.sid, {
+      previousRefreshTokenExpiresAt: new Date(0),
+    });
+
+    await request(app.getHttpServer())
+      .post('/sessions/refresh')
+      .set('cookie', originalCookie)
+      .send({ platform: 'web' })
+      .expect(401);
+    await expect(
+      sessions.findOneByOrFail({ id: tokenPayload.sid })
+    ).resolves.toMatchObject({ revocationReason: 'refresh-replay' });
+    await request(app.getHttpServer())
+      .post('/sessions/refresh')
+      .set('cookie', currentCookie)
+      .send({ platform: 'web' })
+      .expect(401);
+  });
+
+  it('rejects current access tokens at the legacy migration endpoint', async () => {
+    await request(app.getHttpServer())
+      .post('/sessions/migrate')
+      .set('authorization', `Bearer ${token}`)
+      .send({ platform: 'android' })
+      .expect(401);
+  });
+
   it('bounds repeated credentials and returns retry guidance', async () => {
     const username = usernames[2];
     await request(app.getHttpServer())

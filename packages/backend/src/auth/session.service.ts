@@ -30,6 +30,9 @@ export type RefreshedSession = CreatedSession & {
   userId: string;
 };
 
+type RefreshTransactionResult =
+  { status: 'refreshed'; session: RefreshedSession } | { status: 'invalid' };
+
 const SESSION_INACTIVITY_MS = 365 * 24 * 60 * 60 * 1000;
 const CONCURRENT_REFRESH_GRACE_MS = 30_000;
 const REFRESH_TOKEN_BYTES = 32;
@@ -96,84 +99,104 @@ export class SessionService {
     const parsed = this.parseRefreshToken(rawRefreshToken);
     if (!parsed) throw new UnauthorizedException('Invalid session');
 
-    return this.sessionRepository.manager.transaction(async manager => {
-      const repository = manager.getRepository(AuthSessionEntity);
-      const session = await repository.findOne({
-        where: { id: parsed.sessionId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      const now = new Date();
-
-      if (!session || session.revokedAt || session.expiresAt <= now) {
-        if (session && !session.revokedAt && session.expiresAt <= now) {
-          await repository.update(session.id, {
-            revokedAt: now,
-            revocationReason: 'expired',
+    const result =
+      await this.sessionRepository.manager.transaction<RefreshTransactionResult>(
+        async manager => {
+          const repository = manager.getRepository(AuthSessionEntity);
+          const session = await repository.findOne({
+            where: { id: parsed.sessionId },
+            lock: { mode: 'pessimistic_write' },
           });
-        }
-        throw new UnauthorizedException('Invalid session');
-      }
+          const now = new Date();
 
-      const presentedHash = hashRefreshSecret(parsed.secret);
-      if (refreshSecretsMatch(presentedHash, session.refreshTokenHash)) {
-        const nextSecret = this.createRefreshSecret();
-        const nextHash = hashRefreshSecret(nextSecret);
-        await repository.update(session.id, {
-          refreshTokenHash: nextHash,
-          currentRefreshTokenCiphertext: encryptRefreshSecret(
-            nextSecret,
-            this.jwtSecret
-          ),
-          previousRefreshTokenHash: session.refreshTokenHash,
-          previousRefreshTokenExpiresAt: new Date(
-            now.getTime() + CONCURRENT_REFRESH_GRACE_MS
-          ),
-          platform,
-          expiresAt: new Date(now.getTime() + SESSION_INACTIVITY_MS),
-          lastUsedAt: now,
-        });
-        return {
-          userId: session.userId,
-          sessionId: session.id,
-          refreshToken: this.formatRefreshToken(session.id, nextSecret),
-        };
-      }
+          if (!session || session.revokedAt || session.expiresAt <= now) {
+            if (session && !session.revokedAt && session.expiresAt <= now) {
+              await repository.update(session.id, {
+                revokedAt: now,
+                revocationReason: 'expired',
+              });
+            }
+            return { status: 'invalid' };
+          }
 
-      const previousIsValid =
-        session.previousRefreshTokenExpiresAt !== null &&
-        session.previousRefreshTokenExpiresAt > now &&
-        session.previousRefreshTokenHash !== null &&
-        refreshSecretsMatch(presentedHash, session.previousRefreshTokenHash);
-      if (previousIsValid) {
-        try {
-          const currentSecret = decryptRefreshSecret(
-            session.currentRefreshTokenCiphertext,
-            this.jwtSecret
-          );
-          return {
-            userId: session.userId,
-            sessionId: session.id,
-            refreshToken: this.formatRefreshToken(session.id, currentSecret),
-          };
-        } catch {
+          const presentedHash = hashRefreshSecret(parsed.secret);
+          if (refreshSecretsMatch(presentedHash, session.refreshTokenHash)) {
+            const nextSecret = this.createRefreshSecret();
+            const nextHash = hashRefreshSecret(nextSecret);
+            await repository.update(session.id, {
+              refreshTokenHash: nextHash,
+              currentRefreshTokenCiphertext: encryptRefreshSecret(
+                nextSecret,
+                this.jwtSecret
+              ),
+              previousRefreshTokenHash: session.refreshTokenHash,
+              previousRefreshTokenExpiresAt: new Date(
+                now.getTime() + CONCURRENT_REFRESH_GRACE_MS
+              ),
+              platform,
+              expiresAt: new Date(now.getTime() + SESSION_INACTIVITY_MS),
+              lastUsedAt: now,
+            });
+            return {
+              status: 'refreshed',
+              session: {
+                userId: session.userId,
+                sessionId: session.id,
+                refreshToken: this.formatRefreshToken(session.id, nextSecret),
+              },
+            };
+          }
+
+          const previousIsValid =
+            session.previousRefreshTokenExpiresAt !== null &&
+            session.previousRefreshTokenExpiresAt > now &&
+            session.previousRefreshTokenHash !== null &&
+            refreshSecretsMatch(
+              presentedHash,
+              session.previousRefreshTokenHash
+            );
+          if (previousIsValid) {
+            try {
+              const currentSecret = decryptRefreshSecret(
+                session.currentRefreshTokenCiphertext,
+                this.jwtSecret
+              );
+              return {
+                status: 'refreshed',
+                session: {
+                  userId: session.userId,
+                  sessionId: session.id,
+                  refreshToken: this.formatRefreshToken(
+                    session.id,
+                    currentSecret
+                  ),
+                },
+              };
+            } catch {
+              await this.revokeFamily(
+                repository,
+                session.familyId,
+                now,
+                'refresh-secret-corrupt'
+              );
+              return { status: 'invalid' };
+            }
+          }
+
           await this.revokeFamily(
             repository,
             session.familyId,
             now,
-            'refresh-secret-corrupt'
+            'refresh-replay'
           );
-          throw new UnauthorizedException('Invalid session');
+          return { status: 'invalid' };
         }
-      }
-
-      await this.revokeFamily(
-        repository,
-        session.familyId,
-        now,
-        'refresh-replay'
       );
+
+    if (result.status === 'invalid') {
       throw new UnauthorizedException('Invalid session');
-    });
+    }
+    return result.session;
   }
 
   async revokeAccessSession(sessionId: string, userId: string): Promise<void> {
@@ -228,6 +251,7 @@ export class SessionService {
 
   isLegacyTokenAllowed(payload: SessionPayload): boolean {
     if (
+      typeof payload.sid === 'string' ||
       !this.legacyMigrationUntilMs ||
       Date.now() >= this.legacyMigrationUntilMs
     ) {

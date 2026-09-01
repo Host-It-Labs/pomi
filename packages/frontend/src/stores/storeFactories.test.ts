@@ -52,6 +52,46 @@ describe('isolated store factories', () => {
     expect(store.getState().systemInfo?.selfHosted).toBe(true);
   });
 
+  it('starts a new load and ignores stale results after the backend changes', async () => {
+    const resolvers: Array<(value: any) => void> = [];
+    const get = vi.fn(() => new Promise(resolve => resolvers.push(resolve)));
+    let backendOrigin = 'https://old.example';
+    const store = createSystemStore(
+      { system: { get } } as never,
+      () => backendOrigin
+    );
+
+    const oldLoad = store.getState().loadSystemInfo();
+    backendOrigin = 'https://new.example';
+    const newLoad = store.getState().loadSystemInfo();
+    expect(get).toHaveBeenCalledTimes(2);
+
+    resolvers[0]({
+      status: 200,
+      body: {
+        hostingMode: 'hosted',
+        selfHosted: false,
+        requiresAdminBootstrapToken: false,
+      },
+    });
+    await oldLoad;
+    expect(store.getState().systemInfo).toBeNull();
+
+    resolvers[1]({
+      status: 200,
+      body: {
+        hostingMode: 'self-hosted',
+        selfHosted: true,
+        requiresAdminBootstrapToken: true,
+      },
+    });
+    await newLoad;
+    expect(store.getState().systemInfo).toMatchObject({
+      selfHosted: true,
+      requiresAdminBootstrapToken: true,
+    });
+  });
+
   it('injects stable notification IDs and resets independently', () => {
     const store = createInAppNotificationStore(() => 'notification-id');
 

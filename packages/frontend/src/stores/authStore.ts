@@ -64,7 +64,6 @@ const readLegacyAccessToken = (): string | null => {
   if (typeof window === 'undefined') return null;
   try {
     const serialized = localStorage.getItem('pomi-auth-storage');
-    localStorage.removeItem('pomi-auth-storage');
     if (!serialized) return null;
     const parsed = JSON.parse(serialized) as { state?: { token?: unknown } };
     return typeof parsed.state?.token === 'string' ? parsed.state.token : null;
@@ -75,6 +74,15 @@ const readLegacyAccessToken = (): string | null => {
       // Storage can be unavailable in hardened webviews.
     }
     return null;
+  }
+};
+
+const clearLegacyAccessToken = (): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem('pomi-auth-storage');
+  } catch {
+    // Storage can be unavailable in hardened webviews.
   }
 };
 
@@ -174,8 +182,10 @@ const useAuthStoreBase = create<AuthState>()((set, get) => ({
           const migratedSession = await parseSession(migrated);
           if (migratedSession) {
             await get().acceptSession(migratedSession);
+            clearLegacyAccessToken();
             return;
           }
+          if (migrated.status === 401) clearLegacyAccessToken();
         }
 
         await get().refreshSession();

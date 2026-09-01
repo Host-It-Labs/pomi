@@ -69,6 +69,36 @@ describe('client session storage', () => {
     });
   });
 
+  it('preserves a legacy token when migration is temporarily unavailable', async () => {
+    localStorage.setItem(
+      'pomi-auth-storage',
+      JSON.stringify({ state: { token: 'legacy-token' } })
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null, { status: 503 }))
+    );
+
+    await useAuthStoreBase.getState().initializeSession();
+
+    expect(localStorage.getItem('pomi-auth-storage')).toContain('legacy-token');
+  });
+
+  it('removes a legacy token after the migration endpoint rejects it', async () => {
+    localStorage.setItem(
+      'pomi-auth-storage',
+      JSON.stringify({ state: { token: 'legacy-token' } })
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null, { status: 401 }))
+    );
+
+    await useAuthStoreBase.getState().initializeSession();
+
+    expect(localStorage.getItem('pomi-auth-storage')).toBeNull();
+  });
+
   it('coalesces concurrent refreshes into one rotating request', async () => {
     let resolveRequest!: (response: Response) => void;
     const request = vi.fn(

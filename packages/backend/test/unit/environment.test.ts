@@ -119,6 +119,19 @@ describe('backend environment validation', () => {
     ).toMatchObject({ POMI_HOSTING_MODE: 'hosted' });
   });
 
+  it('normalizes hosted mode casing before validating bootstrap secrets', () => {
+    expect(
+      validateEnvironment({
+        NODE_ENV: 'production',
+        POMI_HOSTING_MODE: 'HOSTED',
+        DATABASE_URL: 'postgres://database.example/pomi',
+        REDIS_URL: 'rediss://redis.example/pomi',
+        JWT_SECRET: 'a-production-secret-with-more-than-32-characters',
+        CORS_ORIGINS: 'https://focus.example',
+      })
+    ).toMatchObject({ POMI_HOSTING_MODE: 'HOSTED' });
+  });
+
   it('parses a comma-separated origin allowlist', () => {
     expect(
       parseCorsOrigins(
