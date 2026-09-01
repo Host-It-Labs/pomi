@@ -677,7 +677,10 @@ export class TimerService implements OnModuleInit {
 
     if (selectedIntentions.length === 0) {
       this.applySelectedIntentionsToTimer(timer, []);
-      if (timerNotStarted && preferences.intentionCustomDurations) {
+      if (
+        (timerNotStarted || shouldResetOnFirstIntention) &&
+        preferences.intentionCustomDurations
+      ) {
         timer.duration = this.getDefaultTimerDuration(
           timer.type,
           preferences,
@@ -1936,6 +1939,14 @@ export class TimerService implements OnModuleInit {
       options.intention,
       options.intentions
     );
+    if (
+      options.customDuration != null &&
+      (!options.focusedTaskId || incomingIntentions.length === 0)
+    ) {
+      throw new BadRequestException(
+        'Task custom duration requires its confirmed Intention selection'
+      );
+    }
     const hasSelectionPayload =
       options.intention !== undefined ||
       options.intentions !== undefined ||
@@ -2059,10 +2070,13 @@ export class TimerService implements OnModuleInit {
               (preferences.intentionCustomDurations ||
                 options.customDuration != null)
             ) {
-              existingTimer.duration =
-                options.customDuration ??
-                selection.customDuration ??
-                defaultDuration;
+              existingTimer.duration = shouldResetOnFirstIntention
+                ? (selection.customDuration ??
+                  options.customDuration ??
+                  defaultDuration)
+                : (options.customDuration ??
+                  selection.customDuration ??
+                  defaultDuration);
               existingTimer.remainingTime = existingTimer.duration;
             } else if (
               !options.focusedTaskId &&

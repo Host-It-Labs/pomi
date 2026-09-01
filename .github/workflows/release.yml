@@ -237,11 +237,23 @@ jobs:
         working-directory: packages/frontend
         env:
           NODE_ENV: production
+          POMI_UPLOAD_SENTRY_SOURCEMAPS: 'true'
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ env.SENTRY_ORG }}
+          SENTRY_FRONTEND_PROJECT: ${{ env.SENTRY_FRONTEND_PROJECT }}
           VITE_BACKEND_URL: ${{ vars.PROD_BACKEND_URL }}
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
           VITE_SENTRY_RELEASE: ${{ env.FRONTEND_SENTRY_RELEASE }}
           VITE_USE_HTTPS: 'true'
         run: pnpm tauri build --target aarch64-apple-darwin
+
+      - name: Verify private source maps were removed
+        run: |
+          set -euo pipefail
+          if find packages/frontend/dist -type f -name '*.map' -print -quit | grep -q .; then
+            echo 'Frontend source maps must not remain in packaged assets.' >&2
+            exit 1
+          fi
 
       - name: Collect macOS release assets
         shell: bash

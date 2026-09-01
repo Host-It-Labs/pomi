@@ -186,7 +186,7 @@ describe('Task-specific Timer durations', () => {
   });
 
   it.each([TIMER_TYPES.BREAK, TIMER_TYPES.LONG_BREAK])(
-    'applies a focused Task duration when resetting an auto-started %s',
+    'lets the selected Intention duration win when resetting an auto-started %s',
     async type => {
       vi.useFakeTimers();
       vi.setSystemTime(601_000);
@@ -214,12 +214,34 @@ describe('Task-specific Timer durations', () => {
       });
 
       expect(result).toMatchObject({
-        duration: TASK_DURATION,
-        remainingTime: TASK_DURATION,
+        duration: INTENTION_DURATION,
+        remainingTime: INTENTION_DURATION,
         startTime: 601_000,
         focusedTaskIds: ['task-1'],
         hasConsumedFirstIntentionReset: true,
       });
     }
   );
+
+  it('rejects a Task duration without its confirmed Intention selection', async () => {
+    const { service } = createService(
+      timer({
+        type: TIMER_TYPES.BREAK,
+        status: TIMER_STATUSES.RUNNING,
+        duration: 5 * 60_000,
+        remainingTime: 5 * 60_000,
+        isAutoStarted: true,
+      })
+    );
+
+    await expect(
+      service.createOrResumeTimer('user-1', {
+        type: TIMER_TYPES.BREAK,
+        focusedTaskId: 'task-1',
+        customDuration: TASK_DURATION,
+      })
+    ).rejects.toThrow(
+      'Task custom duration requires its confirmed Intention selection'
+    );
+  });
 });

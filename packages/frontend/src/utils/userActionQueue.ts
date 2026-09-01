@@ -579,6 +579,14 @@ async function settleTerminalItem(item: QueueItem) {
       updateItem(item, { status: terminalStatus });
     } catch (error) {
       item.reconcileFinishedAtMs = performance.now();
+      const action = toGatewayAction(item) as Record<string, unknown>;
+      Sentry.captureException(error, {
+        tags: {
+          operation: 'confirmed_action.reconcile',
+          action_kind: String(action.kind ?? 'unknown'),
+          action_operation: String(action.operation ?? 'unknown'),
+        },
+      });
       terminalFailure(
         item,
         error instanceof Error

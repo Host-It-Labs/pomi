@@ -22,6 +22,7 @@ const networkBlockedLog = vi.hoisted(() => vi.fn());
 
 vi.mock('uuid', () => ({ v4: uuid }));
 vi.mock('@sentry/react', () => ({
+  captureException: vi.fn(),
   logger: { info: timingLog, warn: networkBlockedLog },
 }));
 vi.mock('../stores/authStore', () => ({

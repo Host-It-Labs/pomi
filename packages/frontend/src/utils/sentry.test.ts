@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getFrontendSentryRelease,
+  getSafeSentryFingerprint,
   redactSentryEvent,
   redactSentryLog,
 } from './sentry';
@@ -18,6 +19,63 @@ describe('Sentry release configuration', () => {
 });
 
 describe('redactSentryEvent', () => {
+  it('groups equivalent safe origins without retaining exception text', () => {
+    const baseEvent = {
+      tags: { operation: 'modal.render' },
+      exception: {
+        values: [
+          {
+            type: 'TypeError',
+            value: 'private Task title',
+            mechanism: {
+              type: 'auto.browser.global_handlers.onunhandledrejection',
+            },
+            stacktrace: {
+              frames: [
+                { module: 'vendor', in_app: false },
+                { module: 'components.ui.Modal', in_app: true },
+              ],
+            },
+          },
+        ],
+      },
+    };
+
+    expect(getSafeSentryFingerprint(baseEvent)).toEqual([
+      'pomi-client',
+      'TypeError',
+      'auto.browser.global_handlers.onunhandledrejection',
+      'components.ui.Modal',
+      'modal.render',
+    ]);
+    const redacted = redactSentryEvent(baseEvent) as typeof baseEvent & {
+      fingerprint: string[];
+    };
+    expect(redacted.fingerprint).toEqual(
+      getSafeSentryFingerprint({
+        ...baseEvent,
+        exception: {
+          values: [
+            {
+              ...baseEvent.exception.values[0],
+              value: 'a different private Task title',
+            },
+          ],
+        },
+      })
+    );
+    expect(redacted.exception.values[0].value).toBe('ClientError');
+  });
+
+  it('rejects unsafe high-cardinality fingerprint segments', () => {
+    expect(
+      getSafeSentryFingerprint({
+        tags: { operation: 'task for user@example.com' },
+        exception: { values: [{ type: 'Error with private title' }] },
+      })
+    ).toEqual(['pomi-client', 'unknown', 'unknown', 'unknown', 'unknown']);
+  });
+
   it('removes credentials, personal fields, and request payloads', () => {
     const event = redactSentryEvent({
       request: {
