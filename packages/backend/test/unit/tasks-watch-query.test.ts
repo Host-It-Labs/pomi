@@ -66,7 +66,7 @@ function createBuilder(
       return Promise.resolve(count);
     },
     getMany() {
-      return Promise.resolve(rows);
+      return Promise.resolve(rows.slice(0, this.takeValue ?? rows.length));
     },
   } satisfies QueryBuilder;
 
@@ -162,5 +162,54 @@ describe('TasksService Watch query', () => {
         'task.id',
       ])
     );
+  });
+
+  it('keeps the newest overrides when a manual position exceeds the limit', async () => {
+    const overrides = Array.from({ length: 13 }, (_, index) =>
+      createTask(`override-${index}`, {
+        manualOrder: 0,
+        manualOrderOverride: true,
+        createdAt: new Date(
+          `2026-09-01T00:00:${String(index).padStart(2, '0')}Z`
+        ),
+      })
+    );
+    const builders: QueryBuilder[] = [];
+    const repository = {
+      createQueryBuilder() {
+        const rows = builders.length === 3 ? [...overrides].reverse() : [];
+        const builder = createBuilder(13, rows);
+        builders.push(builder);
+        return builder;
+      },
+      find: async () => [],
+    };
+    const service = new TasksService(
+      repository as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never
+    );
+
+    const result = await service.getWatchTaskSnapshot('user-1', {
+      timerType: 'work',
+      taskMode: 'general',
+      timerIntentions: [],
+      limit: 12,
+      now: new Date('2026-09-01T00:00:00.000Z'),
+      timeZone: 'UTC',
+    });
+
+    expect(result.tasks.map(task => task.id)).toEqual(
+      overrides
+        .slice()
+        .reverse()
+        .slice(0, 12)
+        .map(task => task.id)
+    );
+    expect(builders[3].takeValue).toBe(12);
   });
 });

@@ -62,14 +62,15 @@ export class WatchService {
       this.assistantService.getStatus(userId),
     ]);
     const now = this.getNow();
+    const timeZone = this.normalizeTimeZone(preferences.timeZone);
     const taskSnapshot = preferences.tasksExtension
       ? await this.getWatchTaskSnapshot(
           userId,
           timer,
-          preferences,
           taskMode,
           limit,
-          now
+          now,
+          timeZone
         )
       : this.emptyWatchTaskSnapshot();
     const activeTasks = taskSnapshot.tasks;
@@ -80,7 +81,7 @@ export class WatchService {
     );
     const timerSummary = this.formatTimer(timer, intentionsBySlug);
     const tasks = activeTasks.map(task =>
-      this.formatTask(task, timer, preferences, intentionsBySlug, now)
+      this.formatTask(task, timer, intentionsBySlug, now, timeZone)
     );
     const requiresIntentionSelection =
       await this.requiresIntentionSelectionForStart(userId, timer, preferences);
@@ -123,10 +124,10 @@ export class WatchService {
   private async getWatchTaskSnapshot(
     userId: string,
     timer: Timer | null,
-    preferences: Preferences,
     taskMode: WatchTaskMode,
     limit: number,
-    now: Date
+    now: Date,
+    timeZone: string
   ): Promise<WatchTaskQueryResult> {
     const currentTaskType = timer?.type ?? TIMER_TYPES.WORK;
     const options = {
@@ -138,16 +139,16 @@ export class WatchService {
       })),
       limit,
       now,
-      timeZone: preferences.timeZone,
+      timeZone,
     };
     const legacy = () =>
       this.getLegacyWatchTaskSnapshot(
         userId,
         timer,
-        preferences,
         taskMode,
         limit,
-        now
+        now,
+        timeZone
       );
 
     const queryMode = this.getWatchTaskQueryMode();
@@ -186,10 +187,10 @@ export class WatchService {
   private async getLegacyWatchTaskSnapshot(
     userId: string,
     timer: Timer | null,
-    preferences: Preferences,
     taskMode: WatchTaskMode,
     limit: number,
-    now: Date
+    now: Date,
+    timeZone: string
   ): Promise<WatchTaskQueryResult> {
     const activeTasks = await this.tasksService.getActiveTasks(userId);
     const currentTaskType = timer?.type ?? TIMER_TYPES.WORK;
@@ -199,9 +200,9 @@ export class WatchService {
     const visibleTasks = this.buildTaskView(
       activeTasksForTimer,
       timer,
-      preferences,
       taskMode,
-      now
+      now,
+      timeZone
     );
     return {
       tasks: visibleTasks.slice(0, limit),
@@ -424,9 +425,9 @@ export class WatchService {
   private buildTaskView(
     tasks: TaskEntity[],
     timer: Timer | null,
-    preferences: Preferences,
     mode: WatchTaskMode,
-    now: Date
+    now: Date,
+    timeZone: string
   ) {
     const focusedOrder = this.getPinnedOrder(tasks);
     const hasTimerFilter = this.getTimerIntentions(timer).length > 0;
@@ -447,9 +448,9 @@ export class WatchService {
           b,
           focusedOrder,
           timer,
-          preferences,
           sortMode,
-          now
+          now,
+          timeZone
         )
       ),
       task => this.getTaskGroup(task, focusedOrder, timer, sortMode)
@@ -502,9 +503,9 @@ export class WatchService {
   private formatTask(
     task: TaskEntity,
     timer: Timer | null,
-    preferences: Preferences,
     intentionsBySlug: IntentionLookup,
-    now: Date
+    now: Date,
+    timeZone: string
   ): WatchTaskSummary {
     const intention = task.intentionSlug
       ? this.lookupIntention(
@@ -537,7 +538,7 @@ export class WatchService {
       followUpParent: task.followUpParent ?? null,
       isFocused: task.pinnedAt !== null,
       isLinkedToTimer: this.isTaskLinkedToTimer(task, timer),
-      isOverdue: this.isTaskOverdueAt(task, now, preferences.timeZone),
+      isOverdue: this.isTaskOverdueAt(task, now, timeZone),
     };
   }
 
@@ -546,9 +547,9 @@ export class WatchService {
     b: TaskEntity,
     focusedOrder: Map<string, number>,
     timer: Timer | null,
-    preferences: Preferences,
     mode: WatchTaskMode,
-    now: Date
+    now: Date,
+    timeZone: string
   ) {
     const aGroup = this.getTaskGroup(a, focusedOrder, timer, mode);
     const bGroup = this.getTaskGroup(b, focusedOrder, timer, mode);
@@ -562,7 +563,7 @@ export class WatchService {
       return aFocusOrder - bFocusOrder;
     }
 
-    return this.compareTasksByDueAndPriority(a, b, now, preferences.timeZone);
+    return this.compareTasksByDueAndPriority(a, b, now, timeZone);
   }
 
   private getTaskGroup(
@@ -735,14 +736,15 @@ export class WatchService {
       return false;
     }
 
+    const normalizedTimeZone = this.normalizeTimeZone(timeZone);
+    const dueDate = task.dueTime
+      ? task.dueDate
+      : this.addDaysToDateString(task.dueDate, 1);
     const dueBoundary = this.getDateTimeInTimeZone(
-      task.dueDate,
+      dueDate,
       task.dueTime ?? '00:00',
-      timeZone
+      normalizedTimeZone
     );
-    if (!task.dueTime) {
-      dueBoundary.setUTCDate(dueBoundary.getUTCDate() + 1);
-    }
     return now.getTime() > dueBoundary.getTime();
   }
 
@@ -788,8 +790,28 @@ export class WatchService {
 
       return new Date(timestamp);
     } catch {
-      return new Date(`${date}T${time}:00`);
+      return new Date(`${date}T${time}:00Z`);
     }
+  }
+
+  private normalizeTimeZone(timeZone: string | null | undefined) {
+    if (!timeZone) {
+      return 'UTC';
+    }
+
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+      return timeZone;
+    } catch {
+      return 'UTC';
+    }
+  }
+
+  private addDaysToDateString(date: string, days: number) {
+    const [year, month, day] = date.split('-').map(Number);
+    const nextDate = new Date(Date.UTC(year, month - 1, day));
+    nextDate.setUTCDate(nextDate.getUTCDate() + days);
+    return nextDate.toISOString().slice(0, 10);
   }
 
   private normalizeTaskLimit(limit?: number) {

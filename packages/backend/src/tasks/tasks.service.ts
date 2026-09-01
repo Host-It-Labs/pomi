@@ -247,8 +247,8 @@ export class TasksService {
     overrideQuery
       .andWhere('task.manualOrderOverride = true')
       .orderBy('COALESCE(task.manualOrder, :watchManualOrderBottom)', 'ASC')
-      .addOrderBy('task.createdAt', 'ASC')
-      .addOrderBy('task.id', 'ASC')
+      .addOrderBy('task.createdAt', 'DESC')
+      .addOrderBy('task.id', 'DESC')
       .setParameter('watchManualOrderBottom', TASK_MANUAL_ORDER_BOTTOM);
 
     const [automaticTasks, overrides] = await Promise.all([
@@ -257,8 +257,18 @@ export class TasksService {
     ]);
     return this.applyWatchManualOverrides(
       automaticTasks,
-      overrides,
+      this.sortWatchManualOverridesForApplication(overrides),
       options.limit
+    );
+  }
+
+  private sortWatchManualOverridesForApplication(overrides: TaskEntity[]) {
+    return [...overrides].sort(
+      (a, b) =>
+        (a.manualOrder ?? TASK_MANUAL_ORDER_BOTTOM) -
+          (b.manualOrder ?? TASK_MANUAL_ORDER_BOTTOM) ||
+        a.createdAt.getTime() - b.createdAt.getTime() ||
+        a.id.localeCompare(b.id)
     );
   }
 
