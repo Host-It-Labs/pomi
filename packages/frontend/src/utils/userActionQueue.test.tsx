@@ -8,6 +8,7 @@ const forceReconnect = vi.hoisted(() => vi.fn());
 const uuid = vi.hoisted(() => vi.fn());
 const auth = vi.hoisted(() => ({
   token: 'test-token' as string | null,
+  isAuthenticated: false,
   expireSession: vi.fn(),
   subscriber: undefined as
     | ((
@@ -96,6 +97,7 @@ beforeEach(() => {
   socketHandlers.clear();
   forceReconnect.mockReset();
   auth.token = 'test-token';
+  auth.isAuthenticated = false;
   auth.expireSession.mockReset();
   auth.subscriber = undefined;
   debug.lag = 0;
@@ -109,6 +111,20 @@ afterEach(() => {
 });
 
 describe('accepted action queue', () => {
+  it('discovers recoverable actions for an already-authenticated startup session', async () => {
+    auth.isAuthenticated = true;
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse(200, { items: [], nextCursor: null })
+    );
+
+    await import('./userActionQueue');
+    await act(flush);
+
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe(
+      'http://backend.test/user-actions?limit=50'
+    );
+  });
+
   it('uses a caller-provided idempotency ID for prepared mutations', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(
@@ -877,6 +893,59 @@ describe('accepted action queue', () => {
       result: { socket: true },
     });
     expect(useUserActionQueueBase.getState().isNetworkBlocked).toBe(false);
+  });
+
+  it('discovers accepted actions after authentication and polls without resubmitting', async () => {
+    const terminal = deferred<Response>();
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          items: [
+            {
+              actionId: 'recovered-action',
+              status: 'accepted',
+              action: { kind: 'feedback', operation: 'submit' },
+              acceptedAt: 1,
+              updatedAt: 2,
+            },
+          ],
+          nextCursor: null,
+        })
+      )
+      .mockReturnValueOnce(terminal.promise);
+    const { useUserActionQueueBase } = await import('./userActionQueue');
+
+    await useUserActionQueueBase.getState().hydrateRecoveredActions();
+    expect(useUserActionQueueBase.getState().actions).toEqual([
+      expect.objectContaining({
+        id: 'recovered-action',
+        status: 'accepted',
+        kind: 'feedback',
+        label: 'Send feedback',
+      }),
+    ]);
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe(
+      'http://backend.test/user-actions?limit=50'
+    );
+    expect(vi.mocked(fetch).mock.calls[1]?.[0]).toBe(
+      'http://backend.test/user-actions/recovered-action?waitMs=25000'
+    );
+    expect(
+      vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'POST')
+    ).toBe(false);
+
+    terminal.resolve(
+      jsonResponse(200, {
+        actionId: 'recovered-action',
+        status: 'succeeded',
+        action: { kind: 'feedback', operation: 'submit' },
+        acceptedAt: 1,
+        completedAt: 3,
+        updatedAt: 3,
+      })
+    );
+    await act(flush);
+    expect(useUserActionQueueBase.getState().actions).toEqual([]);
   });
 
   it('clears the queue only when the authenticated account changes', async () => {

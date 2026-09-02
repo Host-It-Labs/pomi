@@ -28,6 +28,12 @@ class InMemoryUserActionsStore {
     return [...this.queue.keys()];
   }
 
+  async listRecent(userId: string) {
+    return [...this.records.entries()]
+      .filter(([key]) => key.startsWith(`${userId}:`))
+      .map(([, value]) => value);
+  }
+
   async acquireLock() {
     this.acquireCalls += 1;
     if (this.acquireBarrier) await this.acquireBarrier;
@@ -140,6 +146,55 @@ beforeEach(() => {
 });
 
 describe('UserActionsService accepted-action queue', () => {
+  it('pages account-scoped recovery metadata without payloads or results', async () => {
+    const store = new InMemoryUserActionsStore();
+    store.records.set('user-1:action-1', {
+      ...accepted('action-1', {
+        kind: 'tasks',
+        operation: 'create',
+        title: 'Private title',
+        description: 'Private description',
+      }),
+      result: { title: 'Private result' },
+      updatedAt: 3,
+    });
+    store.records.set('user-1:action-2', {
+      ...accepted('action-2', { kind: 'timer', operation: 'pause' }),
+      updatedAt: 2,
+    });
+    store.records.set('user-2:action-3', {
+      ...accepted('action-3', { kind: 'lists', operation: 'create' }),
+      updatedAt: 4,
+    });
+    const { service } = createService(store);
+
+    const firstPage = await service.listRecentActions('user-1', undefined, 1);
+    expect(firstPage.items).toEqual([
+      {
+        actionId: 'action-1',
+        status: 'accepted',
+        action: { kind: 'tasks', operation: 'create' },
+        acceptedAt: 1,
+        updatedAt: 3,
+      },
+    ]);
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+    await expect(
+      service.listRecentActions('user-2', firstPage.nextCursor!, 1)
+    ).rejects.toThrow('Invalid user action cursor');
+    await expect(
+      service.listRecentActions('user-1', firstPage.nextCursor!, 1)
+    ).resolves.toMatchObject({
+      items: [
+        {
+          actionId: 'action-2',
+          action: { kind: 'timer', operation: 'pause' },
+        },
+      ],
+      nextCursor: null,
+    });
+  });
+
   it('strips the action envelope before executing a queued Task update', async () => {
     const store = new InMemoryUserActionsStore();
     const updateTask = vi.fn(async () => ({ status: 'completed' }));

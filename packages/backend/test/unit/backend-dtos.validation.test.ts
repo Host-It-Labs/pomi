@@ -60,6 +60,7 @@ import { TestNotificationDto } from '../../src/timer/dto/test-notification.dto';
 import { CreateUserActionDto } from '../../src/user-actions/dto/create-user-action.dto';
 import { UserActionIdParam } from '../../src/user-actions/dto/user-action-id.param';
 import { UserActionStatusQuery } from '../../src/user-actions/dto/user-action-status.query';
+import { UserActionsListQuery } from '../../src/user-actions/dto/user-actions-list.query';
 import { UpdatePushTokenDto } from '../../src/users/dto/update-push-token.dto';
 import { UserIdParamDto } from '../../src/users/dto/user-id.param';
 import { UsernameParamDto } from '../../src/users/dto/username.param';
@@ -108,6 +109,12 @@ describe('backend scalar and parameter DTO validation', () => {
     invalid: Record<string, unknown>;
     property: string;
   }> = [
+    {
+      Dto: UserActionsListQuery,
+      valid: { cursor: 'opaque-cursor', limit: '20' },
+      invalid: { limit: '0' },
+      property: 'limit',
+    },
     {
       Dto: AssistantDebugLogParamDto,
       valid: { id: UUID },

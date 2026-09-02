@@ -98,7 +98,7 @@ describe('user action contract', () => {
     ).toBe(true);
   });
 
-  it('redacts bulky and sensitive lifecycle inputs', () => {
+  it('keeps only operation metadata in lifecycle records', () => {
     expect(
       redactUserAction({
         kind: 'tasks',
@@ -106,6 +106,14 @@ describe('user action contract', () => {
         importSource: 'CSV',
         rows: [{ title: 'one' }, { title: 'two' }],
       })
-    ).toMatchObject({ rows: [], rowCount: 2 });
+    ).toEqual({ kind: 'tasks', operation: 'import' });
+    expect(
+      redactUserAction({
+        kind: 'tasks',
+        operation: 'create',
+        title: 'Private title',
+        description: 'Private description',
+      })
+    ).toEqual({ kind: 'tasks', operation: 'create' });
   });
 });
