@@ -15,6 +15,11 @@ export class UserActionsListQuery {
   cursor?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(1024)
+  after?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)

@@ -117,6 +117,7 @@ const COPYME_RECOVERY_ACTION_IDS = {
   timer: '00000000-0000-4000-8000-000000000222',
   task: '00000000-0000-4000-8000-000000000223',
 } as const;
+const COPYME_RECOVERY_TIMESTAMP = Date.UTC(2026, 8, 1, 12);
 
 export function buildCopymeRecoveryStatuses(now: number): UserActionStatus[] {
   return [
@@ -151,7 +152,9 @@ async function seedCopymeRecoveryStatuses(username: string): Promise<void> {
   });
   try {
     const store = new UserActionsStore(redis);
-    for (const status of buildCopymeRecoveryStatuses(Date.now())) {
+    for (const status of buildCopymeRecoveryStatuses(
+      COPYME_RECOVERY_TIMESTAMP
+    )) {
       await store.write(user.id, status);
     }
   } finally {

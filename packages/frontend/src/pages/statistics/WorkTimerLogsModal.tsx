@@ -10,6 +10,7 @@ import { UnsavedChangesDialog } from '../../components/ui/UnsavedChangesDialog';
 import { MILLISECONDS_PER_MINUTE } from '../../constants/time';
 import { useTimerStore } from '../../stores/timerStore';
 import { apiClient } from '../../utils/apiClient';
+import { subscribeToWorkTimerLogRefresh } from '../../utils/recoveryRefresh';
 import { submitUserMutation } from '../../utils/userActionQueue';
 import { useOpenModalRegistration } from '../../utils/modalRegistry';
 import { useI18n } from '../../i18n';
@@ -171,6 +172,11 @@ export function WorkTimerLogsModal({
       setIsLoadingMore(false);
     }
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    return subscribeToWorkTimerLogRefresh(() => void fetchWorkTimerLogs(0));
+  }, [isOpen]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;

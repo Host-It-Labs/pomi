@@ -9,6 +9,7 @@ const uuid = vi.hoisted(() => vi.fn());
 const auth = vi.hoisted(() => ({
   token: 'test-token' as string | null,
   isAuthenticated: false,
+  user: { id: 'user-1' } as { id: string } | null,
   expireSession: vi.fn(),
   subscriber: undefined as
     | ((
@@ -90,6 +91,7 @@ const deferred = <T,>() => {
 
 beforeEach(() => {
   vi.resetModules();
+  localStorage.clear();
   vi.stubGlobal('fetch', vi.fn());
   uuid.mockReset();
   let actionIndex = 0;
@@ -98,6 +100,7 @@ beforeEach(() => {
   forceReconnect.mockReset();
   auth.token = 'test-token';
   auth.isAuthenticated = false;
+  auth.user = { id: 'user-1' };
   auth.expireSession.mockReset();
   auth.subscriber = undefined;
   debug.lag = 0;
@@ -114,7 +117,11 @@ describe('accepted action queue', () => {
   it('discovers recoverable actions for an already-authenticated startup session', async () => {
     auth.isAuthenticated = true;
     vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse(200, { items: [], nextCursor: null })
+      jsonResponse(200, {
+        items: [],
+        nextCursor: null,
+        recoveryCursor: null,
+      })
     );
 
     await import('./userActionQueue');
@@ -910,6 +917,7 @@ describe('accepted action queue', () => {
             },
           ],
           nextCursor: null,
+          recoveryCursor: 'checkpoint-1',
         })
       )
       .mockReturnValueOnce(terminal.promise);
@@ -946,6 +954,30 @@ describe('accepted action queue', () => {
     );
     await act(flush);
     expect(useUserActionQueueBase.getState().actions).toEqual([]);
+    expect(localStorage.getItem('pomi-user-action-recovery:user-1')).toBe(
+      'checkpoint-1'
+    );
+  });
+
+  it('retries discovery after a transient startup failure', async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetch)
+      .mockRejectedValueOnce(new TypeError('backend restarting'))
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          items: [],
+          nextCursor: null,
+          recoveryCursor: null,
+        })
+      );
+    const { useUserActionQueueBase } = await import('./userActionQueue');
+
+    await useUserActionQueueBase.getState().hydrateRecoveredActions();
+    expect(forceReconnect).toHaveBeenCalledWith(false);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await act(flush);
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it('clears the queue only when the authenticated account changes', async () => {

@@ -268,4 +268,5 @@ export interface RecoverableUserActionStatus {
 export interface RecoverableUserActionsPage {
   items: RecoverableUserActionStatus[];
   nextCursor: string | null;
+  recoveryCursor: string | null;
 }

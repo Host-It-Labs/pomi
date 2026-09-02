@@ -168,7 +168,12 @@ describe('UserActionsService accepted-action queue', () => {
     });
     const { service } = createService(store);
 
-    const firstPage = await service.listRecentActions('user-1', undefined, 1);
+    const firstPage = await service.listRecentActions(
+      'user-1',
+      undefined,
+      undefined,
+      1
+    );
     expect(firstPage.items).toEqual([
       {
         actionId: 'action-1',
@@ -180,10 +185,10 @@ describe('UserActionsService accepted-action queue', () => {
     ]);
     expect(firstPage.nextCursor).toEqual(expect.any(String));
     await expect(
-      service.listRecentActions('user-2', firstPage.nextCursor!, 1)
+      service.listRecentActions('user-2', firstPage.nextCursor!, undefined, 1)
     ).rejects.toThrow('Invalid user action cursor');
     await expect(
-      service.listRecentActions('user-1', firstPage.nextCursor!, 1)
+      service.listRecentActions('user-1', firstPage.nextCursor!, undefined, 1)
     ).resolves.toMatchObject({
       items: [
         {

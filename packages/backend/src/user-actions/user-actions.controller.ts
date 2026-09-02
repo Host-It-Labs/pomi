@@ -30,6 +30,7 @@ export class UserActionsController {
       body: await this.userActionsService.listRecentActions(
         request.user.sub,
         query.cursor,
+        query.after,
         query.limit
       ),
     }));

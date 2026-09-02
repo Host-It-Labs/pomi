@@ -1518,12 +1518,14 @@ export const apiContract = c.router({
       path: '/user-actions',
       query: z.object({
         cursor: z.string().min(1).max(1024).optional(),
+        after: z.string().min(1).max(1024).optional(),
         limit: z.coerce.number().int().min(1).max(50).optional(),
       }),
       responses: {
         200: z.object({
           items: z.array(recoverableUserActionStatusSchema),
           nextCursor: z.string().nullable(),
+          recoveryCursor: z.string().nullable(),
         }),
         400: errorSchema,
         401: errorSchema,

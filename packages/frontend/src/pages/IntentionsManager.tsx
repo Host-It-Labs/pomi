@@ -37,6 +37,7 @@ import { usePreferencesStore } from '../stores/preferencesStore';
 import { useTimerStore } from '../stores/timerStore';
 import { useUiStore } from '../stores/uiStore';
 import { apiClient } from '../utils/apiClient';
+import { subscribeToIntentionRefresh } from '../utils/recoveryRefresh';
 import { hasOpenModal } from '../utils/modalRegistry';
 import { isDesktop } from '../utils/osUtils';
 import { submitUserMutation } from '../utils/userActionQueue';
@@ -293,6 +294,7 @@ export function IntentionsManager() {
 
   useEffect(() => {
     loadIntentions();
+    return subscribeToIntentionRefresh(() => void loadIntentions());
   }, [
     preferences?.intentionBreakIntentions,
     preferences?.intentionSubIntentions,

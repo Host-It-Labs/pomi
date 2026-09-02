@@ -6,10 +6,18 @@ import { createSelectors } from '../stores/createSelectors';
 import { getDebugLag } from '../stores/debugStore';
 import { translateCurrent } from '../i18n';
 import { getBackendOrigin } from './backendUrl';
-import { forceReconnect, registerSocketEventHandler } from './socketManager';
+import {
+  forceReconnect,
+  registerSocketEventHandler,
+  waitForAuthoritativeTimer,
+} from './socketManager';
 import type { RecoverableUserActionStatus } from '@pomi/shared';
 import { apiClient } from './apiClient';
 import { requestListRefresh } from './listRefresh';
+import {
+  requestIntentionRefresh,
+  requestWorkTimerLogRefresh,
+} from './recoveryRefresh';
 
 /** Lifecycle states exposed by the accepted-action gateway. */
 export type UserActionStatus =
@@ -72,6 +80,7 @@ type QueueItem = UserActionLifecycle & {
   timingReported?: boolean;
   restored?: boolean;
   recoveryAction?: RecoverableUserActionStatus['action'];
+  recoveryCheckpoint?: string;
 };
 
 type UserActionQueueState = {
@@ -108,6 +117,22 @@ let socketLifecycleHandlerRegistered = false;
 let networkRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let networkRetryAttempt = 0;
 let hydrationGeneration = 0;
+let hydrationRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let hydrationRetryAttempt = 0;
+let hydrationRetryPending = false;
+
+const recoveryCheckpointKey = (userId: string) =>
+  `pomi-user-action-recovery:${userId}`;
+
+function readRecoveryCheckpoint(userId?: string): string | null {
+  if (!userId || typeof localStorage === 'undefined') return null;
+  return localStorage.getItem(recoveryCheckpointKey(userId));
+}
+
+function writeRecoveryCheckpoint(userId: string, cursor: string) {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(recoveryCheckpointKey(userId), cursor);
+}
 
 export function getRecoveredActionLabel(
   action: RecoverableUserActionStatus['action']
@@ -167,8 +192,7 @@ export async function reconcileRecoveredUserAction(
   action: RecoverableUserActionStatus['action']
 ): Promise<void> {
   if (action.kind === 'timer') {
-    const { useTimerStore } = await import('../stores/timerStore');
-    useTimerStore.getState().forceReconnect(false);
+    await waitForAuthoritativeTimer();
     return;
   }
   if (action.kind === 'tasks') {
@@ -177,7 +201,7 @@ export async function reconcileRecoveredUserAction(
     return;
   }
   if (action.kind === 'intentions') {
-    await apiClient.intentions.list({ query: { includeSubIntentions: true } });
+    requestIntentionRefresh();
     return;
   }
   if (action.kind === 'preferences' || action.kind === 'notifications') {
@@ -204,6 +228,11 @@ export async function reconcileRecoveredUserAction(
       useAssistantStore.getState().loadStatus(),
       useTasksStore.getState().refreshTasks(),
     ]);
+    requestListRefresh();
+    return;
+  }
+  if (action.kind === 'workTimerLog') {
+    requestWorkTimerLogRefresh();
     return;
   }
   if (action.kind === 'vacation') {
@@ -240,6 +269,26 @@ function clearNetworkRetry() {
 function resetNetworkRetry() {
   clearNetworkRetry();
   networkRetryAttempt = 0;
+}
+
+function clearHydrationRetry() {
+  if (hydrationRetryTimer) clearTimeout(hydrationRetryTimer);
+  hydrationRetryTimer = null;
+}
+
+function scheduleHydrationRetry() {
+  if (hydrationRetryTimer || !useAuthStore.getState().token) return;
+  hydrationRetryPending = true;
+  forceReconnect(false);
+  const delay = Math.min(
+    NETWORK_RETRY_MS * 2 ** hydrationRetryAttempt,
+    MAX_NETWORK_RETRY_MS
+  );
+  hydrationRetryAttempt += 1;
+  hydrationRetryTimer = setTimeout(() => {
+    hydrationRetryTimer = null;
+    void hydrateRecoveredActions();
+  }, delay);
 }
 
 function blockNetworkAndRetry(item: QueueItem, phase: 'submit' | 'poll') {
@@ -740,6 +789,10 @@ async function settleTerminalItem(item: QueueItem) {
       return;
     }
   }
+  const userId = useAuthStore.getState().user?.id;
+  if (item.recoveryCheckpoint && userId) {
+    writeRecoveryCheckpoint(userId, item.recoveryCheckpoint);
+  }
   resolveItem(item);
 }
 
@@ -833,16 +886,19 @@ async function processQueue() {
 
 async function hydrateRecoveredActions(): Promise<void> {
   const token = useAuthStore.getState().token;
+  const userId = useAuthStore.getState().user?.id;
   if (!token) return;
   const generation = ++hydrationGeneration;
   let cursor: string | null = null;
   const recovered: RecoverableUserActionStatus[] = [];
+  let recoveryCursor: string | null = null;
+  const after = readRecoveryCheckpoint(userId);
   try {
     do {
       const response = await requestJson(
         `/user-actions?limit=50${
-          cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
-        }`,
+          after ? `&after=${encodeURIComponent(after)}` : ''
+        }${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
         { method: 'GET' },
         RECEIPT_TIMEOUT_MS
       );
@@ -858,13 +914,18 @@ async function hydrateRecoveredActions(): Promise<void> {
             status: response.status,
           });
         }
+        if (response.status !== 401) scheduleHydrationRetry();
         return;
       }
       const body = response.body as {
         items?: RecoverableUserActionStatus[];
         nextCursor?: string | null;
+        recoveryCursor?: string | null;
       };
       recovered.push(...(Array.isArray(body.items) ? body.items : []));
+      if (!recoveryCursor && typeof body.recoveryCursor === 'string') {
+        recoveryCursor = body.recoveryCursor;
+      }
       cursor = typeof body.nextCursor === 'string' ? body.nextCursor : null;
     } while (cursor);
   } catch (error) {
@@ -875,9 +936,14 @@ async function hydrateRecoveredActions(): Promise<void> {
       Sentry.logger.warn('User action recovery discovery failed', {
         error: error instanceof Error ? error.message : String(error),
       });
+      scheduleHydrationRetry();
     }
     return;
   }
+
+  clearHydrationRetry();
+  hydrationRetryAttempt = 0;
+  hydrationRetryPending = false;
 
   const knownIds = new Set(queue.map(item => item.id));
   recovered.sort((left, right) => {
@@ -896,7 +962,7 @@ async function hydrateRecoveredActions(): Promise<void> {
     const localStatus: UserActionStatus = status.outcomeUnknown
       ? 'outcomeUnknown'
       : status.status;
-    queue.push({
+    const item: QueueItem = {
       id: status.actionId,
       status: localStatus,
       kind: status.action.kind,
@@ -915,7 +981,16 @@ async function hydrateRecoveredActions(): Promise<void> {
       scheduledRetryWaitMs: 0,
       restored: true,
       recoveryAction: status.action,
-    });
+    };
+    queue.push(item);
+  }
+  if (recoveryCursor && userId) {
+    const recoveredIds = new Set(recovered.map(status => status.actionId));
+    const checkpointTarget = [...queue]
+      .reverse()
+      .find(item => recoveredIds.has(item.id));
+    if (checkpointTarget) checkpointTarget.recoveryCheckpoint = recoveryCursor;
+    else writeRecoveryCheckpoint(userId, recoveryCursor);
   }
   useUserActionQueueBase.setState({ actions: queue.map(toPublicAction) });
   void processQueue();
@@ -924,6 +999,9 @@ async function hydrateRecoveredActions(): Promise<void> {
 function resetQueueForAuthenticationChange() {
   hydrationGeneration += 1;
   clearNetworkRetry();
+  clearHydrationRetry();
+  hydrationRetryAttempt = 0;
+  hydrationRetryPending = false;
   queue.forEach(item => {
     item.status = 'cancelled';
     item.abortController?.abort();
@@ -1020,6 +1098,7 @@ const useUserActionQueueBase = create<UserActionQueueState>(() => ({
       updateItem(head, { status: 'queued', error: undefined });
     }
     void processQueue();
+    if (hydrationRetryPending) void hydrateRecoveredActions();
   },
   setNetworkBlocked: blocked => {
     if (!blocked) resetNetworkRetry();
@@ -1036,12 +1115,18 @@ export const submitUserMutation = <T>(
 ): Promise<T> => useUserActionQueueBase.getState().submitUserMutation(options);
 
 useAuthStore.subscribe((state, previousState) => {
-  if (state.token === previousState.token) return;
+  const tokenChanged = state.token !== previousState.token;
+  const accountChanged = state.user?.id !== previousState.user?.id;
+  if (!tokenChanged && !accountChanged) return;
   resetQueueForAuthenticationChange();
-  if (state.token) void hydrateRecoveredActions();
+  if (state.token && state.user?.id) void hydrateRecoveredActions();
 });
 
 const initialAuthState = useAuthStore.getState();
-if (initialAuthState.token && initialAuthState.isAuthenticated) {
+if (
+  initialAuthState.token &&
+  initialAuthState.isAuthenticated &&
+  initialAuthState.user?.id
+) {
   void hydrateRecoveredActions();
 }

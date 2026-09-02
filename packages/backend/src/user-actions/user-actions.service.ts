@@ -175,18 +175,27 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
   async listRecentActions(
     userId: string,
     rawCursor?: string,
+    rawAfter?: string,
     rawLimit?: number
   ): Promise<RecoverableUserActionsPage> {
     const limit = Math.min(Math.max(rawLimit ?? 20, 1), 50);
     const cursor = rawCursor
       ? this.decodeRecoveryCursor(rawCursor, userId)
       : null;
+    const after = rawAfter ? this.decodeRecoveryCursor(rawAfter, userId) : null;
     const statuses = (await this.userActionsStore.listRecent(userId))
       .filter(status => status.action.kind !== 'cancellation')
       .sort(
         (left, right) =>
           right.updatedAt - left.updatedAt ||
           right.actionId.localeCompare(left.actionId)
+      )
+      .filter(
+        status =>
+          !after ||
+          status.updatedAt > after.updatedAt ||
+          (status.updatedAt === after.updatedAt &&
+            status.actionId.localeCompare(after.actionId) > 0)
       );
     const startIndex = cursor
       ? statuses.findIndex(
@@ -196,7 +205,17 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
               status.actionId.localeCompare(cursor.actionId) < 0)
         )
       : 0;
-    if (cursor && startIndex < 0) return { items: [], nextCursor: null };
+    const newest = statuses[0];
+    const recoveryCursor = newest
+      ? this.encodeRecoveryCursor({
+          userId,
+          updatedAt: newest.updatedAt,
+          actionId: newest.actionId,
+        })
+      : null;
+    if (cursor && startIndex < 0) {
+      return { items: [], nextCursor: null, recoveryCursor };
+    }
     const page = statuses.slice(startIndex, startIndex + limit + 1);
     const hasMore = page.length > limit;
     const items = page
@@ -213,6 +232,7 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
               actionId: last.actionId,
             })
           : null,
+      recoveryCursor,
     };
   }
 
