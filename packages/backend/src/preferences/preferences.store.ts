@@ -63,14 +63,16 @@ export class PreferencesStore {
 
     const lockToken = await this.acquireLock(userId);
     try {
-      await this.remove(userId);
+      await this.invalidate(userId);
       const preferences = await writer();
       if (lockToken) {
         await this.write(userId, preferences);
+      } else {
+        await this.invalidate(userId);
       }
       return preferences;
     } catch (error) {
-      await this.remove(userId);
+      await this.invalidate(userId);
       throw error;
     } finally {
       if (lockToken) {
@@ -112,7 +114,7 @@ export class PreferencesStore {
       }
       const parsed = JSON.parse(value);
       if (!parsed || typeof parsed !== 'object' || parsed.userId !== userId) {
-        await this.remove(userId);
+        await this.invalidate(userId);
         return null;
       }
       return parsed as Preferences;
@@ -135,7 +137,7 @@ export class PreferencesStore {
     }
   }
 
-  private async remove(userId: string): Promise<void> {
+  async invalidate(userId: string): Promise<void> {
     try {
       await this.redis.del(this.cacheKey(userId));
     } catch (error) {

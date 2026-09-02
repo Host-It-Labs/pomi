@@ -286,6 +286,22 @@ describe('Tasks page interactions', () => {
     });
   });
 
+  it('does not run unbounded archive fallbacks for endpoint failures', async () => {
+    vi.mocked(apiClient.tasks.archive).mockResolvedValueOnce({
+      status: 500,
+      body: { message: 'Unavailable' },
+      headers: new Headers(),
+    } as never);
+
+    render(<Tasks />);
+    fireEvent.click(screen.getByRole('button', { name: 'Archived' }));
+
+    expect(
+      await screen.findByText('Failed to load archived Tasks.')
+    ).toBeInTheDocument();
+    expect(apiClient.tasks.list).not.toHaveBeenCalled();
+  });
+
   it('keeps all dated Tasks and individual actions in the list', async () => {
     mocks.tasks = [
       task({

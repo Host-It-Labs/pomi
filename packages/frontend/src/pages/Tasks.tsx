@@ -737,7 +737,7 @@ export function Tasks() {
           return;
         }
 
-        if (cursor) {
+        if (cursor || Number(pageResponse.status) !== 404) {
           setArchiveError(t('task.archiveLoadFailed'));
           return;
         }

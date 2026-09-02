@@ -76,6 +76,9 @@ function createQueryBuilder(
     getMany() {
       return Promise.resolve(manyRows);
     },
+    getRawAndEntities() {
+      return Promise.resolve({ raw: rawRows, entities: manyRows });
+    },
   };
 }
 
@@ -1027,26 +1030,32 @@ test('task archive pages use a stable updated-at and id cursor', async () => {
   const taskRepository = service['tasksRepository'];
   const rows = [
     {
-      id: '00000000-0000-0000-0000-000000000003',
+      id: '00000000-0000-4000-8000-000000000003',
       userId: 'user-1',
       updatedAt: new Date('2026-09-01T12:00:00.000Z'),
       followUpSourceTaskId: null,
     },
     {
-      id: '00000000-0000-0000-0000-000000000002',
+      id: '00000000-0000-4000-8000-000000000002',
       userId: 'user-1',
       updatedAt: new Date('2026-09-01T12:00:00.000Z'),
       followUpSourceTaskId: null,
     },
     {
-      id: '00000000-0000-0000-0000-000000000001',
+      id: '00000000-0000-4000-8000-000000000001',
       userId: 'user-1',
       updatedAt: new Date('2026-08-31T12:00:00.000Z'),
       followUpSourceTaskId: null,
     },
   ];
   taskRepository.createQueryBuilder = vi.fn(() =>
-    createQueryBuilder(0, [], rows)
+    createQueryBuilder(
+      0,
+      rows.map(row => ({
+        taskArchiveUpdatedAt: row.updatedAt.toISOString().replace('Z', '000'),
+      })),
+      rows
+    )
   );
 
   const firstPage = await service.getTaskArchivePage('user-1', 2);
@@ -1068,8 +1077,23 @@ test('task archive pages use a stable updated-at and id cursor', async () => {
   );
   assert.ok(
     secondBuilder.params.some(
-      params => params?.id === '00000000-0000-0000-0000-000000000002'
+      params => params?.id === '00000000-0000-4000-8000-000000000002'
     )
+  );
+});
+
+test('task archive cursors reject non-UUID row IDs', async () => {
+  const { service } = createService(null);
+  const cursor = Buffer.from(
+    JSON.stringify({
+      updatedAt: '2026-09-01T12:00:00.123456',
+      id: 'not-a-uuid',
+    })
+  ).toString('base64url');
+
+  await assert.rejects(
+    service.getTaskArchivePage('user-1', 2, cursor),
+    /Invalid task archive cursor/
   );
 });
 

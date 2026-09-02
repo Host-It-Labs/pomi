@@ -3,6 +3,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
 import type Redis from 'ioredis';
 import request from 'supertest';
 import { DataSource, In } from 'typeorm';
@@ -20,6 +21,7 @@ const hasInfrastructure = Boolean(
 
 describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
   let app: INestApplication;
+  let dataSource: DataSource;
   let redis: Redis;
   let token: string;
   const usernames = [
@@ -36,6 +38,7 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
     });
     configureHttpApp(app as NestExpressApplication);
     await app.init();
+    dataSource = app.get(DataSource);
     redis = app.get<Redis>(REDIS_CLIENT);
     await clearAuthRateLimitKeys(redis);
     const session = await request(app.getHttpServer()).post('/sessions').send({
@@ -48,7 +51,6 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
   afterAll(async () => {
     if (app) {
       if (redis) await clearAuthRateLimitKeys(redis);
-      const dataSource = app.get(DataSource);
       const entityTarget = (tableName: string) => {
         const metadata = dataSource.entityMetadatas.find(
           candidate => candidate.tableName === tableName
@@ -203,6 +205,36 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
       .set('authorization', `Bearer ${token}`);
     expect(status.status).toBe(200);
     expect(status.body).toEqual({ hasImportedTasks: true });
+  });
+
+  it('preserves PostgreSQL timestamp precision across Task archive pages', async () => {
+    const [{ id: userId }] = await dataSource.query(
+      'SELECT id FROM users WHERE username = $1',
+      [usernames[0]]
+    );
+    const newestId = randomUUID();
+    const olderId = randomUUID();
+    await dataSource.query(
+      `INSERT INTO tasks (id, "userId", title, status, "itemKind", "createdAt", "updatedAt")
+       VALUES ($1, $3, 'Newest microsecond Task', 'completed', 'task', now(), '2026-09-01 12:00:00.123456'),
+              ($2, $3, 'Older microsecond Task', 'completed', 'task', now(), '2026-09-01 12:00:00.123123')`,
+      [newestId, olderId, userId]
+    );
+
+    const firstPage = await request(app.getHttpServer())
+      .get('/tasks/archive?limit=1')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(firstPage.body.items.map(item => item.id)).toEqual([newestId]);
+    expect(firstPage.body.nextCursor).toEqual(expect.any(String));
+
+    const secondPage = await request(app.getHttpServer())
+      .get(
+        `/tasks/archive?limit=1&cursor=${encodeURIComponent(firstPage.body.nextCursor)}`
+      )
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(secondPage.body.items.map(item => item.id)).toEqual([olderId]);
   });
 
   it('logs out through the authenticated production contract', async () => {

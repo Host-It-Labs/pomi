@@ -100,4 +100,26 @@ describe('PreferencesStore', () => {
 
     expect(loader).toHaveBeenCalledOnce();
   });
+
+  it('invalidates again after an unlocked write fallback', async () => {
+    vi.useFakeTimers();
+    try {
+      const redis = createRedis();
+      redis.set.mockImplementation(
+        async (_key: string, _value: string, ...args: unknown[]) =>
+          args.includes('NX') ? null : 'OK'
+      );
+      const store = new PreferencesStore(redis as never, new ConfigService());
+
+      const update = store.writeThrough('user-5', async () =>
+        preferences('user-5', 'fr')
+      );
+      await vi.advanceTimersByTimeAsync(500);
+
+      await expect(update).resolves.toMatchObject({ language: 'fr' });
+      expect(redis.del).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

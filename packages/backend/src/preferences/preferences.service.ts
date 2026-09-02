@@ -194,6 +194,10 @@ export class PreferencesService {
     return savedPreferences;
   }
 
+  async invalidateCache(userId: string): Promise<void> {
+    await this.preferencesStore.invalidate(userId);
+  }
+
   private applyDefaultPreferences(preferences: Preferences): Preferences {
     for (const [key, value] of Object.entries(DEFAULT_PREFERENCES)) {
       const preferenceKey = key as keyof typeof DEFAULT_PREFERENCES;

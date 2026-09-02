@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { isUUID } from 'class-validator';
 import {
   TASK_CREATION_SOURCES,
   TASK_FOLLOW_UP_DELAY_MAX_DAYS,
@@ -181,6 +182,10 @@ export class TasksService {
       })
       .orderBy('task.updatedAt', 'DESC')
       .addOrderBy('task.id', 'DESC')
+      .addSelect(
+        `to_char(task.updatedAt, 'YYYY-MM-DD"T"HH24:MI:SS.US')`,
+        'taskArchiveUpdatedAt'
+      )
       .take(limit + 1);
 
     if (cursor) {
@@ -191,23 +196,32 @@ export class TasksService {
       );
     }
 
-    const tasks = await query.getMany();
+    const { entities: tasks, raw } = await query.getRawAndEntities();
     const hasNextPage = tasks.length > limit;
     const items = hasNextPage ? tasks.slice(0, limit) : tasks;
     await this.attachFollowUpParents(userId, items, this.tasksRepository);
     const lastTask = items[items.length - 1];
+    const lastRaw = raw[items.length - 1] as
+      { taskArchiveUpdatedAt?: unknown } | undefined;
     return {
       items,
       nextCursor:
-        hasNextPage && lastTask ? this.encodeTaskArchiveCursor(lastTask) : null,
+        hasNextPage &&
+        lastTask &&
+        typeof lastRaw?.taskArchiveUpdatedAt === 'string'
+          ? this.encodeTaskArchiveCursor(
+              lastRaw.taskArchiveUpdatedAt,
+              lastTask.id
+            )
+          : null,
     };
   }
 
-  private encodeTaskArchiveCursor(task: TaskEntity): string {
+  private encodeTaskArchiveCursor(updatedAt: string, id: string): string {
     return Buffer.from(
       JSON.stringify({
-        updatedAt: task.updatedAt.toISOString(),
-        id: task.id,
+        updatedAt,
+        id,
       } satisfies TaskArchiveCursor)
     ).toString('base64url');
   }
@@ -217,15 +231,17 @@ export class TasksService {
       const value = JSON.parse(
         Buffer.from(cursor, 'base64url').toString('utf8')
       ) as Partial<TaskArchiveCursor>;
-      const updatedAt = new Date(value.updatedAt ?? '');
+      const updatedAt = value.updatedAt;
       if (
-        !value.id ||
         typeof value.id !== 'string' ||
-        !Number.isFinite(updatedAt.getTime())
+        !isUUID(value.id) ||
+        typeof updatedAt !== 'string' ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}$/.test(updatedAt) ||
+        !Number.isFinite(new Date(`${updatedAt.slice(0, 23)}Z`).getTime())
       ) {
         throw new Error('Invalid archive cursor');
       }
-      return { updatedAt: updatedAt.toISOString(), id: value.id };
+      return { updatedAt, id: value.id };
     } catch {
       throw new BadRequestException('Invalid task archive cursor');
     }
