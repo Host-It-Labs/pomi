@@ -53,6 +53,7 @@ export function configureHttpApp(app: NestExpressApplication): void {
     json({ limit: USER_DATA_IMPORT_JSON_LIMIT })
   );
   app.use('/assistant', json({ limit: '10mb' }));
+  app.use('/feedback/transcribe', json({ limit: '4mb' }));
   app.use(json({ limit: '2mb' }));
   app.use(urlencoded({ extended: true, limit: '2mb' }));
   app.set('trust proxy', getTrustedProxyHops());

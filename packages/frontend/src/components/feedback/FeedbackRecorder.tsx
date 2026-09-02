@@ -24,7 +24,9 @@ type FeedbackRecorderState = {
   cancelRecording: () => void;
 };
 
-const MAX_RECORDING_SECONDS = 10 * 60;
+const MAX_RECORDING_SECONDS = 30 * 60;
+const CHUNK_DURATION_MS = 60 * 1000;
+const MAX_ENCODED_CHUNK_BYTES = 4 * 1024 * 1024;
 
 let mediaRecorder: MediaRecorder | null = null;
 let stream: MediaStream | null = null;
@@ -69,17 +71,36 @@ export async function submitFeedbackText(feedback: string) {
   });
 }
 
-async function submitVoice(blob: Blob, mimeType: string, request: number) {
-  try {
-    const response = await apiClient.feedback.transcribe({
-      body: { audioBase64: await blobToBase64(blob), mimeType },
-    });
-    if (request !== submissionRequest) return;
-    if (response.status !== 200) {
-      throw new Error(feedbackText('feedback.transcribeFailed'));
+async function transcribeChunk(blob: Blob, mimeType: string) {
+  const audioBase64 = await blobToBase64(blob);
+  if (
+    new TextEncoder().encode(audioBase64).byteLength > MAX_ENCODED_CHUNK_BYTES
+  ) {
+    throw new Error(feedbackText('feedback.chunkTooLarge'));
+  }
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await apiClient.feedback.transcribe({
+        body: { audioBase64, mimeType },
+      });
+      if (response.status === 200) return response.body.transcript;
+      lastError = new Error(feedbackText('feedback.transcribeFailed'));
+    } catch (error) {
+      lastError = error;
     }
+  }
+  throw lastError;
+}
 
-    await submitFeedbackText(response.body.transcript);
+async function submitVoice(blobs: Blob[], mimeType: string, request: number) {
+  try {
+    const transcripts: string[] = [];
+    for (const blob of blobs) {
+      if (request !== submissionRequest) return;
+      transcripts.push(await transcribeChunk(blob, mimeType));
+    }
+    await submitFeedbackText(transcripts.join(' ').trim());
     if (request !== submissionRequest) return;
     showToastFromStore(feedbackText('feedback.sentThankYou'), 'success');
     useFeedbackRecorderStoreBase.setState({ stage: 'idle', error: '' });
@@ -157,12 +178,12 @@ const useFeedbackRecorderStoreBase = create<FeedbackRecorderState>(
           const nextSubmissionRequest = ++submissionRequest;
           set({ stage: 'sending', error: '' });
           void submitVoice(
-            new Blob(recordedChunks, { type: recordedMimeType }),
+            recordedChunks,
             recordedMimeType,
             nextSubmissionRequest
           );
         };
-        recorder.start();
+        recorder.start(CHUNK_DURATION_MS);
         if (request !== recordingRequest) {
           recorder.stop();
           return;
@@ -238,6 +259,16 @@ export function FeedbackRecorder() {
       useFeedbackRecorderStoreBase.setState({ seconds: elapsed });
       if (elapsed >= MAX_RECORDING_SECONDS) {
         showToastFromStore(t('feedback.maximumDuration'), 'info');
+        try {
+          const context = new AudioContext();
+          const oscillator = context.createOscillator();
+          oscillator.frequency.value = 660;
+          oscillator.connect(context.destination);
+          oscillator.start();
+          oscillator.stop(context.currentTime + 0.18);
+        } catch {
+          // The visible warning remains available when audio is unavailable.
+        }
         stopRecording();
       }
     }, 500);
@@ -260,7 +291,7 @@ export function FeedbackRecorder() {
   useEffect(() => {
     if (
       previousAuthTokenRef.current !== authToken &&
-      (stage === 'starting' || stage === 'recording')
+      (stage === 'starting' || stage === 'recording' || stage === 'sending')
     ) {
       cancelRecording();
       showToastFromStore(t('feedback.discardedAfterSignOut'), 'info');
