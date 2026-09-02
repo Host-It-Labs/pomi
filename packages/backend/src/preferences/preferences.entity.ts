@@ -108,6 +108,9 @@ export class Preferences {
   @Column({ default: false })
   intentionHabits: boolean;
 
+  @Column({ default: false })
+  intentionPrioritizeUnfinishedHabits: boolean;
+
   @Column({ default: true })
   workTimerLogsExtension: boolean;
 

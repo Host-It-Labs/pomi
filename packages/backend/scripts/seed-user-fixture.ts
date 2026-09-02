@@ -37,6 +37,7 @@ type SeedIntention = {
   hasCustomDuration?: boolean;
   customDuration?: number;
   keepScreenAwake?: boolean;
+  habitCadence?: 'off' | 'daily' | 'weekly';
 };
 
 type SeedSession = {
@@ -145,6 +146,7 @@ function buildFixturePreferences(userId: string) {
     intentionCustomDurations: true,
     intentionSubIntentions: true,
     intentionHabits: true,
+    intentionPrioritizeUnfinishedHabits: false,
     assistantExtension: true,
     assistantTaskTranscriptsEnabled: true,
     assistantTaskTranscriptMinWords: 15,
@@ -211,8 +213,8 @@ const seedIntentions: SeedIntention[] = [
   { title: 'Budget', emoji: '💸', type: 'work' },
   { title: 'Groceries', emoji: '🛒', type: 'work' },
   { title: 'Laundry', emoji: '🧺', type: 'work' },
-  { title: 'Workout', emoji: '🏋️', type: 'work' },
-  { title: 'Read', emoji: '📚', type: 'work' },
+  { title: 'Workout', emoji: '🏋️', type: 'work', habitCadence: 'daily' },
+  { title: 'Read', emoji: '📚', type: 'work', habitCadence: 'weekly' },
   { title: 'Errands', emoji: '🧾', type: 'work' },
   { title: 'Calls', emoji: '📞', type: 'work' },
   { title: 'Social', emoji: '🤝', type: 'work' },
@@ -1212,6 +1214,9 @@ export async function seedUserFixture({
           hasCustomDuration: item.hasCustomDuration === true,
           customDuration: item.hasCustomDuration ? item.customDuration : null,
           keepScreenAwake: item.keepScreenAwake === true,
+          isHabit:
+            item.habitCadence !== undefined && item.habitCadence !== 'off',
+          habitCadence: item.habitCadence ?? 'off',
           usageCount: 0,
         })
       )
@@ -1241,6 +1246,9 @@ export async function seedUserFixture({
           hasCustomDuration: item.hasCustomDuration === true,
           customDuration: item.hasCustomDuration ? item.customDuration : null,
           keepScreenAwake: item.keepScreenAwake === true,
+          isHabit:
+            item.habitCadence !== undefined && item.habitCadence !== 'off',
+          habitCadence: item.habitCadence ?? 'off',
           usageCount: 0,
         });
       })

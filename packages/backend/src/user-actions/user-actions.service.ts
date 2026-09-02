@@ -869,7 +869,8 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           action.parentIntentionId ?? null,
           action.isFavorite === true,
           action.description,
-          action.allowsTasks !== false
+          action.allowsTasks !== false,
+          action.habitCadence
         );
       case 'update':
         if (!action.slug)
@@ -887,7 +888,8 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           action.parentIntentionId,
           action.isFavorite,
           action.description,
-          action.allowsTasks
+          action.allowsTasks,
+          action.habitCadence
         );
       case 'delete':
         if (!action.slug)

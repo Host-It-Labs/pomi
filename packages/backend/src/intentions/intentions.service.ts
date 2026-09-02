@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IntentionType, TIMER_TYPES } from '@pomi/shared';
+import { HabitCadence, IntentionType, TIMER_TYPES } from '@pomi/shared';
 import { StatisticsService } from 'src/statistics/statistics.service';
 import { In, IsNull, Repository } from 'typeorm';
 import { TaskEntity } from '../tasks/tasks.entity';
@@ -122,7 +122,8 @@ export class IntentionsService {
     parentIntentionId?: string | null,
     isFavorite?: boolean,
     description?: string | null,
-    allowsTasks?: boolean
+    allowsTasks?: boolean,
+    habitCadence?: HabitCadence
   ): Promise<Intention> {
     const slug = await this.getAvailableSlug(userId, type, title);
     const parentIntention = parentIntentionId
@@ -139,7 +140,8 @@ export class IntentionsService {
       hasCustomDuration,
       customDuration: hasCustomDuration ? customDuration : null,
       keepScreenAwake: keepScreenAwake === true,
-      isHabit: isHabit === true,
+      isHabit: habitCadence ? habitCadence !== 'off' : isHabit === true,
+      habitCadence: habitCadence ?? (isHabit ? 'daily' : 'off'),
       isFavorite: isFavorite === true,
       allowsTasks: parentIntention ? true : allowsTasks !== false,
       description: description?.trim() || null,
@@ -400,7 +402,8 @@ export class IntentionsService {
     parentIntentionId?: string | null,
     isFavorite?: boolean,
     description?: string | null,
-    allowsTasks?: boolean
+    allowsTasks?: boolean,
+    habitCadence?: HabitCadence
   ): Promise<Intention> {
     const intention = await this.intentionsRepository.findOne({
       where: { userId, slug, type },
@@ -440,6 +443,13 @@ export class IntentionsService {
     }
     if (isHabit !== undefined) {
       intention.isHabit = isHabit;
+      if (habitCadence === undefined) {
+        intention.habitCadence = isHabit ? 'daily' : 'off';
+      }
+    }
+    if (habitCadence !== undefined) {
+      intention.habitCadence = habitCadence;
+      intention.isHabit = habitCadence !== 'off';
     }
     if (isFavorite !== undefined) {
       intention.isFavorite = isFavorite;

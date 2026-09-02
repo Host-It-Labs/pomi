@@ -121,6 +121,8 @@ export function ExpandedIntentionsPicker({
     subCountBySlug,
     countByTypedSlug,
     subCountByTypedSlug,
+    weekCountBySlug,
+    weekSubCountBySlug,
     isLoading: isCountLoading,
     refetch: refetchTodayCount,
   } = useTodayIntentionsCount(intentionType);
@@ -462,6 +464,17 @@ export function ExpandedIntentionsPicker({
       return null;
     }
 
+    const getCadenceCount = (candidate: PickerIntention) => {
+      if (candidate.habitCadence === 'weekly') {
+        return candidate.parentIntentionId
+          ? (weekSubCountBySlug[candidate.slug] ?? 0) +
+              (weekCountBySlug[candidate.slug] ?? 0)
+          : (weekCountBySlug[candidate.slug] ?? 0);
+      }
+      return candidate.parentIntentionId
+        ? getSubIntentionDisplayCount(candidate)
+        : getAggregateDisplayCount(candidate);
+    };
     const childHabits = (
       subIntentionsByParent[
         getParentKey(intention.sourceType, intention.slug)
@@ -470,7 +483,7 @@ export function ExpandedIntentionsPicker({
 
     if (childHabits.length > 0) {
       return childHabits.every(
-        subIntention => getSubIntentionDisplayCount(subIntention) > 0
+        subIntention => getCadenceCount(subIntention) > 0
       )
         ? 'done'
         : 'pending';
@@ -480,9 +493,7 @@ export function ExpandedIntentionsPicker({
       return null;
     }
 
-    const doneCount = intention.parentIntentionId
-      ? getSubIntentionDisplayCount(intention)
-      : getAggregateDisplayCount(intention);
+    const doneCount = getCadenceCount(intention);
     return doneCount > 0 ? 'done' : 'pending';
   };
 
@@ -503,10 +514,31 @@ export function ExpandedIntentionsPicker({
         intention => intention.usageCount ?? getAggregateDisplayCount(intention)
       )
     : intentions;
-  const displayIntentions = habitsEnabled
+  const prioritizeUnfinishedHabits =
+    habitsEnabled && preferences?.intentionPrioritizeUnfinishedHabits === true;
+  const displayIntentions = prioritizeUnfinishedHabits
     ? orderIntentionsForHabits(mixedDisplayIntentions, getHabitState)
     : mixedDisplayIntentions;
   const showDailyCounts = preferences?.intentionShowDailyCount === true;
+  const leafHabits = [
+    ...intentions,
+    ...Object.values(subIntentionsByParent).flat(),
+  ].filter(
+    candidate =>
+      candidate.isHabit &&
+      (subIntentionsByParent[getParentKey(candidate.sourceType, candidate.slug)]
+        ?.length ?? 0) === 0
+  );
+  const dailyHabitsRemaining = leafHabits.filter(
+    candidate =>
+      candidate.habitCadence !== 'weekly' &&
+      getHabitState(candidate) === 'pending'
+  ).length;
+  const weeklyHabitsRemaining = leafHabits.filter(
+    candidate =>
+      candidate.habitCadence === 'weekly' &&
+      getHabitState(candidate) === 'pending'
+  ).length;
   const isTopPlacement = placement === 'top';
   const compressPicker = isShortViewport;
   const itemsPerRow = 3;
@@ -562,7 +594,7 @@ export function ExpandedIntentionsPicker({
     (currentPage + 1) * itemsPerPage
   );
   const currentSubPickerIntentions = subPickerState
-    ? habitsEnabled
+    ? prioritizeUnfinishedHabits
       ? orderIntentionsForHabits(
           subIntentionsByParent[
             getParentKey(
@@ -1293,6 +1325,14 @@ export function ExpandedIntentionsPicker({
           data-testid="expanded-intentions-bottom-slot"
           className={`relative flex items-center justify-center ${isTopPlacement || compressPicker ? 'mt-1 min-h-8' : 'mt-2 min-h-10'}`}
         >
+          {habitsEnabled && (
+            <span
+              className="absolute left-0 text-[9px] text-slate-500"
+              aria-label={`${dailyHabitsRemaining} daily and ${weeklyHabitsRemaining} weekly habits remaining`}
+            >
+              D {dailyHabitsRemaining} · W {weeklyHabitsRemaining}
+            </span>
+          )}
           {subPickerState ? renderSubIntentionsBand() : controls}
         </div>
       </div>

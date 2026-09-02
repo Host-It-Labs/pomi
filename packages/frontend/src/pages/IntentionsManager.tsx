@@ -1,4 +1,4 @@
-import { Intention, IntentionType, List } from '@pomi/shared';
+import { HabitCadence, Intention, IntentionType, List } from '@pomi/shared';
 import { TIMER_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -128,6 +128,7 @@ export function IntentionsManager() {
   const [newCustomDuration, setNewCustomDuration] = useState(25);
   const [newKeepScreenAwake, setNewKeepScreenAwake] = useState(false);
   const [newIsHabit, setNewIsHabit] = useState(false);
+  const [newHabitCadence, setNewHabitCadence] = useState<HabitCadence>('off');
   const [newAllowsTasks, setNewAllowsTasks] = useState(true);
   const [showDisableTasksConfirm, setShowDisableTasksConfirm] = useState(false);
   const [intentionToConvert, setIntentionToConvert] =
@@ -208,6 +209,7 @@ export function IntentionsManager() {
                 : DEFAULT_BREAK_INTENTION_MINUTES,
           keepScreenAwake: false,
           isHabit: false,
+          habitCadence: 'off',
           allowsTasks: true,
           description: '',
         })
@@ -374,6 +376,7 @@ export function IntentionsManager() {
         customDuration: finalDuration,
         keepScreenAwake: newKeepScreenAwake,
         isHabit: newIsHabit,
+        habitCadence: newHabitCadence,
         parentIntentionId:
           preferences?.intentionSubIntentions && newParentIntentionId
             ? newParentIntentionId
@@ -437,6 +440,7 @@ export function IntentionsManager() {
         customDuration: finalDuration,
         keepScreenAwake: newKeepScreenAwake,
         isHabit: newIsHabit,
+        habitCadence: newHabitCadence,
         parentIntentionId:
           preferences?.intentionSubIntentions &&
           newParentIntentionId !== editingIntention?.parentIntentionId
@@ -636,6 +640,9 @@ export function IntentionsManager() {
     setNewHasCustomDuration(intention.hasCustomDuration);
     setNewKeepScreenAwake(intention.keepScreenAwake);
     setNewIsHabit(intention.isHabit);
+    setNewHabitCadence(
+      intention.habitCadence ?? (intention.isHabit ? 'daily' : 'off')
+    );
     setNewAllowsTasks(intention.allowsTasks !== false);
     setNewCustomDuration(customDuration);
     setInitialFormKey(
@@ -648,6 +655,8 @@ export function IntentionsManager() {
         customDuration,
         keepScreenAwake: intention.keepScreenAwake,
         isHabit: intention.isHabit,
+        habitCadence:
+          intention.habitCadence ?? (intention.isHabit ? 'daily' : 'off'),
         allowsTasks: intention.allowsTasks !== false,
         description: intention.description ?? '',
       })
@@ -759,6 +768,7 @@ export function IntentionsManager() {
     setNewHasCustomDuration(false);
     setNewKeepScreenAwake(false);
     setNewIsHabit(false);
+    setNewHabitCadence('off');
     setNewAllowsTasks(true);
     setNewCustomDuration(
       defaultType === TIMER_TYPES.WORK
@@ -780,6 +790,7 @@ export function IntentionsManager() {
     customDuration: newCustomDuration,
     keepScreenAwake: newKeepScreenAwake,
     isHabit: newIsHabit,
+    habitCadence: newHabitCadence,
     allowsTasks: newAllowsTasks,
     description: newDescription,
   });
@@ -1233,12 +1244,26 @@ export function IntentionsManager() {
               <div className="space-y-2">
                 {preferences?.intentionHabits && (
                   <div className="rounded-lg border border-slate-800 bg-slate-800/50 px-3 py-2">
-                    <ToggleField
+                    <label
+                      htmlFor={`habit-${isEdit ? editingIntention?.slug : 'new'}`}
+                      className="mb-1 block text-xs font-medium text-slate-300"
+                    >
+                      {t('intention.habitCadence')}
+                    </label>
+                    <select
                       id={`habit-${isEdit ? editingIntention?.slug : 'new'}`}
-                      checked={newIsHabit}
-                      onChange={checked => setNewIsHabit(checked)}
-                      label={t('intention.habit')}
-                    />
+                      value={newHabitCadence}
+                      onChange={event => {
+                        const cadence = event.target.value as HabitCadence;
+                        setNewHabitCadence(cadence);
+                        setNewIsHabit(cadence !== 'off');
+                      }}
+                      className="w-full rounded-md border border-slate-700/40 bg-slate-900 px-2 py-1.5 text-sm text-slate-100"
+                    >
+                      <option value="off">{t('common.off')}</option>
+                      <option value="daily">{t('common.daily')}</option>
+                      <option value="weekly">{t('common.weekly')}</option>
+                    </select>
                   </div>
                 )}
 
@@ -1984,6 +2009,7 @@ function serializeIntentionFormState(state: {
   customDuration: number;
   keepScreenAwake: boolean;
   isHabit: boolean;
+  habitCadence: HabitCadence;
   allowsTasks: boolean;
   description: string;
 }) {

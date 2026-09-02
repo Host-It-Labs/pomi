@@ -683,6 +683,13 @@ export function Settings() {
             [t('intention.habits'), t('intention.habitsDescription')],
             'intentionHabits'
           ),
+          settingsSearchEntry(
+            [
+              t('intention.prioritizeUnfinishedHabits'),
+              t('intention.prioritizeUnfinishedHabitsDescription'),
+            ],
+            'intentionPrioritizeUnfinishedHabits'
+          ),
         ],
         icon: <FaBullseye size={18} />,
         content: (

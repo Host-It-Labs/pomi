@@ -1,4 +1,5 @@
 import type {
+  HabitCadence,
   TaskCreationSource,
   TaskPriority,
   TaskRecurrenceAnchorMode,
@@ -115,6 +116,7 @@ export interface IntentionsUserAction {
   customDuration?: number;
   keepScreenAwake?: boolean;
   isHabit?: boolean;
+  habitCadence?: HabitCadence;
   isFavorite?: boolean;
   allowsTasks?: boolean;
   parentIntentionId?: string | null;

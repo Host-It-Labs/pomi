@@ -38,6 +38,7 @@ const DEFAULT_PREFERENCES = {
   intentionCustomDurations: false,
   intentionSubIntentions: false,
   intentionHabits: false,
+  intentionPrioritizeUnfinishedHabits: false,
   workTimerLogsExtension: true,
   sessionsExtension: false,
   sessionPomodorosCount: 3,

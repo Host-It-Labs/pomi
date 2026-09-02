@@ -117,6 +117,21 @@ export const IntentionSettings = ({
           icon={<FaCalendarCheck size={12} />}
           description={t('intention.habitsDescription')}
         />
+
+        {preferences.intentionHabits && (
+          <>
+            <Separator />
+            <ToggleField
+              id="intentionPrioritizeUnfinishedHabits"
+              checked={preferences.intentionPrioritizeUnfinishedHabits ?? false}
+              onChange={value =>
+                updatePreference('intentionPrioritizeUnfinishedHabits', value)
+              }
+              label={t('intention.prioritizeUnfinishedHabits')}
+              description={t('intention.prioritizeUnfinishedHabitsDescription')}
+            />
+          </>
+        )}
       </ExtrasSection>
     </div>
   );

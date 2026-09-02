@@ -87,7 +87,8 @@ export class IntentionsController {
         data.parentIntentionId ?? null,
         data.isFavorite === true,
         data.description,
-        data.allowsTasks !== false
+        data.allowsTasks !== false,
+        data.habitCadence
       );
 
       return {
@@ -182,7 +183,8 @@ export class IntentionsController {
         data.parentIntentionId,
         data.isFavorite,
         data.description,
-        data.allowsTasks
+        data.allowsTasks,
+        data.habitCadence
       );
 
       return {
