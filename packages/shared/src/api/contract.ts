@@ -162,7 +162,7 @@ const preferencesSchema = z.object({
   intentionCustomDurations: z.boolean(),
   intentionSubIntentions: z.boolean(),
   intentionHabits: z.boolean(),
-  intentionPrioritizeUnfinishedHabits: z.boolean(),
+  intentionPrioritizeUnfinishedHabits: z.boolean().default(false),
   workTimerLogsExtension: z.boolean(),
   sessionsExtension: z.boolean(),
   sessionPomodorosCount: z.number().int(),
