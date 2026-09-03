@@ -118,20 +118,18 @@ export const IntentionSettings = ({
           description={t('intention.habitsDescription')}
         />
 
-        {preferences.intentionHabits && (
-          <>
-            <Separator />
-            <ToggleField
-              id="intentionPrioritizeUnfinishedHabits"
-              checked={preferences.intentionPrioritizeUnfinishedHabits ?? false}
-              onChange={value =>
-                updatePreference('intentionPrioritizeUnfinishedHabits', value)
-              }
-              label={t('intention.prioritizeUnfinishedHabits')}
-              description={t('intention.prioritizeUnfinishedHabitsDescription')}
-            />
-          </>
-        )}
+        <Separator />
+        <ToggleField
+          id="intentionPrioritizeUnfinishedHabits"
+          checked={preferences.intentionPrioritizeUnfinishedHabits ?? false}
+          onChange={value =>
+            updatePreference('intentionPrioritizeUnfinishedHabits', value)
+          }
+          label={t('intention.prioritizeUnfinishedHabits')}
+          description={t('intention.prioritizeUnfinishedHabitsDescription')}
+          disabled={!preferences.intentionHabits}
+          onDisabledClick={() => updatePreference('intentionHabits', true)}
+        />
       </ExtrasSection>
     </div>
   );

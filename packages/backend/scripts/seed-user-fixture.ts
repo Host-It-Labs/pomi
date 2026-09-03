@@ -883,7 +883,10 @@ async function findFixtureHealthIssues(
         (expected.hasCustomDuration
           ? (expected.customDuration ?? null)
           : null) ||
-      intention.keepScreenAwake !== (expected.keepScreenAwake === true)
+      intention.keepScreenAwake !== (expected.keepScreenAwake === true) ||
+      intention.habitCadence !== (expected.habitCadence ?? 'off') ||
+      intention.isHabit !==
+        (expected.habitCadence !== undefined && expected.habitCadence !== 'off')
     ) {
       issues.push(
         `canonical intention ${expected.type}:${expected.title} is missing or changed`

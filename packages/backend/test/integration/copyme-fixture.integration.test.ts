@@ -325,6 +325,16 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
     assert.equal(preserved.rows[0].id, repaired.rows[0].id);
 
     await client.query(
+      `UPDATE intentions SET "isHabit" = false, "habitCadence" = 'off'
+       WHERE "userId" = $1 AND type = 'work' AND slug = 'read'`,
+      [preserved.rows[0].id]
+    );
+    assert.match(
+      await seedCopyme(),
+      /canonical intention work:Read is missing or changed/
+    );
+
+    await client.query(
       `UPDATE development_fixture_markers SET "seedVersion" = 0 WHERE "fixtureName" = $1`,
       [fixtureName]
     );

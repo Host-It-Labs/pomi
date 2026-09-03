@@ -442,9 +442,14 @@ export class IntentionsService {
       intention.keepScreenAwake = keepScreenAwake;
     }
     if (isHabit !== undefined) {
+      const wasHabit = intention.isHabit;
       intention.isHabit = isHabit;
       if (habitCadence === undefined) {
-        intention.habitCadence = isHabit ? 'daily' : 'off';
+        if (!isHabit) {
+          intention.habitCadence = 'off';
+        } else if (!wasHabit || intention.habitCadence === 'off') {
+          intention.habitCadence = 'daily';
+        }
       }
     }
     if (habitCadence !== undefined) {

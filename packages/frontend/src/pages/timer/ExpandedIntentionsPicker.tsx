@@ -19,10 +19,7 @@ import { PaginationControls } from '../../components/PaginationControls';
 import { Button } from '../../components/ui/Button';
 import { IntentionEmojiPair } from '../../components/ui/IntentionEmojiPair';
 import { KeyboardShortcut } from '../../components/ui/KeyboardShortcut';
-import {
-  getTypedCountKey,
-  useTodayIntentionsCount,
-} from '../../hooks/useTodayIntentionsCount';
+import { useTodayIntentionsCount } from '../../hooks/useTodayIntentionsCount';
 import { usePreferencesStore } from '../../stores/preferencesStore';
 import { useTimerStore } from '../../stores/timerStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -34,6 +31,11 @@ import {
   sortMixedBreakIntentionsByTypeAndCount,
 } from '../../utils/breakIntentionPreview';
 import { orderIntentionsForHabits } from '../../utils/habits';
+import {
+  getTypedAggregateCount,
+  getTypedCountKey,
+  getTypedLeafCount,
+} from '../../utils/intentionCounts';
 import { hasOpenModal } from '../../utils/modalRegistry';
 import { isIos, isMac, isMobile } from '../../utils/osUtils';
 import { getSelectedTimerIntentions } from '../../utils/timerIntentions';
@@ -121,8 +123,8 @@ export function ExpandedIntentionsPicker({
     subCountBySlug,
     countByTypedSlug,
     subCountByTypedSlug,
-    weekCountBySlug,
-    weekSubCountBySlug,
+    weekCountByTypedSlug,
+    weekSubCountByTypedSlug,
     isLoading: isCountLoading,
     refetch: refetchTodayCount,
   } = useTodayIntentionsCount(intentionType);
@@ -467,9 +469,23 @@ export function ExpandedIntentionsPicker({
     const getCadenceCount = (candidate: PickerIntention) => {
       if (candidate.habitCadence === 'weekly') {
         return candidate.parentIntentionId
-          ? (weekSubCountBySlug[candidate.slug] ?? 0) +
-              (weekCountBySlug[candidate.slug] ?? 0)
-          : (weekCountBySlug[candidate.slug] ?? 0);
+          ? getTypedLeafCount(
+              candidate.sourceType,
+              candidate.slug,
+              weekCountByTypedSlug,
+              weekSubCountByTypedSlug
+            )
+          : getTypedAggregateCount(
+              candidate.sourceType,
+              candidate.slug,
+              (
+                subIntentionsByParent[
+                  getParentKey(candidate.sourceType, candidate.slug)
+                ] ?? []
+              ).map(child => child.slug),
+              weekCountByTypedSlug,
+              weekSubCountByTypedSlug
+            );
       }
       return candidate.parentIntentionId
         ? getSubIntentionDisplayCount(candidate)
@@ -495,6 +511,30 @@ export function ExpandedIntentionsPicker({
 
     const doneCount = getCadenceCount(intention);
     return doneCount > 0 ? 'done' : 'pending';
+  };
+  const getHabitAriaLabel = (
+    intention: PickerIntention,
+    state: 'pending' | 'done'
+  ) => {
+    const childHabits = (
+      subIntentionsByParent[
+        getParentKey(intention.sourceType, intention.slug)
+      ] ?? []
+    ).filter(child => child.isHabit);
+    const isWeekly =
+      intention.habitCadence === 'weekly' ||
+      (!intention.isHabit &&
+        childHabits.length > 0 &&
+        childHabits.every(child => child.habitCadence === 'weekly'));
+    return t(
+      isWeekly
+        ? state === 'done'
+          ? 'intention.habitDoneThisWeek'
+          : 'intention.habitPendingThisWeek'
+        : state === 'done'
+          ? 'intention.habitDoneToday'
+          : 'intention.habitPendingToday'
+    );
   };
 
   const getVisibleDisplayCount = (
@@ -947,13 +987,13 @@ export function ExpandedIntentionsPicker({
           {isPendingHabit && (
             <span
               className="absolute left-0 top-0 h-1.5 w-1.5 rounded-full bg-amber-400"
-              aria-label={t('intention.habitPendingToday')}
+              aria-label={getHabitAriaLabel(intention, 'pending')}
             />
           )}
           {habitDone && (
             <span
               className="absolute left-0 top-0 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 text-white"
-              aria-label={t('intention.habitDoneToday')}
+              aria-label={getHabitAriaLabel(intention, 'done')}
             >
               <FaCheck size={7} />
             </span>
@@ -1081,13 +1121,13 @@ export function ExpandedIntentionsPicker({
         {isPendingHabit && (
           <span
             className="absolute left-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-amber-400"
-            aria-label={t('intention.habitPendingToday')}
+            aria-label={getHabitAriaLabel(subIntention, 'pending')}
           />
         )}
         {habitDone && (
           <span
             className="absolute left-0.5 top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 text-white"
-            aria-label={t('intention.habitDoneToday')}
+            aria-label={getHabitAriaLabel(subIntention, 'done')}
           >
             <FaCheck size={7} />
           </span>

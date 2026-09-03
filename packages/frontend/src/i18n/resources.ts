@@ -132,6 +132,8 @@ const english: TranslationCatalog = {
   'intention.add': 'Add intention',
   'intention.habitPendingToday': 'Habit pending today',
   'intention.habitDoneToday': 'Habit done today',
+  'intention.habitPendingThisWeek': 'Habit pending this week',
+  'intention.habitDoneThisWeek': 'Habit done this week',
   'intention.previousSubIntentions': 'Previous sub-intentions',
   'intention.nextSubIntentions': 'Next sub-intentions',
   'intention.editIntentions': 'Edit intentions',
