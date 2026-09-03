@@ -1,5 +1,5 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
-import { FEEDBACK_TRANSCRIPTION_JSON_LIMIT } from '@pomi/shared/src/constants';
+import { FEEDBACK_TRANSCRIPTION_JSON_LIMIT } from '@pomi/shared';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { ValidationError } from 'class-validator';
 import { json, urlencoded } from 'express';
