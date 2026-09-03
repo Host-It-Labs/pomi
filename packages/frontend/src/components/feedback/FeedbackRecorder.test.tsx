@@ -48,6 +48,7 @@ function Harness() {
 
 function createRecorderClass(options?: { startError?: Error }) {
   let latest: FakeMediaRecorder | null = null;
+  const instances: FakeMediaRecorder[] = [];
 
   class FakeMediaRecorder {
     state = 'inactive';
@@ -59,6 +60,7 @@ function createRecorderClass(options?: { startError?: Error }) {
     constructor(_stream: MediaStream) {
       // eslint-disable-next-line @typescript-eslint/no-this-alias -- retain the fake instance for assertions
       latest = this;
+      instances.push(this);
     }
 
     start() {
@@ -77,6 +79,7 @@ function createRecorderClass(options?: { startError?: Error }) {
   return {
     Recorder: FakeMediaRecorder,
     getLatest: () => latest,
+    getInstances: () => instances,
   };
 }
 
@@ -161,6 +164,48 @@ describe('FeedbackRecorder', () => {
     await waitFor(() => expect(mocks.transcribe).toHaveBeenCalledOnce());
     await waitFor(() => expect(submitUserMutation).toHaveBeenCalledOnce());
     expect(getLatest()?.stopCalls).toBe(1);
+  });
+
+  it('rotates complete recorder segments before transcribing them', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { Recorder, getInstances } = createRecorderClass();
+    vi.stubGlobal('MediaRecorder', Recorder);
+    mocks.transcribe
+      .mockResolvedValueOnce({
+        status: 200,
+        body: { transcript: 'First minute', costUsd: 0 },
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        body: { transcript: 'Second minute', costUsd: 0 },
+      });
+    render(<Harness />);
+
+    await act(async () => {
+      await useFeedbackRecorderStore.getState().startRecording();
+    });
+    act(() => {
+      vi.advanceTimersByTime(60 * 1000);
+    });
+
+    expect(getInstances()).toHaveLength(2);
+    expect(getInstances()[0].stopCalls).toBe(1);
+
+    useFeedbackRecorderStore.getState().stopRecording();
+
+    await waitFor(() => expect(mocks.transcribe).toHaveBeenCalledTimes(2));
+    expect(submitUserMutation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          text: 'First minute Second minute',
+        }),
+      })
+    );
+    const firstKey = mocks.transcribe.mock.calls[0][0].body.idempotencyKey;
+    const secondKey = mocks.transcribe.mock.calls[1][0].body.idempotencyKey;
+    expect(firstKey).toMatch(/^[0-9a-f-]{36}$/);
+    expect(secondKey).not.toBe(firstKey);
+    vi.useRealTimers();
   });
 
   it('discards the recording when authentication is lost', async () => {

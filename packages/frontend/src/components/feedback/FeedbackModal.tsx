@@ -1,3 +1,4 @@
+import { FEEDBACK_MAX_TEXT_LENGTH } from '@pomi/shared/src/constants';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FaMicrophone } from 'react-icons/fa';
 import {
@@ -203,7 +204,7 @@ export function FeedbackModal({
             autoFocus
             rows={7}
             value={text}
-            maxLength={20_000}
+            maxLength={FEEDBACK_MAX_TEXT_LENGTH}
             onChange={event => setText(event.target.value)}
             placeholder={t('feedback.improve')}
             className="w-full resize-y rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25"

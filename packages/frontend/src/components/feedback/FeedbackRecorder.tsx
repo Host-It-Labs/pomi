@@ -1,3 +1,7 @@
+import {
+  FEEDBACK_MAX_TEXT_LENGTH,
+  FEEDBACK_TRANSCRIPTION_MAX_ENCODED_BYTES,
+} from '@pomi/shared/src/constants';
 import { createPortal } from 'react-dom';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { create } from 'zustand';
@@ -11,6 +15,7 @@ import { useUiStore } from '../../stores/uiStore';
 import { createSelectors } from '../../stores/createSelectors';
 import { showToastFromStore } from '../toast/ToastContext';
 import { getLanguage, translate, useI18n } from '../../i18n';
+import { v4 as uuid } from 'uuid';
 
 export type FeedbackRecordingStage =
   'idle' | 'starting' | 'recording' | 'sending' | 'error';
@@ -26,7 +31,6 @@ type FeedbackRecorderState = {
 
 const MAX_RECORDING_SECONDS = 30 * 60;
 const CHUNK_DURATION_MS = 60 * 1000;
-const MAX_ENCODED_CHUNK_BYTES = 4 * 1024 * 1024;
 
 let mediaRecorder: MediaRecorder | null = null;
 let stream: MediaStream | null = null;
@@ -34,6 +38,10 @@ let stopIntent: 'submit' | 'cancel' = 'cancel';
 let recordingRequest = 0;
 let submissionRequest = 0;
 let recordingStartedAt: number | null = null;
+let recordedSegments: Blob[] = [];
+let segmentChunks: Blob[] = [];
+let rotateRecorderOnStop = false;
+let rotationTimer: number | null = null;
 
 function feedbackText(key: string) {
   return translate(key, undefined, getLanguage());
@@ -45,6 +53,10 @@ function stopStream(value: MediaStream | null) {
 
 function cleanupRecorder(expectedRecorder?: MediaRecorder) {
   if (expectedRecorder && mediaRecorder !== expectedRecorder) return;
+  if (rotationTimer !== null) {
+    window.clearTimeout(rotationTimer);
+    rotationTimer = null;
+  }
   stopStream(stream);
   stream = null;
   mediaRecorder = null;
@@ -54,6 +66,9 @@ function cleanupRecorder(expectedRecorder?: MediaRecorder) {
 export async function submitFeedbackText(feedback: string) {
   const text = feedback.trim();
   if (!text) throw new Error(feedbackText('feedback.addFirst'));
+  if (text.length > FEEDBACK_MAX_TEXT_LENGTH) {
+    throw new Error(feedbackText('feedback.tooLong'));
+  }
 
   await submitUserMutation({
     kind: 'feedback',
@@ -71,10 +86,15 @@ export async function submitFeedbackText(feedback: string) {
   });
 }
 
-async function transcribeChunk(blob: Blob, mimeType: string) {
+async function transcribeChunk(
+  blob: Blob,
+  mimeType: string,
+  idempotencyKey: string
+) {
   const audioBase64 = await blobToBase64(blob);
   if (
-    new TextEncoder().encode(audioBase64).byteLength > MAX_ENCODED_CHUNK_BYTES
+    new TextEncoder().encode(audioBase64).byteLength >
+    FEEDBACK_TRANSCRIPTION_MAX_ENCODED_BYTES
   ) {
     throw new Error(feedbackText('feedback.chunkTooLarge'));
   }
@@ -82,7 +102,7 @@ async function transcribeChunk(blob: Blob, mimeType: string) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const response = await apiClient.feedback.transcribe({
-        body: { audioBase64, mimeType },
+        body: { audioBase64, mimeType, idempotencyKey },
       });
       if (response.status === 200) return response.body.transcript;
       lastError = new Error(feedbackText('feedback.transcribeFailed'));
@@ -98,7 +118,7 @@ async function submitVoice(blobs: Blob[], mimeType: string, request: number) {
     const transcripts: string[] = [];
     for (const blob of blobs) {
       if (request !== submissionRequest) return;
-      transcripts.push(await transcribeChunk(blob, mimeType));
+      transcripts.push(await transcribeChunk(blob, mimeType, uuid()));
     }
     await submitFeedbackText(transcripts.join(' ').trim());
     if (request !== submissionRequest) return;
@@ -144,6 +164,9 @@ const useFeedbackRecorderStoreBase = create<FeedbackRecorderState>(
       submissionRequest += 1;
       stopIntent = 'cancel';
       recordingStartedAt = null;
+      recordedSegments = [];
+      segmentChunks = [];
+      rotateRecorderOnStop = false;
       set({ stage: 'starting', seconds: 0, error: '' });
 
       try {
@@ -156,36 +179,70 @@ const useFeedbackRecorderStoreBase = create<FeedbackRecorderState>(
         }
 
         stream = nextStream;
-        const recorder = new MediaRecorder(nextStream);
-        mediaRecorder = recorder;
-        const recordedChunks: Blob[] = [];
-        recorder.ondataavailable = event => {
-          if (event.data.size > 0) recordedChunks.push(event.data);
-        };
-        recorder.onstop = () => {
-          const intent = stopIntent;
-          const recordedMimeType =
-            recorder.mimeType || recordedChunks[0]?.type || 'audio/webm';
-          const isCurrentRequest = request === recordingRequest;
-          cleanupRecorder(recorder);
+        const startSegment = () => {
+          const recorder = new MediaRecorder(nextStream);
+          mediaRecorder = recorder;
+          segmentChunks = [];
+          recorder.ondataavailable = event => {
+            if (event.data.size > 0) segmentChunks.push(event.data);
+          };
+          recorder.onstop = () => {
+            if (rotationTimer !== null) {
+              window.clearTimeout(rotationTimer);
+              rotationTimer = null;
+            }
+            const chunks = segmentChunks;
+            segmentChunks = [];
+            if (chunks.length > 0) {
+              recordedSegments.push(
+                new Blob(chunks, { type: recorder.mimeType || 'audio/webm' })
+              );
+            }
+            const shouldRotate = rotateRecorderOnStop;
+            rotateRecorderOnStop = false;
+            const isCurrentRequest = request === recordingRequest;
+            if (shouldRotate && isCurrentRequest) {
+              try {
+                startSegment();
+              } catch {
+                recordedSegments = [];
+                cleanupRecorder();
+                set({
+                  stage: 'error',
+                  error: feedbackText('feedback.permissionDenied'),
+                });
+              }
+              return;
+            }
 
-          if (!isCurrentRequest || intent !== 'submit') return;
-          if (recordedChunks.length === 0) {
-            set({ stage: 'error', error: feedbackText('feedback.noSpeech') });
-            return;
-          }
+            const intent = stopIntent;
+            const segments = recordedSegments;
+            recordedSegments = [];
+            const recordedMimeType =
+              recorder.mimeType || segments[0]?.type || 'audio/webm';
+            cleanupRecorder(recorder);
 
-          const nextSubmissionRequest = ++submissionRequest;
-          set({ stage: 'sending', error: '' });
-          void submitVoice(
-            recordedChunks,
-            recordedMimeType,
-            nextSubmissionRequest
-          );
+            if (!isCurrentRequest || intent !== 'submit') return;
+            if (segments.length === 0) {
+              set({ stage: 'error', error: feedbackText('feedback.noSpeech') });
+              return;
+            }
+
+            const nextSubmissionRequest = ++submissionRequest;
+            set({ stage: 'sending', error: '' });
+            void submitVoice(segments, recordedMimeType, nextSubmissionRequest);
+          };
+          recorder.start();
+          rotationTimer = window.setTimeout(() => {
+            if (request === recordingRequest && recorder.state !== 'inactive') {
+              rotateRecorderOnStop = true;
+              recorder.stop();
+            }
+          }, CHUNK_DURATION_MS);
         };
-        recorder.start(CHUNK_DURATION_MS);
+        startSegment();
         if (request !== recordingRequest) {
-          recorder.stop();
+          mediaRecorder?.stop();
           return;
         }
         recordingStartedAt = Date.now();
@@ -202,6 +259,11 @@ const useFeedbackRecorderStoreBase = create<FeedbackRecorderState>(
     stopRecording: () => {
       if (get().stage !== 'recording') return;
       stopIntent = 'submit';
+      rotateRecorderOnStop = false;
+      if (rotationTimer !== null) {
+        window.clearTimeout(rotationTimer);
+        rotationTimer = null;
+      }
       set({ stage: 'sending', error: '' });
       const recorder = mediaRecorder;
       if (recorder && recorder.state !== 'inactive') {
@@ -213,11 +275,18 @@ const useFeedbackRecorderStoreBase = create<FeedbackRecorderState>(
     },
     cancelRecording: () => {
       stopIntent = 'cancel';
+      rotateRecorderOnStop = false;
       recordingRequest += 1;
       submissionRequest += 1;
       const recorder = mediaRecorder;
+      if (rotationTimer !== null) {
+        window.clearTimeout(rotationTimer);
+        rotationTimer = null;
+      }
       if (recorder && recorder.state !== 'inactive') recorder.stop();
       cleanupRecorder(recorder ?? undefined);
+      recordedSegments = [];
+      segmentChunks = [];
       set({ stage: 'idle', seconds: 0, error: '' });
     },
   })

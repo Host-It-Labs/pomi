@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -15,6 +16,7 @@ import {
   AssistantVoiceCommandResult,
 } from '@pomi/shared';
 import { Repository } from 'typeorm';
+import { createHash } from 'node:crypto';
 import { PomiLogger } from '../logging/pomi-logger';
 import { PreferencesService } from '../preferences/preferences.service';
 import { AssistantSettingsEntity } from './assistant-settings.entity';
@@ -25,6 +27,7 @@ import {
   type AssistantModelRequestOptions,
 } from './assistant-input-types';
 import { translateAssistant } from '../i18n/assistant-localization';
+import { AssistantPreparationStore } from './assistant-task-preparation.store';
 
 type OpenRouterUsage = {
   cost?: number;
@@ -90,7 +93,8 @@ export class AssistantService {
     private assistantSettingsRepository: Repository<AssistantSettingsEntity>,
     @InjectRepository(AssistantUsageEntity)
     private assistantUsageRepository: Repository<AssistantUsageEntity>,
-    private preferencesService: PreferencesService
+    private preferencesService: PreferencesService,
+    @Optional() private preparationStore?: AssistantPreparationStore
   ) {}
 
   async getStatus(userId: string): Promise<AssistantStatus> {
@@ -357,7 +361,11 @@ export class AssistantService {
 
   async transcribeFeedback(
     userId: string,
-    input: { audioBase64: string; mimeType: string }
+    input: {
+      audioBase64: string;
+      mimeType: string;
+      idempotencyKey: string;
+    }
   ): Promise<{ transcript: string; costUsd: number }> {
     const [settings, preferences] = await Promise.all([
       this.getSettingsEntity(),
@@ -371,8 +379,32 @@ export class AssistantService {
         )
       );
     }
-    const result = await this.transcribe(userId, input, settings);
-    return { transcript: result.text.trim(), costUsd: result.costUsd };
+    const transcribe = async () => {
+      const result = await this.transcribe(userId, input, settings);
+      return {
+        transcript: result.text.trim(),
+        costUsd: result.costUsd,
+        debugLogId: null,
+        modelCall: result.modelCall,
+      };
+    };
+    const result = this.preparationStore
+      ? await this.preparationStore.getOrCreateVoiceChunk(
+          userId,
+          `feedback:${input.idempotencyKey}`,
+          0,
+          {
+            audioSha256: createHash('sha256')
+              .update(input.audioBase64)
+              .digest('hex'),
+            mimeType: input.mimeType,
+            transcriptionModel: settings.transcriptionModel ?? null,
+            debugLogId: null,
+          },
+          transcribe
+        )
+      : await transcribe();
+    return { transcript: result.transcript, costUsd: result.costUsd };
   }
 
   async addSpokenAudio(
@@ -615,10 +647,7 @@ export class AssistantService {
 
   private requirePreparedMode(
     mode:
-      | 'taskCapture'
-      | 'dictation'
-      | 'voiceCommand'
-      | 'descriptionGeneration',
+      'taskCapture' | 'dictation' | 'voiceCommand' | 'descriptionGeneration',
     settings: AssistantSettingsEntity,
     preferences: Preferences
   ) {
