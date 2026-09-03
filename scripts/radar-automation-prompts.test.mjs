@@ -61,7 +61,7 @@ for (const definition of promptDefinitions) {
       'utf8'
     );
     const startupIndex = prompt.indexOf(
-      'The first phase of every run is startup synchronization.'
+      'The first phase of every run is startup synchronization'
     );
     const acquireIndex = prompt.indexOf(
       `node scripts/radar-automation-lock.mjs acquire --track ${definition.track} --stage ${definition.stage}`
@@ -69,12 +69,15 @@ for (const definition of promptDefinitions) {
     const remoteIndex = prompt.indexOf(
       `fetch the remote \`${definition.branch}\` branch and \`origin/main\``
     );
-    const lifecycleIndex = prompt.indexOf('Read `AGENTS.md`');
+    const lifecycleIndex = prompt.indexOf('read `AGENTS.md`');
 
     assert.notEqual(startupIndex, -1);
     assert.notEqual(acquireIndex, -1);
     assert.notEqual(remoteIndex, -1);
     assert.notEqual(lifecycleIndex, -1);
+    assert.match(prompt, /ignore only macOS `\.DS_Store` entries/);
+    assert.match(prompt, /run `git merge --abort`/);
+    assert.match(prompt, /bounded exception to the initial repository-policy read/);
     assert.ok(startupIndex < acquireIndex);
     assert.ok(acquireIndex < remoteIndex);
     assert.ok(remoteIndex < lifecycleIndex);
