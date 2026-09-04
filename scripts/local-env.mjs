@@ -7,10 +7,25 @@ export const repositoryRoot = path.resolve(
   '..'
 );
 
+function findPrimaryCheckoutRoot() {
+  try {
+    const gitFile = readFileSync(path.join(repositoryRoot, '.git'), 'utf8');
+    const gitDirectory = gitFile.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
+    const marker = `${path.sep}.git${path.sep}worktrees${path.sep}`;
+    const markerIndex = gitDirectory?.indexOf(marker) ?? -1;
+    if (markerIndex > 0) return gitDirectory.slice(0, markerIndex);
+  } catch {
+    // The primary checkout has a .git directory instead of a worktree file.
+  }
+  return repositoryRoot;
+}
+
+export const primaryCheckoutRoot = findPrimaryCheckoutRoot();
+
 export const environmentFiles = Object.freeze({
-  local: path.join(repositoryRoot, '.env.local'),
-  automation: path.join(repositoryRoot, 'config/pomi-automation.env'),
-  release: path.join(repositoryRoot, 'config/pomi-release.env'),
+  local: path.join(primaryCheckoutRoot, '.env.local'),
+  automation: path.join(primaryCheckoutRoot, 'config/pomi-automation.env'),
+  release: path.join(primaryCheckoutRoot, 'config/pomi-release.env'),
 });
 
 export const defaultLocalEnvironmentFile = environmentFiles.local;
@@ -179,7 +194,11 @@ export function loadReleaseEnvironment(options) {
 
 export function resolveRepositoryPath(value) {
   if (!value) return undefined;
-  return path.isAbsolute(value) ? value : path.resolve(repositoryRoot, value);
+  if (path.isAbsolute(value)) return value;
+  return path.resolve(
+    value.startsWith('config/secrets/') ? primaryCheckoutRoot : repositoryRoot,
+    value
+  );
 }
 
 function quoteForShell(value) {
@@ -206,6 +225,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (!valid || !profile) {
     process.stderr.write(
       'Usage: node scripts/local-env.mjs --shell-exports --profile local|automation|release [--env-file path]\n'
+    );
+    process.exitCode = 2;
+  } else if (profile === 'automation') {
+    process.stderr.write(
+      'The automation profile cannot be exported to a shell. Use scripts/github-app-auth.mjs or the Node environment loader.\n'
     );
     process.exitCode = 2;
   } else {

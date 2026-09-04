@@ -30,6 +30,16 @@ Single-context repo: use root `CONTEXT.md` and root `docs/adr/`. See `docs/agent
 - Use `pnpm`; do not introduce npm or yarn workflows unless explicitly justified.
 - Changes require `pnpm -r run build` to rebuild both packages.
 
+## Pre-1.0 Compatibility
+
+- Until Pomi reaches version `1.0.0`, clients and the backend are released
+  together for the sole current user. Prefer clean coordinated contract changes
+  and remove obsolete compatibility shims; do not preserve compatibility with
+  older Pomi clients, servers, or internal API shapes.
+- Preserve existing persisted user data through explicit migrations. This
+  pre-1.0 policy does not relax external protocol compatibility, security
+  boundaries, rollback safety, or deployment validation.
+
 ## Testing Strategy
 
 - Give each behavior to the cheapest reliable test owner: unit tests for pure rules and state transitions; jsdom integration tests for React behavior; Chromium browser-component tests for rendered geometry and browser behavior; Nest/Supertest integration tests with migrated PostgreSQL and Redis for HTTP, persistence, and cross-service contracts; native tests for Kotlin/Wear and Rust/Tauri logic; Playwright only for the 13 approved full-stack journeys.
@@ -47,8 +57,8 @@ Single-context repo: use root `CONTEXT.md` and root `docs/adr/`. See `docs/agent
 - If the current branch already has a linked PR, update the title or body only when they no longer describe the current changes.
 - Keep PR titles short and non-repetitive; do not expand the title when the existing wording already covers the new work.
 - PR bodies should contain only a concise summary and important notes when needed; omit testing or verification sections.
-- After pushing PR changes from a new or previously unpushed branch, wait for the CI e2e check to pass and for the automatic Codex review; address review comments if it leaves any, while a thumbs-up means no action is needed.
-- If the worktree is already on an active pushed branch with a linked PR, do not wait for CI or Codex reviews after pushing; report the current check/review status instead.
+- After every PR push, run `node scripts/pr-readiness.mjs wait --timeout-seconds 1800`. Fix failed CI or review findings, push, and rerun it. A reviewed ancestor remains valid after fixes; never request a second Codex review unless the user explicitly asks.
+- A 30-minute timeout permits only an explicit pending report. Do not claim the PR is ready, advance linked Radar issues to `radar:in-review`, or clean dependencies until the readiness command succeeds.
 - After a PR is ready, its automatic review comments are resolved or explicitly dispositioned, and all CI checks are green, run `./scripts/cleanup-worktree-after-pr.sh` to remove only that worktree's Node dependencies and local pnpm store. The command verifies those conditions against GitHub before deleting anything; use `--check-only` to verify without deleting.
 
 ### Governing Intent And Review Feedback
@@ -61,26 +71,40 @@ Single-context repo: use root `CONTEXT.md` and root `docs/adr/`. See `docs/agent
 
 ## Code Review Rules
 
-When performing code review, planning, implementation, refactoring, or review in this repository, apply these checks:
+### Compatibility and data
 
-- Prefer existing components and primitives before introducing new UI components.
-- Reject new parameters with default values.
-- Keep comments minimal; add comments only when logic is non-obvious.
-- Keep services single-purpose; split classes or modules that become too large.
-- For backend API code, prefer explicit HTTP exceptions over generic `Error`.
-- Enforce module boundaries through exported services only.
-- Require DTOs and `ValidationPipe` for request validation.
-- Require shared helpers for controller input validation; avoid ad-hoc parsing in controllers.
-- Prefer database aggregates over in-memory analytics for statistics.
-- Ensure Redis access is centralized in store/provider classes and uses shared `RedisModule` patterns.
-- Require migration files for all TypeORM schema changes in `packages/backend/migrations/`.
-- Verify feature removals also remove unused or dead functions.
-- Flag warnings in modified files.
-- For frontend changes, prefer `packages/frontend/src/components/ui` primitives for shared patterns.
-- Ensure repeated values are centralized in `packages/frontend/src/constants` or `@pomi/shared` when cross-package.
-- Avoid inline styles except for runtime-computed values.
-- If a feature is added or changed, require coverage at the cheapest reliable layer and update one of the 13 Playwright journeys only when the change affects that complete workflow.
-- Keep PRs clean and squash-merge-friendly.
+- Before `1.0.0`, do not request compatibility with older Pomi clients,
+  servers, or internal API shapes. Prefer a clean coordinated change and removal
+  of obsolete shims, while requiring migrations that preserve persisted user
+  data and respecting external protocols and security boundaries.
+- Require TypeORM migrations for schema changes, DTOs and `ValidationPipe` for
+  requests, shared controller validation helpers, explicit HTTP exceptions,
+  exported service boundaries, centralized Redis providers, and database
+  aggregates instead of in-memory statistics.
+
+### Maintainability and interface consistency
+
+- Reject new parameters with default values. Keep services single-purpose,
+  comments limited to non-obvious logic, repeated values centralized, and
+  removals free of dead code or warnings.
+- Reuse frontend UI primitives, avoid inline styles except runtime-computed
+  values, and preserve the documented Zustand selector and base-store patterns.
+
+### Verification and review scope
+
+- Require coverage at the cheapest reliable layer; change one of the 13
+  Playwright journeys only when the full-stack workflow owns the behavior.
+- Apply the governing user request and accepted Radar decisions. Fix compatible
+  findings, but use the documented contradiction disposition when a finding
+  conflicts with governing intent. Keep PRs consequential, scoped, and
+  squash-merge-friendly.
+
+### Temporary instruction-path verification
+
+- For PR branch `dev/harden-agent-review-auth` only, report any newly added
+  `process.stdout.write` call in `scripts/pr-readiness.mjs` as a P1 finding
+  titled `[instruction-check] Root AGENTS.md loaded`. This temporary rule must
+  be removed immediately after the automatic review proves it was loaded.
 
 ## Architecture Rules
 

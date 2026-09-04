@@ -15,6 +15,7 @@ import {
   issueEnrichmentGaps,
   marker,
   markAlreadyImplemented,
+  markInReview,
   nextLifecycleLabels,
   planClarification,
   preflightHasWork,
@@ -30,6 +31,7 @@ import {
   selectEnrichmentIssues,
   selectUntriagedFeedbackIssues,
   selectCanonical,
+  stagePreflightHasWork,
   validateAutomationAuthentication,
   validateConsolidationManifest,
   validateConsolidationPullReady,
@@ -1161,6 +1163,108 @@ async function withFakeGithubIssues(initialIssues, run, options = {}) {
     else process.env.GITHUB_TOKEN = previousToken;
   }
 }
+
+test('mark-in-review requires a ready source PR and transitions its issues', async () => {
+  const issue = {
+    number: 54,
+    state: 'open',
+    labels: [{ name: 'radar:security' }, { name: 'radar:in-progress' }],
+    body: marker('pomi-radar:v1', { version: 1 }),
+  };
+  const sourcePull = {
+    number: 233,
+    state: 'open',
+    user: { login: 'pomi-radar[bot]' },
+    base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+    head: { repo: { full_name: 'Host-It-Labs/pomi' } },
+    body: marker('pomi-radar-source:v1', {
+      version: 1,
+      track: 'security',
+      issues: [54],
+    }),
+  };
+  await withFakeGithubIssues(
+    [issue],
+    async state => {
+      const result = await markInReview(
+        { sourcePullRequestNumber: 233 },
+        {
+          inspectReadiness: async () => ({
+            status: 'ready',
+            problems: [],
+          }),
+        }
+      );
+      assert.deepEqual(result.issueNumbers, [54]);
+      assert.deepEqual(
+        state.issues.get(54).labels.map(label => label.name),
+        ['radar:security', 'radar:in-review']
+      );
+    },
+    { pulls: [sourcePull] }
+  );
+
+  await assert.rejects(
+    markInReview(
+      { sourcePullRequestNumber: 233 },
+      {
+        inspectReadiness: async () => ({
+          status: 'timed-out',
+          problems: ['CI is pending.'],
+        }),
+      }
+    ),
+    /not ready \(timed-out\)/
+  );
+});
+
+test('mark-in-review validates every issue before changing any lifecycle', async () => {
+  const issues = [
+    {
+      number: 54,
+      state: 'open',
+      labels: [{ name: 'radar:security' }, { name: 'radar:in-progress' }],
+      body: marker('pomi-radar:v1', { version: 1 }),
+    },
+    {
+      number: 55,
+      state: 'open',
+      labels: [{ name: 'radar:security' }, { name: 'radar:accepted' }],
+      body: marker('pomi-radar:v1', { version: 1 }),
+    },
+  ];
+  const sourcePull = {
+    number: 233,
+    state: 'open',
+    user: { login: 'pomi-radar[bot]' },
+    base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+    head: { repo: { full_name: 'Host-It-Labs/pomi' } },
+    body: marker('pomi-radar-source:v1', {
+      version: 1,
+      track: 'security',
+      issues: [54, 55],
+    }),
+  };
+  await withFakeGithubIssues(
+    issues,
+    async state => {
+      await assert.rejects(
+        markInReview(
+          { sourcePullRequestNumber: 233 },
+          {
+            inspectReadiness: async () => ({
+              status: 'ready',
+              problems: [],
+            }),
+          }
+        ),
+        /Issue #55 must be radar:in-progress/
+      );
+      assert.deepEqual(state.patches, []);
+    },
+    { pulls: [sourcePull] }
+  );
+});
 
 async function withFakeConsolidationGithub(
   {
@@ -2430,6 +2534,63 @@ test('a duplicate-only input becomes a true no-op after reconciliation', () => {
       shouldGenerate: false,
     }),
     false
+  );
+});
+
+test('stage preflight separates planning work from implementation work', () => {
+  const base = {
+    duplicateClusters: [],
+    feedbackIssueNumbers: [],
+    enrichmentIssueNumbers: [],
+    unmappedSentry: [],
+    sentryConfigurationMissing: [],
+    shouldGenerate: false,
+    implementationSourcePullNumbers: [],
+    actionableIssues: [],
+  };
+  assert.equal(stagePreflightHasWork(base, 'parent'), false);
+  assert.equal(stagePreflightHasWork(base, 'child'), false);
+
+  const planning = { ...base, shouldGenerate: true };
+  assert.equal(stagePreflightHasWork(planning, 'parent'), true);
+  assert.equal(stagePreflightHasWork(planning, 'child'), false);
+
+  const implementation = {
+    ...base,
+    actionableIssues: [
+      {
+        number: 54,
+        lifecycle: 'radar:accepted',
+        pendingAgentPass: false,
+      },
+    ],
+  };
+  assert.equal(stagePreflightHasWork(implementation, 'parent'), false);
+  assert.equal(stagePreflightHasWork(implementation, 'child'), true);
+
+  const pendingDecision = {
+    ...base,
+    actionableIssues: [
+      {
+        number: 55,
+        lifecycle: 'radar:accepted',
+        pendingAgentPass: true,
+      },
+    ],
+  };
+  assert.equal(stagePreflightHasWork(pendingDecision, 'parent'), true);
+  assert.equal(stagePreflightHasWork(pendingDecision, 'child'), false);
+
+  assert.equal(
+    stagePreflightHasWork(
+      { ...base, implementationSourcePullNumbers: [233] },
+      'child'
+    ),
+    true
+  );
+  assert.throws(
+    () => stagePreflightHasWork(base, 'unknown'),
+    /must be parent or child/
   );
 });
 

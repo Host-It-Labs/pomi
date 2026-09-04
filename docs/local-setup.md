@@ -31,6 +31,11 @@ value must be base64-encoded PKCS#8 or PKCS#1 RSA key material. The older
 `POMI_RADAR_GITHUB_APP_PRIVATE_KEY_PATH` remains available as a local-file
 fallback.
 
+Do not attach `config/pomi-automation.env` as a Codex automation task
+environment. The scheduled prompts invoke the Node-based App and Sentry
+wrappers, which load only what they need from the ignored primary-checkout
+profile and remove private-key variables before starting child commands.
+
 Use `config/pomi-release.env` only for local release commands. It holds the
 production client URL, client Sentry release values, native build paths, Wear
 deployment address, and optional GHCR credentials. The release commands load
@@ -38,8 +43,9 @@ this profile explicitly, so development values cannot silently be embedded in
 a client artifact.
 
 Keep file-shaped credentials in `config/secrets/` and set their corresponding
-path variables in the appropriate profile. All three profiles and the secrets
-directory are copied into Codex worktrees through `.worktreeinclude`.
+path variables in the appropriate profile. Secret-bearing profiles and the
+secrets directory stay in the primary checkout. Supported loaders resolve
+them there from linked Codex worktrees without copying their contents.
 
 Codex-created worktrees run `scripts/setup-development-environment.sh` during
 their setup. It installs the locked Node workspace dependencies, reusing the
@@ -48,8 +54,11 @@ not start Docker, tmux, migrations, or the application. The worktree is ready
 for the Node test suites; database, browser, Rust, and Wear tests still need
 their respective local services or toolchains.
 
-After the PR is ready, automatic review comments have been resolved or
-explicitly dispositioned, and all CI checks are green, run
+After each PR push, run `node scripts/pr-readiness.mjs wait
+--timeout-seconds 1800`. It waits for current-head CI and the automatic Codex
+outcome, and fails immediately when CI or review feedback needs action. After
+the PR is ready and review comments have been resolved or explicitly
+dispositioned, run
 `./scripts/cleanup-worktree-after-pr.sh`. It verifies the PR state, current
 branch/commit, CI results, and automatic review threads before removing only
 the worktree's `node_modules` directories and fallback `.pnpm-store`. Use
