@@ -1069,7 +1069,7 @@ export class TimerService implements OnModuleInit {
         return recordHistory(
           await this.createOrResumeTimer(userId, {
             ...this.getExtensionNextTimerOptions(timer, preferences),
-            expectedVersion,
+            expectedVersion: committedExpectedVersion,
           })
         );
       }
@@ -1099,7 +1099,7 @@ export class TimerService implements OnModuleInit {
                 extensionCandidate: buildSkipExtensionCandidate(
                   TIMER_TYPES.LONG_BREAK
                 ),
-                expectedVersion,
+                expectedVersion: committedExpectedVersion,
                 sessionState: null,
               })
             );
@@ -1114,7 +1114,7 @@ export class TimerService implements OnModuleInit {
                 type: TIMER_TYPES.WORK,
                 startPaused: !autoStart,
                 isAutoStarted: autoStart,
-                expectedVersion,
+                expectedVersion: committedExpectedVersion,
                 sessionState: null,
               })
             );
@@ -1148,7 +1148,7 @@ export class TimerService implements OnModuleInit {
                 TIMER_TYPES.BREAK
               ),
               stackedSessions: timer.stackedSessions,
-              expectedVersion,
+              expectedVersion: committedExpectedVersion,
               sessionState: nextSessionState,
             })
           );

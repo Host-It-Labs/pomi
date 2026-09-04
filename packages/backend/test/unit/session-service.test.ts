@@ -121,7 +121,7 @@ describe('SessionService', () => {
     expect(concurrent.refreshToken).toBe(rotated.refreshToken);
   });
 
-  it('revokes the session family when an old refresh secret is replayed', async () => {
+  it('keeps one lost refresh response recoverable until the next rotation', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-01T12:00:00.000Z'));
     const { service, rows } = createService();
@@ -129,9 +129,13 @@ describe('SessionService', () => {
       '00000000-0000-4000-8000-000000000010',
       'web'
     );
-    await service.refreshSession(created.refreshToken, 'web');
+    const rotated = await service.refreshSession(created.refreshToken, 'web');
     await vi.advanceTimersByTimeAsync(31_000);
 
+    const recovered = await service.refreshSession(created.refreshToken, 'web');
+    expect(recovered.refreshToken).toBe(rotated.refreshToken);
+
+    await service.refreshSession(rotated.refreshToken, 'web');
     await expect(
       service.refreshSession(created.refreshToken, 'web')
     ).rejects.toBeInstanceOf(UnauthorizedException);

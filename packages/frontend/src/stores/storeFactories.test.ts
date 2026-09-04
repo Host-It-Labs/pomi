@@ -6,7 +6,10 @@ describe('isolated store factories', () => {
   it('loads system state without mutating the production singleton', async () => {
     const systemInfo = { version: 'test' };
     const get = vi.fn().mockResolvedValue({ status: 200, body: systemInfo });
-    const store = createSystemStore({ system: { get } } as never);
+    const store = createSystemStore(
+      { system: { get } } as never,
+      () => 'https://backend.example'
+    );
 
     await store.getState().loadSystemInfo();
 
@@ -34,7 +37,10 @@ describe('isolated store factories', () => {
       resolveRequest = resolve;
     });
     const get = vi.fn(() => response);
-    const store = createSystemStore({ system: { get } } as never);
+    const store = createSystemStore(
+      { system: { get } } as never,
+      () => 'https://backend.example'
+    );
 
     const first = store.getState().loadSystemInfo();
     const second = store.getState().loadSystemInfo();

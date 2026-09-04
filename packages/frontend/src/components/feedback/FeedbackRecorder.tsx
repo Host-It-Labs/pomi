@@ -38,8 +38,6 @@ let stopIntent: 'submit' | 'cancel' = 'cancel';
 let recordingRequest = 0;
 let submissionRequest = 0;
 let recordingStartedAt: number | null = null;
-let recordedSegments: Blob[] = [];
-let segmentChunks: Blob[] = [];
 let rotateRecorderOnStop = false;
 let rotationTimer: number | null = null;
 
@@ -164,8 +162,6 @@ const useFeedbackRecorderStoreBase = create<FeedbackRecorderState>(
       submissionRequest += 1;
       stopIntent = 'cancel';
       recordingStartedAt = null;
-      recordedSegments = [];
-      segmentChunks = [];
       rotateRecorderOnStop = false;
       set({ stage: 'starting', seconds: 0, error: '' });
 
@@ -179,33 +175,35 @@ const useFeedbackRecorderStoreBase = create<FeedbackRecorderState>(
         }
 
         stream = nextStream;
+        const recordedSegments: Blob[] = [];
         const startSegment = () => {
           const recorder = new MediaRecorder(nextStream);
           mediaRecorder = recorder;
-          segmentChunks = [];
+          const segmentChunks: Blob[] = [];
           recorder.ondataavailable = event => {
             if (event.data.size > 0) segmentChunks.push(event.data);
           };
           recorder.onstop = () => {
+            const isCurrentRequest =
+              request === recordingRequest && recorder === mediaRecorder;
+            if (!isCurrentRequest) return;
             if (rotationTimer !== null) {
               window.clearTimeout(rotationTimer);
               rotationTimer = null;
             }
-            const chunks = segmentChunks;
-            segmentChunks = [];
-            if (chunks.length > 0) {
+            if (segmentChunks.length > 0) {
               recordedSegments.push(
-                new Blob(chunks, { type: recorder.mimeType || 'audio/webm' })
+                new Blob(segmentChunks, {
+                  type: recorder.mimeType || 'audio/webm',
+                })
               );
             }
             const shouldRotate = rotateRecorderOnStop;
             rotateRecorderOnStop = false;
-            const isCurrentRequest = request === recordingRequest;
             if (shouldRotate && isCurrentRequest) {
               try {
                 startSegment();
               } catch {
-                recordedSegments = [];
                 cleanupRecorder();
                 set({
                   stage: 'error',
@@ -216,8 +214,7 @@ const useFeedbackRecorderStoreBase = create<FeedbackRecorderState>(
             }
 
             const intent = stopIntent;
-            const segments = recordedSegments;
-            recordedSegments = [];
+            const segments = [...recordedSegments];
             const recordedMimeType =
               recorder.mimeType || segments[0]?.type || 'audio/webm';
             cleanupRecorder(recorder);
@@ -285,8 +282,6 @@ const useFeedbackRecorderStoreBase = create<FeedbackRecorderState>(
       }
       if (recorder && recorder.state !== 'inactive') recorder.stop();
       cleanupRecorder(recorder ?? undefined);
-      recordedSegments = [];
-      segmentChunks = [];
       set({ stage: 'idle', seconds: 0, error: '' });
     },
   })
@@ -314,9 +309,9 @@ export function FeedbackRecorder() {
   const cancelRecording = useFeedbackRecorderStore.use.cancelRecording();
   const expanded = useUiStore.use.expanded();
   const activeTab = useUiStore.use.activeTab();
-  const authToken = useAuthStore.use.token();
+  const authenticatedUserId = useAuthStore.use.user()?.id;
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
-  const previousAuthTokenRef = useRef(authToken);
+  const previousAuthenticatedUserIdRef = useRef(authenticatedUserId);
 
   useEffect(() => {
     if (stage !== 'recording') return;
@@ -359,14 +354,14 @@ export function FeedbackRecorder() {
 
   useEffect(() => {
     if (
-      previousAuthTokenRef.current !== authToken &&
+      previousAuthenticatedUserIdRef.current !== authenticatedUserId &&
       (stage === 'starting' || stage === 'recording' || stage === 'sending')
     ) {
       cancelRecording();
       showToastFromStore(t('feedback.discardedAfterSignOut'), 'info');
     }
-    previousAuthTokenRef.current = authToken;
-  }, [authToken, cancelRecording, stage]);
+    previousAuthenticatedUserIdRef.current = authenticatedUserId;
+  }, [authenticatedUserId, cancelRecording, stage]);
 
   useEffect(
     () => () => {

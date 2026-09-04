@@ -224,7 +224,8 @@ const setupSocketListeners = (sock: Socket) => {
       .getState()
       .refreshSession()
       .then(refreshed => {
-        if (!refreshed) useAuthStore.getState().expireSession();
+        if (refreshed) forceReconnect(false);
+        else useAuthStore.getState().expireSession();
       });
   });
 

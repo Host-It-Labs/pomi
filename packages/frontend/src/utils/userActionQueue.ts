@@ -1126,8 +1126,10 @@ useAuthStore.subscribe((state, previousState) => {
   const tokenChanged = state.token !== previousState.token;
   const accountChanged = state.user?.id !== previousState.user?.id;
   if (!tokenChanged && !accountChanged) return;
-  resetQueueForAuthenticationChange();
-  if (state.token && state.user?.id) void hydrateRecoveredActions();
+  if (accountChanged) resetQueueForAuthenticationChange();
+  if (state.token && state.user?.id && accountChanged) {
+    void hydrateRecoveredActions();
+  }
 });
 
 const initialAuthState = useAuthStore.getState();

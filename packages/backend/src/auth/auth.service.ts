@@ -200,17 +200,19 @@ export class AuthService {
     rawRefreshToken: string,
     options?: AuthenticationOptions
   ) {
-    const refreshed = await this.sessionService.refreshSession(
-      rawRefreshToken,
-      options?.platform ?? 'web'
-    );
-    const user = await this.usersService.findUserById(refreshed.userId);
+    const userId =
+      await this.sessionService.getRefreshSessionUserId(rawRefreshToken);
+    const user = await this.usersService.findUserById(userId);
     if (!user) {
       await this.sessionService.revokeRefreshSession(rawRefreshToken);
       throw new UnauthorizedException('Invalid session');
     }
 
     const preferences = await this.preferencesService.getPreferences(user.id);
+    const refreshed = await this.sessionService.refreshSession(
+      rawRefreshToken,
+      options?.platform ?? 'web'
+    );
     return await this.formatSessionResult(
       user,
       preferences.language,

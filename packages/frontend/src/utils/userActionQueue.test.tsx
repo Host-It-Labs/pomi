@@ -13,8 +13,8 @@ const auth = vi.hoisted(() => ({
   expireSession: vi.fn(),
   subscriber: undefined as
     | ((
-        state: { token: string | null },
-        previous: { token: string | null }
+        state: { token: string | null; user?: { id: string } | null },
+        previous: { token: string | null; user?: { id: string } | null }
       ) => void)
     | undefined,
 }));
@@ -32,8 +32,8 @@ vi.mock('../stores/authStore', () => ({
     getState: () => auth,
     subscribe: (
       subscriber: (
-        state: { token: string | null },
-        previous: { token: string | null }
+        state: { token: string | null; user?: { id: string } | null },
+        previous: { token: string | null; user?: { id: string } | null }
       ) => void
     ) => {
       auth.subscriber = subscriber;
@@ -985,11 +985,17 @@ describe('accepted action queue', () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse(404, {}));
     const { useUserActionQueueBase } = await import('./userActionQueue');
     expect(auth.subscriber).toBeDefined();
-    auth.subscriber?.({ token: 'same' }, { token: 'same' });
     useUserActionQueueBase.setState({ isNetworkBlocked: true });
-    auth.subscriber?.({ token: 'new' }, { token: 'old' });
-    expect(useUserActionQueueBase.getState().isNetworkBlocked).toBe(false);
-    useUserActionQueueBase.getState().setNetworkBlocked(true);
+    auth.subscriber?.(
+      { token: 'new', user: { id: 'user-1' } },
+      { token: 'old', user: { id: 'user-1' } }
+    );
     expect(useUserActionQueueBase.getState().isNetworkBlocked).toBe(true);
+
+    auth.subscriber?.(
+      { token: 'other', user: { id: 'user-2' } },
+      { token: 'new', user: { id: 'user-1' } }
+    );
+    expect(useUserActionQueueBase.getState().isNetworkBlocked).toBe(false);
   });
 });

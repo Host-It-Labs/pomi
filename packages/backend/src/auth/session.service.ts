@@ -34,7 +34,6 @@ type RefreshTransactionResult =
   { status: 'refreshed'; session: RefreshedSession } | { status: 'invalid' };
 
 const SESSION_INACTIVITY_MS = 365 * 24 * 60 * 60 * 1000;
-const CONCURRENT_REFRESH_GRACE_MS = 30_000;
 const REFRESH_TOKEN_BYTES = 32;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -123,6 +122,9 @@ export class SessionService {
           if (refreshSecretsMatch(presentedHash, session.refreshTokenHash)) {
             const nextSecret = this.createRefreshSecret();
             const nextHash = hashRefreshSecret(nextSecret);
+            const nextExpiresAt = new Date(
+              now.getTime() + SESSION_INACTIVITY_MS
+            );
             await repository.update(session.id, {
               refreshTokenHash: nextHash,
               currentRefreshTokenCiphertext: encryptRefreshSecret(
@@ -130,11 +132,9 @@ export class SessionService {
                 this.jwtSecret
               ),
               previousRefreshTokenHash: session.refreshTokenHash,
-              previousRefreshTokenExpiresAt: new Date(
-                now.getTime() + CONCURRENT_REFRESH_GRACE_MS
-              ),
+              previousRefreshTokenExpiresAt: nextExpiresAt,
               platform,
-              expiresAt: new Date(now.getTime() + SESSION_INACTIVITY_MS),
+              expiresAt: nextExpiresAt,
               lastUsedAt: now,
             });
             return {
@@ -197,6 +197,34 @@ export class SessionService {
       throw new UnauthorizedException('Invalid session');
     }
     return result.session;
+  }
+
+  async getRefreshSessionUserId(rawRefreshToken: string): Promise<string> {
+    const parsed = this.parseRefreshToken(rawRefreshToken);
+    if (!parsed) throw new UnauthorizedException('Invalid session');
+
+    const session = await this.sessionRepository.findOne({
+      where: { id: parsed.sessionId },
+    });
+    const now = new Date();
+    if (!session || session.revokedAt || session.expiresAt <= now) {
+      throw new UnauthorizedException('Invalid session');
+    }
+
+    const presentedHash = hashRefreshSecret(parsed.secret);
+    const currentMatches = refreshSecretsMatch(
+      presentedHash,
+      session.refreshTokenHash
+    );
+    const previousMatches =
+      session.previousRefreshTokenHash !== null &&
+      session.previousRefreshTokenExpiresAt !== null &&
+      session.previousRefreshTokenExpiresAt > now &&
+      refreshSecretsMatch(presentedHash, session.previousRefreshTokenHash);
+    if (!currentMatches && !previousMatches) {
+      throw new UnauthorizedException('Invalid session');
+    }
+    return session.userId;
   }
 
   async revokeAccessSession(sessionId: string, userId: string): Promise<void> {

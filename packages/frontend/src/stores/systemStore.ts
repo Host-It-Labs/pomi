@@ -13,7 +13,7 @@ type SystemApi = Pick<typeof apiClient, 'system'>;
 
 export const createSystemStore = (
   systemApi: SystemApi,
-  getRequestKey: () => string = getBackendOrigin
+  getRequestKey: () => string
 ) => {
   let activeLoad: {
     id: number;
@@ -51,6 +51,6 @@ export const createSystemStore = (
   }));
 };
 
-const useSystemStoreBase = createSystemStore(apiClient);
+const useSystemStoreBase = createSystemStore(apiClient, getBackendOrigin);
 export const useSystemStore = createSelectors(useSystemStoreBase);
 export { useSystemStoreBase };

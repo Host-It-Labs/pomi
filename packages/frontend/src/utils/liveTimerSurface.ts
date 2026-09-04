@@ -88,15 +88,18 @@ export async function publishLiveTimerProjection(
   }
 }
 
-export async function clearLiveTimerProjection(): Promise<void> {
+export async function clearLiveTimerProjection(
+  capturedUserId?: string
+): Promise<void> {
   if (!isMobile) return;
   if (!isTauri) {
     delete window.__POMI_TEST_LIVE_TIMER_PROJECTION__;
     return;
   }
+  const userId = capturedUserId ?? useAuthStoreBase.getState().user?.id;
   try {
     await invoke('plugin:notifications|clear_timer_projection');
-    await syncLiveActivityPushToken(null);
+    await syncLiveActivityPushToken(null, userId);
   } catch (error) {
     console.error('[LiveTimerSurface] Projection clear failed:', error);
   }
@@ -165,9 +168,12 @@ export async function registerLiveTimerActionListeners(): Promise<() => void> {
   };
 }
 
-async function syncLiveActivityPushToken(token: string | null): Promise<void> {
+async function syncLiveActivityPushToken(
+  token: string | null,
+  capturedUserId?: string
+): Promise<void> {
   if (!isIos || !isTauri) return;
-  const userId = useAuthStoreBase.getState().user?.id;
+  const userId = capturedUserId ?? useAuthStoreBase.getState().user?.id;
   if (!userId) return;
   await apiClient.users.updatePushToken({
     params: { userId },

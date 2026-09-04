@@ -739,32 +739,7 @@ export function Tasks() {
           return;
         }
 
-        if (cursor || Number(pageResponse.status) !== 404) {
-          setArchiveError(t('task.archiveLoadFailed'));
-          return;
-        }
-
-        const [archivedResponse, completedResponse] = await Promise.all([
-          apiClient.tasks.list({ query: { status: TASK_STATUSES.ARCHIVED } }),
-          apiClient.tasks.list({ query: { status: TASK_STATUSES.COMPLETED } }),
-        ]);
-
-        if (
-          archivedResponse.status !== 200 ||
-          completedResponse.status !== 200
-        ) {
-          setArchiveError(t('task.archiveLoadFailed'));
-          return;
-        }
-
-        setArchivedTasks(
-          [...archivedResponse.body, ...completedResponse.body].sort(
-            (a, b) =>
-              new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-          )
-        );
-        setArchiveNextCursor(null);
-        setArchiveError(null);
+        setArchiveError(t('task.archiveLoadFailed'));
       } catch {
         setArchiveError(t('task.archiveLoadFailed'));
       } finally {

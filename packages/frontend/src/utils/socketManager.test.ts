@@ -178,6 +178,25 @@ describe('socket manager reconnect contracts', () => {
     expect(auth.expireSession).not.toHaveBeenCalled();
   });
 
+  it('reconnects with the replacement token after session refresh', async () => {
+    const { getOrCreateSocket } = await import('./socketManager');
+    getOrCreateSocket();
+    auth.refreshSession.mockImplementationOnce(async () => {
+      auth.token = 'refreshed-token';
+      return true;
+    });
+
+    socketHarness.handlers.get(SOCKET_EVENTS.SESSION_EXPIRED)?.();
+
+    await vi.waitFor(() => expect(io).toHaveBeenCalledTimes(2));
+    expect(socketHarness.socket.disconnect).toHaveBeenCalledOnce();
+    expect(io).toHaveBeenLastCalledWith(
+      'http://backend.test',
+      expect.objectContaining({ auth: { token: 'refreshed-token' } })
+    );
+    expect(auth.expireSession).not.toHaveBeenCalled();
+  });
+
   it('does not preempt the HTTP retry backoff after socket connection', async () => {
     actionQueue.isNetworkBlocked = true;
     const { getOrCreateSocket } = await import('./socketManager');

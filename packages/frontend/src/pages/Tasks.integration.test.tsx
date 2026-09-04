@@ -1,10 +1,4 @@
-import {
-  TASK_STATUSES,
-  type Intention,
-  type Preferences,
-  type Task,
-  type User,
-} from '@pomi/shared';
+import type { Intention, Preferences, Task, User } from '@pomi/shared';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -255,35 +249,19 @@ describe('Tasks page interactions', () => {
     });
   });
 
-  it('falls back to the legacy archive requests during endpoint rollout', async () => {
+  it('reports a missing archive endpoint without legacy fallback requests', async () => {
     vi.mocked(apiClient.tasks.archive).mockResolvedValueOnce({
       status: 404,
       body: { message: 'Not found' },
       headers: new Headers(),
     } as never);
-    vi.mocked(apiClient.tasks.list)
-      .mockResolvedValueOnce({
-        status: 200,
-        body: [task({ id: 'archived-legacy', title: 'Legacy archived' })],
-        headers: new Headers(),
-      })
-      .mockResolvedValueOnce({
-        status: 200,
-        body: [task({ id: 'completed-legacy', title: 'Legacy completed' })],
-        headers: new Headers(),
-      });
-
     render(<Tasks />);
     fireEvent.click(screen.getByRole('button', { name: 'Archived' }));
 
-    expect(await screen.findByText('Legacy archived')).toBeInTheDocument();
-    expect(screen.getByText('Legacy completed')).toBeInTheDocument();
-    expect(apiClient.tasks.list).toHaveBeenCalledWith({
-      query: { status: TASK_STATUSES.ARCHIVED },
-    });
-    expect(apiClient.tasks.list).toHaveBeenCalledWith({
-      query: { status: TASK_STATUSES.COMPLETED },
-    });
+    expect(
+      await screen.findByText('Failed to load archived Tasks.')
+    ).toBeInTheDocument();
+    expect(apiClient.tasks.list).not.toHaveBeenCalled();
   });
 
   it('does not run unbounded archive fallbacks for endpoint failures', async () => {

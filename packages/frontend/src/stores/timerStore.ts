@@ -624,6 +624,6 @@ useAuthStoreBase.subscribe((state, prevState) => {
 
   if (!state.token && prevState.token) {
     useTimerStoreBase.getState().clearUndoVisible();
-    void clearLiveTimerProjection();
+    void clearLiveTimerProjection(prevState.user?.id);
   }
 });
