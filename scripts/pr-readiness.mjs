@@ -2,10 +2,12 @@
 
 import { spawnSync } from 'node:child_process';
 import process from 'node:process';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const DEFAULT_POLL_INTERVAL_MS = 60_000;
 export const DEFAULT_TIMEOUT_MS = 1_800_000;
+export const COMMAND_TIMEOUT_MS = 60_000;
 export const REVIEW_DISPOSITION_MARKER = 'pomi-review-disposition:v1';
 
 const PASSING_CHECK_CONCLUSIONS = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
@@ -240,16 +242,44 @@ export async function waitForPullRequestReadiness({
   onPending,
 }) {
   const startedAt = now();
+  let previousPending;
   for (;;) {
-    const result = await inspect();
+    let result;
+    try {
+      result = await inspect();
+    } catch (error) {
+      if (!(error instanceof RetryableGitHubError)) throw error;
+      result = { status: 'pending', problems: [error.message] };
+    }
     if (result.status !== 'pending') return result;
     const elapsed = now() - startedAt;
     if (elapsed >= timeoutMs) {
       return { status: 'timed-out', problems: result.problems };
     }
-    onPending(result);
+    const pendingKey = JSON.stringify([result.status, result.problems]);
+    if (pendingKey !== previousPending) onPending(result);
+    previousPending = pendingKey;
     await sleep(Math.min(pollIntervalMs, timeoutMs - elapsed));
   }
+}
+
+export class RetryableGitHubError extends Error {}
+
+export function githubCommandError({ error, stderr }) {
+  const detail = `${error?.code ?? ''} ${stderr ?? ''}`;
+  // Classify diagnostics in memory only: gh or its environment can contain secrets.
+  if (
+    /rate limit|HTTP 429|HTTP 5\d\d|\b50[0234]\b.*(?:gateway|unavailable)|GitHub is temporarily unavailable|ENOTFOUND|EAI_AGAIN|ECONNRESET|ECONNREFUSED|ETIMEDOUT|UND_ERR_\w*TIMEOUT|error connecting to|could not resolve host|connection (?:reset|refused)|connect timeout|i\/o timeout|TLS handshake timeout|temporary failure in name resolution|unexpected EOF/i.test(
+      detail
+    )
+  ) {
+    return new RetryableGitHubError(
+      'GitHub is temporarily unavailable; the wait will retry automatically.'
+    );
+  }
+  return new Error(
+    'GitHub inspection failed. Check App authentication, permissions, and local configuration; this is not a ready result.'
+  );
 }
 
 function run(command, args, cwd, options) {
@@ -258,13 +288,18 @@ function run(command, args, cwd, options) {
     cwd,
     encoding: 'utf8',
     maxBuffer: 10 * 1024 * 1024,
+    timeout: COMMAND_TIMEOUT_MS,
   });
   if (result.error || (!allowNonzero && result.status !== 0)) {
+    if (command === 'gh' || options?.githubApp === true) {
+      throw githubCommandError(result);
+    }
     throw new Error(`${command} could not complete successfully.`);
   }
   return {
     output: String(result.stdout ?? '').trim(),
     status: result.status,
+    stderr: String(result.stderr ?? ''),
   };
 }
 
@@ -427,17 +462,46 @@ export async function inspectPullRequestReadiness(options) {
   return { ...result, pullRequest: snapshot.pullRequest };
 }
 
+export function inspectWithGitHubApp(options, runCommand) {
+  const root = options.root ?? process.cwd();
+  const result = runCommand(
+    process.execPath,
+    [
+      path.join(import.meta.dirname, 'github-app-auth.mjs'),
+      'exec',
+      '--',
+      'node',
+      fileURLToPath(import.meta.url),
+      'check',
+      '--json',
+      ...(options.pullRequestNumber
+        ? ['--pr', String(options.pullRequestNumber)]
+        : []),
+    ],
+    root,
+    { allowNonzero: true, githubApp: true }
+  );
+  if (![0, 2, 3].includes(result.status)) throw githubCommandError(result);
+  return parseJson(result.output, 'App-authenticated readiness check');
+}
+
 function parseCliArguments(args) {
   const [command, ...options] = args;
   if (!['check', 'wait'].includes(command)) {
     throw new Error(
-      'Usage: node scripts/pr-readiness.mjs check|wait [--pr number] [--timeout-seconds number]'
+      'Usage: node scripts/pr-readiness.mjs check|wait [--github-app] [--json] [--pr number] [--timeout-seconds number]'
     );
   }
   let pullRequestNumber;
   let timeoutMs = DEFAULT_TIMEOUT_MS;
+  let githubApp = false;
+  let json = false;
   for (let index = 0; index < options.length; index += 1) {
-    if (options[index] === '--pr' && options[index + 1]) {
+    if (options[index] === '--github-app') {
+      githubApp = true;
+    } else if (options[index] === '--json') {
+      json = true;
+    } else if (options[index] === '--pr' && options[index + 1]) {
       pullRequestNumber = Number(options[++index]);
       if (!Number.isSafeInteger(pullRequestNumber) || pullRequestNumber <= 0) {
         throw new Error('--pr must be a positive integer.');
@@ -452,7 +516,7 @@ function parseCliArguments(args) {
       throw new Error(`Unsupported PR readiness option: ${options[index]}`);
     }
   }
-  return { command, pullRequestNumber, timeoutMs };
+  return { command, pullRequestNumber, timeoutMs, githubApp, json };
 }
 
 function reportResult(result) {
@@ -466,7 +530,10 @@ function reportResult(result) {
 
 export async function runPrReadinessCli(args) {
   const options = parseCliArguments(args);
-  const inspect = () => inspectPullRequestReadiness(options);
+  const inspect = () =>
+    options.githubApp
+      ? inspectWithGitHubApp(options, run)
+      : inspectPullRequestReadiness(options);
   const result =
     options.command === 'wait'
       ? await waitForPullRequestReadiness({
@@ -476,10 +543,13 @@ export async function runPrReadinessCli(args) {
           now: () => Date.now(),
           sleep: milliseconds =>
             new Promise(resolve => setTimeout(resolve, milliseconds)),
-          onPending: pending => reportResult(pending),
+          onPending: pending => {
+            if (!options.json) reportResult(pending);
+          },
         })
       : await inspect();
-  reportResult(result);
+  if (options.json) process.stdout.write(`${JSON.stringify(result)}\n`);
+  else reportResult(result);
   if (result.status === 'ready') return 0;
   if (result.status === 'action-required') return 2;
   return 3;

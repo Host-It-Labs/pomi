@@ -105,7 +105,11 @@ versioned lifecycle and policy files:
 ## Verification and reporting
 
 - After every source-PR push, run `node scripts/pr-readiness.mjs wait
---timeout-seconds 1800` through the App wrapper. Fix action-required results,
+--github-app --timeout-seconds 1800` as one persistent command. App authentication
+  and transient GitHub failures are retried inside the same 30-minute deadline;
+  it polls every 60 seconds and prints only status changes. Keep the task active
+  and resume the running command with bounded waits until it exits. Follow the
+  exit-code and no-early-final-response rules in `AGENTS.md`. Fix action-required results,
   push, and rerun. A timeout may end only as an explicit pending blocker and
   must not advance issues to `radar:in-review` or claim readiness.
 - Move source issues into review only with App-authenticated `node
@@ -114,7 +118,7 @@ scripts/radar-lifecycle.mjs mark-in-review` input. That command revalidates
 - Use the cheapest reliable validation for the change and keep local results,
   remote CI, automatic review, browser/device checks, and deployment status
   distinct in reports.
-- Treat transient network errors as execution blockers and retry only the same
+- Outside the post-push readiness wait, treat transient network errors as execution blockers and retry only the same
   read-only operation once when the track-specific prompt permits it. Never
   infer an empty Radar index or continue past a failed required preflight.
 - Preserve user decisions and repository history. Do not perform destructive

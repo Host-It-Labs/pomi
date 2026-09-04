@@ -9,6 +9,9 @@ import {
   DEFAULT_TIMEOUT_MS,
   evaluatePullRequestReadiness,
   flattenReactionPages,
+  githubCommandError,
+  inspectWithGitHubApp,
+  RetryableGitHubError,
   unprocessedReviewThreads,
   waitForPullRequestReadiness,
 } from './pr-readiness.mjs';
@@ -266,4 +269,158 @@ test('returns immediately for action-required and after readiness arrives', asyn
   });
   assert.equal(action.status, 'action-required');
   assert.equal(inspections, 1);
+});
+
+test('wait survives transient inspection failures and reports only changes', async () => {
+  let currentTime = 0;
+  const unavailable = githubCommandError({
+    stderr: 'getaddrinfo ENOTFOUND api.github.com',
+  });
+  const snapshots = [
+    unavailable,
+    unavailable,
+    { status: 'pending', problems: ['tests running'] },
+    { status: 'pending', problems: ['tests running'] },
+    { status: 'ready', problems: [] },
+  ];
+  const reports = [];
+  const sleeps = [];
+  const result = await waitForPullRequestReadiness({
+    inspect: async () => {
+      const snapshot = snapshots.shift();
+      if (snapshot instanceof Error) throw snapshot;
+      return snapshot;
+    },
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
+    now: () => currentTime,
+    sleep: async milliseconds => {
+      sleeps.push(milliseconds);
+      currentTime += milliseconds;
+    },
+    onPending: result => reports.push(result),
+  });
+  assert.equal(result.status, 'ready');
+  assert.equal(currentTime, 240_000);
+  assert.deepEqual(sleeps, [60_000, 60_000, 60_000, 60_000]);
+  assert.equal(reports.length, 2);
+});
+
+test('persistent network failures exhaust the original wait budget instead of exiting early', async () => {
+  let currentTime = 0;
+  let attempts = 0;
+  const reports = [];
+  const result = await waitForPullRequestReadiness({
+    inspect: async () => {
+      attempts += 1;
+      currentTime += 10_000;
+      throw githubCommandError({ stderr: 'UND_ERR_CONNECT_TIMEOUT' });
+    },
+    timeoutMs: 150_000,
+    pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
+    now: () => currentTime,
+    sleep: async milliseconds => {
+      currentTime += milliseconds;
+    },
+    onPending: result => reports.push(result),
+  });
+  assert.equal(result.status, 'timed-out');
+  assert.equal(attempts, 3);
+  assert.equal(currentTime, 150_000);
+  assert.equal(reports.length, 1);
+});
+
+test('retries transport and temporary API errors without echoing diagnostics', () => {
+  for (const stderr of [
+    'ENOTFOUND',
+    'error connecting to api.github.com',
+    'HTTP 502',
+    'HTTP 503',
+    'HTTP 429',
+    'API rate limit exceeded',
+    'unexpected EOF',
+    'GitHub is temporarily unavailable',
+  ]) {
+    const error = githubCommandError({
+      stderr: `${stderr}: sensitive-diagnostic`,
+    });
+    assert.ok(error instanceof RetryableGitHubError);
+    assert.doesNotMatch(error.message, /sensitive-diagnostic/);
+  }
+  assert.ok(
+    githubCommandError({ error: { code: 'ETIMEDOUT' } }) instanceof
+      RetryableGitHubError
+  );
+});
+
+test('does not retry authentication, permissions, missing tools, or malformed configuration', async () => {
+  for (const stderr of [
+    'HTTP 401: Bad credentials',
+    'HTTP 403: Resource not accessible by integration',
+    'HTTP 404: Not Found',
+    'GitHub App private key is missing',
+  ]) {
+    const error = githubCommandError({ stderr });
+    assert.ok(!(error instanceof RetryableGitHubError));
+    let sleeps = 0;
+    await assert.rejects(
+      waitForPullRequestReadiness({
+        inspect: async () => {
+          throw error;
+        },
+        timeoutMs: DEFAULT_TIMEOUT_MS,
+        pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
+        now: () => 0,
+        sleep: async () => {
+          sleeps += 1;
+        },
+        onPending: () => {},
+      }),
+      error
+    );
+    assert.equal(sleeps, 0);
+  }
+  assert.ok(
+    !(
+      githubCommandError({ error: { code: 'ENOENT' } }) instanceof
+      RetryableGitHubError
+    )
+  );
+});
+
+test('App inspection authenticates inside each poll and preserves readiness outcomes', () => {
+  for (const [status, outcome] of [
+    [0, 'ready'],
+    [2, 'action-required'],
+    [3, 'pending'],
+  ]) {
+    const result = inspectWithGitHubApp(
+      { root: process.cwd(), pullRequestNumber: 256 },
+      (command, args, cwd, options) => {
+        assert.equal(command, process.execPath);
+        assert.ok(args[0].endsWith('github-app-auth.mjs'));
+        assert.deepEqual(args.slice(1, 4), ['exec', '--', 'node']);
+        assert.deepEqual(args.slice(5), ['check', '--json', '--pr', '256']);
+        assert.equal(cwd, process.cwd());
+        assert.equal(options.githubApp, true);
+        return {
+          status,
+          output: JSON.stringify({ status: outcome, problems: [] }),
+        };
+      }
+    );
+    assert.equal(result.status, outcome);
+  }
+  assert.throws(
+    () =>
+      inspectWithGitHubApp({}, () => ({
+        status: 1,
+        stderr: 'ENOTFOUND api.github.com',
+      })),
+    RetryableGitHubError
+  );
+  assert.throws(
+    () => inspectWithGitHubApp({}, () => ({ status: 0, output: 'not-json' })),
+    /valid JSON/
+  );
 });
