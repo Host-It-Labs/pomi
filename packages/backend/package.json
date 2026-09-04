@@ -4,21 +4,21 @@
   "description": "Pomi self-hosted API and realtime backend.",
   "main": "dist/src/main",
   "scripts": {
-    "build": "nest build",
-    "start:dev": "nest start --watch",
+    "build": "tsc -p tsconfig.build.json && node ../../scripts/rewrite-backend-paths.mjs dist",
+    "start:dev": "cd ../.. && packages/backend/node_modules/.bin/nest start --watch --config packages/backend/nest-cli.json --path packages/backend/tsconfig.build.json",
     "start:prod": "node .",
-    "openapi:generate": "ts-node src/openapi.ts",
-    "seed:test-user": "ts-node scripts/seed-test-user.ts",
-    "seed:e2e-admins": "ts-node scripts/seed-e2e-admins.ts",
-    "seed:copyme": "ts-node scripts/seed-copyme-user.ts",
-    "reseed:copyme": "ts-node scripts/reseed-copyme-user.ts",
-    "ensure:copyme": "ts-node scripts/ensure-copyme-user.ts",
-    "migration:generate": "typeorm-ts-node-commonjs migration:generate -d data-source.ts",
-    "migration:verify-history": "ts-node scripts/verify-migration-history.ts",
-    "migration:run": "typeorm-ts-node-commonjs migration:run -d data-source.ts",
-    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d data-source.ts",
-    "db:clear": "ts-node scripts/clear-test-data.ts",
-    "migrate:user-action-keys": "ts-node scripts/migrate-user-action-keys.ts"
+    "openapi:generate": "TS_NODE_COMPILER=\"$PWD/../../node_modules/typescript\" ts-node src/openapi.ts",
+    "seed:test-user": "TS_NODE_COMPILER=\"$PWD/../../node_modules/typescript\" ts-node scripts/seed-test-user.ts",
+    "seed:e2e-admins": "TS_NODE_COMPILER=\"$PWD/../../node_modules/typescript\" ts-node scripts/seed-e2e-admins.ts",
+    "seed:copyme": "TS_NODE_COMPILER=\"$PWD/../../node_modules/typescript\" ts-node scripts/seed-copyme-user.ts",
+    "reseed:copyme": "TS_NODE_COMPILER=\"$PWD/../../node_modules/typescript\" ts-node scripts/reseed-copyme-user.ts",
+    "ensure:copyme": "TS_NODE_COMPILER=\"$PWD/../../node_modules/typescript\" ts-node scripts/ensure-copyme-user.ts",
+    "migration:generate": "TS_NODE_COMPILER=\"$PWD/../../node_modules/typescript\" typeorm-ts-node-commonjs migration:generate -d data-source.ts",
+    "migration:verify-history": "TS_NODE_COMPILER=\"$PWD/../../node_modules/typescript\" ts-node scripts/verify-migration-history.ts",
+    "migration:run": "TS_NODE_COMPILER=\"$PWD/../../node_modules/typescript\" typeorm-ts-node-commonjs migration:run -d data-source.ts",
+    "migration:revert": "TS_NODE_COMPILER=\"$PWD/../../node_modules/typescript\" typeorm-ts-node-commonjs migration:revert -d data-source.ts",
+    "db:clear": "TS_NODE_COMPILER=\"$PWD/../../node_modules/typescript\" ts-node scripts/clear-test-data.ts",
+    "migrate:user-action-keys": "TS_NODE_COMPILER=\"$PWD/../../node_modules/typescript\" ts-node scripts/migrate-user-action-keys.ts"
   },
   "engines": {
     "node": "26.x"
@@ -71,6 +71,6 @@
     "@types/express": "^5.0.6",
     "@types/node": "^26.2.0",
     "@types/pg": "^8.15.6",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   }
 }
