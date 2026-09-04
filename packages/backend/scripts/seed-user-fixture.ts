@@ -92,6 +92,11 @@ const COPYME_LIST_ITEMS = [
     dueOffsetDays: null,
     priority: TASK_PRIORITIES.NORMAL,
   },
+  {
+    title: 'Plan work errands',
+    dueOffsetDays: null,
+    priority: TASK_PRIORITIES.NORMAL,
+  },
 ] as const;
 
 type SeedUserFixtureOptions = {
