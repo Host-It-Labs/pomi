@@ -77,3 +77,27 @@ test('detects drift across all six installed Radar prompts', () => {
     rmSync(installedRoot, { recursive: true, force: true });
   }
 });
+
+test('rejects malformed escape-heavy prompts without regex backtracking', () => {
+  const installedRoot = mkdtempSync(
+    path.join(os.tmpdir(), 'pomi-automation-prompt-sync-')
+  );
+  try {
+    const [automationId] = Object.keys(AUTOMATION_PROMPT_BACKUPS);
+    const directory = path.join(installedRoot, automationId);
+    mkdirSync(directory);
+    writeFileSync(
+      path.join(directory, 'automation.toml'),
+      `version = 1\nprompt = "${'\\\\'.repeat(100_000)}!\n`
+    );
+
+    assert.deepEqual(automationPromptSyncProblems({ installedRoot }), [
+      `${automationId}: Installed automation prompt is not a valid TOML string.`,
+      ...Object.keys(AUTOMATION_PROMPT_BACKUPS)
+        .slice(1)
+        .map((id) => `${id}: installed automation is missing.`),
+    ]);
+  } finally {
+    rmSync(installedRoot, { recursive: true, force: true });
+  }
+});

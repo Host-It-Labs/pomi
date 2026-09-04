@@ -18,7 +18,11 @@ export const AUTOMATION_PROMPT_BACKUPS = Object.freeze({
 const repositoryRoot = path.resolve(import.meta.dirname, '..');
 
 function automationPrompt(contents) {
-  const value = contents.match(/^prompt = ("(?:\\.|[^"])*")$/m)?.[1];
+  const prefix = 'prompt = ';
+  const promptLine = contents
+    .split(/\r?\n/)
+    .find((line) => line.startsWith(prefix));
+  const value = promptLine?.slice(prefix.length);
   if (!value) throw new Error('Installed automation prompt is missing.');
   try {
     return JSON.parse(value);
