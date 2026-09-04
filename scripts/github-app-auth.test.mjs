@@ -6,6 +6,7 @@ import {
   ALLOWED_COMMANDS,
   appAuthenticatedEnvironment,
   createAppJwt,
+  githubRequest,
   readGitHubAppConfiguration,
   validateMutationPermissions,
 } from './github-app-auth.mjs';
@@ -205,4 +206,36 @@ test('requires mutation permissions before spawning App-authenticated commands',
       }),
     /lacks required contents, issues, or pull-request write permission/
   );
+});
+
+test('preserves temporary HTTP failures even when GitHub returns HTML', async () => {
+  await assert.rejects(
+    githubRequest('/app/installations/123/access_tokens', {
+      method: 'POST',
+      token: 'test-token',
+      fetchImpl: async () =>
+        new globalThis.Response('<html>sensitive upstream diagnostics</html>', {
+          status: 503,
+        }),
+    }),
+    error =>
+      error.message ===
+      'GitHub POST /app/installations/123/access_tokens failed (503).'
+  );
+});
+
+test('distinguishes an App rate limit from a permanent permission error', async () => {
+  for (const [headers, expected] of [
+    [{ 'x-ratelimit-remaining': '0' }, /rate limit/],
+    [{ 'retry-after': '60' }, /rate limit/],
+    [{}, /failed \(403\)\.$/],
+  ]) {
+    await assert.rejects(
+      githubRequest('/app', {
+        fetchImpl: async () =>
+          new globalThis.Response('forbidden', { status: 403, headers }),
+      }),
+      expected
+    );
+  }
 });

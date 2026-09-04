@@ -86,13 +86,16 @@ export async function githubRequest(
       : NO_NETWORK_RETRY_DELAYS_MS
   );
   const text = await response.text();
-  const data = text ? JSON.parse(text) : undefined;
   if (!response.ok) {
+    const rateLimited =
+      response.status === 403 &&
+      (response.headers.get('x-ratelimit-remaining') === '0' ||
+        response.headers.has('retry-after'));
     throw new Error(
-      `GitHub ${method} ${pathname} failed (${response.status}): ${data?.message || text}`
+      `GitHub ${method} ${pathname} failed (${response.status})${rateLimited ? ': rate limit' : ''}.`
     );
   }
-  return data;
+  return text ? JSON.parse(text) : undefined;
 }
 
 export function readGitHubAppConfiguration(environment = process.env) {

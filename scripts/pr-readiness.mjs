@@ -269,7 +269,7 @@ export function githubCommandError({ error, stderr }) {
   const detail = `${error?.code ?? ''} ${stderr ?? ''}`;
   // Classify diagnostics in memory only: gh or its environment can contain secrets.
   if (
-    /rate limit|HTTP 429|HTTP 5\d\d|\b50[0234]\b.*(?:gateway|unavailable)|GitHub is temporarily unavailable|ENOTFOUND|EAI_AGAIN|ECONNRESET|ECONNREFUSED|ETIMEDOUT|UND_ERR_\w*TIMEOUT|error connecting to|could not resolve host|connection (?:reset|refused)|connect timeout|i\/o timeout|TLS handshake timeout|temporary failure in name resolution|unexpected EOF/i.test(
+    /rate limit|HTTP 429|HTTP 5\d\d|failed \((?:429|5\d\d)\)|\b50[0234]\b.*(?:gateway|unavailable)|GitHub is temporarily unavailable|ENOTFOUND|EAI_AGAIN|ECONNRESET|ECONNREFUSED|ETIMEDOUT|UND_ERR_\w*TIMEOUT|error connecting to|could not resolve host|connection (?:reset|refused)|connect timeout|i\/o timeout|TLS handshake timeout|temporary failure in name resolution|unexpected EOF/i.test(
       detail
     )
   ) {

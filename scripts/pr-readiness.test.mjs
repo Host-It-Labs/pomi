@@ -336,6 +336,8 @@ test('retries transport and temporary API errors without echoing diagnostics', (
     'error connecting to api.github.com',
     'HTTP 502',
     'HTTP 503',
+    'GitHub POST /app/installations/123/access_tokens failed (500).',
+    'GitHub POST /app/installations/123/access_tokens failed (429).',
     'HTTP 429',
     'API rate limit exceeded',
     'unexpected EOF',
