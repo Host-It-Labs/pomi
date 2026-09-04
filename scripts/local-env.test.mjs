@@ -133,6 +133,10 @@ test('keeps secret-bearing environment files out of Codex worktrees', () => {
   assert.doesNotMatch(includeFile, /^config\/pomi-release\.env$/m);
   assert.doesNotMatch(includeFile, /^config\/secrets\/$/m);
   assert.ok(environmentFiles.automation.startsWith(primaryCheckoutRoot));
+  assert.equal(
+    resolveRepositoryPath('config/secrets/google-services.json'),
+    path.join(primaryCheckoutRoot, 'config/secrets/google-services.json')
+  );
 });
 
 test('refuses to print automation credentials as shell exports', () => {

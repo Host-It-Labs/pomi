@@ -106,6 +106,7 @@ export function classifyCiChecks(checks) {
 export async function classifyCodexReview({
   reviews,
   reactions,
+  commits,
   head,
   isAncestor,
 }) {
@@ -121,17 +122,31 @@ export async function classifyCodexReview({
     }
   }
 
-  const noFindingsReaction = array(reactions).some(
+  const noFindingsReactions = array(reactions).filter(
     reaction =>
       isCodexReviewAuthor(authorLogin(reaction)) &&
       String(reaction?.content ?? '').toLowerCase() === '+1'
   );
-  if (noFindingsReaction) return { status: 'ready', problems: [] };
-  if (codexReviews.length) {
+  for (const reaction of noFindingsReactions.toReversed()) {
+    const reactedAt = Date.parse(reaction?.created_at ?? '');
+    if (!Number.isFinite(reactedAt)) continue;
+    const reviewedCommit = array(commits)
+      .filter(commit => {
+        const committedAt = Date.parse(
+          commit?.commit?.committer?.date ?? commit?.commit?.author?.date ?? ''
+        );
+        return Number.isFinite(committedAt) && committedAt <= reactedAt;
+      })
+      .at(-1)?.sha;
+    if (reviewedCommit && (await isAncestor(reviewedCommit, head))) {
+      return { status: 'ready', problems: [] };
+    }
+  }
+  if (codexReviews.length || noFindingsReactions.length) {
     return {
       status: 'action-required',
       problems: [
-        'The Codex review commit is not an ancestor of the current pull request head.',
+        'The Codex review outcome is not associated with an ancestor of the current pull request head.',
       ],
     };
   }
@@ -147,7 +162,7 @@ export async function evaluatePullRequestReadiness({
   reactions,
   localBranch,
   localHead,
-  dirtyPaths = [],
+  dirtyPaths,
   isAncestor,
 }) {
   const structuralProblems = [];
@@ -177,9 +192,9 @@ export async function evaluatePullRequestReadiness({
       );
     }
   }
-  if (dirtyPaths.length) {
+  if (array(dirtyPaths).length) {
     structuralProblems.push(
-      `The worktree has uncommitted changes (${dirtyPaths.length} path(s)).`
+      `The worktree has uncommitted changes (${array(dirtyPaths).length} path(s)).`
     );
   }
   if (structuralProblems.length) {
@@ -202,6 +217,7 @@ export async function evaluatePullRequestReadiness({
   const review = await classifyCodexReview({
     reviews: pullRequest.reviews,
     reactions,
+    commits: pullRequest.commits,
     head: remoteHead,
     isAncestor,
   });
@@ -217,12 +233,11 @@ export async function evaluatePullRequestReadiness({
 
 export async function waitForPullRequestReadiness({
   inspect,
-  timeoutMs = DEFAULT_TIMEOUT_MS,
-  pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
-  now = () => Date.now(),
-  sleep = milliseconds =>
-    new Promise(resolve => setTimeout(resolve, milliseconds)),
-  onPending = () => {},
+  timeoutMs,
+  pollIntervalMs,
+  now,
+  sleep,
+  onPending,
 }) {
   const startedAt = now();
   for (;;) {
@@ -237,7 +252,8 @@ export async function waitForPullRequestReadiness({
   }
 }
 
-function run(command, args, cwd, { allowNonzero = false } = {}) {
+function run(command, args, cwd, options) {
+  const allowNonzero = options?.allowNonzero === true;
   const result = spawnSync(command, args, {
     cwd,
     encoding: 'utf8',
@@ -246,7 +262,10 @@ function run(command, args, cwd, { allowNonzero = false } = {}) {
   if (result.error || (!allowNonzero && result.status !== 0)) {
     throw new Error(`${command} could not complete successfully.`);
   }
-  return { output: String(result.stdout ?? '').trim(), status: 0 };
+  return {
+    output: String(result.stdout ?? '').trim(),
+    status: result.status,
+  };
 }
 
 function parseJson(output, label) {
@@ -279,14 +298,14 @@ function validateReviewPagination(reviewThreads) {
   }
 }
 
-export function inspectLocalRepository(root = process.cwd()) {
+export function inspectLocalRepository(root) {
   const branch = run('git', ['branch', '--show-current'], root).output;
   const head = run('git', ['rev-parse', 'HEAD'], root).output;
   if (!branch) throw new Error('The worktree is detached.');
   return { branch, head, dirtyPaths: dirtyPaths(root) };
 }
 
-export function createGitAncestorCheck(root = process.cwd()) {
+export function createGitAncestorCheck(root) {
   return async (ancestor, descendant) =>
     run('git', ['merge-base', '--is-ancestor', ancestor, descendant], root, {
       // A force-pushed, unrelated reviewed commit may no longer exist locally.
@@ -295,10 +314,7 @@ export function createGitAncestorCheck(root = process.cwd()) {
     }).status === 0;
 }
 
-export async function loadPullRequestSnapshot({
-  root = process.cwd(),
-  pullRequestNumber,
-} = {}) {
+export async function loadPullRequestSnapshot({ root, pullRequestNumber }) {
   const local = inspectLocalRepository(root);
   const selector = pullRequestNumber ? [String(pullRequestNumber)] : [];
   const pullRequest = parseJson(
@@ -376,10 +392,24 @@ export async function loadPullRequestSnapshot({
     'GitHub pull-request reactions query'
   );
   const reactions = flattenReactionPages(reactionPages);
+  const commitPages = parseJson(
+    run(
+      'gh',
+      [
+        'api',
+        `repos/${repository}/pulls/${pullRequest.number}/commits`,
+        '--paginate',
+        '--slurp',
+      ],
+      root
+    ).output,
+    'GitHub pull-request commits query'
+  );
+  pullRequest.commits = flattenReactionPages(commitPages);
   return { pullRequest, reviewThreads: reviewThreads.nodes, reactions, local };
 }
 
-export async function inspectPullRequestReadiness(options = {}) {
+export async function inspectPullRequestReadiness(options) {
   const root = options.root ?? process.cwd();
   const snapshot = await loadPullRequestSnapshot({
     root,
@@ -434,7 +464,7 @@ function reportResult(result) {
   }
 }
 
-export async function runPrReadinessCli(args = process.argv.slice(2)) {
+export async function runPrReadinessCli(args) {
   const options = parseCliArguments(args);
   const inspect = () => inspectPullRequestReadiness(options);
   const result =
@@ -442,6 +472,10 @@ export async function runPrReadinessCli(args = process.argv.slice(2)) {
       ? await waitForPullRequestReadiness({
           inspect,
           timeoutMs: options.timeoutMs,
+          pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
+          now: () => Date.now(),
+          sleep: milliseconds =>
+            new Promise(resolve => setTimeout(resolve, milliseconds)),
           onPending: pending => reportResult(pending),
         })
       : await inspect();
@@ -452,7 +486,7 @@ export async function runPrReadinessCli(args = process.argv.slice(2)) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  runPrReadinessCli()
+  runPrReadinessCli(process.argv.slice(2))
     .then(code => {
       process.exitCode = code;
     })

@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   classifyCiChecks,
   classifyCodexReview,
+  createGitAncestorCheck,
   DEFAULT_POLL_INTERVAL_MS,
   DEFAULT_TIMEOUT_MS,
   evaluatePullRequestReadiness,
@@ -43,6 +44,7 @@ function evaluate(overrides = {}) {
     pullRequest: pullRequest(),
     reviewThreads: [],
     reactions: [],
+    commits: [],
     localBranch: 'dev/example',
     localHead: head,
     dirtyPaths: [],
@@ -79,12 +81,41 @@ test('accepts the Codex no-findings thumbs-up outcome', async () => {
       {
         user: { login: 'chatgpt-codex-connector[bot]' },
         content: '+1',
+        created_at: '2026-09-04T10:00:00Z',
+      },
+    ],
+    commits: [
+      {
+        sha: reviewedAncestor,
+        commit: { committer: { date: '2026-09-04T09:59:00Z' } },
+      },
+    ],
+    head,
+    isAncestor: async ancestor => ancestor === reviewedAncestor,
+  });
+  assert.equal(review.status, 'ready');
+});
+
+test('rejects a no-findings reaction that cannot apply to a head ancestor', async () => {
+  const review = await classifyCodexReview({
+    reviews: [],
+    reactions: [
+      {
+        user: { login: 'chatgpt-codex-connector[bot]' },
+        content: '+1',
+        created_at: '2026-09-04T10:00:00Z',
+      },
+    ],
+    commits: [
+      {
+        sha: reviewedAncestor,
+        commit: { committer: { date: '2026-09-04T10:01:00Z' } },
       },
     ],
     head,
     isAncestor: async () => false,
   });
-  assert.equal(review.status, 'ready');
+  assert.equal(review.status, 'action-required');
 });
 
 test('combines every paginated reaction page', () => {
@@ -103,7 +134,14 @@ test('combines every paginated reaction page', () => {
 test('rejects a Codex review unrelated to the current head', async () => {
   const result = await evaluate({ isAncestor: async () => false });
   assert.equal(result.status, 'action-required');
-  assert.match(result.problems[0], /not an ancestor/);
+  assert.match(result.problems[0], /not associated with an ancestor/);
+});
+
+test('preserves a nonzero git ancestry result', async () => {
+  assert.equal(
+    await createGitAncestorCheck(process.cwd())('0'.repeat(40), head),
+    false
+  );
 });
 
 test('distinguishes pending and failed current-head CI', () => {
@@ -188,6 +226,7 @@ test('waits every 60 seconds and times out exactly after 30 minutes', async () =
       sleeps.push(milliseconds);
       currentTime += milliseconds;
     },
+    onPending: () => {},
   });
   assert.equal(result.status, 'timed-out');
   assert.equal(sleeps.length, 30);
@@ -208,6 +247,7 @@ test('returns immediately for action-required and after readiness arrives', asyn
     pollIntervalMs: 60_000,
     now: () => (inspections - 1) * 60_000,
     sleep: async () => {},
+    onPending: () => {},
   });
   assert.equal(ready.status, 'ready');
   assert.equal(inspections, 2);
@@ -218,6 +258,11 @@ test('returns immediately for action-required and after readiness arrives', asyn
       inspections += 1;
       return { status: 'action-required', problems: ['failed'] };
     },
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
+    now: () => 0,
+    sleep: async () => {},
+    onPending: () => {},
   });
   assert.equal(action.status, 'action-required');
   assert.equal(inspections, 1);

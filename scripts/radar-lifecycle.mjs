@@ -1542,10 +1542,11 @@ export async function markAlreadyImplemented(input) {
   };
 }
 
-export async function markInReview(
-  input,
-  { inspectReadiness = inspectPullRequestReadiness } = {}
-) {
+export async function markInReview(input, dependencies) {
+  const inspectReadiness = dependencies?.inspectReadiness;
+  if (typeof inspectReadiness !== 'function') {
+    throw new Error('markInReview requires an inspectReadiness dependency.');
+  }
   const sourcePullRequestNumber = Number(input.sourcePullRequestNumber);
   if (
     !Number.isSafeInteger(sourcePullRequestNumber) ||
@@ -1583,7 +1584,27 @@ export async function markInReview(
     issueNumbers.map(issueNumber => github(`/issues/${issueNumber}`, {}))
   );
   for (const issue of issues) {
-    if (issueLifecycle(issue) !== 'radar:in-progress') {
+    const labels = issue.labels.map(label => label.name);
+    const sourceLabels = labels.filter(label =>
+      CONTRACT.sources.includes(label)
+    );
+    const lifecycleLabels = labels.filter(label =>
+      CONTRACT.lifecycle.includes(label)
+    );
+    const issueData = readMarker(issue.body, CONTRACT.marker);
+    if (
+      issue.state !== 'open' ||
+      !issueData ||
+      issueData.duplicateOf ||
+      labels.includes('duplicate') ||
+      sourceLabels.length !== 1 ||
+      lifecycleLabels.length !== 1
+    ) {
+      throw new Error(
+        `Issue #${issue.number} is not an eligible open canonical Radar issue with exactly one source and lifecycle label.`
+      );
+    }
+    if (lifecycleLabels[0] !== 'radar:in-progress') {
       throw new Error(
         `Issue #${issue.number} must be radar:in-progress before entering review.`
       );
@@ -2498,7 +2519,7 @@ async function main() {
     await validateAutomationAuthentication();
     const input = readJsonStdin();
     process.stdout.write(
-      `${JSON.stringify(await markInReview(input), null, 2)}\n`
+      `${JSON.stringify(await markInReview(input, { inspectReadiness: inspectPullRequestReadiness }), null, 2)}\n`
     );
     return;
   }
