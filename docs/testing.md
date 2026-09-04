@@ -42,7 +42,7 @@ pnpm test:e2e:timing:dry
 
 Timing p50/p95 values use linear interpolation over successful full-suite durations. A mode is reportable only when all required runs pass; partial measurements remain `incomplete` and the ownership report stays `pending`.
 
-The `PR E2E` workflow keeps its normal pull-request run unchanged. A manual workflow dispatch with `acceptance_timing` enabled runs the measured 10+3 sequence and uploads `e2e-acceptance-timing`; failures upload the partial timing report with the ordinary diagnostics.
+The `PR E2E` workflow runs for pull requests and pushes to `main`; pull-request commits use only the pull-request trigger. A manual workflow dispatch with `acceptance_timing` enabled runs the measured 10+3 sequence and uploads `e2e-acceptance-timing`; failures upload the partial timing report with the ordinary diagnostics.
 
 ## Business-logic acceptance and coverage
 
