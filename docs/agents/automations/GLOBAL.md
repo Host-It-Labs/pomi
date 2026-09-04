@@ -42,9 +42,12 @@ must not weaken this contract.
 
 ## Synchronization, credentials, and external writes
 
-- Use the dedicated `config/pomi-automation.env` profile. Never load
-  `.env.local`, enumerate or print secret values, or fall back to a personal
-  GitHub token or identity.
+- Credentials are supplied from the primary checkout's dedicated
+  `config/pomi-automation.env` profile. Never source or line-inspect that file,
+  enumerate or print secret values, load `.env.local`, or fall back to a
+  personal GitHub token or identity. Use only the supported Node loader and
+  GitHub App wrapper; raw multiline PEM values must never cross an output
+  boundary.
 - Run every GitHub-facing `git`, `gh`, and Radar lifecycle command through
   `node scripts/github-app-auth.mjs exec -- ...`, and stop before GitHub
   interaction if authentication does not resolve to `pomi-radar[bot]`.
@@ -59,8 +62,31 @@ must not weaken this contract.
   verify an empty status. Do not release the lock while on a source branch or
   with uncommitted work. Do not cross those ownership boundaries.
 
+## Rapid no-work gate
+
+- The first objective of every run is to decide whether its own stage has
+  actionable work. Before this decision, do only the mandatory lock, exact
+  worktree/branch/cleanliness checks, safe branch synchronization, credential
+  gate, and the required reading of `AGENTS.md`, this file,
+  `docs/agents/radar-lifecycle.md`, and `config/radar-lifecycle.json`.
+- Immediately run the scoped preflight with `--stage parent` or `--stage child`
+  as applicable. Do not inspect source files, history, diagnostics, PR details,
+  or issue details beyond that command; do not research, plan, implement, or
+  delegate first.
+- `stageNoWork` is authoritative for this early exit. If it is `true`, release
+  the lock and stop immediately with a concise no-work result. Do not spend the
+  run producing an inventory or looking for optional work. The broader
+  `noWork` field may include responsibilities owned by the other stage.
+
 ## Verification and reporting
 
+- After every source-PR push, run `node scripts/pr-readiness.mjs wait
+--timeout-seconds 1800` through the App wrapper. Fix action-required results,
+  push, and rerun. A timeout may end only as an explicit pending blocker and
+  must not advance issues to `radar:in-review` or claim readiness.
+- Move source issues into review only with App-authenticated `node
+scripts/radar-lifecycle.mjs mark-in-review` input. That command revalidates
+  current-head CI, the automatic Codex outcome, and processed review threads.
 - Use the cheapest reliable validation for the change and keep local results,
   remote CI, automatic review, browser/device checks, and deployment status
   distinct in reports.

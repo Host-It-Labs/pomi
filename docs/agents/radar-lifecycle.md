@@ -40,6 +40,14 @@ merge updates, and production-release closure.
 - Use `Related #N` in source and consolidation PRs. Never use a closing keyword.
 - Accept moves to `radar:accepted`; Ask moves to `radar:needs-agent`; Reject
   requires a reason, moves to `radar:rejected`, and closes as not planned.
+- Implementation issues move from `radar:in-progress` to `radar:in-review`
+  only through the App-authenticated `mark-in-review` command with a
+  `sourcePullRequestNumber` JSON payload. It refuses the transition unless the
+  source PR's current head has green CI, a completed automatic Codex outcome,
+  and no unprocessed review thread.
+- Scheduled parents and children run `preflight --track <track> --stage
+<parent|child>` before substantive work. Its `stageNoWork` result considers
+  only that stage's ownership and requires an immediate early exit when true.
 - When implementation verification finds complete existing coverage, move the
   issue to `radar:already-implemented` with concrete evidence and leave it open
   for user confirmation. Confirming closes it as completed; reconsidering

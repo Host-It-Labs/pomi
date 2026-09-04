@@ -16,12 +16,17 @@ repository does not update the installed Codex automation, and editing an
 installed automation does not update its Markdown backup. Before handing a
 prompt change off for merge, update the matching installed automation directly,
 then verify that its complete runtime prompt exactly matches the backup while
-its schedule, model, environment, and notification settings remain unchanged.
+its schedule, model, execution environment, worktree, status, and notification
+settings remain unchanged. Do not attach the secret-bearing automation profile
+as a Codex task environment; the repository's Node loaders resolve it only when
+the App-authentication or Sentry wrapper needs it.
+Run `node scripts/verify-automation-prompt-sync.mjs` for that exact six-prompt
+comparison.
 
 Each backup records the stable automation ID, cadence, parent/child relationship,
 dedicated branch, and complete runtime prompt. Every parent runs one hour before
 its child and hands off through the canonical GitHub issue state. Machine-local
-project IDs and environment-file paths remain in Codex and are intentionally not
+project IDs and worktree paths remain in Codex and are intentionally not
 required to restore the prompt text.
 
 Every runtime prompt must acquire the durable per-worktree lock before branch
@@ -29,10 +34,10 @@ synchronization and release it on every successful exit. The lock helper and
 its recovery procedure are defined in `GLOBAL.md` and covered by the operations
 tests.
 
-Planning parents use `gpt-5.6-sol` with high reasoning. Implementation children
-use `gpt-5.6-luna` with max reasoning. Activation is controlled by the Codex
-automation records; every run must still pass its App and track preflight
-gates.
+Planning parents currently use `gpt-5.6-sol` with high reasoning. Child model
+and reasoning settings remain track-specific in the installed records.
+Activation is controlled by the Codex automation records; every run must still
+pass its App and track preflight gates.
 
 ## Worktree ownership
 

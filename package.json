@@ -46,7 +46,7 @@
     "audit:public-source": "node ./scripts/audit-public-source.mjs",
     "snapshot:public-source": "node ./scripts/create-public-snapshot.mjs",
     "test:public-snapshot": "node ./scripts/test-public-snapshot.mjs",
-    "test:operations": "node --test scripts/codex-worktree-environment.test.mjs scripts/dev-database-paths.test.mjs scripts/dev-ports.test.mjs scripts/github-app-auth.test.mjs scripts/http-client.test.mjs scripts/local-env.test.mjs scripts/migrate-private-radar.test.mjs scripts/migrate-private-pulls.test.mjs scripts/path-safety.test.mjs scripts/radar-automation-lock.test.mjs scripts/run-parallel-releases.test.mjs scripts/xml-resource-text.test.mjs && ./scripts/run-pomi-sentry.test.sh",
+    "test:operations": "node --test scripts/codex-worktree-environment.test.mjs scripts/dev-database-paths.test.mjs scripts/dev-ports.test.mjs scripts/github-app-auth.test.mjs scripts/http-client.test.mjs scripts/local-env.test.mjs scripts/migrate-private-radar.test.mjs scripts/migrate-private-pulls.test.mjs scripts/path-safety.test.mjs scripts/pr-readiness.test.mjs scripts/radar-automation-lock.test.mjs scripts/run-parallel-releases.test.mjs scripts/run-pomi-sentry.test.mjs scripts/verify-automation-prompt-sync.test.mjs scripts/xml-resource-text.test.mjs && ./scripts/run-pomi-sentry.test.sh",
     "test:radar-lifecycle": "node --test scripts/radar-lifecycle.test.mjs",
     "test:coverage:ratchet": "pnpm test:build && vitest run --coverage && node ./scripts/verify-coverage.mjs --mode=ratchet",
     "test:business": "pnpm test:build && vitest run --coverage && node ./scripts/verify-coverage.mjs --mode=business && node ./scripts/verify-business-logic-ownership.mjs",

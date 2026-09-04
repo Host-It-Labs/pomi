@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
@@ -9,6 +10,7 @@ import {
   loadReleaseEnvironment,
   mergeEnvironment,
   parseEnvironmentFile,
+  primaryCheckoutRoot,
   repositoryRoot,
   resolveEnvironmentFile,
   resolveRepositoryPath,
@@ -121,13 +123,30 @@ test('requires generic callers to select an environment profile', () => {
   );
 });
 
-test('documents the ignored files copied into Codex worktrees', () => {
+test('keeps secret-bearing environment files out of Codex worktrees', () => {
   const includeFile = readFileSync(
     path.join(repositoryRoot, '.worktreeinclude'),
     'utf8'
   );
-  assert.match(includeFile, /^\.env\.local$/m);
-  assert.match(includeFile, /^config\/pomi-automation\.env$/m);
-  assert.match(includeFile, /^config\/pomi-release\.env$/m);
-  assert.match(includeFile, /^config\/secrets\/$/m);
+  assert.doesNotMatch(includeFile, /^\.env\.local$/m);
+  assert.doesNotMatch(includeFile, /^config\/pomi-automation\.env$/m);
+  assert.doesNotMatch(includeFile, /^config\/pomi-release\.env$/m);
+  assert.doesNotMatch(includeFile, /^config\/secrets\/$/m);
+  assert.ok(environmentFiles.automation.startsWith(primaryCheckoutRoot));
+});
+
+test('refuses to print automation credentials as shell exports', () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      path.join(repositoryRoot, 'scripts/local-env.mjs'),
+      '--shell-exports',
+      '--profile',
+      'automation',
+    ],
+    { encoding: 'utf8' }
+  );
+  assert.equal(result.status, 2);
+  assert.equal(result.stdout, '');
+  assert.match(result.stderr, /cannot be exported to a shell/);
 });

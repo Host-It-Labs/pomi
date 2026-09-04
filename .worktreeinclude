@@ -1,4 +1,2 @@
-.env.local
-config/pomi-automation.env
-config/pomi-release.env
-config/secrets/
+# Secret-bearing profiles and credential files remain in the primary checkout.
+# Supported loaders resolve them there without copying their contents.

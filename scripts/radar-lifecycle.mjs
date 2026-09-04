@@ -13,6 +13,7 @@ import {
   NETWORK_RETRY_DELAYS_MS,
   NO_NETWORK_RETRY_DELAYS_MS,
 } from './http-client.mjs';
+import { inspectPullRequestReadiness } from './pr-readiness.mjs';
 
 const ROOT = new URL('../', import.meta.url);
 const CONTRACT = JSON.parse(
@@ -773,7 +774,40 @@ export function preflightHasWork(index) {
   );
 }
 
-export async function preflight(track) {
+export function stagePreflightHasWork(index, stage) {
+  const actionableIssues = Array.isArray(index.actionableIssues)
+    ? index.actionableIssues
+    : [];
+  if (stage === 'parent') {
+    return Boolean(
+      array(index.duplicateClusters).length ||
+      array(index.feedbackIssueNumbers).length ||
+      array(index.enrichmentIssueNumbers).length ||
+      array(index.unmappedSentry).length ||
+      array(index.sentryConfigurationMissing).length ||
+      index.shouldGenerate === true ||
+      actionableIssues.some(issue => issue.pendingAgentPass === true)
+    );
+  }
+  if (stage === 'child') {
+    const childLifecycles = new Set([
+      'radar:accepted',
+      'radar:in-progress',
+      'radar:in-review',
+    ]);
+    return Boolean(
+      array(index.implementationSourcePullNumbers).length ||
+      actionableIssues.some(
+        issue =>
+          issue.pendingAgentPass !== true &&
+          childLifecycles.has(issue.lifecycle)
+      )
+    );
+  }
+  throw new Error('Preflight stage must be parent or child.');
+}
+
+export async function preflight(track, stage) {
   const [issues, pulls] = await Promise.all([
     paginate('/issues?state=all&sort=updated&direction=desc'),
     paginate('/pulls?state=open&base=main'),
@@ -872,6 +906,9 @@ export async function preflight(track) {
       title: pull.title,
       url: pull.html_url,
     })),
+    implementationSourcePullNumbers: relevantPulls
+      .filter(pull => readMarker(pull.body, SOURCE_MARKER))
+      .map(pull => pull.number),
     currentBatch: latestRun
       ? { runId: latestRun[0], issueNumbers: latestRun[1] }
       : null,
@@ -883,6 +920,10 @@ export async function preflight(track) {
     noWork: false,
   };
   result.noWork = !preflightHasWork(result);
+  if (stage) {
+    result.stage = stage;
+    result.stageNoWork = !stagePreflightHasWork(result, stage);
+  }
   return result;
 }
 
@@ -1498,6 +1539,70 @@ export async function markAlreadyImplemented(input) {
     sourcePullRequests: detachedPullRequests.sourcePullRequests,
     consolidationPullRequests: detachedPullRequests.consolidationPullRequests,
     issue: updated,
+  };
+}
+
+export async function markInReview(
+  input,
+  { inspectReadiness = inspectPullRequestReadiness } = {}
+) {
+  const sourcePullRequestNumber = Number(input.sourcePullRequestNumber);
+  if (
+    !Number.isSafeInteger(sourcePullRequestNumber) ||
+    sourcePullRequestNumber <= 0
+  ) {
+    throw new Error('A positive sourcePullRequestNumber is required.');
+  }
+
+  const readiness = await inspectReadiness({
+    pullRequestNumber: sourcePullRequestNumber,
+  });
+  if (readiness.status !== 'ready') {
+    throw new Error(
+      `Source PR #${sourcePullRequestNumber} is not ready (${readiness.status}): ${(readiness.problems ?? []).join(' ')}`
+    );
+  }
+
+  const sourcePull = await github(`/pulls/${sourcePullRequestNumber}`, {});
+  const source = readMarker(sourcePull.body, SOURCE_MARKER);
+  const issueNumbers = sourcePullIssueNumbers(source);
+  if (
+    sourcePull.state !== 'open' ||
+    sourcePull.base?.ref !== 'main' ||
+    sourcePull.base?.repo?.full_name !== repo() ||
+    sourcePull.head?.repo?.full_name !== repo() ||
+    sourcePull.user?.login !== radarBotLogin() ||
+    !issueNumbers.length
+  ) {
+    throw new Error(
+      `PR #${sourcePullRequestNumber} is not an eligible open Pomi Radar source PR.`
+    );
+  }
+
+  const issues = await Promise.all(
+    issueNumbers.map(issueNumber => github(`/issues/${issueNumber}`, {}))
+  );
+  for (const issue of issues) {
+    if (issueLifecycle(issue) !== 'radar:in-progress') {
+      throw new Error(
+        `Issue #${issue.number} must be radar:in-progress before entering review.`
+      );
+    }
+  }
+  for (const issue of issues) {
+    await setIssueLifecycle(
+      issue.number,
+      'radar:in-review',
+      'open',
+      undefined,
+      undefined,
+      'radar:in-progress'
+    );
+  }
+  return {
+    sourcePullRequestNumber,
+    issueNumbers,
+    readiness: 'ready',
   };
 }
 
@@ -2359,8 +2464,13 @@ async function main() {
         '--track must be feature-bug, security, performance, or all.'
       );
     }
+    const stageFlag = process.argv.indexOf('--stage');
+    const stage = stageFlag >= 0 ? process.argv[stageFlag + 1] : undefined;
+    if (stage && !['parent', 'child'].includes(stage)) {
+      throw new Error('--stage must be parent or child.');
+    }
     process.stdout.write(
-      `${JSON.stringify(await preflight(track), null, 2)}\n`
+      `${JSON.stringify(await preflight(track, stage), null, 2)}\n`
     );
     return;
   }
@@ -2381,6 +2491,14 @@ async function main() {
     const input = readJsonStdin();
     process.stdout.write(
       `${JSON.stringify(await markAlreadyImplemented(input), null, 2)}\n`
+    );
+    return;
+  }
+  if (command === 'mark-in-review') {
+    await validateAutomationAuthentication();
+    const input = readJsonStdin();
+    process.stdout.write(
+      `${JSON.stringify(await markInReview(input), null, 2)}\n`
     );
     return;
   }
