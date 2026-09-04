@@ -7,6 +7,7 @@ overrides:
 allowBuilds:
   '@firebase/util': true
   '@nestjs/core': true
+  '@sentry/cli': true
   '@swc/core': true
   bcrypt: true
   esbuild: true
