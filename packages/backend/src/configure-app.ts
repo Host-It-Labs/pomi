@@ -1,4 +1,5 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import { FEEDBACK_TRANSCRIPTION_JSON_LIMIT } from '@pomi/shared';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { ValidationError } from 'class-validator';
 import { json, urlencoded } from 'express';
@@ -53,6 +54,10 @@ export function configureHttpApp(app: NestExpressApplication): void {
     json({ limit: USER_DATA_IMPORT_JSON_LIMIT })
   );
   app.use('/assistant', json({ limit: '10mb' }));
+  app.use(
+    '/feedback/transcribe',
+    json({ limit: FEEDBACK_TRANSCRIPTION_JSON_LIMIT })
+  );
   app.use(json({ limit: '2mb' }));
   app.use(urlencoded({ extended: true, limit: '2mb' }));
   app.set('trust proxy', getTrustedProxyHops());

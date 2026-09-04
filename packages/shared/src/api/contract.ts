@@ -4,6 +4,8 @@ import {
   ASSISTANT_MAX_RECORDING_MINUTES,
   APP_LANGUAGE_VALUES,
   CLIENT_NOTIFICATION_TYPES,
+  FEEDBACK_MAX_TEXT_LENGTH,
+  FEEDBACK_TRANSCRIPTION_MAX_ENCODED_BYTES,
   TASK_DESCRIPTION_MAX_LENGTH,
   TASK_CREATION_SOURCES,
   TASK_FOLLOW_UP_DELAY_MAX_DAYS,
@@ -1228,7 +1230,7 @@ const userActionSchema = z
     z.object({
       kind: z.literal('feedback'),
       operation: z.literal('submit'),
-      text: z.string().trim().min(1).max(20_000),
+      text: z.string().trim().min(1).max(FEEDBACK_MAX_TEXT_LENGTH),
       diagnostics: z
         .object({
           appVersion: z.string().max(100).optional(),
@@ -2036,8 +2038,12 @@ export const apiContract = router({
       method: 'POST',
       path: '/feedback/transcribe',
       body: z.object({
-        audioBase64: z.string().min(1),
+        audioBase64: z
+          .string()
+          .min(1)
+          .max(FEEDBACK_TRANSCRIPTION_MAX_ENCODED_BYTES),
         mimeType: z.string().min(1).max(100),
+        idempotencyKey: z.string().uuid(),
       }),
       responses: {
         200: z.object({ transcript: z.string(), costUsd: z.number() }),

@@ -778,4 +778,30 @@ describe('accepted-action schemas', () => {
         .success
     ).toBe(false);
   });
+
+  it('bounds feedback payloads and requires a transcription idempotency key', () => {
+    const transcriptionBody = apiContract.feedback.transcribe.body;
+    const idempotencyKey = '550e8400-e29b-41d4-a716-446655440000';
+
+    expect(
+      transcriptionBody.safeParse({
+        audioBase64: 'YQ==',
+        mimeType: 'audio/webm',
+        idempotencyKey,
+      }).success
+    ).toBe(true);
+    expect(
+      transcriptionBody.safeParse({
+        audioBase64: 'YQ==',
+        mimeType: 'audio/webm',
+      }).success
+    ).toBe(false);
+    expect(
+      transcriptionBody.safeParse({
+        audioBase64: 'a'.repeat(4 * 1024 * 1024 + 1),
+        mimeType: 'audio/webm',
+        idempotencyKey,
+      }).success
+    ).toBe(false);
+  });
 });

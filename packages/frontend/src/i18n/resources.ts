@@ -874,6 +874,8 @@ const english: TranslationCatalog = {
   'description.saveIntention': 'Save Intention description',
   'feedback.sentThankYou': 'Thank you for your feedback.',
   'feedback.transcribeFailed': 'Failed to transcribe feedback recording',
+  'feedback.chunkTooLarge': 'One recording segment was too large to send.',
+  'feedback.tooLong': 'Feedback is too long to send.',
   'feedback.microphoneUnavailable': 'Microphone unavailable',
   'feedback.backgroundStopped': 'Recording stopped while app was backgrounded.',
   'feedback.discardedAfterSignOut': 'Recording discarded after sign-out.',

@@ -18,9 +18,10 @@ describe('configureHttpApp', () => {
 
     configureHttpApp(app as never);
 
-    expect(app.use).toHaveBeenCalledTimes(4);
+    expect(app.use).toHaveBeenCalledTimes(5);
     expect(app.use.mock.calls[0][0]).toBe('/system/user-data/import');
     expect(app.use.mock.calls[1][0]).toBe('/assistant');
+    expect(app.use.mock.calls[2][0]).toBe('/feedback/transcribe');
     expect(app.set).toHaveBeenCalledWith('trust proxy', expect.any(Number));
     expect(app.enableCors).toHaveBeenCalledWith({
       credentials: true,
