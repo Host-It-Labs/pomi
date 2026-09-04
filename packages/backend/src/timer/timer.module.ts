@@ -7,6 +7,7 @@ import { PreferencesModule } from 'src/preferences/preferences.module';
 import { RedisModule } from 'src/redis/redis.module';
 import { StatisticsModule } from 'src/statistics/statistics.module';
 import { DebugGuard } from '../auth/debug.guard';
+import { SessionsModule } from '../auth/sessions.module';
 import { TimerCountdownService } from './timer-countdown.service';
 import { TimerCompletionEffectsService } from './timer-completion-effects.service';
 import { TimerCompletionOutboxService } from './timer-completion-outbox.service';
@@ -33,6 +34,7 @@ import { LiveActivityUpdateService } from './live-activity-update.service';
     StatisticsModule,
     forwardRef(() => NotificationsModule),
     IntentionsModule,
+    SessionsModule,
   ],
   providers: [
     TimerService,

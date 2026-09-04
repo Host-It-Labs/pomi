@@ -24,7 +24,7 @@ export class SystemController {
   @TsRestHandler(apiContract.system.get)
   async getInfo(): Promise<unknown> {
     return tsRestHandler(apiContract.system.get, async () => {
-      const info = this.systemService.getSystemInfo();
+      const info = await this.systemService.getSystemInfo();
       return {
         status: 200,
         body: info,

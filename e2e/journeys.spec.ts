@@ -1,5 +1,5 @@
 import { expect, test } from './test';
-import { TestHelpers } from './helpers';
+import { getApiAuthContext, TestHelpers } from './helpers';
 import {
   createIntention,
   createSession,
@@ -553,26 +553,13 @@ test('9. reconciles Task updates across two clients while isolating another user
     await waitForTimerConnection(peerPage);
     await openTasks(peerPage);
 
-    const otherSession = await createSession(
-      page,
+    await otherPage.goto('/');
+    await createSession(
+      otherPage,
       deterministicUsername(testInfo, 'isolated'),
       E2E_PASSWORD
     );
-    await otherPage.addInitScript(session => {
-      localStorage.setItem(
-        'pomi-auth-storage',
-        JSON.stringify({
-          state: {
-            user: session.user,
-            token: session.token,
-            isAuthenticated: true,
-            isLoading: false,
-          },
-          version: 0,
-        })
-      );
-    }, otherSession);
-    await otherPage.goto('/');
+    await otherPage.reload({ waitUntil: 'domcontentloaded' });
     await waitForPreferencesBootstrap(otherPage);
     await updatePreferences(otherPage, { tasksExtension: true });
     await otherPage.reload({ waitUntil: 'domcontentloaded' });
@@ -804,11 +791,9 @@ test('13. exports and imports complete user data as an administrator', async ({
   const helpers = new TestHelpers(page);
   await helpers.login(adminUsername, adminPassword);
   await helpers.expandWindow();
-  const auth = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem('pomi-auth-storage') ?? '{}')
-  );
+  const auth = await getApiAuthContext(page);
   expect(
-    auth?.state?.user?.isAdmin,
+    auth?.user?.isAdmin,
     'E2E admin fixture must be provisioned before Playwright'
   ).toBe(true);
   const title = `${deterministicUsername(testInfo, 'export')} task`;

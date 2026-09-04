@@ -4,11 +4,14 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PUSH_PLATFORMS, PushPlatform } from '@pomi/shared';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import Redis from 'ioredis';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { REDIS_CLIENT } from '../redis/redis.constants';
 import { UserEntity } from './users.entity';
 
@@ -16,7 +19,11 @@ interface CreateUserDto {
   username: string;
   password: string;
   isAdmin?: boolean;
+  adminBootstrapToken?: string;
 }
+
+const FIRST_ADMIN_LOCK_KEY = 'pomi:first-admin-claim';
+const MIN_ADMIN_BOOTSTRAP_TOKEN_LENGTH = 32;
 
 @Injectable()
 export class UsersService {
@@ -26,7 +33,9 @@ export class UsersService {
     @InjectRepository(UserEntity)
     private userRepository: Repository<UserEntity>,
     @Inject(REDIS_CLIENT)
-    redis: Redis
+    redis: Redis,
+    private dataSource: DataSource,
+    private configService: ConfigService
   ) {
     this.redis = redis;
   }
@@ -43,8 +52,57 @@ export class UsersService {
   }
 
   async createUser(userData: CreateUserDto): Promise<UserEntity> {
-    const userEntity = this.userRepository.create(userData);
-    return await this.userRepository.save(userEntity);
+    const { adminBootstrapToken: _adminBootstrapToken, ...persistedUserData } =
+      userData;
+
+    if (!persistedUserData.isAdmin) {
+      const userEntity = this.userRepository.create(persistedUserData);
+      return await this.userRepository.save(userEntity);
+    }
+
+    this.assertFirstAdminBootstrapToken(userData.adminBootstrapToken);
+
+    return await this.dataSource.transaction(async manager => {
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [FIRST_ADMIN_LOCK_KEY]
+      );
+
+      const repository = manager.getRepository(UserEntity);
+      const hasAdmin = await repository.exists({
+        where: { isAdmin: true },
+      });
+      const userEntity = repository.create({
+        ...persistedUserData,
+        isAdmin: !hasAdmin,
+      });
+      return await repository.save(userEntity);
+    });
+  }
+
+  assertFirstAdminBootstrapToken(token?: string): void {
+    const configuredToken = this.configService
+      .get<string>('POMI_ADMIN_BOOTSTRAP_TOKEN')
+      ?.trim();
+
+    if (
+      !configuredToken ||
+      configuredToken.length < MIN_ADMIN_BOOTSTRAP_TOKEN_LENGTH ||
+      !token
+    ) {
+      throw new UnauthorizedException('Invalid admin bootstrap token');
+    }
+
+    const provided = Buffer.from(token);
+    const expected = Buffer.from(configuredToken);
+    if (
+      !timingSafeEqual(
+        createHash('sha256').update(provided).digest(),
+        createHash('sha256').update(expected).digest()
+      )
+    ) {
+      throw new UnauthorizedException('Invalid admin bootstrap token');
+    }
   }
 
   async countAdmins(): Promise<number> {

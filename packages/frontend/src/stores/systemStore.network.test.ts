@@ -6,7 +6,11 @@ import { createSystemStore } from './systemStore';
 
 const server = setupServer(
   http.get('http://localhost:3000/system', () =>
-    HttpResponse.json({ hostingMode: 'self-hosted', selfHosted: true })
+    HttpResponse.json({
+      hostingMode: 'self-hosted',
+      selfHosted: true,
+      requiresAdminBootstrapToken: false,
+    })
   )
 );
 
@@ -23,6 +27,7 @@ describe('system store network boundary', () => {
     expect(store.getState().systemInfo).toEqual({
       hostingMode: 'self-hosted',
       selfHosted: true,
+      requiresAdminBootstrapToken: false,
     });
   });
 

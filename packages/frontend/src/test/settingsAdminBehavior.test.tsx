@@ -26,6 +26,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../stores/authStore', () => ({
   useAuthStore: {
+    getState: () => ({
+      token: null,
+      refreshSession: async () => false,
+      expireSession: vi.fn(),
+    }),
     use: {
       user: () => mocks.user,
       signOut: () => mocks.signOut,

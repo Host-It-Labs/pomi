@@ -10,7 +10,7 @@ import {
 describe('backend environment validation', () => {
   it('fails closed when production secrets are missing', () => {
     expect(() => validateEnvironment({ NODE_ENV: 'production' })).toThrow(
-      'DATABASE_URL or PostgreSQL connection fields, REDIS_URL or REDIS_PASSWORD, JWT_SECRET, CORS_ORIGINS'
+      'DATABASE_URL or PostgreSQL connection fields, REDIS_URL or REDIS_PASSWORD, JWT_SECRET, POMI_ADMIN_BOOTSTRAP_TOKEN, CORS_ORIGINS'
     );
   });
 
@@ -52,6 +52,8 @@ describe('backend environment validation', () => {
         DATABASE_URL: 'postgres://database.example/pomi',
         REDIS_URL: 'rediss://redis.example/pomi',
         JWT_SECRET: 'your-secret-key',
+        POMI_ADMIN_BOOTSTRAP_TOKEN:
+          'a-production-bootstrap-token-over-32-characters',
         CORS_ORIGINS: 'https://focus.example',
       })
     ).toThrow('JWT_SECRET must be at least 32 characters');
@@ -64,6 +66,8 @@ describe('backend environment validation', () => {
         DATABASE_URL: 'postgres://database.example/pomi',
         REDIS_URL: 'rediss://redis.example/pomi',
         JWT_SECRET: 'a-production-secret-with-more-than-32-characters',
+        POMI_ADMIN_BOOTSTRAP_TOKEN:
+          'a-production-bootstrap-token-over-32-characters',
         CORS_ORIGINS: 'https://focus.example',
       })
     ).toMatchObject({ NODE_ENV: 'production' });
@@ -78,6 +82,8 @@ describe('backend environment validation', () => {
         POSTGRES_DB: 'pomi',
         REDIS_PASSWORD: 'redis@pass',
         JWT_SECRET: 'a-production-secret-with-more-than-32-characters',
+        POMI_ADMIN_BOOTSTRAP_TOKEN:
+          'a-production-bootstrap-token-over-32-characters',
         CORS_ORIGINS: 'tauri://localhost',
       })
     ).toMatchObject({
@@ -85,6 +91,45 @@ describe('backend environment validation', () => {
       REDIS_URL: 'redis://:redis%40pass@redis:6379',
       APN_PRODUCTION: false,
     });
+  });
+
+  it('rejects weak production administrator bootstrap tokens', () => {
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: 'production',
+        DATABASE_URL: 'postgres://database.example/pomi',
+        REDIS_URL: 'rediss://redis.example/pomi',
+        JWT_SECRET: 'a-production-secret-with-more-than-32-characters',
+        POMI_ADMIN_BOOTSTRAP_TOKEN: 'too-short',
+        CORS_ORIGINS: 'https://focus.example',
+      })
+    ).toThrow('POMI_ADMIN_BOOTSTRAP_TOKEN must be at least 32 characters');
+  });
+
+  it('does not require an administrator bootstrap token in hosted mode', () => {
+    expect(
+      validateEnvironment({
+        NODE_ENV: 'production',
+        POMI_HOSTING_MODE: 'hosted',
+        DATABASE_URL: 'postgres://database.example/pomi',
+        REDIS_URL: 'rediss://redis.example/pomi',
+        JWT_SECRET: 'a-production-secret-with-more-than-32-characters',
+        CORS_ORIGINS: 'https://focus.example',
+      })
+    ).toMatchObject({ POMI_HOSTING_MODE: 'hosted' });
+  });
+
+  it('normalizes hosted mode casing before validating bootstrap secrets', () => {
+    expect(
+      validateEnvironment({
+        NODE_ENV: 'production',
+        POMI_HOSTING_MODE: 'HOSTED',
+        DATABASE_URL: 'postgres://database.example/pomi',
+        REDIS_URL: 'rediss://redis.example/pomi',
+        JWT_SECRET: 'a-production-secret-with-more-than-32-characters',
+        CORS_ORIGINS: 'https://focus.example',
+      })
+    ).toMatchObject({ POMI_HOSTING_MODE: 'HOSTED' });
   });
 
   it('parses a comma-separated origin allowlist', () => {

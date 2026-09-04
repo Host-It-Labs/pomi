@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../../src/auth/auth.service';
+import { createSessionServiceStub } from './auth-session-test-stubs';
 
 describe('new account password policy', () => {
   it('rejects short passwords before creating an unknown account', async () => {
@@ -18,7 +19,8 @@ describe('new account password policy', () => {
       {
         assertAuthenticationAllowed: vi.fn(),
         assertRegistrationAllowed,
-      } as never
+      } as never,
+      createSessionServiceStub()
     );
 
     await expect(
@@ -45,7 +47,8 @@ describe('new account password policy', () => {
       {
         assertAuthenticationAllowed: vi.fn(),
         assertRegistrationAllowed: vi.fn(),
-      } as never
+      } as never,
+      createSessionServiceStub()
     );
 
     await expect(
@@ -67,7 +70,8 @@ describe('new account password policy', () => {
       {
         assertAuthenticationAllowed: vi.fn(),
         assertRegistrationAllowed: vi.fn(),
-      } as never
+      } as never,
+      createSessionServiceStub()
     );
 
     await expect(
@@ -103,7 +107,8 @@ describe('new account password policy', () => {
       {
         assertAuthenticationAllowed: vi.fn(),
         assertRegistrationAllowed: vi.fn(),
-      } as never
+      } as never,
+      createSessionServiceStub()
     );
 
     const result = await service.authenticateUser(
@@ -141,7 +146,8 @@ describe('new account password policy', () => {
       {
         assertAuthenticationAllowed: vi.fn(),
         assertRegistrationAllowed: vi.fn(),
-      } as never
+      } as never,
+      createSessionServiceStub()
     );
 
     const result = await service.authenticateUser(
@@ -164,7 +170,8 @@ describe('new account password policy', () => {
         {
           assertAuthenticationAllowed: vi.fn(),
           assertRegistrationAllowed: vi.fn(),
-        } as never
+        } as never,
+        createSessionServiceStub()
       );
     const captureError = async (service: AuthService) => {
       try {

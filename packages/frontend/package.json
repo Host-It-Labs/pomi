@@ -42,6 +42,7 @@
     "socket.io-client": "^4.8.3",
     "tailwindcss": "^4.3.3",
     "tauri-plugin-android-battery-optimization-api": "^0.1.0",
+    "tauri-plugin-keyring-api": "0.1.1",
     "uuid": "^14.0.2",
     "zustand": "^5.0.15"
   },

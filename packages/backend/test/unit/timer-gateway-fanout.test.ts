@@ -1,6 +1,7 @@
 import { SOCKET_EVENTS } from '@pomi/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { TimerGateway } from '../../src/timer/timer.gateway';
+import { createSessionServiceStub } from './auth-session-test-stubs';
 
 function eventSource<T>() {
   let subscriber: ((value: T) => void) | null = null;
@@ -53,6 +54,7 @@ function createGateway(currentTimer: object | null = { id: 'timer-1' }) {
       userExists: async () => true,
       hasPushToken: legacyHasPushToken,
     } as never,
+    createSessionServiceStub(),
     { onPreferencesUpdate: preferencesUpdate.source } as never,
     {
       onTasksUpdate: tasksUpdate.source,

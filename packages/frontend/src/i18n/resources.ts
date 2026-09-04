@@ -41,6 +41,11 @@ const english: TranslationCatalog = {
     'Enter the base URL for your hosted Pomi server.',
   'login.urlPlaceholder': 'https://pomi.yourdomain.com',
   'login.invalidUrl': 'Please enter a valid URL',
+  'login.httpsRequired': 'Remote backends must use HTTPS',
+  'login.backendQuarantined':
+    'An unsafe saved backend was removed. Enter its HTTPS origin to reconnect.',
+  'login.bootstrapToken': 'First-admin setup token',
+  'login.bootstrapTokenPlaceholder': 'Enter the server setup token',
   'login.urlSaved': 'Self-hosting URL saved',
   'login.hostedUrlSaved': 'Using hosted service URL',
   'settings.essentials': 'Essentials',

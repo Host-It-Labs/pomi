@@ -68,6 +68,12 @@ export function validateEnvironment(
   const environment = { ...input };
   const nodeEnvironment = readString(environment, 'NODE_ENV') || 'development';
   const jwtSecret = readString(environment, 'JWT_SECRET');
+  const adminBootstrapToken = readString(
+    environment,
+    'POMI_ADMIN_BOOTSTRAP_TOKEN'
+  );
+  const selfHosted =
+    readString(environment, 'POMI_HOSTING_MODE')?.toLowerCase() !== 'hosted';
   const databaseUrl = resolveDatabaseUrl(environment);
   const redisUrl = resolveRedisUrl(environment);
 
@@ -88,6 +94,10 @@ export function validateEnvironment(
     [databaseUrl, 'DATABASE_URL or PostgreSQL connection fields'],
     [redisUrl, 'REDIS_URL or REDIS_PASSWORD'],
     [jwtSecret, 'JWT_SECRET'],
+    [
+      selfHosted ? adminBootstrapToken : 'not-required',
+      'POMI_ADMIN_BOOTSTRAP_TOKEN',
+    ],
     [readString(environment, 'CORS_ORIGINS'), 'CORS_ORIGINS'],
   ]
     .filter(([value]) => !value)
@@ -105,6 +115,12 @@ export function validateEnvironment(
   ) {
     throw new Error(
       'JWT_SECRET must be at least 32 characters and must not use a documented default'
+    );
+  }
+
+  if (selfHosted && (!adminBootstrapToken || adminBootstrapToken.length < 32)) {
+    throw new Error(
+      'POMI_ADMIN_BOOTSTRAP_TOKEN must be at least 32 characters'
     );
   }
 

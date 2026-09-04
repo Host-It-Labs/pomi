@@ -19,6 +19,7 @@ const hasInfrastructure = Boolean(
 );
 const USER_PREFIX = 'vitest_watch_contract_';
 const PASSWORD = 'vitest-password';
+const ADMIN_BOOTSTRAP_TOKEN = 'pomi-development-admin-bootstrap-token';
 
 type Auth = { token: string; userId: string };
 type TimerAction =
@@ -59,7 +60,11 @@ describe.runIf(hasInfrastructure)('Watch HTTP integration', () => {
   async function createSession(name: string): Promise<Auth> {
     const response = await request(app.getHttpServer())
       .post('/sessions')
-      .send({ username: `${USER_PREFIX}${name}`, password: PASSWORD });
+      .send({
+        username: `${USER_PREFIX}${name}`,
+        password: PASSWORD,
+        bootstrapToken: ADMIN_BOOTSTRAP_TOKEN,
+      });
     expect(response.status).toBe(200);
     return { token: response.body.token, userId: response.body.user.id };
   }
@@ -278,9 +283,12 @@ describe.runIf(hasInfrastructure)('Watch HTTP integration', () => {
 
   it('persists a new account language and keeps it authoritative on login', async () => {
     const username = `${USER_PREFIX}language`;
-    const created = await request(app.getHttpServer())
-      .post('/sessions')
-      .send({ username, password: PASSWORD, language: 'fr' });
+    const created = await request(app.getHttpServer()).post('/sessions').send({
+      username,
+      password: PASSWORD,
+      language: 'fr',
+      bootstrapToken: ADMIN_BOOTSTRAP_TOKEN,
+    });
     expect(created.status).toBe(200);
     expect(created.body).toMatchObject({ language: 'fr', isNewUser: true });
 

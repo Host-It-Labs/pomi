@@ -1,6 +1,7 @@
 import * as bcrypt from 'bcrypt';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../../src/auth/auth.service';
+import { createSessionServiceStub } from './auth-session-test-stubs';
 
 describe('AuthService account language', () => {
   it('persists the requested language for a newly created account', async () => {
@@ -33,7 +34,8 @@ describe('AuthService account language', () => {
       {
         assertAuthenticationAllowed: vi.fn(),
         assertRegistrationAllowed: vi.fn(),
-      } as never
+      } as never,
+      createSessionServiceStub()
     );
 
     const result = await service.authenticateUser(
@@ -73,7 +75,8 @@ describe('AuthService account language', () => {
       {
         assertAuthenticationAllowed: vi.fn(),
         assertRegistrationAllowed: vi.fn(),
-      } as never
+      } as never,
+      createSessionServiceStub()
     );
 
     const result = await service.authenticateUser(

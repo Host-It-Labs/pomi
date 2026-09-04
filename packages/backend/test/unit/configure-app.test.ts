@@ -23,6 +23,7 @@ describe('configureHttpApp', () => {
     expect(app.use.mock.calls[1][0]).toBe('/assistant');
     expect(app.set).toHaveBeenCalledWith('trust proxy', expect.any(Number));
     expect(app.enableCors).toHaveBeenCalledWith({
+      credentials: true,
       origin: expect.any(Function),
     });
     expect(app.useGlobalPipes).toHaveBeenCalledWith(expect.any(ValidationPipe));

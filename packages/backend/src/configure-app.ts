@@ -57,6 +57,7 @@ export function configureHttpApp(app: NestExpressApplication): void {
   app.use(urlencoded({ extended: true, limit: '2mb' }));
   app.set('trust proxy', getTrustedProxyHops());
   app.enableCors({
+    credentials: true,
     origin: (origin, callback) => {
       try {
         callback(null, isCorsOriginAllowed(origin));

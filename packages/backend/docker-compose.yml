@@ -40,10 +40,12 @@ services:
       REDIS_PORT: '6379'
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
 
-      # Generate JWT_SECRET with `openssl rand -hex 32`. Changing it signs every
-      # user out. CORS_ORIGINS is a comma-separated list of exact origins, with
-      # no paths or trailing slashes; add the web app origin when applicable.
+      # Generate JWT_SECRET and POMI_ADMIN_BOOTSTRAP_TOKEN separately with
+      # `openssl rand -hex 32`. CORS_ORIGINS is a comma-separated list of exact
+      # origins, with no paths or trailing slashes.
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      POMI_ADMIN_BOOTSTRAP_TOKEN: ${POMI_ADMIN_BOOTSTRAP_TOKEN:?Set POMI_ADMIN_BOOTSTRAP_TOKEN}
+      POMI_LEGACY_JWT_MIGRATION_UNTIL: ${POMI_LEGACY_JWT_MIGRATION_UNTIL:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-tauri://localhost,http://tauri.localhost,https://tauri.localhost}
 
       # Optional integrations remain disabled when their values are blank.

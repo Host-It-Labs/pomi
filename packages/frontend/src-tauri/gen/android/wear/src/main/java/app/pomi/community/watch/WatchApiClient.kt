@@ -23,6 +23,7 @@ data class WatchActionLifecycle(
 
 data class WatchLoginResult(
     val token: String,
+    val refreshToken: String?,
     val language: String?
 )
 
@@ -31,7 +32,7 @@ class WatchApiClient(private val sessionStore: WatchSessionStore) {
         get() = sessionStore.accountKey
 
     fun login(backendUrl: String, username: String, password: String): WatchLoginResult {
-        val baseUrl = WatchSessionStore.normalizeBackendUrl(backendUrl)
+        val baseUrl = sessionStore.normalizeBackendUrl(backendUrl)
         val response = try {
             request(
                 baseUrl = baseUrl,
@@ -55,6 +56,7 @@ class WatchApiClient(private val sessionStore: WatchSessionStore) {
         val result = JSONObject(response)
         return WatchLoginResult(
             token = result.getString("token"),
+            refreshToken = result.optString("refreshToken").ifBlank { null },
             language = result.optString("language").ifBlank { null }
         )
     }
@@ -62,6 +64,7 @@ class WatchApiClient(private val sessionStore: WatchSessionStore) {
     private fun loginBody(username: String, password: String): String = JSONObject()
         .put("username", username)
         .put("password", password)
+        .put("platform", "android")
         // The backend uses this only for new accounts; existing accounts
         // return their authoritative preference in the response.
         .put("language", sessionStore.languageTag)
@@ -230,6 +233,48 @@ class WatchApiClient(private val sessionStore: WatchSessionStore) {
         connectTimeoutMs: Int = 15000,
         baseUrl: String = requireNotNull(sessionStore.backendUrl) { "Missing backend URL" }
     ): String {
+        val authenticating = path == "/sessions"
+        val effectiveToken = when {
+            authenticating -> token
+            sessionStore.hasLegacyAccessToken -> migrateLegacySession(baseUrl)
+            !token.isNullOrBlank() -> token
+            else -> refreshAccessToken(baseUrl, false)
+        }
+
+        return try {
+            executeRequest(
+                baseUrl,
+                path,
+                method,
+                effectiveToken,
+                body,
+                readTimeoutMs,
+                connectTimeoutMs
+            )
+        } catch (error: WatchApiException) {
+            if (authenticating || error.code != 401) throw error
+            sessionStore.clearAccessToken()
+            executeRequest(
+                baseUrl,
+                path,
+                method,
+                refreshAccessToken(baseUrl, true),
+                body,
+                readTimeoutMs,
+                connectTimeoutMs
+            )
+        }
+    }
+
+    private fun executeRequest(
+        baseUrl: String,
+        path: String,
+        method: String,
+        token: String?,
+        body: String?,
+        readTimeoutMs: Int,
+        connectTimeoutMs: Int
+    ): String {
         val connection = URL("$baseUrl$path").openConnection() as HttpURLConnection
         connection.requestMethod = method
         connection.connectTimeout = connectTimeoutMs
@@ -254,6 +299,62 @@ class WatchApiClient(private val sessionStore: WatchSessionStore) {
             throw WatchApiException(code, parseErrorMessage(text, code))
         }
         return text
+    }
+
+    private fun refreshAccessToken(baseUrl: String, force: Boolean): String {
+        synchronized(SESSION_REFRESH_LOCK) {
+            if (!force) sessionStore.token?.let { return it }
+            val refreshToken = sessionStore.refreshToken
+                ?: throw WatchApiException(401, "Session expired")
+            val response = executeRequest(
+                baseUrl,
+                "/sessions/refresh",
+                "POST",
+                null,
+                JSONObject()
+                    .put("platform", "android")
+                    .put("refreshToken", refreshToken)
+                    .toString(),
+                30_000,
+                15_000
+            )
+            val session = JSONObject(response)
+            val token = session.getString("token")
+            sessionStore.saveRotatedSession(
+                token,
+                session.getString("refreshToken")
+            )
+            return token
+        }
+    }
+
+    private fun migrateLegacySession(baseUrl: String): String {
+        synchronized(SESSION_REFRESH_LOCK) {
+            if (!sessionStore.hasLegacyAccessToken) {
+                return sessionStore.token ?: refreshAccessToken(baseUrl, false)
+            }
+            val legacyToken = requireNotNull(sessionStore.token)
+            return try {
+                val response = executeRequest(
+                    baseUrl,
+                    "/sessions/migrate",
+                    "POST",
+                    legacyToken,
+                    JSONObject().put("platform", "android").toString(),
+                    30_000,
+                    15_000
+                )
+                val session = JSONObject(response)
+                val token = session.getString("token")
+                sessionStore.saveRotatedSession(
+                    token,
+                    session.getString("refreshToken")
+                )
+                token
+            } catch (error: WatchApiException) {
+                if (error.code == 404) legacyToken else throw error
+            }
+        }
     }
 
     private fun readResponse(connection: HttpURLConnection, code: Int): String {
@@ -290,6 +391,7 @@ class WatchApiClient(private val sessionStore: WatchSessionStore) {
     )
 
     private companion object {
+        val SESSION_REFRESH_LOCK = Any()
         const val GATEWAY_RECEIPT_TIMEOUT_MS = 5_000
         const val GATEWAY_CONNECT_TIMEOUT_MS = 5_000
     }
