@@ -7,6 +7,7 @@ import {
   DEFAULT_POLL_INTERVAL_MS,
   DEFAULT_TIMEOUT_MS,
   evaluatePullRequestReadiness,
+  flattenReactionPages,
   unprocessedReviewThreads,
   waitForPullRequestReadiness,
 } from './pr-readiness.mjs';
@@ -84,6 +85,19 @@ test('accepts the Codex no-findings thumbs-up outcome', async () => {
     isAncestor: async () => false,
   });
   assert.equal(review.status, 'ready');
+});
+
+test('combines every paginated reaction page', () => {
+  assert.deepEqual(
+    flattenReactionPages([
+      [{ id: 1, content: '+1' }],
+      [{ id: 2, content: 'eyes' }],
+    ]),
+    [
+      { id: 1, content: '+1' },
+      { id: 2, content: 'eyes' },
+    ]
+  );
 });
 
 test('rejects a Codex review unrelated to the current head', async () => {

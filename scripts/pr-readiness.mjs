@@ -62,6 +62,10 @@ export function unprocessedReviewThreads(threads) {
   });
 }
 
+export function flattenReactionPages(pages) {
+  return array(pages).flatMap(page => array(page));
+}
+
 function checkName(check, index) {
   return String(check?.name || check?.context || `check ${index + 1}`);
 }
@@ -358,7 +362,7 @@ export async function loadPullRequestSnapshot({
   const reviewThreads =
     reviewResponse?.data?.repository?.pullRequest?.reviewThreads;
   validateReviewPagination(reviewThreads);
-  const reactions = parseJson(
+  const reactionPages = parseJson(
     run(
       'gh',
       [
@@ -366,13 +370,12 @@ export async function loadPullRequestSnapshot({
         `repos/${repository}/issues/${pullRequest.number}/reactions`,
         '--paginate',
         '--slurp',
-        '--jq',
-        'add',
       ],
       root
     ).output,
     'GitHub pull-request reactions query'
   );
+  const reactions = flattenReactionPages(reactionPages);
   return { pullRequest, reviewThreads: reviewThreads.nodes, reactions, local };
 }
 
