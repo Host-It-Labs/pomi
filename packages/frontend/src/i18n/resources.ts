@@ -524,6 +524,7 @@ const english: TranslationCatalog = {
   'task.filterOpenList': 'Filter Tasks or open a List',
   'task.loading': 'Loading tasks...',
   'task.loadingArchived': 'Loading archived Tasks...',
+  'task.loadMore': 'Load more',
   'task.noArchived': 'No archived Tasks',
   'task.resetAutomaticOrder': 'Reset to automatic order',
   'task.resetAutomaticOrderFor': 'Reset {{title}} to automatic order',

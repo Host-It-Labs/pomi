@@ -190,6 +190,10 @@ export function Tasks() {
   const [isArchiveOpen, setIsArchiveOpen] = useState(false);
   const [archivedTasks, setArchivedTasks] = useState<Task[]>([]);
   const [isArchiveLoading, setIsArchiveLoading] = useState(false);
+  const [isArchiveLoadingMore, setIsArchiveLoadingMore] = useState(false);
+  const [archiveNextCursor, setArchiveNextCursor] = useState<string | null>(
+    null
+  );
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [restoringTaskId, setRestoringTaskId] = useState<string | null>(null);
   const [descriptionTask, setDescriptionTask] = useState<Task | null>(null);
@@ -708,30 +712,66 @@ export function Tasks() {
     await loadLists();
   }, [loadLists, selectedList, t]);
 
-  const loadTaskArchive = useCallback(async () => {
-    setIsArchiveLoading(true);
-    try {
-      const [archivedResponse, completedResponse] = await Promise.all([
-        apiClient.tasks.list({ query: { status: TASK_STATUSES.ARCHIVED } }),
-        apiClient.tasks.list({ query: { status: TASK_STATUSES.COMPLETED } }),
-      ]);
-
-      if (archivedResponse.status !== 200 || completedResponse.status !== 200) {
-        setArchiveError(t('task.archiveLoadFailed'));
-        return;
+  const loadTaskArchive = useCallback(
+    async (cursor?: string) => {
+      if (cursor) {
+        setIsArchiveLoadingMore(true);
+      } else {
+        setIsArchiveLoading(true);
+        setArchivedTasks([]);
+        setArchiveNextCursor(null);
       }
+      try {
+        const pageResponse = await apiClient.tasks.archive({
+          query: { limit: 50, ...(cursor ? { cursor } : {}) },
+        });
+        if (pageResponse.status === 200) {
+          setArchivedTasks(current => {
+            const combined = cursor
+              ? [...current, ...pageResponse.body.items]
+              : pageResponse.body.items;
+            return [...new Map(combined.map(task => [task.id, task])).values()];
+          });
+          setArchiveNextCursor(pageResponse.body.nextCursor);
+          setArchiveError(null);
+          return;
+        }
 
-      setArchivedTasks(
-        [...archivedResponse.body, ...completedResponse.body].sort(
-          (a, b) =>
-            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        )
-      );
-      setArchiveError(null);
-    } finally {
-      setIsArchiveLoading(false);
-    }
-  }, [t]);
+        if (cursor || Number(pageResponse.status) !== 404) {
+          setArchiveError(t('task.archiveLoadFailed'));
+          return;
+        }
+
+        const [archivedResponse, completedResponse] = await Promise.all([
+          apiClient.tasks.list({ query: { status: TASK_STATUSES.ARCHIVED } }),
+          apiClient.tasks.list({ query: { status: TASK_STATUSES.COMPLETED } }),
+        ]);
+
+        if (
+          archivedResponse.status !== 200 ||
+          completedResponse.status !== 200
+        ) {
+          setArchiveError(t('task.archiveLoadFailed'));
+          return;
+        }
+
+        setArchivedTasks(
+          [...archivedResponse.body, ...completedResponse.body].sort(
+            (a, b) =>
+              new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+          )
+        );
+        setArchiveNextCursor(null);
+        setArchiveError(null);
+      } catch {
+        setArchiveError(t('task.archiveLoadFailed'));
+      } finally {
+        setIsArchiveLoading(false);
+        setIsArchiveLoadingMore(false);
+      }
+    },
+    [t]
+  );
 
   useEffect(() => {
     if (isArchiveOpen) {
@@ -1403,10 +1443,17 @@ export function Tasks() {
           isOpen={isArchiveOpen}
           tasks={archivedTasks}
           isLoading={isArchiveLoading}
+          isLoadingMore={isArchiveLoadingMore}
+          hasMore={archiveNextCursor !== null}
           error={archiveError}
           restoringTaskId={restoringTaskId}
           onClose={() => setIsArchiveOpen(false)}
           onRestore={restoreArchivedTask}
+          onLoadMore={() => {
+            if (archiveNextCursor) {
+              void loadTaskArchive(archiveNextCursor);
+            }
+          }}
         />
         <ListItemEditModal
           item={editingListItem}
@@ -1908,18 +1955,24 @@ function TaskArchiveModal({
   isOpen,
   tasks,
   isLoading,
+  isLoadingMore,
+  hasMore,
   error,
   restoringTaskId,
   onClose,
   onRestore,
+  onLoadMore,
 }: {
   isOpen: boolean;
   tasks: Task[];
   isLoading: boolean;
+  isLoadingMore: boolean;
+  hasMore: boolean;
   error: string | null;
   restoringTaskId: string | null;
   onClose: () => void;
   onRestore: (task: Task) => void;
+  onLoadMore: () => void;
 }) {
   const { t } = useI18n();
   return (
@@ -1942,41 +1995,55 @@ function TaskArchiveModal({
             {t('task.noArchived')}
           </div>
         ) : (
-          tasks.map(task => (
-            <div
-              key={task.id}
-              data-testid="task-archive-row"
-              data-task-title={task.title}
-              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-slate-800/70 bg-slate-950/25 px-3 py-2"
-            >
-              <div className="min-w-0">
-                {task.followUpParent && (
-                  <TaskFollowUpContext
-                    parentTitle={task.followUpParent.title}
-                  />
-                )}
-                <div className="truncate text-xs font-medium text-slate-200">
-                  {task.title}
-                </div>
-                <div className="mt-0.5 flex flex-wrap gap-1.5 text-[11px] capitalize text-slate-500">
-                  <span>{t(`common.${task.status}`)}</span>
-                  <span>{t(`common.${task.priority}`)}</span>
-                  <TaskTimerTypeBadge timerType={task.timerType} />
-                </div>
-              </div>
-              <Button
-                size="xs"
-                variant="secondary"
-                onClick={() => onRestore(task)}
-                isLoading={restoringTaskId === task.id}
-                loadingText={t('common.loading')}
-                className="h-7 gap-1.5 px-2 text-[11px]"
+          <>
+            {tasks.map(task => (
+              <div
+                key={task.id}
+                data-testid="task-archive-row"
+                data-task-title={task.title}
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-slate-800/70 bg-slate-950/25 px-3 py-2"
               >
-                <FaUndo size={10} />
-                {t('common.restore')}
+                <div className="min-w-0">
+                  {task.followUpParent && (
+                    <TaskFollowUpContext
+                      parentTitle={task.followUpParent.title}
+                    />
+                  )}
+                  <div className="truncate text-xs font-medium text-slate-200">
+                    {task.title}
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap gap-1.5 text-[11px] capitalize text-slate-500">
+                    <span>{t(`common.${task.status}`)}</span>
+                    <span>{t(`common.${task.priority}`)}</span>
+                    <TaskTimerTypeBadge timerType={task.timerType} />
+                  </div>
+                </div>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  onClick={() => onRestore(task)}
+                  isLoading={restoringTaskId === task.id}
+                  loadingText={t('common.loading')}
+                  className="h-7 gap-1.5 px-2 text-[11px]"
+                >
+                  <FaUndo size={10} />
+                  {t('common.restore')}
+                </Button>
+              </div>
+            ))}
+            {hasMore && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={onLoadMore}
+                isLoading={isLoadingMore}
+                loadingText={t('common.loading')}
+                className="w-full"
+              >
+                {t('task.loadMore')}
               </Button>
-            </div>
-          ))
+            )}
+          </>
         )}
       </div>
     </Modal>

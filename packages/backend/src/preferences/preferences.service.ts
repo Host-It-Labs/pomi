@@ -11,6 +11,7 @@ import { Subject } from 'rxjs';
 import { Repository } from 'typeorm';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { Preferences } from './preferences.entity';
+import { PreferencesStore } from './preferences.store';
 
 const DEFAULT_PREFERENCES = {
   language: DEFAULT_APP_LANGUAGE,
@@ -91,11 +92,24 @@ export class PreferencesService {
   constructor(
     @InjectRepository(Preferences)
     private preferencesRepository: Repository<Preferences>,
+    private readonly preferencesStore: PreferencesStore,
     @Inject(forwardRef(() => TimerService))
     private timerService?: TimerService
   ) {}
 
   async getPreferences(
+    userId: string,
+    initialLanguage?: AppLanguage
+  ): Promise<Preferences> {
+    const preferences = await this.preferencesStore.getOrLoad(
+      userId,
+      () => this.loadPreferences(userId, initialLanguage),
+      initialLanguage !== undefined
+    );
+    return this.applyDefaultPreferences(preferences);
+  }
+
+  private async loadPreferences(
     userId: string,
     initialLanguage?: AppLanguage
   ): Promise<Preferences> {
@@ -150,8 +164,12 @@ export class PreferencesService {
 
     Object.assign(preferences, nextUpdates);
 
-    const savedPreferences = this.applyDefaultPreferences(
-      await this.preferencesRepository.save(preferences)
+    const savedPreferences = await this.preferencesStore.writeThrough(
+      userId,
+      async () =>
+        this.applyDefaultPreferences(
+          await this.preferencesRepository.save(preferences)
+        )
     );
     this.onPreferencesUpdate.next({ userId, preferences: savedPreferences });
 
@@ -174,6 +192,10 @@ export class PreferencesService {
     }
 
     return savedPreferences;
+  }
+
+  async invalidateCache(userId: string): Promise<void> {
+    await this.preferencesStore.invalidate(userId);
   }
 
   private applyDefaultPreferences(preferences: Preferences): Preferences {

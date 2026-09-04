@@ -28,6 +28,7 @@ import { Intention } from '../intentions/intentions.entity';
 import { ListEntity } from '../lists/lists.entity';
 import { VacationEntity } from '../vacation/vacation.entity';
 import { Preferences } from '../preferences/preferences.entity';
+import { PreferencesService } from '../preferences/preferences.service';
 import { RealtimeEvents } from '../realtime/realtime-events';
 import { Statistic } from '../statistics/statistics.entity';
 import { TimerStore, TimerUserDataSnapshot } from '../timer/timer-store';
@@ -57,7 +58,8 @@ export class UserDataTransferService {
     @InjectDataSource()
     private readonly dataSource: DataSource,
     private readonly timerStore: TimerStore,
-    private readonly realtimeEvents: RealtimeEvents
+    private readonly realtimeEvents: RealtimeEvents,
+    private readonly preferencesService: PreferencesService
   ) {}
 
   async exportUserData(userId: string): Promise<UserDataExport> {
@@ -247,6 +249,8 @@ export class UserDataTransferService {
         )
       );
     });
+
+    await this.preferencesService.invalidateCache(userId);
 
     await this.timerStore.importUserData(
       userId,

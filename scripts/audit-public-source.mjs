@@ -101,6 +101,7 @@ const textExtensions = new Set([
 ]);
 const reviewedTextFiles = new Set([
   'patches/@anatine__zod-openapi@1.14.2.patch',
+  'patches/@ts-rest__open-api@3.52.1.patch',
 ]);
 
 const failures = [];

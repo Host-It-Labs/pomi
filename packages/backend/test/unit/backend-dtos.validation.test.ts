@@ -45,6 +45,7 @@ import { UpdateWorkTimerLogDto } from '../../src/statistics/dto/update-work-time
 import { WorkTimerLogParamDto } from '../../src/statistics/dto/work-timer-log-param.dto';
 import { WorkTimerLogsQueryDto } from '../../src/statistics/dto/work-timer-logs-query.dto';
 import { CreateTaskDto } from '../../src/tasks/dto/create-task.dto';
+import { TaskArchiveQueryDto } from '../../src/tasks/dto/task-archive-query.dto';
 import {
   ReorderTaskDto,
   ReorderTasksDto,
@@ -161,6 +162,12 @@ describe('backend scalar and parameter DTO validation', () => {
       valid: { status: TASK_STATUSES.ACTIVE },
       invalid: { status: 'waiting' },
       property: 'status',
+    },
+    {
+      Dto: TaskArchiveQueryDto,
+      valid: { limit: '50', cursor: 'next-page' },
+      invalid: { limit: '101', cursor: '' },
+      property: 'limit',
     },
     {
       Dto: AssistantModelsQueryDto,

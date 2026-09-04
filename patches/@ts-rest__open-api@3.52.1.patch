@@ -1,0 +1,32 @@
+diff --git a/index.cjs.js b/index.cjs.js
+--- a/index.cjs.js
++++ b/index.cjs.js
+@@ -6 +6 @@ var core = require('@ts-rest/core');
+-var zodOpenapi = require('@anatine/zod-openapi');
++var zod = require('zod/v4');
+@@ -31 +31,5 @@ const generateSchema = (zodType, useOutput) => {
+-    return zodOpenapi.generateSchema(zodType, useOutput);
++    return zod.z.toJSONSchema(zodType, {
++        target: 'openapi-3.0',
++        io: useOutput ? 'output' : 'input',
++        unrepresentable: 'any',
++    });
+@@ -95 +99 @@ const generateOpenApi = (router, apiDoc, options = {}) => {
+-            return obj._def.typeName === 'ZodObject';
++            return obj._def.typeName === 'ZodObject' || obj._def.type === 'object';
+diff --git a/index.esm.mjs b/index.esm.mjs
+--- a/index.esm.mjs
++++ b/index.esm.mjs
+@@ -2 +2 @@ import { isZodType, isAppRoute, isZodObject, extractZodObjectShape } from '@ts-
+-import { generateSchema } from '@anatine/zod-openapi';
++import { z } from 'zod/v4';
+@@ -27 +27,5 @@ const generateSchema = (zodType, useOutput) => {
+-    return generateSchema(zodType, useOutput);
++    return z.toJSONSchema(zodType, {
++        target: 'openapi-3.0',
++        io: useOutput ? 'output' : 'input',
++        unrepresentable: 'any',
++    });
+@@ -91 +95 @@ const generateOpenApi = (router, apiDoc, options = {}) => {
+-            return obj._def.typeName === 'ZodObject';
++            return obj._def.typeName === 'ZodObject' || obj._def.type === 'object';

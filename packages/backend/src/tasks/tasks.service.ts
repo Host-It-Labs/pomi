@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { isUUID } from 'class-validator';
 import {
   TASK_CREATION_SOURCES,
   TASK_FOLLOW_UP_DELAY_MAX_DAYS,
@@ -88,6 +89,7 @@ type TaskStatisticsPeriodKey =
   | 'previousYear';
 type TaskStatisticsPeriodRange = { start: Date; end?: Date };
 type TaskStatisticsPeriodCounts = Record<TaskStatisticsPeriodKey, number>;
+type TaskArchiveCursor = { updatedAt: string; id: string };
 
 type ImportTaskRow = {
   sourceId: string;
@@ -437,6 +439,83 @@ export class TasksService {
       tasks.splice(position, 0, task);
     });
     return tasks.slice(0, limit);
+  }
+
+  async getTaskArchivePage(userId: string, limit: number, cursor?: string) {
+    const query = this.tasksRepository
+      .createQueryBuilder('task')
+      .where('task.userId = :userId', { userId })
+      .andWhere('task.status IN (:...statuses)', {
+        statuses: [TASK_STATUSES.COMPLETED, TASK_STATUSES.ARCHIVED],
+      })
+      .andWhere('task.itemKind IN (:...itemKinds)', {
+        itemKinds: ['task', 'followUp'],
+      })
+      .orderBy('task.updatedAt', 'DESC')
+      .addOrderBy('task.id', 'DESC')
+      .addSelect(
+        `to_char(task.updatedAt, 'YYYY-MM-DD"T"HH24:MI:SS.US')`,
+        'taskArchiveUpdatedAt'
+      )
+      .take(limit + 1);
+
+    if (cursor) {
+      const decoded = this.decodeTaskArchiveCursor(cursor);
+      query.andWhere(
+        '(task.updatedAt < :updatedAt OR (task.updatedAt = :updatedAt AND task.id < :id))',
+        decoded
+      );
+    }
+
+    const { entities: tasks, raw } = await query.getRawAndEntities();
+    const hasNextPage = tasks.length > limit;
+    const items = hasNextPage ? tasks.slice(0, limit) : tasks;
+    await this.attachFollowUpParents(userId, items, this.tasksRepository);
+    const lastTask = items[items.length - 1];
+    const lastRaw = raw[items.length - 1] as
+      { taskArchiveUpdatedAt?: unknown } | undefined;
+    return {
+      items,
+      nextCursor:
+        hasNextPage &&
+        lastTask &&
+        typeof lastRaw?.taskArchiveUpdatedAt === 'string'
+          ? this.encodeTaskArchiveCursor(
+              lastRaw.taskArchiveUpdatedAt,
+              lastTask.id
+            )
+          : null,
+    };
+  }
+
+  private encodeTaskArchiveCursor(updatedAt: string, id: string): string {
+    return Buffer.from(
+      JSON.stringify({
+        updatedAt,
+        id,
+      } satisfies TaskArchiveCursor)
+    ).toString('base64url');
+  }
+
+  private decodeTaskArchiveCursor(cursor: string): TaskArchiveCursor {
+    try {
+      const value = JSON.parse(
+        Buffer.from(cursor, 'base64url').toString('utf8')
+      ) as Partial<TaskArchiveCursor>;
+      const updatedAt = value.updatedAt;
+      if (
+        typeof value.id !== 'string' ||
+        !isUUID(value.id) ||
+        typeof updatedAt !== 'string' ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}$/.test(updatedAt) ||
+        !Number.isFinite(new Date(`${updatedAt.slice(0, 23)}Z`).getTime())
+      ) {
+        throw new Error('Invalid archive cursor');
+      }
+      return { updatedAt, id: value.id };
+    } catch {
+      throw new BadRequestException('Invalid task archive cursor');
+    }
   }
 
   private async attachFollowUpParents(

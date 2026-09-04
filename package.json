@@ -53,6 +53,7 @@
     "test:coverage": "pnpm test:business",
     "test:ci": "pnpm -r run build && pnpm lint && pnpm test:native && pnpm test:business && pnpm test:public-snapshot",
     "test:stress": "node ./scripts/stress-non-e2e.mjs",
+    "benchmark:zod-validation": "node ./scripts/benchmark-zod-validation.mjs",
     "test:e2e": "./scripts/run-e2e.sh",
     "test:e2e:stress": "CI=1 POMI_E2E_ADMIN_REPEAT_COUNT=10 PLAYWRIGHT_CI_WORKERS=7 PLAYWRIGHT_FULLY_PARALLEL=1 ./scripts/run-e2e.sh --repeat-each=10",
     "test:e2e:stress:serial": "CI=1 POMI_E2E_ADMIN_REPEAT_COUNT=3 PLAYWRIGHT_CI_WORKERS=1 PLAYWRIGHT_FULLY_PARALLEL=0 ./scripts/run-e2e.sh --workers=1 --repeat-each=3",

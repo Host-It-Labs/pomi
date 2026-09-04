@@ -1,6 +1,9 @@
 import { Controller } from '@nestjs/common';
 import { apiContract } from '@pomi/shared';
-import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
+import {
+  TsRestHandler,
+  tsRestHandler,
+} from '../validation/ts-rest-zod4.adapter';
 import { NotificationService } from './notifications.service';
 
 @Controller()

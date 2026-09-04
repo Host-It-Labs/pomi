@@ -4,12 +4,13 @@ import { useAuthStore } from '../stores/authStore';
 import { requestBackendConnectionRecovery } from './backendConnectionRecovery';
 import { getBackendOrigin } from './backendUrl';
 import { startServerResponseWatch } from './serverResponseMonitor';
+import type { TsRestZod4Client } from './tsRestZod4Client';
 
 export const baseUrl = () => {
   return getBackendOrigin();
 };
 
-const rawClient = initClient(apiContract, {
+const rawClient = initClient(apiContract as never, {
   baseUrl: baseUrl(),
   baseHeaders: {
     'Content-Type': 'application/json',
@@ -20,7 +21,7 @@ const rawClient = initClient(apiContract, {
   },
   credentials: 'include',
   validateResponse: true,
-});
+}) as unknown as TsRestZod4Client<typeof apiContract>;
 
 const responseStatus = (response: unknown): number | null =>
   response && typeof response === 'object' && 'status' in response
@@ -91,6 +92,7 @@ const READ_RECOVERY_ROUTES = new Set([
   'statistics.topIntentions',
   'system.get',
   'tasks.importStatus',
+  'tasks.archive',
   'tasks.list',
   'tasks.logs',
   'tasks.statistics',

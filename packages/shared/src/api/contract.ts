@@ -1,5 +1,5 @@
 import { initContract } from '@ts-rest/core';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import {
   ASSISTANT_MAX_RECORDING_MINUTES,
   APP_LANGUAGE_VALUES,
@@ -19,6 +19,10 @@ import {
 } from '../constants';
 
 const c = initContract();
+
+const router = <const Router extends Record<string, unknown>>(
+  routes: Router
+): Router => c.router(routes as never) as unknown as Router;
 
 const platformSchema = z.enum([
   'android',
@@ -86,7 +90,7 @@ const systemInfoSchema = z.object({
   requiresAdminBootstrapToken: z.boolean(),
 });
 
-const userDataTransferRowSchema = z.record(z.unknown());
+const userDataTransferRowSchema = z.record(z.string(), z.unknown());
 const userDataTimerRuntimeSchema = z.object({
   currentTimer: userDataTransferRowSchema.nullable(),
   sessionState: userDataTransferRowSchema.nullable(),
@@ -325,7 +329,7 @@ const workTimerLogSchema = z.object({
         .optional(),
     })
   ),
-  subIntentions: z.record(z.string()).optional(),
+  subIntentions: z.record(z.string(), z.string()).optional(),
   duration: z.number().int(),
   completedAt: z.number().int(),
   date: z.string(),
@@ -828,13 +832,13 @@ const assistantDebugProcessedOutputSchema = z.object({
       action: z.enum(['startTimer', 'pauseTimer', 'addFiveMinutes', 'none']),
       timerType: timerTypeSchema.optional(),
       intentionSlugs: z.array(z.string()),
-      subIntentions: z.record(z.string()),
+      subIntentions: z.record(z.string(), z.string()),
     })
     .optional(),
 });
 
 const assistantDebugModelCallAttemptSchema = z.object({
-  request: z.record(z.unknown()),
+  request: z.record(z.string(), z.unknown()),
   status: z.number().int().nullable(),
   response: z.any(),
   error: z.string().nullable(),
@@ -844,7 +848,7 @@ const assistantDebugModelCallSchema = z.object({
   provider: z.literal('openrouter'),
   endpoint: z.string().url(),
   stage: z.enum(['transcription', 'initial', 'repair', 'review']),
-  request: z.record(z.unknown()),
+  request: z.record(z.string(), z.unknown()),
   attempts: z.array(assistantDebugModelCallAttemptSchema),
   response: z.any(),
   content: z.string().nullable(),
@@ -1019,7 +1023,7 @@ const workTimerLogsQuerySchema = z.object({
 const workTimerLogUpdateSchema = z.object({
   intention: z.string().nullable().optional(),
   intentions: z.array(z.string()).optional(),
-  subIntentions: z.record(z.string()).optional(),
+  subIntentions: z.record(z.string(), z.string()).optional(),
   duration: z
     .number()
     .int()
@@ -1029,8 +1033,8 @@ const workTimerLogUpdateSchema = z.object({
 
 const todayIntentionsSchema = z.object({
   count: z.number().int(),
-  bySlug: z.record(z.number().int()),
-  subBySlug: z.record(z.number().int()).optional(),
+  bySlug: z.record(z.string(), z.number().int()),
+  subBySlug: z.record(z.string(), z.number().int()).optional(),
 });
 
 const notificationProviderSchema = z.object({
@@ -1079,7 +1083,7 @@ const userActionSchema = z
       timerType: timerTypeSchema.optional(),
       intention: z.string().optional(),
       intentions: z.array(z.string()).optional(),
-      subIntentions: z.record(z.string()).optional(),
+      subIntentions: z.record(z.string(), z.string()).optional(),
       focusedTaskId: z.string().optional(),
       customDuration: z.number().int().min(1).nullable().optional(),
       taskId: z.string().optional(),
@@ -1198,18 +1202,18 @@ const userActionSchema = z
         'updateDebugLogFlag',
         'clearDebugLogs',
       ]),
-      payload: z.record(z.unknown()).optional(),
+      payload: z.record(z.string(), z.unknown()).optional(),
     }),
     z.object({
       kind: z.literal('workTimerLog'),
       operation: z.enum(['update', 'delete']),
       logId: z.string(),
-      payload: z.record(z.unknown()).optional(),
+      payload: z.record(z.string(), z.unknown()).optional(),
     }),
     z.object({
       kind: z.literal('system'),
       operation: z.literal('importUserData'),
-      payload: z.record(z.unknown()),
+      payload: z.record(z.string(), z.unknown()),
     }),
     z.object({
       kind: z.literal('notifications'),
@@ -1509,8 +1513,8 @@ const pushTokenUpdateSchema = z.discriminatedUnion('platform', [
   }),
 ]);
 
-export const apiContract = c.router({
-  userActions: c.router({
+export const apiContract = router({
+  userActions: router({
     submit: {
       method: 'POST',
       path: '/user-actions',
@@ -1547,7 +1551,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  watch: c.router({
+  watch: router({
     status: {
       method: 'GET',
       path: '/watch/status',
@@ -1569,7 +1573,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  sessions: c.router({
+  sessions: router({
     create: {
       method: 'POST',
       path: '/sessions',
@@ -1612,7 +1616,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  system: c.router({
+  system: router({
     get: {
       method: 'GET',
       path: '/system',
@@ -1651,7 +1655,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  preferences: c.router({
+  preferences: router({
     get: {
       method: 'GET',
       path: '/preferences',
@@ -1669,7 +1673,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  intentions: c.router({
+  intentions: router({
     list: {
       method: 'GET',
       path: '/intentions',
@@ -1765,7 +1769,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  tasks: c.router({
+  tasks: router({
     importStatus: {
       method: 'GET',
       path: '/tasks/import-status',
@@ -1803,6 +1807,21 @@ export const apiContract = c.router({
         200: taskSchema,
         400: errorSchema,
         404: errorSchema,
+      },
+    },
+    archive: {
+      method: 'GET',
+      path: '/tasks/archive',
+      query: z.object({
+        limit: z.coerce.number().int().min(1).max(100).optional(),
+        cursor: z.string().min(1).max(512).optional(),
+      }),
+      responses: {
+        200: z.object({
+          items: z.array(taskSchema),
+          nextCursor: z.string().nullable(),
+        }),
+        400: errorSchema,
       },
     },
     list: {
@@ -1855,7 +1874,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  lists: c.router({
+  lists: router({
     list: {
       method: 'GET',
       path: '/lists',
@@ -1926,7 +1945,7 @@ export const apiContract = c.router({
       responses: { 200: listItemSchema, 400: errorSchema, 404: errorSchema },
     },
   }),
-  vacation: c.router({
+  vacation: router({
     status: {
       method: 'GET',
       path: '/vacation',
@@ -1955,7 +1974,7 @@ export const apiContract = c.router({
       responses: { 200: vacationStateSchema },
     },
   }),
-  feedback: c.router({
+  feedback: router({
     transcribe: {
       method: 'POST',
       path: '/feedback/transcribe',
@@ -1970,7 +1989,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  descriptions: c.router({
+  descriptions: router({
     generate: {
       method: 'POST',
       path: '/descriptions/generate',
@@ -1992,7 +2011,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  assistant: c.router({
+  assistant: router({
     status: {
       method: 'GET',
       path: '/assistant/status',
@@ -2168,7 +2187,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  statistics: c.router({
+  statistics: router({
     summary: {
       method: 'GET',
       path: '/statistics',
@@ -2222,7 +2241,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  workTimerLogs: c.router({
+  workTimerLogs: router({
     list: {
       method: 'GET',
       path: '/work-timer-logs',
@@ -2257,7 +2276,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  users: c.router({
+  users: router({
     byUsername: {
       method: 'GET',
       path: '/users/by-username/:username',
@@ -2302,7 +2321,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  notifications: c.router({
+  notifications: router({
     provider: {
       method: 'GET',
       path: '/notification-providers/current',

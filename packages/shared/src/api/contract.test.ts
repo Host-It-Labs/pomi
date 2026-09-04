@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { z as zod3 } from 'zod/v3';
 import {
   TASK_FOLLOW_UP_DELAY_MAX_DAYS,
   TASK_DESCRIPTION_MAX_LENGTH,
@@ -11,6 +12,38 @@ import {
   userActionSchema,
   userActionStatusSchema,
 } from './contract';
+
+describe('Zod 4 contract compatibility', () => {
+  it('matches legacy archive-query acceptance and coercion', () => {
+    const legacySchema = zod3.object({
+      limit: zod3.coerce.number().int().min(1).max(100).optional(),
+      cursor: zod3.string().min(1).max(512).optional(),
+    });
+    const currentSchema = apiContract.tasks.archive.query;
+    const samples = [
+      {},
+      { limit: '50' },
+      { limit: 1, cursor: 'next-page' },
+      { limit: 0 },
+      { limit: 101 },
+      { cursor: '' },
+    ];
+
+    for (const sample of samples) {
+      const legacy = legacySchema.safeParse(sample);
+      const current = currentSchema.safeParse(sample);
+      expect(current.success).toBe(legacy.success);
+      if (current.success && legacy.success) {
+        expect(current.data).toEqual(legacy.data);
+      }
+    }
+
+    expect(
+      (currentSchema as unknown as { _zod: { version: { major: number } } })
+        ._zod.version.major
+    ).toBe(4);
+  });
+});
 
 function expectActionValid(action: unknown) {
   expect(userActionSchema.safeParse(action).success).toBe(true);

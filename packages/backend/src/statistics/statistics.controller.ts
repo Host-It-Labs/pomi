@@ -7,7 +7,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { apiContract, TimerTypes } from '@pomi/shared';
-import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
+import {
+  TsRestHandler,
+  tsRestHandler,
+} from '../validation/ts-rest-zod4.adapter';
 import { addDays, startOfDay } from 'date-fns';
 import { AuthGuard } from '../auth/auth.guard';
 import { User as UserDecorator } from '../users/users.decorator';

@@ -5,12 +5,14 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  zod: 4.5.4
   '@anatine/zod-openapi>ts-deepmerge': 8.0.0
   gaxios>uuid: 11.1.1
   teeny-request>uuid: 11.1.1
 
 patchedDependencies:
   '@anatine/zod-openapi@1.14.2': 0e2bf327a9ac97434dc30c8835b3bb2add15c565a9ff6fc4c9afd815113e5701
+  '@ts-rest/open-api@3.52.1': 23540cd1371dd8659589d608db5abe8cd1d4c350b91c0ea50431da1b023a79af
 
 importers:
   .:
@@ -128,7 +130,7 @@ importers:
         version: 8.3.0(socket.io-adapter@2.5.8(supports-color@8.1.1))(supports-color@8.1.1)
       '@ts-rest/nest':
         specifier: ^3.52.1
-        version: 3.52.1(@nestjs/common@11.2.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@11.2.1)(@ts-rest/core@3.52.1(@types/node@26.2.0)(zod@3.25.76))(rxjs@7.8.2)(zod@3.25.76)
+        version: 3.52.1(@nestjs/common@11.2.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@11.2.1)(@ts-rest/core@3.52.1(@types/node@26.2.0)(zod@4.5.4))(rxjs@7.8.2)(zod@4.5.4)
       '@types/bcrypt':
         specifier: ^6.0.0
         version: 6.0.0
@@ -195,7 +197,7 @@ importers:
         version: 11.1.0(chokidar@4.0.3)(prettier@3.9.6)(typescript@7.0.2)
       '@ts-rest/open-api':
         specifier: ^3.52.1
-        version: 3.52.1(@ts-rest/core@3.52.1(@types/node@26.2.0)(zod@3.25.76))(zod@3.25.76)
+        version: 3.52.1(patch_hash=23540cd1371dd8659589d608db5abe8cd1d4c350b91c0ea50431da1b023a79af)(@ts-rest/core@3.52.1(@types/node@26.2.0)(zod@4.5.4))(zod@4.5.4)
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
@@ -249,7 +251,7 @@ importers:
         version: 2.3.5
       '@ts-rest/core':
         specifier: ^3.52.1
-        version: 3.52.1(@types/node@26.2.0)(zod@3.25.76)
+        version: 3.52.1(@types/node@26.2.0)(zod@4.5.4)
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -283,6 +285,9 @@ importers:
       uuid:
         specifier: ^14.0.2
         version: 14.0.2
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
       zustand:
         specifier: ^5.0.15
         version: 5.0.15(@types/react@19.2.18)(react@19.2.8)
@@ -328,10 +333,10 @@ importers:
     dependencies:
       '@ts-rest/core':
         specifier: ^3.52.1
-        version: 3.52.1(@types/node@26.2.0)(zod@3.25.76)
+        version: 3.52.1(@types/node@26.2.0)(zod@4.5.4)
       zod:
-        specifier: ^3.25.76
-        version: 3.25.76
+        specifier: 4.5.4
+        version: 4.5.4
     devDependencies:
       typescript:
         specifier: ^7.0.2
@@ -351,7 +356,7 @@ packages:
       }
     peerDependencies:
       openapi3-ts: ^2.0.0 || ^3.0.0
-      zod: ^3.20.0
+      zod: 4.5.4
 
   '@angular-devkit/core@19.2.24':
     resolution:
@@ -2524,7 +2529,7 @@ packages:
       }
     peerDependencies:
       '@types/node': ^18.18.7 || >=20.8.4
-      zod: ^3.22.3
+      zod: 4.5.4
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -2541,7 +2546,7 @@ packages:
       '@nestjs/core': ^9.0.0 || ^10.0.0 || ^11.0.0
       '@ts-rest/core': ~3.52.0
       rxjs: ^7.1.0
-      zod: ^3.22.3
+      zod: 4.5.4
     peerDependenciesMeta:
       zod:
         optional: true
@@ -2553,7 +2558,7 @@ packages:
       }
     peerDependencies:
       '@ts-rest/core': ~3.52.0
-      zod: ^3.22.3
+      zod: 4.5.4
 
   '@tsconfig/node10@1.0.13':
     resolution:
@@ -8672,12 +8677,12 @@ packages:
       }
     engines: { node: '>=18.0.0' }
     peerDependencies:
-      zod: ^3.25.0 || ^4.0.0
+      zod: 4.5.4
 
-  zod@3.25.76:
+  zod@4.5.4:
     resolution:
       {
-        integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==,
+        integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==,
       }
 
   zustand@5.0.15:
@@ -8704,11 +8709,11 @@ packages:
 snapshots:
   '@adobe/css-tools@4.5.0': {}
 
-  '@anatine/zod-openapi@1.14.2(patch_hash=0e2bf327a9ac97434dc30c8835b3bb2add15c565a9ff6fc4c9afd815113e5701)(openapi3-ts@2.0.2)(zod@3.25.76)':
+  '@anatine/zod-openapi@1.14.2(patch_hash=0e2bf327a9ac97434dc30c8835b3bb2add15c565a9ff6fc4c9afd815113e5701)(openapi3-ts@2.0.2)(zod@4.5.4)':
     dependencies:
       openapi3-ts: 2.0.2
       ts-deepmerge: 8.0.0
-      zod: 3.25.76
+      zod: 4.5.4
 
   '@angular-devkit/core@19.2.24(chokidar@4.0.3)':
     dependencies:
@@ -10113,26 +10118,26 @@ snapshots:
   '@tootallnate/once@2.0.1':
     optional: true
 
-  '@ts-rest/core@3.52.1(@types/node@26.2.0)(zod@3.25.76)':
+  '@ts-rest/core@3.52.1(@types/node@26.2.0)(zod@4.5.4)':
     optionalDependencies:
       '@types/node': 26.2.0
-      zod: 3.25.76
+      zod: 4.5.4
 
-  '@ts-rest/nest@3.52.1(@nestjs/common@11.2.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@11.2.1)(@ts-rest/core@3.52.1(@types/node@26.2.0)(zod@3.25.76))(rxjs@7.8.2)(zod@3.25.76)':
+  '@ts-rest/nest@3.52.1(@nestjs/common@11.2.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@11.2.1)(@ts-rest/core@3.52.1(@types/node@26.2.0)(zod@4.5.4))(rxjs@7.8.2)(zod@4.5.4)':
     dependencies:
       '@nestjs/common': 11.2.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)
       '@nestjs/core': 11.2.1(@nestjs/common@11.2.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/platform-express@11.2.1)(@nestjs/websockets@11.2.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
-      '@ts-rest/core': 3.52.1(@types/node@26.2.0)(zod@3.25.76)
+      '@ts-rest/core': 3.52.1(@types/node@26.2.0)(zod@4.5.4)
       rxjs: 7.8.2
     optionalDependencies:
-      zod: 3.25.76
+      zod: 4.5.4
 
-  '@ts-rest/open-api@3.52.1(@ts-rest/core@3.52.1(@types/node@26.2.0)(zod@3.25.76))(zod@3.25.76)':
+  '@ts-rest/open-api@3.52.1(patch_hash=23540cd1371dd8659589d608db5abe8cd1d4c350b91c0ea50431da1b023a79af)(@ts-rest/core@3.52.1(@types/node@26.2.0)(zod@4.5.4))(zod@4.5.4)':
     dependencies:
-      '@anatine/zod-openapi': 1.14.2(patch_hash=0e2bf327a9ac97434dc30c8835b3bb2add15c565a9ff6fc4c9afd815113e5701)(openapi3-ts@2.0.2)(zod@3.25.76)
-      '@ts-rest/core': 3.52.1(@types/node@26.2.0)(zod@3.25.76)
+      '@anatine/zod-openapi': 1.14.2(patch_hash=0e2bf327a9ac97434dc30c8835b3bb2add15c565a9ff6fc4c9afd815113e5701)(openapi3-ts@2.0.2)(zod@4.5.4)
+      '@ts-rest/core': 3.52.1(@types/node@26.2.0)(zod@4.5.4)
       openapi3-ts: 2.0.2
-      zod: 3.25.76
+      zod: 4.5.4
 
   '@tsconfig/node10@1.0.13': {}
 
@@ -11365,8 +11370,8 @@ snapshots:
       '@babel/parser': 7.29.8
       eslint: 9.39.5(jiti@2.7.0)(supports-color@8.1.1)
       hermes-parser: 0.25.1
-      zod: 3.25.76
-      zod-validation-error: 4.0.2(zod@3.25.76)
+      zod: 4.5.4
+      zod-validation-error: 4.0.2(zod@4.5.4)
     transitivePeerDependencies:
       - supports-color
 
@@ -14084,11 +14089,11 @@ snapshots:
 
   yoctocolors-cjs@2.1.3: {}
 
-  zod-validation-error@4.0.2(zod@3.25.76):
+  zod-validation-error@4.0.2(zod@4.5.4):
     dependencies:
-      zod: 3.25.76
+      zod: 4.5.4
 
-  zod@3.25.76: {}
+  zod@4.5.4: {}
 
   zustand@5.0.15(@types/react@19.2.18)(react@19.2.8):
     optionalDependencies:

@@ -51,6 +51,9 @@ function createQueryBuilder(
     limit() {
       return this;
     },
+    take() {
+      return this;
+    },
     where(condition, params) {
       this.conditions.push(condition);
       this.params.push(params);
@@ -72,6 +75,9 @@ function createQueryBuilder(
     },
     getMany() {
       return Promise.resolve(manyRows);
+    },
+    getRawAndEntities() {
+      return Promise.resolve({ raw: rawRows, entities: manyRows });
     },
   };
 }
@@ -1017,6 +1023,78 @@ test('active follow-ups retain context when their parent becomes a List item', a
     id: parent.id,
     title: parent.title,
   });
+});
+
+test('task archive pages use a stable updated-at and id cursor', async () => {
+  const { service } = createService(null);
+  const taskRepository = service['tasksRepository'];
+  const rows = [
+    {
+      id: '00000000-0000-4000-8000-000000000003',
+      userId: 'user-1',
+      updatedAt: new Date('2026-09-01T12:00:00.000Z'),
+      followUpSourceTaskId: null,
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000002',
+      userId: 'user-1',
+      updatedAt: new Date('2026-09-01T12:00:00.000Z'),
+      followUpSourceTaskId: null,
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000001',
+      userId: 'user-1',
+      updatedAt: new Date('2026-08-31T12:00:00.000Z'),
+      followUpSourceTaskId: null,
+    },
+  ];
+  taskRepository.createQueryBuilder = vi.fn(() =>
+    createQueryBuilder(
+      0,
+      rows.map(row => ({
+        taskArchiveUpdatedAt: row.updatedAt.toISOString().replace('Z', '000'),
+      })),
+      rows
+    )
+  );
+
+  const firstPage = await service.getTaskArchivePage('user-1', 2);
+
+  assert.deepEqual(
+    firstPage.items.map(item => item.id),
+    rows.slice(0, 2).map(item => item.id)
+  );
+  assert.ok(firstPage.nextCursor);
+
+  const secondBuilder = createQueryBuilder(0, [], []);
+  taskRepository.createQueryBuilder = vi.fn(() => secondBuilder);
+  await service.getTaskArchivePage('user-1', 2, firstPage.nextCursor!);
+
+  assert.ok(
+    secondBuilder.conditions.some(condition =>
+      String(condition).includes('task.updatedAt < :updatedAt')
+    )
+  );
+  assert.ok(
+    secondBuilder.params.some(
+      params => params?.id === '00000000-0000-4000-8000-000000000002'
+    )
+  );
+});
+
+test('task archive cursors reject non-UUID row IDs', async () => {
+  const { service } = createService(null);
+  const cursor = Buffer.from(
+    JSON.stringify({
+      updatedAt: '2026-09-01T12:00:00.123456',
+      id: 'not-a-uuid',
+    })
+  ).toString('base64url');
+
+  await assert.rejects(
+    service.getTaskArchivePage('user-1', 2, cursor),
+    /Invalid task archive cursor/
+  );
 });
 
 test('recurring completion advances successive occurrences and ignores a replay', async () => {

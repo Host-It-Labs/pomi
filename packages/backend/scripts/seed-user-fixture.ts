@@ -548,7 +548,14 @@ const SEED_TASK_CATALOG: Array<{
   },
 ];
 
-const SEED_TASK_BATCH_LABELS = ['This week', 'Next pass', 'Later review'];
+const SEED_TASK_BATCH_LABELS = [
+  'This week',
+  'Next pass',
+  'Later review',
+  'Previous sprint',
+  'Last month',
+  'Earlier archive',
+];
 
 const GENERATED_TASK_RECURRENCE_RULES: Array<{
   rule: string | null;
