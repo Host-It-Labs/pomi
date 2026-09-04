@@ -84,10 +84,10 @@ test('existing process values take precedence over local values', () => {
   assert.equal(loaded.LOCAL_ONLY, 'loaded');
 });
 
-test('resolves credential paths from the repository root', () => {
+test('resolves ordinary paths from the worktree repository root', () => {
   assert.equal(
-    resolveRepositoryPath('config/secrets/example.json'),
-    path.join(repositoryRoot, 'config/secrets/example.json')
+    resolveRepositoryPath('docs/example.md'),
+    path.join(repositoryRoot, 'docs/example.md')
   );
 });
 
