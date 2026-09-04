@@ -17,6 +17,6 @@ void import('./seed-user-fixture').then(({ runEnsureSeedUserFixture }) =>
     isAdmin: true,
     includeCanonicalLists: true,
     includeUserActionRecoveryFixtures: true,
-    fixtureMarker: { fixtureName, seedVersion: 17 },
+    fixtureMarker: { fixtureName, seedVersion: 18 },
   })
 );

@@ -137,6 +137,8 @@ const english: TranslationCatalog = {
   'intention.add': 'Add intention',
   'intention.habitPendingToday': 'Habit pending today',
   'intention.habitDoneToday': 'Habit done today',
+  'intention.habitPendingThisWeek': 'Habit pending this week',
+  'intention.habitDoneThisWeek': 'Habit done this week',
   'intention.previousSubIntentions': 'Previous sub-intentions',
   'intention.nextSubIntentions': 'Next sub-intentions',
   'intention.editIntentions': 'Edit intentions',
@@ -681,6 +683,7 @@ const english: TranslationCatalog = {
   'intention.discardListMessage':
     'Closing now will discard unsaved List changes.',
   'intention.habit': 'Habit',
+  'intention.habitCadence': 'Habit cadence',
   'intention.keepStatistics': 'Keep statistics',
   'intention.keepStatisticsDescription':
     'Past logs will remain tagged as "No Intention"',
@@ -697,6 +700,9 @@ const english: TranslationCatalog = {
   'settings.saveChangesFirst': 'Save changes first',
   'intention.habits': 'Habits',
   'intention.habitsDescription': 'Track this intention as a daily habit.',
+  'intention.prioritizeUnfinishedHabits': 'Prioritize unfinished habits',
+  'intention.prioritizeUnfinishedHabitsDescription':
+    'Move unfinished habits ahead of your normal Intention order.',
   'intention.multiSelect': 'Multi-select',
   'intention.multiSelectDescription':
     'Allow selecting more than one intention at a time.',

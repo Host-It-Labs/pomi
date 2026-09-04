@@ -191,6 +191,7 @@ export interface Preferences {
   intentionCustomDurations: boolean;
   intentionSubIntentions: boolean;
   intentionHabits: boolean;
+  intentionPrioritizeUnfinishedHabits?: boolean;
   workTimerLogsExtension: boolean;
   sessionsExtension: boolean;
   sessionPomodorosCount: number;
@@ -354,6 +355,7 @@ export interface WorkTimerLog {
 export type TopIntentionsPeriod = 'today' | 'week' | 'month' | 'year';
 
 export type IntentionType = 'work' | 'break' | 'longBreak';
+export type HabitCadence = 'off' | 'daily' | 'weekly';
 
 export interface Intention {
   id: string;
@@ -373,6 +375,7 @@ export interface Intention {
   customDuration?: number | null;
   keepScreenAwake: boolean;
   isHabit: boolean;
+  habitCadence?: HabitCadence;
   isArchived: boolean;
   isFavorite: boolean;
   allowsTasks: boolean;

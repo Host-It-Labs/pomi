@@ -368,6 +368,14 @@ export class UserDataTransferService {
     return rows.map(row => {
       const next = this.remapRowWithFreshId(row, userId, ids);
       next.parentIntentionId = this.remapOptionalId(row.parentIntentionId, ids);
+      const habitCadence =
+        row.habitCadence === 'daily' || row.habitCadence === 'weekly'
+          ? row.habitCadence
+          : row.isHabit === true
+            ? 'daily'
+            : 'off';
+      next.habitCadence = habitCadence;
+      next.isHabit = habitCadence !== 'off';
       return next;
     });
   }

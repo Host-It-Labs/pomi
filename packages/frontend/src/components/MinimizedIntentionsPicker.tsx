@@ -11,10 +11,7 @@ import {
   useState,
 } from 'react';
 import { FaCheck, FaPlus } from 'react-icons/fa';
-import {
-  getTypedCountKey,
-  useTodayIntentionsCount,
-} from '../hooks/useTodayIntentionsCount';
+import { useTodayIntentionsCount } from '../hooks/useTodayIntentionsCount';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { useTimerStore } from '../stores/timerStore';
 import { useUiStore } from '../stores/uiStore';
@@ -27,6 +24,11 @@ import {
   sortMixedBreakIntentionsByTypeAndCount,
 } from '../utils/breakIntentionPreview';
 import { orderIntentionsForHabits } from '../utils/habits';
+import {
+  getTypedAggregateCount,
+  getTypedCountKey,
+  getTypedLeafCount,
+} from '../utils/intentionCounts';
 import { hasOpenModal } from '../utils/modalRegistry';
 import { isMac } from '../utils/osUtils';
 import { getSelectedTimerIntentions } from '../utils/timerIntentions';
@@ -132,6 +134,8 @@ export function MinimizedIntentionsPicker({
     subCountBySlug,
     countByTypedSlug,
     subCountByTypedSlug,
+    weekCountByTypedSlug,
+    weekSubCountByTypedSlug,
     isLoading: isCountLoading,
     refetch: refetchTodayCount,
   } = useTodayIntentionsCount(intentionType);
@@ -197,6 +201,31 @@ export function MinimizedIntentionsPicker({
       return null;
     }
 
+    const getCadenceCount = (candidate: PickerIntention) => {
+      if (candidate.habitCadence === 'weekly') {
+        return candidate.parentIntentionId
+          ? getTypedLeafCount(
+              candidate.sourceType,
+              candidate.slug,
+              weekCountByTypedSlug,
+              weekSubCountByTypedSlug
+            )
+          : getTypedAggregateCount(
+              candidate.sourceType,
+              candidate.slug,
+              (
+                subIntentionsByParent[
+                  getParentKey(candidate.sourceType, candidate.slug)
+                ] ?? []
+              ).map(child => child.slug),
+              weekCountByTypedSlug,
+              weekSubCountByTypedSlug
+            );
+      }
+      return candidate.parentIntentionId
+        ? getSubIntentionDisplayCount(candidate)
+        : getAggregateDisplayCount(candidate);
+    };
     const childHabits = (
       subIntentionsByParent[
         getParentKey(intention.sourceType, intention.slug)
@@ -205,7 +234,7 @@ export function MinimizedIntentionsPicker({
 
     if (childHabits.length > 0) {
       return childHabits.every(
-        subIntention => getSubIntentionDisplayCount(subIntention) > 0
+        subIntention => getCadenceCount(subIntention) > 0
       )
         ? 'done'
         : 'pending';
@@ -215,10 +244,32 @@ export function MinimizedIntentionsPicker({
       return null;
     }
 
-    const doneCount = intention.parentIntentionId
-      ? getSubIntentionDisplayCount(intention)
-      : getAggregateDisplayCount(intention);
+    const doneCount = getCadenceCount(intention);
     return doneCount > 0 ? 'done' : 'pending';
+  };
+  const getHabitAriaLabel = (
+    intention: PickerIntention,
+    state: 'pending' | 'done'
+  ) => {
+    const childHabits = (
+      subIntentionsByParent[
+        getParentKey(intention.sourceType, intention.slug)
+      ] ?? []
+    ).filter(child => child.isHabit);
+    const isWeekly =
+      intention.habitCadence === 'weekly' ||
+      (!intention.isHabit &&
+        childHabits.length > 0 &&
+        childHabits.every(child => child.habitCadence === 'weekly'));
+    return t(
+      isWeekly
+        ? state === 'done'
+          ? 'intention.habitDoneThisWeek'
+          : 'intention.habitPendingThisWeek'
+        : state === 'done'
+          ? 'intention.habitDoneToday'
+          : 'intention.habitPendingToday'
+    );
   };
 
   const mixedDisplayIntentions = showMixedBreakIntentions
@@ -227,14 +278,35 @@ export function MinimizedIntentionsPicker({
         intention => intention.usageCount ?? getAggregateDisplayCount(intention)
       )
     : intentions;
-  const displayIntentions = habitsEnabled
+  const prioritizeUnfinishedHabits =
+    habitsEnabled && preferences?.intentionPrioritizeUnfinishedHabits === true;
+  const displayIntentions = prioritizeUnfinishedHabits
     ? orderIntentionsForHabits(mixedDisplayIntentions, getHabitState)
     : mixedDisplayIntentions;
   const activeIntentions = subPickerState
-    ? habitsEnabled
+    ? prioritizeUnfinishedHabits
       ? orderIntentionsForHabits(subPickerIntentions, getHabitState)
       : subPickerIntentions
     : displayIntentions;
+  const leafHabits = [
+    ...intentions,
+    ...Object.values(subIntentionsByParent).flat(),
+  ].filter(
+    candidate =>
+      candidate.isHabit &&
+      (subIntentionsByParent[getParentKey(candidate.sourceType, candidate.slug)]
+        ?.length ?? 0) === 0
+  );
+  const dailyHabitsRemaining = leafHabits.filter(
+    candidate =>
+      candidate.habitCadence !== 'weekly' &&
+      getHabitState(candidate) === 'pending'
+  ).length;
+  const weeklyHabitsRemaining = leafHabits.filter(
+    candidate =>
+      candidate.habitCadence === 'weekly' &&
+      getHabitState(candidate) === 'pending'
+  ).length;
   const activePageSize = subPickerState
     ? subIntentionsPageSize
     : minimizedIntentionsPageSize;
@@ -906,13 +978,13 @@ export function MinimizedIntentionsPicker({
         {isPendingHabit && (
           <span
             className="absolute left-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-amber-400"
-            aria-label={t('intention.habitPendingToday')}
+            aria-label={getHabitAriaLabel(intention, 'pending')}
           />
         )}
         {habitDone && (
           <span
             className="absolute left-0.5 top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 text-white"
-            aria-label={t('intention.habitDoneToday')}
+            aria-label={getHabitAriaLabel(intention, 'done')}
           >
             <FaCheck size={7} />
           </span>
@@ -988,13 +1060,13 @@ export function MinimizedIntentionsPicker({
         {isPendingHabit && (
           <span
             className="absolute left-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-amber-400"
-            aria-label={t('intention.habitPendingToday')}
+            aria-label={getHabitAriaLabel(subIntention, 'pending')}
           />
         )}
         {habitDone && (
           <span
             className="absolute left-0.5 top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 text-white"
-            aria-label={t('intention.habitDoneToday')}
+            aria-label={getHabitAriaLabel(subIntention, 'done')}
           >
             <FaCheck size={7} />
           </span>
@@ -1099,6 +1171,14 @@ export function MinimizedIntentionsPicker({
           exit={{ opacity: 0, scale: compactForTasks ? 1 : 0.96 }}
           transition={{ duration: 0.18, ease: 'easeOut' }}
         >
+          {habitsEnabled && (
+            <span
+              className="absolute -bottom-2 left-0 text-[8px] text-slate-500"
+              aria-label={`${dailyHabitsRemaining} daily and ${weeklyHabitsRemaining} weekly habits remaining`}
+            >
+              D {dailyHabitsRemaining} · W {weeklyHabitsRemaining}
+            </span>
+          )}
           <div
             className={clsx(
               'flex items-center',

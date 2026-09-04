@@ -58,6 +58,7 @@ describe('UserDataTransferService', () => {
             userId: 'source-user',
             slug: 'parent',
             parentIntentionId: null,
+            isHabit: true,
           },
           {
             id: 'source-child',
@@ -183,6 +184,8 @@ describe('UserDataTransferService', () => {
     expect(parent.id).not.toBe('source-parent');
     expect(child.id).not.toBe('source-child');
     expect(child.parentIntentionId).toBe(parent.id);
+    expect(parent).toMatchObject({ isHabit: true, habitCadence: 'daily' });
+    expect(child).toMatchObject({ isHabit: false, habitCadence: 'off' });
     expect(task.id).not.toBe('source-task');
     expect(task).toMatchObject({
       followUpTaskId: null,

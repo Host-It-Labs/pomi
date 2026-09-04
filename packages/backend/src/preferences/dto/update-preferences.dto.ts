@@ -130,6 +130,10 @@ export class UpdatePreferencesDto {
 
   @IsOptional()
   @IsBoolean()
+  intentionPrioritizeUnfinishedHabits?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   workTimerLogsExtension?: boolean;
 
   @IsOptional()

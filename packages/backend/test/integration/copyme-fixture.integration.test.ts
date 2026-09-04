@@ -121,7 +121,7 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
       [fixtureName]
     );
     assert.equal(marker.rows.length, 1);
-    assert.equal(marker.rows[0].seedVersion, 17);
+    assert.equal(marker.rows[0].seedVersion, 18);
     assert.equal(marker.rows[0].isAdmin, true);
     assert.match(marker.rows[0].credentialFingerprint, /^[a-f0-9]{64}$/);
     const firstUserId = trackRecoveryUser(marker.rows[0].id);
@@ -385,6 +385,16 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
       [username]
     );
     assert.equal(preserved.rows[0].id, repaired.rows[0].id);
+
+    await client.query(
+      `UPDATE intentions SET "isHabit" = false, "habitCadence" = 'off'
+       WHERE "userId" = $1 AND type = 'work' AND slug = 'read'`,
+      [preserved.rows[0].id]
+    );
+    assert.match(
+      await seedCopyme(),
+      /canonical intention work:Read is missing or changed/
+    );
 
     await client.query(
       `UPDATE development_fixture_markers SET "seedVersion" = 0 WHERE "fixtureName" = $1`,
