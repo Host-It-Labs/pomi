@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PUSH_PLATFORMS, PushPlatform } from '@pomi/shared';
 import Redis from 'ioredis';
@@ -67,7 +73,7 @@ export class UsersService {
 
   async updatePushToken(
     userId: string,
-    token: string,
+    token: string | null,
     platform: PushPlatform
   ): Promise<void> {
     this.logger.warn('Updating a push token');
@@ -77,9 +83,13 @@ export class UsersService {
     }
 
     if (platform === PUSH_PLATFORMS.ANDROID) {
+      if (!token) throw new BadRequestException('Push token is required');
       user.fcmToken = token;
     } else if (platform === PUSH_PLATFORMS.IOS) {
+      if (!token) throw new BadRequestException('Push token is required');
       user.apnToken = token;
+    } else if (platform === PUSH_PLATFORMS.IOS_LIVE_ACTIVITY) {
+      user.liveActivityToken = token;
     }
 
     await this.userRepository.save(user);
@@ -93,6 +103,11 @@ export class UsersService {
     return !!(user.fcmToken || user.apnToken);
   }
 
+  async getLiveActivityToken(userId: string): Promise<string | null> {
+    const user = await this.findUserById(userId);
+    return user?.liveActivityToken ?? null;
+  }
+
   async clearPushToken(userId: string, platform: PushPlatform): Promise<void> {
     const user = await this.findUserById(userId);
     if (!user) {
@@ -103,6 +118,8 @@ export class UsersService {
       user.fcmToken = null;
     } else if (platform === PUSH_PLATFORMS.IOS) {
       user.apnToken = null;
+    } else if (platform === PUSH_PLATFORMS.IOS_LIVE_ACTIVITY) {
+      user.liveActivityToken = null;
     }
 
     await this.userRepository.save(user);

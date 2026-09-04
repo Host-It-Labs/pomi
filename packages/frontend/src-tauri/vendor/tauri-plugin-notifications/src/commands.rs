@@ -155,6 +155,23 @@ pub(crate) async fn get_android_foreground_sync_status<R: Runtime>(
 }
 
 #[command]
+pub(crate) async fn set_timer_projection<R: Runtime>(
+    _app: AppHandle<R>,
+    notification: State<'_, Notifications<R>>,
+    projection_json: String,
+) -> Result<()> {
+    notification.set_timer_projection(projection_json).await
+}
+
+#[command]
+pub(crate) async fn clear_timer_projection<R: Runtime>(
+    _app: AppHandle<R>,
+    notification: State<'_, Notifications<R>>,
+) -> Result<()> {
+    notification.clear_timer_projection().await
+}
+
+#[command]
 pub(crate) async fn start_android_foreground_sync<R: Runtime>(
     _app: AppHandle<R>,
     notification: State<'_, Notifications<R>>,

@@ -23,6 +23,7 @@ import { TimerStore } from './timer-store';
 import { TimerController } from './timer.controller';
 import { TimerGateway } from './timer.gateway';
 import { TimerService } from './timer.service';
+import { LiveActivityUpdateService } from './live-activity-update.service';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { TimerService } from './timer.service';
     TimerIdleDetectionStreamService,
     TimerIdleService,
     TimerNotificationService,
+    LiveActivityUpdateService,
     DebugGuard,
   ],
   controllers: [TimerController],

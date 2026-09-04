@@ -239,12 +239,6 @@ export class AssistantListRoutingService {
         translateAssistant(language, 'listDestinationUnavailable')
       );
     }
-    if (drafts.length !== 1) {
-      throw new BadRequestException(
-        translateAssistant(language, 'listQuickAddSingleItem')
-      );
-    }
-
     const explicitlyRouted = this.routeExplicitListItems(
       drafts,
       sourceText,

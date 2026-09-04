@@ -71,6 +71,11 @@ class AndroidForegroundSyncStopArgs {
 }
 
 @InvokeArg
+class TimerProjectionArgs {
+  var projectionJson: String = ""
+}
+
+@InvokeArg
 class ActiveNotification {
   var id: Int = 0
   var tag: String? = null
@@ -99,6 +104,7 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
   // Click listener tracking for cold-start support
   private var hasClickedListener = false
   private var pendingNotificationClick: JSObject? = null
+  private val pendingTimerActions = ArrayDeque<JSObject>()
 
   companion object {
     var instance: NotificationPlugin? = null
@@ -206,6 +212,11 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
   fun onIntent(intent: Intent) {
     Logger.debug(Logger.tags(TAG), "onIntent called - action: ${intent.action}, extras: ${intent.extras?.keySet()}")
 
+    if (intent.action == ACTION_TIMER_ACTION) {
+      triggerTimerAction(intent)
+      return
+    }
+
     // Handle local notification click (requires ACTION_MAIN)
     if (Intent.ACTION_MAIN == intent.action) {
       val dataJson = manager.handleNotificationActionPerformed(intent, notificationStorage)
@@ -275,6 +286,25 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
     }
   }
 
+  private fun triggerTimerAction(intent: Intent) {
+    val projection = AndroidTimerSyncForegroundService.readProjection(activity) ?: return
+    val action = AndroidTimerAction.parse(intent.getStringExtra(EXTRA_TIMER_ACTION)) ?: return
+    if (!isCurrentTimerAction(projection, intent, action)) return
+
+    val data = JSObject()
+    data.put("timerId", projection.timerId)
+    data.put("action", action.wireValue)
+    data.put("actionId", intent.getStringExtra(EXTRA_TIMER_ACTION_ID))
+    data.put("expectedRevision", projection.revision)
+    data.put("timerType", projection.timerType)
+
+    if (hasClickedListener) {
+      trigger("timerAction", data)
+    } else {
+      pendingTimerActions.addLast(data)
+    }
+  }
+
   @Command
   fun show(invoke: Invoke) {
     val notification = invoke.parseArgs(Notification::class.java)
@@ -283,6 +313,26 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
     val id = manager.schedule(notification)
 
     invoke.resolveObject(id)
+  }
+
+  @Command
+  fun setTimerProjection(invoke: Invoke) {
+    val projectionJson = invoke.parseArgs(TimerProjectionArgs::class.java).projectionJson
+    if (projectionJson.isNullOrBlank()) {
+      invoke.reject("Timer projection is required")
+      return
+    }
+    if (!AndroidTimerSyncForegroundService.setTimerProjection(activity, projectionJson)) {
+      invoke.reject("Timer projection is invalid")
+      return
+    }
+    invoke.resolve()
+  }
+
+  @Command
+  fun clearTimerProjection(invoke: Invoke) {
+    AndroidTimerSyncForegroundService.clearTimerProjection(activity)
+    invoke.resolve()
   }
 
   @Command
@@ -584,6 +634,11 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
     if (args.active && pendingNotificationClick != null) {
       trigger("notificationClicked", pendingNotificationClick!!)
       pendingNotificationClick = null
+    }
+    if (args.active) {
+      while (pendingTimerActions.isNotEmpty()) {
+        trigger("timerAction", pendingTimerActions.removeFirst())
+      }
     }
 
     invoke.resolve()

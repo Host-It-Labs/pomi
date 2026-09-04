@@ -1073,6 +1073,8 @@ const userActionSchema = z
       extensionAction: z.enum(['logElapsed', 'addFiveMinutes']).optional(),
       requestedLogMode: z.enum(['none', 'elapsed', 'full']).optional(),
       resetOnFirstIntention: z.boolean().optional(),
+      expectedTimerId: z.string().min(1).max(128).optional(),
+      expectedScheduleRevision: z.string().min(1).max(128).optional(),
     }),
     z.object({
       kind: z.literal('tasks'),
@@ -1283,6 +1285,16 @@ const userActionSchema = z
   ])
   .superRefine((action, context) => {
     if (action.kind === 'timer') {
+      if (
+        (action.expectedTimerId === undefined) !==
+        (action.expectedScheduleRevision === undefined)
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['expectedTimerId'],
+          message: 'Expected Timer ID and revision must be provided together',
+        });
+      }
       if (action.operation === 'createOrResume' && !action.timerType) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
@@ -1472,10 +1484,16 @@ const userActionStatusSchema = z.object({
 
 export { userActionIdSchema, userActionSchema, userActionStatusSchema };
 
-const pushTokenUpdateSchema = z.object({
-  token: z.string().min(1),
-  platform: z.enum(['android', 'ios']),
-});
+const pushTokenUpdateSchema = z.discriminatedUnion('platform', [
+  z.object({
+    token: z.string().min(1),
+    platform: z.enum(['android', 'ios']),
+  }),
+  z.object({
+    token: z.string().min(1).nullable(),
+    platform: z.literal('ios-live-activity'),
+  }),
+]);
 
 export const apiContract = c.router({
   userActions: c.router({

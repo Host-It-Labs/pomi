@@ -33,6 +33,8 @@ It allows all notification related features.
 - `allow-get-android-foreground-sync-status`
 - `allow-start-android-foreground-sync`
 - `allow-stop-android-foreground-sync`
+- `allow-set-timer-projection`
+- `allow-clear-timer-projection`
 
 ## Permission Table
 
@@ -41,7 +43,6 @@ It allows all notification related features.
 <th>Identifier</th>
 <th>Description</th>
 </tr>
-
 
 <tr>
 <td>
@@ -143,6 +144,32 @@ Enables the check_permissions command without any pre-configured scope.
 <td>
 
 Denies the check_permissions command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`notifications:allow-clear-timer-projection`
+
+</td>
+<td>
+
+Enables the clear_timer_projection command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`notifications:deny-clear-timer-projection`
+
+</td>
+<td>
+
+Denies the clear_timer_projection command without any pre-configured scope.
 
 </td>
 </tr>
@@ -559,6 +586,32 @@ Enables the set_click_listener_active command without any pre-configured scope.
 <td>
 
 Denies the set_click_listener_active command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`notifications:allow-set-timer-projection`
+
+</td>
+<td>
+
+Enables the set_timer_projection command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`notifications:deny-set-timer-projection`
+
+</td>
+<td>
+
+Denies the set_timer_projection command without any pre-configured scope.
 
 </td>
 </tr>

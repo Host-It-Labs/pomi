@@ -111,6 +111,95 @@ test('List item creation rejects a blank title defensively', async () => {
   );
 });
 
+test('creates a List item batch atomically and emits one refresh', async () => {
+  let transactionCount = 0;
+  let saveCount = 0;
+  const emittedUsers: string[] = [];
+  const repository = {
+    create: value => value,
+    save: async values => {
+      saveCount += 1;
+      return values.map((value, index) => ({
+        ...value,
+        id: `item-${index + 1}`,
+      }));
+    },
+  };
+  const service = new ListsService(
+    {
+      findOne: async () => ({
+        id: 'list-1',
+        userId: 'user-1',
+        isArchived: false,
+        vacationDefault: true,
+      }),
+    } as never,
+    {} as never,
+    {} as never,
+    {
+      transaction: async callback => {
+        transactionCount += 1;
+        return callback({ getRepository: () => repository });
+      },
+    } as never,
+    {} as never,
+    { emitTasksUpdate: userId => emittedUsers.push(userId) } as never
+  );
+
+  const items = await service.createItems('user-1', 'list-1', [
+    { title: 'Milk', priority: 'high', creationSource: 'assistant' },
+    { title: 'Eggs', creationSource: 'assistant' },
+  ]);
+
+  assert.deepEqual(
+    items.map(item => ({
+      id: item.id,
+      title: item.title,
+      listId: item.listId,
+    })),
+    [
+      { id: 'item-1', title: 'Milk', listId: 'list-1' },
+      { id: 'item-2', title: 'Eggs', listId: 'list-1' },
+    ]
+  );
+  assert.equal(transactionCount, 1);
+  assert.equal(saveCount, 1);
+  assert.deepEqual(emittedUsers, ['user-1']);
+});
+
+test('validates every List item before opening an atomic batch transaction', async () => {
+  let transactionCount = 0;
+  const service = new ListsService(
+    {
+      findOne: async () => ({
+        id: 'list-1',
+        userId: 'user-1',
+        isArchived: false,
+        vacationDefault: false,
+      }),
+    } as never,
+    {} as never,
+    {} as never,
+    {
+      transaction: async () => {
+        transactionCount += 1;
+        return [];
+      },
+    } as never,
+    {} as never,
+    {} as never
+  );
+
+  await assert.rejects(
+    service.createItems('user-1', 'list-1', [
+      { title: 'Milk' },
+      { title: '   ' },
+    ]),
+    BadRequestException
+  );
+  assert.equal(transactionCount, 0);
+});
+
 test('new List items inherit Vacation Coverage until explicitly overridden', async () => {
   const savedItems: Record<string, unknown>[] = [];
   const service = new ListsService(

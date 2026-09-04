@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-set-timer-projection"
+description = "Enables the set_timer_projection command without any pre-configured scope."
+commands.allow = ["set_timer_projection"]
+
+[[permission]]
+identifier = "deny-set-timer-projection"
+description = "Denies the set_timer_projection command without any pre-configured scope."
+commands.deny = ["set_timer_projection"]

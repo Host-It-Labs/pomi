@@ -88,20 +88,116 @@ describe('TaskQuickCreateRow assistant errors', () => {
     mocks.requestTaskItemReveal.mockReset();
   });
 
-  it('shows the backend feedback when assistant capture is rejected', async () => {
+  it('preserves the submitted text when assistant capture is rejected', async () => {
     const feedback =
       'List items support title, due date, priority, and Vacation Coverage only';
-    mocks.submitUserMutation.mockRejectedValue(new Error(feedback));
+    let rejectSubmission!: (reason?: unknown) => void;
+    mocks.submitUserMutation.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectSubmission = reject;
+      })
+    );
 
     render(<TaskQuickCreateRow onOpenAdvanced={vi.fn()} />);
-    fireEvent.change(screen.getByRole('textbox'), {
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, {
       target: { value: 'Add milk to Groceries at 17:00' },
     });
-    fireEvent.submit(screen.getByRole('textbox').closest('form')!);
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() =>
+      expect(mocks.submitUserMutation).toHaveBeenCalledOnce()
+    );
+    expect(input).toHaveAttribute('readonly');
+    fireEvent.change(input, { target: { value: 'Changed while saving' } });
+
+    rejectSubmission(new Error(feedback));
 
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent(feedback)
     );
+    expect(input).not.toHaveAttribute('readonly');
+    expect(input).toHaveValue('Add milk to Groceries at 17:00');
+  });
+
+  it('locks submitted text through reconciliation and blocks duplicate submit shortcuts', async () => {
+    const capture = {
+      tasks: [],
+      listItems: [],
+      usedFallback: false,
+      message: 'Task created',
+      costUsd: 0,
+    };
+    let resolvePreparation!: (value: { status: number; body: null }) => void;
+    let resolveSubmission!: (value: {
+      status: number;
+      body: typeof capture;
+    }) => void;
+    mocks.prepareTaskFromText.mockReturnValue(
+      new Promise(resolve => {
+        resolvePreparation = resolve;
+      })
+    );
+    mocks.submitUserMutation.mockReturnValue(
+      new Promise(resolve => {
+        resolveSubmission = resolve;
+      })
+    );
+    const onCancel = vi.fn();
+
+    render(<TaskQuickCreateRow onCancel={onCancel} />);
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'Create a focused task' } });
+    const form = input.closest('form')!;
+    fireEvent.submit(form);
+
+    await waitFor(() => expect(input).toHaveAttribute('readonly'));
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    expect(input).toHaveClass('cursor-not-allowed');
+    fireEvent.change(input, { target: { value: 'Changed while preparing' } });
+    fireEvent.submit(form);
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+    fireEvent.keyDown(input, {
+      key: 'n',
+      code: 'KeyN',
+      metaKey: true,
+    });
+    expect(input).toHaveValue('Create a focused task');
+    expect(mocks.prepareTaskFromText).toHaveBeenCalledOnce();
+    expect(onCancel).not.toHaveBeenCalled();
+
+    resolvePreparation({ status: 202, body: null });
+    await waitFor(() =>
+      expect(mocks.submitUserMutation).toHaveBeenCalledOnce()
+    );
+    expect(input).toHaveAttribute('readonly');
+
+    const submission = mocks.submitUserMutation.mock.calls[0][0] as {
+      reconcile?: (result: unknown) => Promise<void>;
+    };
+    await submission.reconcile?.(capture);
+    expect(input).toHaveAttribute('readonly');
+
+    resolveSubmission({ status: 201, body: capture });
+    await waitFor(() => expect(input).not.toHaveAttribute('readonly'));
+    expect(input).toHaveValue('');
+  });
+
+  it('exposes explicit batch guidance through native and touch-accessible help', () => {
+    const guidance =
+      'List multiple tasks or items explicitly in one prompt to create them together.';
+
+    render(<TaskQuickCreateRow />);
+    const input = screen.getByRole('textbox');
+    const descriptionId = input.getAttribute('aria-describedby');
+
+    expect(input).toHaveAttribute('title', guidance);
+    expect(descriptionId).toBeTruthy();
+    expect(document.getElementById(descriptionId!)).toHaveTextContent(guidance);
+    expect(input).not.toBeDisabled();
+    fireEvent.touchStart(input);
+    expect(input).toHaveAttribute('aria-describedby', descriptionId);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
   it('carries the selected List through preparation and the confirmed action', async () => {

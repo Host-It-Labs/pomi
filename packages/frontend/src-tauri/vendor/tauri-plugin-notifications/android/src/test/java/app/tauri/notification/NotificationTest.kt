@@ -363,6 +363,7 @@ class NotificationTest {
         notification.summary?.let { data.put("summary", it) }
         notification.sound?.let { data.put("sound", it) }
         notification.actionTypeId?.let { data.put("actionTypeId", it) }
+        notification.tag?.let { data.put("tag", it) }
         notification.group?.let { data.put("group", it) }
         notification.channelId?.let { data.put("channelId", it) }
         if (notification.isGroupSummary) data.put("groupSummary", true)

@@ -48,7 +48,7 @@ class TauriFirebaseMessagingServiceTest {
     assertEquals("pomi-timer", pushData["notificationGroup"])
     assertEquals("timer-completed:timer-1", pushData["notificationId"])
 
-    val sourceJson = JSONObject(notification?.sourceJson)
+    val sourceJson = JSONObject(requireNotNull(notification?.sourceJson))
     assertEquals(
       "pomi-timer",
       sourceJson.getJSONObject("extra").getString("notificationGroup")
