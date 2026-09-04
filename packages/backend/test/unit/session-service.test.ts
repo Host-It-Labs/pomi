@@ -147,6 +147,22 @@ describe('SessionService', () => {
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
+  it('commits replay revocation during pre-rotation account inspection', async () => {
+    const { service, rows } = createService();
+    const created = await service.createSession(
+      '00000000-0000-4000-8000-000000000010',
+      'web'
+    );
+    await service.refreshSession(created.refreshToken, 'web');
+    const row = requireValue(rows.get(created.sessionId));
+    row.previousRefreshTokenExpiresAt = new Date(0);
+
+    await expect(
+      service.getRefreshSessionUserId(created.refreshToken)
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(row.revocationReason).toBe('refresh-replay');
+  });
+
   it('expires inactive sessions and rejects malformed refresh tokens safely', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-01T12:00:00.000Z'));

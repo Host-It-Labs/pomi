@@ -203,28 +203,48 @@ export class SessionService {
     const parsed = this.parseRefreshToken(rawRefreshToken);
     if (!parsed) throw new UnauthorizedException('Invalid session');
 
-    const session = await this.sessionRepository.findOne({
-      where: { id: parsed.sessionId },
-    });
-    const now = new Date();
-    if (!session || session.revokedAt || session.expiresAt <= now) {
-      throw new UnauthorizedException('Invalid session');
-    }
+    const userId = await this.sessionRepository.manager.transaction<
+      string | null
+    >(async manager => {
+      const repository = manager.getRepository(AuthSessionEntity);
+      const session = await repository.findOne({
+        where: { id: parsed.sessionId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      const now = new Date();
+      if (!session || session.revokedAt) return null;
+      if (session.expiresAt <= now) {
+        await repository.update(session.id, {
+          revokedAt: now,
+          revocationReason: 'expired',
+        });
+        return null;
+      }
 
-    const presentedHash = hashRefreshSecret(parsed.secret);
-    const currentMatches = refreshSecretsMatch(
-      presentedHash,
-      session.refreshTokenHash
-    );
-    const previousMatches =
-      session.previousRefreshTokenHash !== null &&
-      session.previousRefreshTokenExpiresAt !== null &&
-      session.previousRefreshTokenExpiresAt > now &&
-      refreshSecretsMatch(presentedHash, session.previousRefreshTokenHash);
-    if (!currentMatches && !previousMatches) {
+      const presentedHash = hashRefreshSecret(parsed.secret);
+      const currentMatches = refreshSecretsMatch(
+        presentedHash,
+        session.refreshTokenHash
+      );
+      const previousMatches =
+        session.previousRefreshTokenHash !== null &&
+        session.previousRefreshTokenExpiresAt !== null &&
+        session.previousRefreshTokenExpiresAt > now &&
+        refreshSecretsMatch(presentedHash, session.previousRefreshTokenHash);
+      if (currentMatches || previousMatches) return session.userId;
+
+      await this.revokeFamily(
+        repository,
+        session.familyId,
+        now,
+        'refresh-replay'
+      );
+      return null;
+    });
+    if (!userId) {
       throw new UnauthorizedException('Invalid session');
     }
-    return session.userId;
+    return userId;
   }
 
   async revokeAccessSession(sessionId: string, userId: string): Promise<void> {
