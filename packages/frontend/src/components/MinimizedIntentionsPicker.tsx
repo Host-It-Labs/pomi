@@ -1,3 +1,4 @@
+import { HabitSummary } from './intentions/HabitSummary';
 import { Intention, IntentionType, TimerTypes } from '@pomi/shared';
 import { TIMER_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
 import clsx from 'clsx';
@@ -297,16 +298,6 @@ export function MinimizedIntentionsPicker({
       (subIntentionsByParent[getParentKey(candidate.sourceType, candidate.slug)]
         ?.length ?? 0) === 0
   );
-  const dailyHabitsRemaining = leafHabits.filter(
-    candidate =>
-      candidate.habitCadence !== 'weekly' &&
-      getHabitState(candidate) === 'pending'
-  ).length;
-  const weeklyHabitsRemaining = leafHabits.filter(
-    candidate =>
-      candidate.habitCadence === 'weekly' &&
-      getHabitState(candidate) === 'pending'
-  ).length;
   const activePageSize = subPickerState
     ? subIntentionsPageSize
     : minimizedIntentionsPageSize;
@@ -1159,6 +1150,7 @@ export function MinimizedIntentionsPicker({
             compactForTasks
               ? 'h-8 min-h-8 max-h-8 shrink-0 overflow-visible'
               : 'mt-5',
+            habitsEnabled && leafHabits.length > 0 && 'mb-10',
             !isConnected && 'opacity-50'
           )}
           style={
@@ -1172,12 +1164,18 @@ export function MinimizedIntentionsPicker({
           transition={{ duration: 0.18, ease: 'easeOut' }}
         >
           {habitsEnabled && (
-            <span
-              className="absolute -bottom-2 left-0 text-[8px] text-slate-500"
-              aria-label={`${dailyHabitsRemaining} daily and ${weeklyHabitsRemaining} weekly habits remaining`}
-            >
-              D {dailyHabitsRemaining} · W {weeklyHabitsRemaining}
-            </span>
+            <HabitSummary
+              habits={leafHabits.map(intention => ({
+                habitCadence: intention.habitCadence,
+                state: getHabitState(intention),
+              }))}
+              className={clsx(
+                'absolute top-full mt-1',
+                compactForTasks && showPickerControls && !isChoosingSubIntention
+                  ? 'left-6'
+                  : 'left-0'
+              )}
+            />
           )}
           <div
             className={clsx(

@@ -1,3 +1,4 @@
+import { HabitSummary } from '../../components/intentions/HabitSummary';
 import { Intention, IntentionType } from '@pomi/shared';
 import { TIMER_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
 import { motion } from 'framer-motion';
@@ -573,16 +574,6 @@ export function ExpandedIntentionsPicker({
       (subIntentionsByParent[getParentKey(candidate.sourceType, candidate.slug)]
         ?.length ?? 0) === 0
   );
-  const dailyHabitsRemaining = leafHabits.filter(
-    candidate =>
-      candidate.habitCadence !== 'weekly' &&
-      getHabitState(candidate) === 'pending'
-  ).length;
-  const weeklyHabitsRemaining = leafHabits.filter(
-    candidate =>
-      candidate.habitCadence === 'weekly' &&
-      getHabitState(candidate) === 'pending'
-  ).length;
   const isTopPlacement = placement === 'top';
   const compressPicker = isShortViewport;
   const itemsPerRow = 3;
@@ -1370,12 +1361,21 @@ export function ExpandedIntentionsPicker({
           className={`relative flex items-center justify-center ${isTopPlacement || compressPicker ? 'mt-1 min-h-8' : 'mt-2 min-h-10'}`}
         >
           {habitsEnabled && (
-            <span
-              className="absolute left-0 text-[9px] text-slate-500"
-              aria-label={`${dailyHabitsRemaining} daily and ${weeklyHabitsRemaining} weekly habits remaining`}
-            >
-              D {dailyHabitsRemaining} · W {weeklyHabitsRemaining}
-            </span>
+            <HabitSummary
+              habits={leafHabits.map(intention => ({
+                habitCadence: intention.habitCadence,
+                state: getHabitState(intention),
+              }))}
+              className={`absolute ${
+                isMobile
+                  ? 'left-1'
+                  : isTopPlacement
+                    ? 'left-[max(calc(5%_-_0.375rem),calc(50%_-_15.375rem))]'
+                    : compressPicker
+                      ? 'left-[max(calc(5%_-_0.25rem),calc(50%_-_15.25rem))]'
+                      : 'left-[max(calc(5%_-_0.5rem),calc(50%_-_15.5rem))]'
+              }`}
+            />
           )}
           {subPickerState ? renderSubIntentionsBand() : controls}
         </div>

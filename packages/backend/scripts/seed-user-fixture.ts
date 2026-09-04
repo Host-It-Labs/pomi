@@ -310,7 +310,7 @@ const seedIntentions: SeedIntention[] = [
   { title: 'Friends', emoji: '🫂', type: 'work', parentTitle: 'Social' },
   { title: 'Family', emoji: '🏡', type: 'work', parentTitle: 'Social' },
   { title: 'Follow Up', emoji: '✉️', type: 'work', parentTitle: 'Social' },
-  { title: 'Stretch', emoji: '🧘', type: 'break' },
+  { title: 'Stretch', emoji: '🧘', type: 'break', habitCadence: 'daily' },
   { title: 'Hydrate', emoji: '💧', type: 'break' },
   { title: 'Walk', emoji: '🚶', type: 'break' },
   { title: 'Tea', emoji: '🍵', type: 'break' },

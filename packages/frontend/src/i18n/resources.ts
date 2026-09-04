@@ -6,6 +6,12 @@ export type TranslationCatalog = Record<string, string>;
  * add namespaces without changing the runtime or fallback behavior.
  */
 const english: TranslationCatalog = {
+  'common.daily': 'Daily',
+  'common.weekly': 'Weekly',
+  'intention.habitsRemaining': 'Habits left',
+  'intention.thisWeek': 'This week',
+  'intention.dailyHabitsRemaining': 'Habits left today: {{count}}',
+  'intention.weeklyHabitsRemaining': 'Habits left this week: {{count}}',
   'common.loading': 'Loading...',
   'common.retry': 'Retry',
   'common.save': 'Save',
@@ -3286,6 +3292,90 @@ type GeneratedPhraseTargets = readonly [
 ];
 
 const generatedPhraseRows: Array<[string, GeneratedPhraseTargets]> = [
+  [
+    'Daily',
+    [
+      '每天',
+      'दैनिक',
+      'A diario',
+      'يوميًا',
+      'Chaque jour',
+      'প্রতিদিন',
+      'Diariamente',
+      'Harian',
+      'روزانہ',
+    ],
+  ],
+  [
+    'Weekly',
+    [
+      '每周',
+      'साप्ताहिक',
+      'Semanalmente',
+      'أسبوعيًا',
+      'Chaque semaine',
+      'প্রতি সপ্তাহে',
+      'Semanalmente',
+      'Mingguan',
+      'ہفتہ وار',
+    ],
+  ],
+  [
+    'Habits left',
+    [
+      '剩余习惯',
+      'बाकी आदतें',
+      'Hábitos pendientes',
+      'العادات المتبقية',
+      'Habitudes restantes',
+      'বাকি অভ্যাস',
+      'Hábitos pendentes',
+      'Kebiasaan tersisa',
+      'باقی عادتیں',
+    ],
+  ],
+  [
+    'This week',
+    [
+      '本周',
+      'इस सप्ताह',
+      'Esta semana',
+      'هذا الأسبوع',
+      'Cette semaine',
+      'এই সপ্তাহে',
+      'Esta semana',
+      'Minggu ini',
+      'اس ہفتے',
+    ],
+  ],
+  [
+    'Habits left today: {{count}}',
+    [
+      '今天还剩 {{count}} 个习惯',
+      'आज {{count}} आदतें बाकी हैं',
+      '{{count}} hábitos pendientes hoy',
+      '{{count}} عادات متبقية اليوم',
+      '{{count}} habitudes restantes aujourd’hui',
+      'আজ {{count}}টি অভ্যাস বাকি',
+      '{{count}} hábitos pendentes hoje',
+      '{{count}} kebiasaan tersisa hari ini',
+      'آج {{count}} عادتیں باقی ہیں',
+    ],
+  ],
+  [
+    'Habits left this week: {{count}}',
+    [
+      '本周还剩 {{count}} 个习惯',
+      'इस सप्ताह {{count}} आदतें बाकी हैं',
+      '{{count}} hábitos pendientes esta semana',
+      '{{count}} عادات متبقية هذا الأسبوع',
+      '{{count}} habitudes restantes cette semaine',
+      'এই সপ্তাহে {{count}}টি অভ্যাস বাকি',
+      '{{count}} hábitos pendentes esta semana',
+      '{{count}} kebiasaan tersisa minggu ini',
+      'اس ہفتے {{count}} عادتیں باقی ہیں',
+    ],
+  ],
   [
     'Back to Timer',
     [
