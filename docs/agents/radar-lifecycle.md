@@ -147,28 +147,28 @@ their automation contract explicitly defines a sequential handoff and the
 expected run duration fits the cadence gap. The Feature/Bug, Performance, and
 Security pipelines use a one-hour parent-to-child offset as that handoff
 contract; the offset is not a general lock for unrelated or overlapping runs.
-Before branch synchronization, acquire the durable per-worktree lock with
+
+The first run phase is startup synchronization. After the required read-only
+snapshot of the resolved path, exact branch, complete porcelain status, and
+registered worktrees, acquire the durable per-worktree lock with
 `node scripts/radar-automation-lock.mjs acquire --track <track> --stage
 <parent|child>`. If it reports an existing owner, stop without reading or
-changing the checkout. Hold the lock until the final clean-branch check and
-release it with the matching `release` command. If a run is still active when
-its child window begins, the lock prevents concurrent mutation; report the
-overlap rather than taking it over. Never use a same-directory or
-shared-environment fork for a coding or file-writing subagent. Writer
-subagents use separate git worktrees and branches; read-only subagents must be
-explicitly labeled and must not edit, generate artifacts, install dependencies,
-or run commands with file-writing side effects.
-
-Before lifecycle preflight, verify the automation is in its dedicated worktree
-and expected branch, and require a clean worktree. Capture the resolved current
-path, branch, complete porcelain status, and registered worktrees before any
-checkout or delegation; ignore only macOS `.DS_Store`. If a gate fails, stop and
-report the exact path, branch, and status entries. Do not switch branches,
-stash, reset, clean, checkout, commit, or delegate to self-heal a dirty or wrong
-worktree. Fetch the branch and
-`origin/main`; fast-forward when the local branch is behind its remote, merge
-`origin/main` when needed, and stop without discarding work on divergence or a
-merge conflict. An ahead-only automation branch is valid and must be preserved.
+changing the checkout. While holding the lock, fetch the automation branch's
+remote-tracking ref and `origin/main` through the GitHub App helper without
+writing the shared `FETCH_HEAD`; fast-forward when behind, preserve an
+ahead-only branch, merge `origin/main` when needed, and stop on divergence or a
+merge conflict. Recheck the exact worktree, branch, and clean status before
+reading lifecycle files or running preflight. If any gate fails, report the
+exact path, branch, and status entries. Do not switch branches, stash, reset,
+clean, checkout, commit, or delegate to self-heal a dirty or wrong worktree.
+Hold the lock until the final clean-branch check and release it with the
+matching `release` command. If a run is still active when its child window
+begins, the lock prevents concurrent mutation; report the overlap rather than
+taking it over. Never use a same-directory or shared-environment fork for a
+coding or file-writing subagent. Writer subagents use separate git worktrees
+and branches; read-only subagents must be explicitly labeled and must not edit,
+generate artifacts, install dependencies, or run commands with file-writing
+side effects.
 
 A single broad diff for one logical batch does not require local checkpoints.
 Preserve it on its owning branch and recover it as one unit if the run is

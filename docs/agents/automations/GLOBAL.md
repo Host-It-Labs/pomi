@@ -4,8 +4,32 @@ This is the shared safety contract for all six Pomi Radar scheduled
 automations: the Feature/Bug, Performance, and Security planning parents and
 implementation children. Every scheduled prompt must read `AGENTS.md` and this
 file before lifecycle work, repository research, external mutation, or file
-writing. Track-specific prompts may add scope and workflow requirements, but
-must not weaken this contract.
+writing. The only exception is the bounded startup-synchronization bootstrap
+embedded in each installed prompt and defined below. Track-specific prompts may
+add scope and workflow requirements, but must not weaken this contract.
+
+## Startup synchronization
+
+The first phase of every run is startup synchronization. Each installed prompt
+contains this bootstrap sequence so it can be followed before opening the
+versioned lifecycle and policy files:
+
+- Take only the required read-only snapshot of `pwd -P`, the exact expected
+  branch, complete `git status --porcelain --untracked-files=all`, and
+  `git worktree list --porcelain`. Ignore only macOS `.DS_Store` entries. A
+  wrong path, branch, or any other dirty entry is a hard stop.
+- Acquire the durable per-worktree lock before any Git mutation. If acquisition
+  reports an existing owner, stop without reading or changing the checkout.
+- While holding the lock, use the GitHub App helper to fetch both the
+  automation branch's remote-tracking ref and `origin/main` without writing the
+  shared `FETCH_HEAD`. Fast-forward the local branch when it is behind its own
+  remote; preserve an ahead-only branch; stop on divergence. Merge `origin/main`
+  when it is not already an ancestor. On conflict, run `git merge --abort`,
+  verify the worktree is clean, release the lock, and stop. If the abort cannot
+  restore a clean worktree, keep the lock held for manual recovery.
+- Recheck the exact worktree, branch, and empty status. Only after this gate
+  succeeds may the run read `AGENTS.md`, this file, lifecycle files, or source
+  code, run preflight, research, delegate, build, or write.
 
 ## Worktree ownership and handoff
 
