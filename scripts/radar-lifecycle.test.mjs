@@ -1266,6 +1266,66 @@ test('mark-in-review validates every issue before changing any lifecycle', async
   );
 });
 
+test('mark-in-review rejects noncanonical or malformed Radar issues', async () => {
+  const sourcePull = {
+    number: 233,
+    state: 'open',
+    user: { login: 'pomi-radar[bot]' },
+    base: { ref: 'main', repo: { full_name: 'Host-It-Labs/pomi' } },
+    head: { repo: { full_name: 'Host-It-Labs/pomi' } },
+    body: marker('pomi-radar-source:v1', {
+      version: 1,
+      track: 'security',
+      issues: [54],
+    }),
+  };
+  const valid = {
+    number: 54,
+    state: 'open',
+    labels: [{ name: 'radar:security' }, { name: 'radar:in-progress' }],
+    body: marker('pomi-radar:v1', { version: 1 }),
+  };
+  const invalidIssues = [
+    { ...valid, state: 'closed' },
+    {
+      ...valid,
+      labels: [...valid.labels, { name: 'duplicate' }],
+      body: marker('pomi-radar:v1', { version: 1, duplicateOf: 12 }),
+    },
+    { ...valid, body: '' },
+    {
+      ...valid,
+      labels: [...valid.labels, { name: 'radar:accepted' }],
+    },
+    {
+      ...valid,
+      labels: [{ name: 'radar:in-progress' }],
+    },
+  ];
+
+  for (const issue of invalidIssues) {
+    await withFakeGithubIssues(
+      [issue],
+      async state => {
+        await assert.rejects(
+          markInReview(
+            { sourcePullRequestNumber: 233 },
+            {
+              inspectReadiness: async () => ({
+                status: 'ready',
+                problems: [],
+              }),
+            }
+          ),
+          /not an eligible open canonical Radar issue/
+        );
+        assert.deepEqual(state.patches, []);
+      },
+      { pulls: [sourcePull] }
+    );
+  }
+});
+
 async function withFakeConsolidationGithub(
   {
     event,

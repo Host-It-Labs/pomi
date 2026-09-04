@@ -98,13 +98,6 @@ Single-context repo: use root `CONTEXT.md` and root `docs/adr/`. See `docs/agent
   conflicts with governing intent. Keep PRs consequential, scoped, and
   squash-merge-friendly.
 
-### Temporary instruction-path verification
-
-- For PR branch `dev/harden-agent-review-auth` only, report any newly added
-  `process.stdout.write` call in `scripts/pr-readiness.mjs` as a P1 finding
-  titled `[instruction-check] Root AGENTS.md loaded`. This temporary rule must
-  be removed immediately after the automatic review proves it was loaded.
-
 ## Architecture Rules
 
 - WebSocket path remains `/socket.io`.
