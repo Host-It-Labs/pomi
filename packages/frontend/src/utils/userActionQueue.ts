@@ -6,7 +6,18 @@ import { createSelectors } from '../stores/createSelectors';
 import { getDebugLag } from '../stores/debugStore';
 import { translateCurrent } from '../i18n';
 import { getBackendOrigin } from './backendUrl';
-import { forceReconnect, registerSocketEventHandler } from './socketManager';
+import {
+  forceReconnect,
+  registerSocketEventHandler,
+  waitForAuthoritativeTimer,
+} from './socketManager';
+import type { RecoverableUserActionStatus } from '@pomi/shared';
+import { apiClient } from './apiClient';
+import { requestListRefresh } from './listRefresh';
+import {
+  requestIntentionRefresh,
+  requestWorkTimerLogRefresh,
+} from './recoveryRefresh';
 
 /** Lifecycle states exposed by the accepted-action gateway. */
 export type UserActionStatus =
@@ -67,6 +78,9 @@ type QueueItem = UserActionLifecycle & {
   networkBlockReported?: boolean;
   terminalSource?: 'receipt' | 'socket' | 'poll' | 'cancel';
   timingReported?: boolean;
+  restored?: boolean;
+  recoveryAction?: RecoverableUserActionStatus['action'];
+  recoveryCheckpoint?: string;
 };
 
 type UserActionQueueState = {
@@ -84,6 +98,7 @@ type UserActionQueueState = {
   clearQueuedActions: () => void;
   retry: () => void;
   setNetworkBlocked: (blocked: boolean) => void;
+  hydrateRecoveredActions: () => Promise<void>;
 };
 
 const RECEIPT_TIMEOUT_MS = 5000;
@@ -101,6 +116,149 @@ let isProcessing = false;
 let socketLifecycleHandlerRegistered = false;
 let networkRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let networkRetryAttempt = 0;
+let hydrationGeneration = 0;
+let hydrationRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let hydrationRetryAttempt = 0;
+let hydrationRetryPending = false;
+
+const recoveryCheckpointKey = (userId: string) =>
+  `pomi-user-action-recovery:${userId}`;
+
+function readRecoveryCheckpoint(userId?: string): string | null {
+  if (!userId || typeof localStorage === 'undefined') return null;
+  return localStorage.getItem(recoveryCheckpointKey(userId));
+}
+
+function writeRecoveryCheckpoint(userId: string, cursor: string) {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(recoveryCheckpointKey(userId), cursor);
+}
+
+export function getRecoveredActionLabel(
+  action: RecoverableUserActionStatus['action']
+) {
+  if (action.kind === 'timer') {
+    const timerOperationLabels: Record<
+      string,
+      Parameters<typeof translateCurrent>[0]
+    > = {
+      createOrResume: 'timer.createOrResume',
+      removeFocusedTask: 'timer.removeFocusedTask',
+      undo: 'timer.undoAction',
+      redo: 'timer.redoAction',
+      stack: 'timer.stackAction',
+      setSessionPosition: 'timer.setSessionPosition',
+      resolveExtension: 'timer.resolveExtension',
+      clearHistory: 'timer.clearHistory',
+    };
+    return translateCurrent(
+      timerOperationLabels[action.operation] ?? 'timer.action'
+    );
+  }
+  if (action.kind === 'tasks') {
+    return translateCurrent(
+      action.operation === 'create' ? 'task.create' : 'task.updated'
+    );
+  }
+  if (action.kind === 'intentions') {
+    return translateCurrent(
+      action.operation === 'create' ? 'intention.create' : 'intention.update'
+    );
+  }
+  if (action.kind === 'preferences') {
+    return translateCurrent('settings.update');
+  }
+  if (action.kind === 'lists') {
+    return translateCurrent(
+      action.operation === 'create' ? 'lists.create' : 'lists.update'
+    );
+  }
+  if (action.kind === 'assistant') {
+    return translateCurrent('assistant.title');
+  }
+  if (action.kind === 'notifications') {
+    return translateCurrent('notifications.notification');
+  }
+  if (action.kind === 'vacation') {
+    return translateCurrent('vacation.coverage');
+  }
+  if (action.kind === 'feedback') {
+    return translateCurrent('feedback.title');
+  }
+  return translateCurrent('actionQueue.action');
+}
+
+export async function reconcileRecoveredUserAction(
+  action: RecoverableUserActionStatus['action']
+): Promise<void> {
+  if (action.kind === 'timer') {
+    await waitForAuthoritativeTimer();
+    return;
+  }
+  if (action.kind === 'tasks') {
+    const { useTasksStore } = await import('../stores/tasksStore');
+    await useTasksStore.getState().refreshTasks();
+    return;
+  }
+  if (action.kind === 'intentions') {
+    requestIntentionRefresh();
+    return;
+  }
+  if (action.kind === 'preferences' || action.kind === 'notifications') {
+    const { usePreferencesStore } = await import('../stores/preferencesStore');
+    await usePreferencesStore
+      .getState()
+      .loadPreferences({ syncTimeZone: false });
+    return;
+  }
+  if (action.kind === 'lists') {
+    await Promise.all([
+      apiClient.lists.list({ query: {} }),
+      apiClient.lists.items({ query: {} }),
+    ]);
+    requestListRefresh();
+    return;
+  }
+  if (action.kind === 'assistant') {
+    const [{ useAssistantStore }, { useTasksStore }] = await Promise.all([
+      import('../stores/assistantStore'),
+      import('../stores/tasksStore'),
+    ]);
+    await Promise.all([
+      useAssistantStore.getState().loadStatus(),
+      useTasksStore.getState().refreshTasks(),
+    ]);
+    requestListRefresh();
+    return;
+  }
+  if (action.kind === 'workTimerLog') {
+    requestWorkTimerLogRefresh();
+    return;
+  }
+  if (action.kind === 'vacation') {
+    const [{ useVacationStore }, { useTasksStore }] = await Promise.all([
+      import('../stores/vacationStore'),
+      import('../stores/tasksStore'),
+    ]);
+    await Promise.all([
+      useVacationStore.getState().loadStatus(),
+      useTasksStore.getState().refreshTasks(),
+    ]);
+    requestListRefresh();
+    return;
+  }
+  if (action.kind === 'system') {
+    const [{ usePreferencesStore }, { useTasksStore }] = await Promise.all([
+      import('../stores/preferencesStore'),
+      import('../stores/tasksStore'),
+    ]);
+    await Promise.all([
+      usePreferencesStore.getState().loadPreferences({ syncTimeZone: false }),
+      useTasksStore.getState().refreshTasks(),
+    ]);
+    forceReconnect(false);
+  }
+}
 
 function clearNetworkRetry() {
   if (!networkRetryTimer) return;
@@ -111,6 +269,26 @@ function clearNetworkRetry() {
 function resetNetworkRetry() {
   clearNetworkRetry();
   networkRetryAttempt = 0;
+}
+
+function clearHydrationRetry() {
+  if (hydrationRetryTimer) clearTimeout(hydrationRetryTimer);
+  hydrationRetryTimer = null;
+}
+
+function scheduleHydrationRetry() {
+  if (hydrationRetryTimer || !useAuthStore.getState().token) return;
+  hydrationRetryPending = true;
+  forceReconnect(false);
+  const delay = Math.min(
+    NETWORK_RETRY_MS * 2 ** hydrationRetryAttempt,
+    MAX_NETWORK_RETRY_MS
+  );
+  hydrationRetryAttempt += 1;
+  hydrationRetryTimer = setTimeout(() => {
+    hydrationRetryTimer = null;
+    void hydrateRecoveredActions();
+  }, delay);
 }
 
 function blockNetworkAndRetry(item: QueueItem, phase: 'submit' | 'poll') {
@@ -207,6 +385,24 @@ function lifecycleFromResponse(
         : undefined,
     createdAt: String(defaults.createdAt ?? now),
     updatedAt: String(defaults.updatedAt ?? now),
+  };
+}
+
+function sanitizeRecoveredLifecycle(
+  lifecycle: UserActionLifecycle,
+  item: QueueItem
+): UserActionLifecycle {
+  if (!item.restored || !item.recoveryAction) return lifecycle;
+  return {
+    ...lifecycle,
+    kind: item.recoveryAction.kind,
+    label: item.label,
+    payload: undefined,
+    result: undefined,
+    error:
+      lifecycle.status === 'failed' || lifecycle.status === 'outcomeUnknown'
+        ? translateCurrent('actionQueue.actionFailed')
+        : undefined,
   };
 }
 
@@ -348,6 +544,8 @@ function toPublicAction(item: QueueItem): UserActionLifecycle {
     networkBlockReported: _networkBlockReported,
     terminalSource: _terminalSource,
     timingReported: _timingReported,
+    restored: _restored,
+    recoveryAction: _recoveryAction,
     ...action
   } = item;
   return action;
@@ -549,7 +747,10 @@ async function pollItem(item: QueueItem) {
       );
       return;
     }
-    const lifecycle = lifecycleFromResponse(response.body, item);
+    const lifecycle = sanitizeRecoveredLifecycle(
+      lifecycleFromResponse(response.body, item),
+      item
+    );
     resetNetworkRetry();
     if (!TERMINAL_STATUSES.has(item.status)) {
       updateItem(item, lifecycle);
@@ -595,6 +796,10 @@ async function settleTerminalItem(item: QueueItem) {
       );
       return;
     }
+  }
+  const userId = useAuthStore.getState().user?.id;
+  if (item.recoveryCheckpoint && userId) {
+    writeRecoveryCheckpoint(userId, item.recoveryCheckpoint);
   }
   resolveItem(item);
 }
@@ -669,7 +874,11 @@ async function processQueue() {
         useUserActionQueueBase.setState({ actions: queue.map(toPublicAction) });
         continue;
       }
-      await submitItem(head);
+      if (head.restored) {
+        await pollItem(head);
+      } else {
+        await submitItem(head);
+      }
       if (useUserActionQueueBase.getState().isNetworkBlocked) {
         return;
       }
@@ -683,6 +892,140 @@ async function processQueue() {
   }
 }
 
+async function hydrateRecoveredActions(): Promise<void> {
+  const token = useAuthStore.getState().token;
+  const userId = useAuthStore.getState().user?.id;
+  if (!token) return;
+  const generation = ++hydrationGeneration;
+  let cursor: string | null = null;
+  const recovered: RecoverableUserActionStatus[] = [];
+  let recoveryCursor: string | null = null;
+  const after = readRecoveryCheckpoint(userId);
+  try {
+    do {
+      const response = await requestJson(
+        `/user-actions?limit=50${
+          after ? `&after=${encodeURIComponent(after)}` : ''
+        }${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+        { method: 'GET' },
+        RECEIPT_TIMEOUT_MS
+      );
+      if (
+        generation !== hydrationGeneration ||
+        token !== useAuthStore.getState().token
+      ) {
+        return;
+      }
+      if (response.status !== 200) {
+        if (response.status !== 401) {
+          Sentry.logger.warn('User action recovery discovery failed', {
+            status: response.status,
+          });
+        }
+        if (response.status !== 401) scheduleHydrationRetry();
+        return;
+      }
+      const body = response.body as {
+        items?: RecoverableUserActionStatus[];
+        nextCursor?: string | null;
+        recoveryCursor?: string | null;
+      };
+      recovered.push(...(Array.isArray(body.items) ? body.items : []));
+      if (!recoveryCursor && typeof body.recoveryCursor === 'string') {
+        recoveryCursor = body.recoveryCursor;
+      }
+      cursor = typeof body.nextCursor === 'string' ? body.nextCursor : null;
+    } while (cursor);
+  } catch (error) {
+    if (
+      generation === hydrationGeneration &&
+      token === useAuthStore.getState().token
+    ) {
+      Sentry.logger.warn('User action recovery discovery failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      scheduleHydrationRetry();
+    }
+    return;
+  }
+
+  clearHydrationRetry();
+  hydrationRetryAttempt = 0;
+  hydrationRetryPending = false;
+
+  const knownIds = new Set(queue.map(item => item.id));
+  recovered.sort((left, right) => {
+    const leftActive = left.status === 'accepted' || left.status === 'running';
+    const rightActive =
+      right.status === 'accepted' || right.status === 'running';
+    if (leftActive !== rightActive) return leftActive ? -1 : 1;
+    return leftActive
+      ? left.acceptedAt - right.acceptedAt
+      : right.updatedAt - left.updatedAt;
+  });
+  for (const status of recovered) {
+    if (knownIds.has(status.actionId)) continue;
+    knownIds.add(status.actionId);
+    const now = performance.now();
+    const localStatus: UserActionStatus = status.outcomeUnknown
+      ? 'outcomeUnknown'
+      : status.status;
+    const item: QueueItem = {
+      id: status.actionId,
+      status: localStatus,
+      kind: status.action.kind,
+      label: getRecoveredActionLabel(status.action),
+      createdAt: new Date(status.acceptedAt).toISOString(),
+      updatedAt: new Date(status.updatedAt).toISOString(),
+      reconcile: () => reconcileRecoveredUserAction(status.action),
+      resolve: () => undefined,
+      reject: () => undefined,
+      enqueuedAtMs: now,
+      firstReceiptReceivedAtMs: now,
+      submitAttempts: 0,
+      pollAttempts: 0,
+      submitFailures: 0,
+      pollFailures: 0,
+      scheduledRetryWaitMs: 0,
+      restored: true,
+      recoveryAction: status.action,
+    };
+    queue.push(item);
+  }
+  if (recoveryCursor && userId) {
+    const recoveredIds = new Set(recovered.map(status => status.actionId));
+    const checkpointTarget = [...queue]
+      .reverse()
+      .find(item => recoveredIds.has(item.id));
+    if (checkpointTarget) checkpointTarget.recoveryCheckpoint = recoveryCursor;
+    else writeRecoveryCheckpoint(userId, recoveryCursor);
+  }
+  useUserActionQueueBase.setState({ actions: queue.map(toPublicAction) });
+  void processQueue();
+}
+
+function resetQueueForAuthenticationChange() {
+  hydrationGeneration += 1;
+  clearNetworkRetry();
+  clearHydrationRetry();
+  hydrationRetryAttempt = 0;
+  hydrationRetryPending = false;
+  queue.forEach(item => {
+    item.status = 'cancelled';
+    item.abortController?.abort();
+    if (!item.settled) {
+      item.settled = true;
+      item.resolve({ ...toPublicAction(item), status: 'cancelled' });
+    }
+  });
+  queue.splice(0);
+  isProcessing = false;
+  useUserActionQueueBase.setState({
+    actions: [],
+    isNetworkBlocked: false,
+  });
+}
+
 function registerLifecycleSocketHandler() {
   if (socketLifecycleHandlerRegistered) return;
   socketLifecycleHandlerRegistered = true;
@@ -693,7 +1036,10 @@ function registerLifecycleSocketHandler() {
     if (item.status === 'reconciling' || TERMINAL_STATUSES.has(item.status)) {
       return;
     }
-    updateItem(item, lifecycleFromResponse(data, item));
+    updateItem(
+      item,
+      sanitizeRecoveredLifecycle(lifecycleFromResponse(data, item), item)
+    );
     if (TERMINAL_STATUSES.has(item.status)) {
       item.terminalSource = 'socket';
       item.terminalReceivedAtMs = performance.now();
@@ -760,11 +1106,13 @@ const useUserActionQueueBase = create<UserActionQueueState>(() => ({
       updateItem(head, { status: 'queued', error: undefined });
     }
     void processQueue();
+    if (hydrationRetryPending) void hydrateRecoveredActions();
   },
   setNetworkBlocked: blocked => {
     if (!blocked) resetNetworkRetry();
     useUserActionQueueBase.setState({ isNetworkBlocked: blocked });
   },
+  hydrateRecoveredActions,
 }));
 
 export const useUserActionQueue = createSelectors(useUserActionQueueBase);
@@ -775,8 +1123,18 @@ export const submitUserMutation = <T>(
 ): Promise<T> => useUserActionQueueBase.getState().submitUserMutation(options);
 
 useAuthStore.subscribe((state, previousState) => {
-  if (state.token === previousState.token) return;
-  resetNetworkRetry();
-  useUserActionQueueBase.getState().clearQueuedActions();
-  useUserActionQueueBase.setState({ isNetworkBlocked: false });
+  const tokenChanged = state.token !== previousState.token;
+  const accountChanged = state.user?.id !== previousState.user?.id;
+  if (!tokenChanged && !accountChanged) return;
+  resetQueueForAuthenticationChange();
+  if (state.token && state.user?.id) void hydrateRecoveredActions();
 });
+
+const initialAuthState = useAuthStore.getState();
+if (
+  initialAuthState.token &&
+  initialAuthState.isAuthenticated &&
+  initialAuthState.user?.id
+) {
+  void hydrateRecoveredActions();
+}

@@ -27,6 +27,7 @@ import { usePreferencesStore } from '../../stores/preferencesStore';
 import { useTimerStore } from '../../stores/timerStore';
 import { useUiStore } from '../../stores/uiStore';
 import { apiClient } from '../../utils/apiClient';
+import { subscribeToIntentionRefresh } from '../../utils/recoveryRefresh';
 import {
   getBreakIntentionQueryTypes,
   getMixedBreakButtonClasses,
@@ -200,6 +201,9 @@ export function ExpandedIntentionsPicker({
 
   useEffect(() => {
     loadIntentions(intentionType);
+    return subscribeToIntentionRefresh(
+      () => void loadIntentions(intentionType)
+    );
   }, [intentionType, loadIntentions]);
 
   useEffect(() => {

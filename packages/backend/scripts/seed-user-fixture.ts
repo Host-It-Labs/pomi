@@ -7,8 +7,10 @@ import {
   TaskRecurrenceAnchorMode,
   TaskStatus,
   TimerTypes,
+  UserActionStatus,
 } from '@pomi/shared';
 import * as bcrypt from 'bcrypt';
+import Redis from 'ioredis';
 import { isDeepStrictEqual } from 'node:util';
 import { addDays, format, startOfDay, subDays } from 'date-fns';
 import dataSource from '../data-source';
@@ -22,6 +24,8 @@ import { Statistic } from '../src/statistics/statistics.entity';
 import { TaskEntity, TaskEventEntity } from '../src/tasks/tasks.entity';
 import { UserEntity } from '../src/users/users.entity';
 import { fixtureCredentialFingerprint } from '../src/development-fixtures/fixture-credential';
+import { DEFAULT_REDIS_URL } from '../src/redis/redis.constants';
+import { UserActionsStore } from '../src/user-actions/user-actions.store';
 
 const WORK_DURATION_MS = 25 * 60 * 1000;
 const BREAK_DURATION_MS = 5 * 60 * 1000;
@@ -105,6 +109,7 @@ type SeedUserFixtureOptions = {
   successLabel: string;
   isAdmin?: boolean;
   includeCanonicalLists?: boolean;
+  includeUserActionRecoveryFixtures?: boolean;
   fixtureMarker?: {
     fixtureName: string;
     seedVersion: number;
@@ -117,6 +122,55 @@ type SeedUserFixtureOptions = {
     ) => ReturnType<typeof buildFixturePreferences>;
   };
 };
+
+const COPYME_RECOVERY_ACTION_IDS = {
+  timer: '00000000-0000-4000-8000-000000000222',
+  task: '00000000-0000-4000-8000-000000000223',
+} as const;
+const COPYME_RECOVERY_TIMESTAMP = Date.UTC(2026, 8, 1, 12);
+
+export function buildCopymeRecoveryStatuses(now: number): UserActionStatus[] {
+  return [
+    {
+      actionId: COPYME_RECOVERY_ACTION_IDS.timer,
+      status: 'succeeded',
+      action: { kind: 'timer', operation: 'pause' },
+      acceptedAt: now - 2_000,
+      startedAt: now - 1_500,
+      completedAt: now - 1_000,
+      updatedAt: now - 1_000,
+    },
+    {
+      actionId: COPYME_RECOVERY_ACTION_IDS.task,
+      status: 'succeeded',
+      action: { kind: 'tasks', operation: 'update' },
+      acceptedAt: now - 1_000,
+      startedAt: now - 750,
+      completedAt: now - 500,
+      updatedAt: now - 500,
+    },
+  ];
+}
+
+async function seedCopymeRecoveryStatuses(username: string): Promise<void> {
+  const user = await dataSource.getRepository(UserEntity).findOne({
+    where: { username },
+  });
+  if (!user) throw new Error(`Fixture user ${username} was not found`);
+  const redis = new Redis(process.env.REDIS_URL || DEFAULT_REDIS_URL, {
+    maxRetriesPerRequest: 1,
+  });
+  try {
+    const store = new UserActionsStore(redis);
+    for (const status of buildCopymeRecoveryStatuses(
+      COPYME_RECOVERY_TIMESTAMP
+    )) {
+      await store.write(user.id, status);
+    }
+  } finally {
+    await redis.quit();
+  }
+}
 
 class FixturePhaseError extends Error {
   constructor(
@@ -1585,6 +1639,11 @@ export async function runSeedUserFixture(
   options: SeedUserFixtureOptions
 ): Promise<void> {
   await seedUserFixture(options)
+    .then(async () => {
+      if (options.includeUserActionRecoveryFixtures) {
+        await seedCopymeRecoveryStatuses(options.username);
+      }
+    })
     .catch(error => {
       console.error(`Failed to seed ${options.username} user`, error);
       process.exitCode = 1;
@@ -1600,6 +1659,11 @@ export async function runEnsureSeedUserFixture(
   options: SeedUserFixtureOptions
 ): Promise<void> {
   await ensureSeedUserFixture(options)
+    .then(async () => {
+      if (options.includeUserActionRecoveryFixtures) {
+        await seedCopymeRecoveryStatuses(options.username);
+      }
+    })
     .catch(error => {
       const phase = error instanceof FixturePhaseError ? error.phase : 'ensure';
       const cause = error instanceof Error ? error.message : String(error);

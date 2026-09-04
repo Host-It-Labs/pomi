@@ -1484,11 +1484,29 @@ const userActionSchema = z
     }
   });
 
+const recoverableUserActionSchema = z.object({
+  kind: z.enum([
+    'timer',
+    'tasks',
+    'intentions',
+    'preferences',
+    'assistant',
+    'workTimerLog',
+    'system',
+    'notifications',
+    'feedback',
+    'lists',
+    'vacation',
+  ]),
+  operation: z.string().min(1),
+});
+
 const userActionStatusSchema = z.object({
   actionId: userActionIdSchema,
   status: z.enum(['accepted', 'running', 'succeeded', 'failed', 'cancelled']),
   action: z.union([
     userActionSchema,
+    recoverableUserActionSchema,
     z.object({ kind: z.literal('cancellation') }),
   ]),
   result: z.unknown().optional(),
@@ -1500,7 +1518,23 @@ const userActionStatusSchema = z.object({
   updatedAt: z.number().int(),
 });
 
-export { userActionIdSchema, userActionSchema, userActionStatusSchema };
+const recoverableUserActionStatusSchema = z.object({
+  actionId: userActionIdSchema,
+  status: z.enum(['accepted', 'running', 'succeeded', 'failed', 'cancelled']),
+  action: recoverableUserActionSchema,
+  outcomeUnknown: z.boolean().optional(),
+  acceptedAt: z.number().int(),
+  startedAt: z.number().int().optional(),
+  completedAt: z.number().int().optional(),
+  updatedAt: z.number().int(),
+});
+
+export {
+  recoverableUserActionStatusSchema,
+  userActionIdSchema,
+  userActionSchema,
+  userActionStatusSchema,
+};
 
 const pushTokenUpdateSchema = z.discriminatedUnion('platform', [
   z.object({
@@ -1515,6 +1549,24 @@ const pushTokenUpdateSchema = z.discriminatedUnion('platform', [
 
 export const apiContract = router({
   userActions: router({
+    list: {
+      method: 'GET',
+      path: '/user-actions',
+      query: z.object({
+        cursor: z.string().min(1).max(1024).optional(),
+        after: z.string().min(1).max(1024).optional(),
+        limit: z.coerce.number().int().min(1).max(50).optional(),
+      }),
+      responses: {
+        200: z.object({
+          items: z.array(recoverableUserActionStatusSchema),
+          nextCursor: z.string().nullable(),
+          recoveryCursor: z.string().nullable(),
+        }),
+        400: errorSchema,
+        401: errorSchema,
+      },
+    },
     submit: {
       method: 'POST',
       path: '/user-actions',

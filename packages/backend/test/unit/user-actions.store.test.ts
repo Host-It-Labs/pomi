@@ -8,14 +8,21 @@ class FakeRedis {
   private readonly tombstones = new Map<string, string>();
   private readonly queues = new Map<string, string[]>();
   private readonly locks = new Map<string, string>();
+  private readonly sortedSets = new Map<string, Map<string, number>>();
 
   async eval(script: string, keyCount: number, ...args: string[]) {
     const keys = args.slice(0, keyCount);
     this.evaluatedKeySets.push(keys);
     const values = args.slice(keyCount);
     if (script.includes('rpush')) {
-      const [recordKey, tombstoneKey, queueKey, executionKey] = keys;
-      if (this.records.has(recordKey)) return [this.records.get(recordKey), 0];
+      const [recordKey, tombstoneKey, queueKey, executionKey, recentKey] = keys;
+      if (this.records.has(recordKey)) {
+        const recent =
+          this.sortedSets.get(recentKey) ?? new Map<string, number>();
+        recent.set(values[1], Number(values[6]));
+        this.sortedSets.set(recentKey, recent);
+        return [this.records.get(recordKey), 0];
+      }
       if (this.tombstones.has(tombstoneKey)) {
         this.records.set(recordKey, values[3]);
         return [values[3], 0];
@@ -25,7 +32,20 @@ class FakeRedis {
       const queue = this.queues.get(queueKey) ?? [];
       queue.push(values[1]);
       this.queues.set(queueKey, queue);
+      const recent =
+        this.sortedSets.get(recentKey) ?? new Map<string, number>();
+      recent.set(values[1], Number(values[6]));
+      this.sortedSets.set(recentKey, recent);
       return [values[0], 1];
+    }
+    if (script.includes("redis.call('zadd'")) {
+      const [recordKey, recentKey] = keys;
+      this.records.set(recordKey, values[0]);
+      const recent =
+        this.sortedSets.get(recentKey) ?? new Map<string, number>();
+      recent.set(values[3], Number(values[1]));
+      this.sortedSets.set(recentKey, recent);
+      return 1;
     }
     if (script.includes('local accepted')) {
       const [recordKey, tombstoneKey] = keys;
@@ -74,6 +94,25 @@ class FakeRedis {
 
   async scan() {
     return ['0', [...this.queues.keys()]];
+  }
+
+  async zrevrange(key: string, start: number, end: number) {
+    return [...(this.sortedSets.get(key) ?? new Map()).entries()]
+      .sort(
+        (left, right) => right[1] - left[1] || right[0].localeCompare(left[0])
+      )
+      .slice(start, end + 1)
+      .map(([member]) => member);
+  }
+
+  async mget(...keys: string[]) {
+    return keys.map(key => this.records.get(key) ?? null);
+  }
+
+  async zrem(key: string, ...members: string[]) {
+    const values = this.sortedSets.get(key);
+    members.forEach(member => values?.delete(member));
+    return members.length;
   }
 }
 
@@ -182,5 +221,35 @@ describe('UserActionsStore', () => {
       expect(hashTags.every(tag => tag === hashTags[0])).toBe(true);
       expect(hashTags[0]).toBeTruthy();
     }
+  });
+
+  it('indexes recent lifecycle records per user without execution payloads', async () => {
+    const store = new UserActionsStore(new FakeRedis() as never);
+    const first = status('action-1');
+    const second = { ...status('action-2'), updatedAt: first.updatedAt + 1 };
+
+    await store.submit(
+      'user-1',
+      first.actionId,
+      first,
+      status(first.actionId, 'cancelled'),
+      executionAction
+    );
+    await store.submit(
+      'user-1',
+      second.actionId,
+      second,
+      status(second.actionId, 'cancelled'),
+      executionAction
+    );
+    await store.submit(
+      'user-2',
+      'other-action',
+      status('other-action'),
+      status('other-action', 'cancelled'),
+      executionAction
+    );
+
+    await expect(store.listRecent('user-1')).resolves.toEqual([second, first]);
   });
 });

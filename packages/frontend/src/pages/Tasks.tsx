@@ -104,6 +104,7 @@ import {
   requestListRefresh,
   subscribeToListRefresh,
 } from '../utils/listRefresh';
+import { subscribeToIntentionRefresh } from '../utils/recoveryRefresh';
 import {
   mixTaskAndListItems,
   type MixedTaskItem,
@@ -271,6 +272,7 @@ export function Tasks() {
     };
 
     void loadIntentions();
+    return subscribeToIntentionRefresh(() => void loadIntentions());
   }, [t, user?.id]);
 
   const loadLists = useCallback(async () => {

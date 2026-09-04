@@ -9,6 +9,7 @@ const RECORD_TTL_SECONDS = 7 * 24 * 60 * 60;
 // payloads; in particular, audio/import blobs are not emitted over sockets.
 const EXECUTION_PAYLOAD_TTL_SECONDS = 24 * 60 * 60;
 const TOMBSTONE_TTL_SECONDS = 10 * 60;
+const RECENT_ACTION_LIMIT = 200;
 
 const RELEASE_LOCK_SCRIPT = `
   if redis.call('get', KEYS[1]) == ARGV[1] then
@@ -37,7 +38,11 @@ export class UserActionsStore {
     const [raw, created] = (await this.redis.eval(
       `
       if redis.call('exists', KEYS[1]) == 1 then
-        return {redis.call('get', KEYS[1]), 0}
+        local existing = redis.call('get', KEYS[1])
+        local existingStatus = cjson.decode(existing)
+        redis.call('zadd', KEYS[5], existingStatus.updatedAt, ARGV[2])
+        redis.call('expire', KEYS[5], ARGV[5])
+        return {existing, 0}
       end
       if redis.call('exists', KEYS[2]) == 1 then
         redis.call('set', KEYS[1], ARGV[4], 'EX', ARGV[5])
@@ -46,19 +51,28 @@ export class UserActionsStore {
       redis.call('set', KEYS[1], ARGV[1], 'EX', ARGV[5])
       redis.call('set', KEYS[4], ARGV[3], 'EX', ARGV[6])
       redis.call('rpush', KEYS[3], ARGV[2])
+      redis.call('zadd', KEYS[5], ARGV[7], ARGV[2])
+      redis.call('expire', KEYS[5], ARGV[5])
+      local recentCount = redis.call('zcard', KEYS[5])
+      if recentCount > tonumber(ARGV[8]) then
+        redis.call('zremrangebyrank', KEYS[5], 0, recentCount - tonumber(ARGV[8]) - 1)
+      end
       return {ARGV[1], 1}
       `,
-      4,
+      5,
       this.recordKey(userId, actionId),
       this.tombstoneKey(userId, actionId),
       this.queueKey(userId),
       this.executionActionKey(userId, actionId),
+      this.recentKey(userId),
       JSON.stringify(accepted),
       actionId,
       JSON.stringify(executionAction),
       JSON.stringify(cancelled),
       RECORD_TTL_SECONDS,
-      EXECUTION_PAYLOAD_TTL_SECONDS
+      EXECUTION_PAYLOAD_TTL_SECONDS,
+      accepted.updatedAt,
+      RECENT_ACTION_LIMIT
     )) as [string, number];
     return { status: this.parse(raw), created: created === 1 };
   }
@@ -109,12 +123,52 @@ export class UserActionsStore {
   }
 
   async write(userId: string, status: StoredUserAction): Promise<void> {
-    await this.redis.set(
+    const recentKey = this.recentKey(userId);
+    await this.redis.eval(
+      `
+      redis.call('set', KEYS[1], ARGV[1], 'EX', ARGV[3])
+      redis.call('zadd', KEYS[2], ARGV[2], ARGV[4])
+      redis.call('expire', KEYS[2], ARGV[3])
+      local recentCount = redis.call('zcard', KEYS[2])
+      if recentCount > tonumber(ARGV[5]) then
+        redis.call('zremrangebyrank', KEYS[2], 0, recentCount - tonumber(ARGV[5]) - 1)
+      end
+      return 1
+      `,
+      2,
       this.recordKey(userId, status.actionId),
+      recentKey,
       JSON.stringify(status),
-      'EX',
-      RECORD_TTL_SECONDS
+      status.updatedAt,
+      RECORD_TTL_SECONDS,
+      status.actionId,
+      RECENT_ACTION_LIMIT
     );
+  }
+
+  async listRecent(userId: string): Promise<StoredUserAction[]> {
+    const recentKey = this.recentKey(userId);
+    const actionIds = await this.redis.zrevrange(
+      recentKey,
+      0,
+      RECENT_ACTION_LIMIT - 1
+    );
+    if (actionIds.length === 0) return [];
+    const rawRecords = await this.redis.mget(
+      ...actionIds.map(actionId => this.recordKey(userId, actionId))
+    );
+    const staleActionIds: string[] = [];
+    const statuses = rawRecords.flatMap((raw, index) => {
+      if (!raw) {
+        staleActionIds.push(actionIds[index]);
+        return [];
+      }
+      return [this.parse(raw)];
+    });
+    if (staleActionIds.length > 0) {
+      await this.redis.zrem(recentKey, ...staleActionIds);
+    }
+    return statuses;
   }
 
   async queueHead(userId: string): Promise<string | null> {
@@ -192,6 +246,10 @@ export class UserActionsStore {
 
   private queueKey(userId: string): string {
     return `pomi:user-actions:{${userId}}:queue`;
+  }
+
+  private recentKey(userId: string): string {
+    return `pomi:user-actions:{${userId}}:recent`;
   }
 
   private lockKey(userId: string): string {

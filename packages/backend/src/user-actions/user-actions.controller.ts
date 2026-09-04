@@ -15,12 +15,29 @@ import { AuthGuard } from '../auth/auth.guard';
 import { CreateUserActionDto } from './dto/create-user-action.dto';
 import { UserActionIdParam } from './dto/user-action-id.param';
 import { UserActionStatusQuery } from './dto/user-action-status.query';
+import { UserActionsListQuery } from './dto/user-actions-list.query';
 import { UserActionsService } from './user-actions.service';
 
 @Controller()
 @UseGuards(AuthGuard)
 export class UserActionsController {
   constructor(private readonly userActionsService: UserActionsService) {}
+
+  @TsRestHandler(apiContract.userActions.list)
+  async list(
+    @Request() request: { user: { sub: string } },
+    @Query() query: UserActionsListQuery
+  ): Promise<unknown> {
+    return tsRestHandler(apiContract.userActions.list, async () => ({
+      status: 200,
+      body: await this.userActionsService.listRecentActions(
+        request.user.sub,
+        query.cursor,
+        query.after,
+        query.limit
+      ),
+    }));
+  }
 
   @TsRestHandler(apiContract.userActions.submit)
   async submit(

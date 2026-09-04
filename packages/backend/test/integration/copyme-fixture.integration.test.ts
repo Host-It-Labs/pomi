@@ -5,7 +5,9 @@ import bcrypt from 'bcrypt';
 import { addDays, format } from 'date-fns';
 import path from 'node:path';
 import { Client } from 'pg';
+import Redis from 'ioredis';
 import { test } from 'vitest';
+import { DEFAULT_REDIS_URL } from '../../src/redis/redis.constants';
 
 const backendRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -16,6 +18,35 @@ const databaseUrl =
   `postgres://user:password@localhost:${process.env.POMI_DB_PORT || '5433'}/pomodoro`;
 const username = 'copyme-integration';
 const fixtureName = 'copyme-integration';
+const recoveryUserIds = new Set<string>();
+const recoveryActionIds = [
+  '00000000-0000-4000-8000-000000000222',
+  '00000000-0000-4000-8000-000000000223',
+];
+
+async function cleanRecoveryFixtures(): Promise<void> {
+  if (recoveryUserIds.size === 0) return;
+  const redis = new Redis(process.env.REDIS_URL || DEFAULT_REDIS_URL, {
+    maxRetriesPerRequest: 1,
+  });
+  try {
+    for (const userId of recoveryUserIds) {
+      await redis.del(
+        `pomi:user-actions:{${userId}}:recent`,
+        ...recoveryActionIds.map(
+          actionId => `pomi:user-actions:{${userId}}:record:${actionId}`
+        )
+      );
+    }
+  } finally {
+    await redis.quit();
+  }
+}
+
+function trackRecoveryUser(userId: string): string {
+  recoveryUserIds.add(userId);
+  return userId;
+}
 
 function runFixtureScript(scriptName: string): string {
   return execFileSync(
@@ -90,10 +121,10 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
       [fixtureName]
     );
     assert.equal(marker.rows.length, 1);
-    assert.equal(marker.rows[0].seedVersion, 16);
+    assert.equal(marker.rows[0].seedVersion, 17);
     assert.equal(marker.rows[0].isAdmin, true);
     assert.match(marker.rows[0].credentialFingerprint, /^[a-f0-9]{64}$/);
-    const firstUserId = marker.rows[0].id;
+    const firstUserId = trackRecoveryUser(marker.rows[0].id);
 
     const preferences = await client.query(
       `SELECT p.*
@@ -345,6 +376,7 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
       [username]
     );
     assert.notEqual(repaired.rows[0].id, firstUserId);
+    trackRecoveryUser(repaired.rows[0].id);
     assert.equal(repaired.rows[0].undoAlerts, true);
 
     assert.match(await seedCopyme(), /Copyme user fixture is healthy/);
@@ -366,6 +398,7 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
       [username]
     );
     assert.notEqual(automaticallyRebuilt.rows[0].id, repaired.rows[0].id);
+    trackRecoveryUser(automaticallyRebuilt.rows[0].id);
     assert.equal(automaticallyRebuilt.rows[0].undoAlerts, true);
 
     assert.match(await reseedCopyme(), /existing Copyme data will be deleted/);
@@ -376,8 +409,15 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
       [username]
     );
     assert.notEqual(rebuilt.rows[0].id, automaticallyRebuilt.rows[0].id);
+    trackRecoveryUser(rebuilt.rows[0].id);
     assert.equal(rebuilt.rows[0].undoAlerts, true);
   } finally {
+    const remainingUsers = await client.query(
+      `SELECT id FROM users WHERE username = $1`,
+      [username]
+    );
+    remainingUsers.rows.forEach(row => trackRecoveryUser(row.id));
+    await cleanRecoveryFixtures();
     await cleanIsolatedFixture(client);
     await client.end();
   }

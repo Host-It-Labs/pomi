@@ -250,3 +250,25 @@ export interface UserActionStatus<T = unknown> {
   completedAt?: number;
   updatedAt: number;
 }
+
+export type RecoverableUserAction = {
+  kind: UserAction['kind'];
+  operation: string;
+};
+
+export interface RecoverableUserActionStatus {
+  actionId: string;
+  status: UserActionLifecycle;
+  action: RecoverableUserAction;
+  outcomeUnknown?: boolean;
+  acceptedAt: number;
+  startedAt?: number;
+  completedAt?: number;
+  updatedAt: number;
+}
+
+export interface RecoverableUserActionsPage {
+  items: RecoverableUserActionStatus[];
+  nextCursor: string | null;
+  recoveryCursor: string | null;
+}

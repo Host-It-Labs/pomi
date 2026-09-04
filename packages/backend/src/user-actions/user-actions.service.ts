@@ -14,6 +14,8 @@ import type {
   VacationUserAction,
   UserAction,
   UserActionStatus,
+  RecoverableUserActionStatus,
+  RecoverableUserActionsPage,
 } from '@pomi/shared';
 import * as Sentry from '@sentry/nestjs';
 import { CLIENT_NOTIFICATION_TYPES, TIMER_TYPES } from '@pomi/shared';
@@ -52,6 +54,11 @@ const POLL_INTERVAL_MS = 1000;
 const LOCK_RETRY_BASE_MS = 250;
 const LOCK_RETRY_MAX_MS = 2000;
 type StoredAction = StoredUserAction;
+type RecoveryCursor = {
+  userId: string;
+  updatedAt: number;
+  actionId: string;
+};
 
 @Injectable()
 export class UserActionsService implements OnModuleInit, OnModuleDestroy {
@@ -166,6 +173,70 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async listRecentActions(
+    userId: string,
+    rawCursor?: string,
+    rawAfter?: string,
+    rawLimit?: number
+  ): Promise<RecoverableUserActionsPage> {
+    const limit = Math.min(Math.max(rawLimit ?? 20, 1), 50);
+    const cursor = rawCursor
+      ? this.decodeRecoveryCursor(rawCursor, userId)
+      : null;
+    const after = rawAfter ? this.decodeRecoveryCursor(rawAfter, userId) : null;
+    const statuses = (await this.userActionsStore.listRecent(userId))
+      .filter(status => status.action.kind !== 'cancellation')
+      .sort(
+        (left, right) =>
+          right.updatedAt - left.updatedAt ||
+          right.actionId.localeCompare(left.actionId)
+      )
+      .filter(
+        status =>
+          !after ||
+          status.updatedAt > after.updatedAt ||
+          (status.updatedAt === after.updatedAt &&
+            status.actionId.localeCompare(after.actionId) > 0)
+      );
+    const startIndex = cursor
+      ? statuses.findIndex(
+          status =>
+            status.updatedAt < cursor.updatedAt ||
+            (status.updatedAt === cursor.updatedAt &&
+              status.actionId.localeCompare(cursor.actionId) < 0)
+        )
+      : 0;
+    const newest = statuses[0];
+    const recoveryCursor = newest
+      ? this.encodeRecoveryCursor({
+          userId,
+          updatedAt: newest.updatedAt,
+          actionId: newest.actionId,
+        })
+      : null;
+    if (cursor && startIndex < 0) {
+      return { items: [], nextCursor: null, recoveryCursor };
+    }
+    const page = statuses.slice(startIndex, startIndex + limit + 1);
+    const hasMore = page.length > limit;
+    const items = page
+      .slice(0, limit)
+      .map(status => this.toRecoverableStatus(status));
+    const last = items[items.length - 1];
+    return {
+      items,
+      nextCursor:
+        hasMore && last
+          ? this.encodeRecoveryCursor({
+              userId,
+              updatedAt: last.updatedAt,
+              actionId: last.actionId,
+            })
+          : null,
+      recoveryCursor,
+    };
+  }
+
   async cancel(userId: string, actionId: string): Promise<UserActionStatus> {
     if (!userActionIdSchema.safeParse(actionId).success) {
       throw new BadRequestException('Invalid user action ID');
@@ -195,6 +266,60 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
     if (created) this.logBackendTiming(status);
     this.emitUpdate(userId, status);
     return status;
+  }
+
+  private toRecoverableStatus(
+    status: StoredAction
+  ): RecoverableUserActionStatus {
+    if (status.action.kind === 'cancellation') {
+      throw new BadRequestException('Cancellation records are not recoverable');
+    }
+    return {
+      actionId: status.actionId,
+      status: status.status,
+      action: {
+        kind: status.action.kind,
+        operation: status.action.operation,
+      },
+      ...(status.outcomeUnknown === undefined
+        ? {}
+        : { outcomeUnknown: status.outcomeUnknown }),
+      acceptedAt: status.acceptedAt,
+      ...(status.startedAt === undefined
+        ? {}
+        : { startedAt: status.startedAt }),
+      ...(status.completedAt === undefined
+        ? {}
+        : { completedAt: status.completedAt }),
+      updatedAt: status.updatedAt,
+    };
+  }
+
+  private encodeRecoveryCursor(cursor: RecoveryCursor): string {
+    return Buffer.from(JSON.stringify(cursor)).toString('base64url');
+  }
+
+  private decodeRecoveryCursor(
+    rawCursor: string,
+    userId: string
+  ): RecoveryCursor {
+    try {
+      const cursor = JSON.parse(
+        Buffer.from(rawCursor, 'base64url').toString('utf8')
+      ) as Partial<RecoveryCursor>;
+      if (
+        cursor.userId !== userId ||
+        typeof cursor.updatedAt !== 'number' ||
+        !Number.isInteger(cursor.updatedAt) ||
+        typeof cursor.actionId !== 'string' ||
+        !userActionIdSchema.safeParse(cursor.actionId).success
+      ) {
+        throw new Error('Invalid cursor');
+      }
+      return cursor as RecoveryCursor;
+    } catch {
+      throw new BadRequestException('Invalid user action cursor');
+    }
   }
 
   private async processUserQueue(userId: string): Promise<void> {
