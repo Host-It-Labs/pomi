@@ -1,10 +1,10 @@
 import { TopIntentionStat, TopIntentionsPeriod } from '@pomi/shared';
 import { TIMER_TYPES } from '@pomi/shared/src/constants';
 import { useLayoutEffect, useRef, useState, type WheelEvent } from 'react';
+import { useI18n } from '../../i18n';
 import type { MetricMode } from '../../stores/statisticsStore';
 import { isDesktop } from '../../utils/osUtils';
 import { formatTimeWithUnit } from '../../utils/timeUtils';
-import { useI18n } from '../../i18n';
 
 const PERIODS = [
   'today',
@@ -45,7 +45,7 @@ function PeriodTabs({
           className={`px-2 py-0.5 text-sm rounded-md transition-all capitalize ${
             period === p
               ? activeTabClass
-              : 'text-slate-400 hover:text-white hover:bg-slate-700/30'
+              : 'text-slate-400 hover:text-ink hover:bg-slate-700/30'
           }`}
         >
           {t(`statistics.${p}`)}

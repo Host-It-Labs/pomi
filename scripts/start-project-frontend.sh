@@ -135,5 +135,5 @@ echo "[pomi] copyme fixture is seeded and auto-login is enabled"
 
 VITE_DEV_AUTO_LOGIN_USERNAME="$copyme_username" \
   VITE_DEV_AUTO_LOGIN_PASSWORD="$copyme_password" \
-  VITE_TEST_CONTEXT_SLUG="${VITE_TEST_CONTEXT_SLUG:-${POMI_CURRENT_WORK_SLUG:-test-context-slug}}" \
+  VITE_TEST_CONTEXT_SLUG="${VITE_TEST_CONTEXT_SLUG:-${POMI_CURRENT_WORK_SLUG:-$(git branch --show-current)}}" \
   pnpm run dev:frontend

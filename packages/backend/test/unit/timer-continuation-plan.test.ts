@@ -96,7 +96,15 @@ describe('buildTimerContinuationPlan', () => {
           }),
         })
       );
-      expect(plan.extensionState).toEqual({ kind: 'keep' });
+      expect(plan.extensionState).toEqual({
+        kind: 'set',
+        value: expect.objectContaining({
+          startTime: 61_000,
+          originalTimerId: 'timer-1',
+          extensionNextTimerType: type,
+        }),
+      });
+      expect(plan.extensionExpirationAt).toBeNull();
     }
   );
 
@@ -208,14 +216,13 @@ describe('buildTimerContinuationPlan', () => {
       kind: 'set',
       value: expect.objectContaining({
         startTime: 61_000,
-        maxDuration: 900_000,
         originalTimerId: 'timer-1',
         originalDuration: 60_000,
         extensionNextTimerType: TIMER_TYPES.BREAK,
         intention: 'focus',
       }),
     });
-    expect(plan.extensionExpirationAt).toBe(961_000);
+    expect(plan.extensionExpirationAt).toBeNull();
     expect(plan.idleDetection).toEqual({
       detectionId: '11111111-1111-4111-8111-111111111111',
       checkAt: 961_000,

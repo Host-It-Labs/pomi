@@ -25,8 +25,6 @@ function task(overrides: Partial<Task>): Task {
     importSourceTaskId: null,
     dueDate: '2026-08-01',
     dueTime: '09:30',
-    manualOrder: null,
-    manualOrderOverride: false,
     priority: 'high',
     status: 'active',
     timerType: 'work',

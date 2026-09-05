@@ -1,15 +1,10 @@
 import clsx from 'clsx';
 import { type ButtonHTMLAttributes } from 'react';
-import { Spinner } from './Spinner.tsx';
 import { useI18n } from '../../i18n';
+import { Spinner } from './Spinner.tsx';
 
 type ButtonVariant =
-  | 'primary'
-  | 'secondary'
-  | 'ghost'
-  | 'danger'
-  | 'outline'
-  | 'link';
+  'primary' | 'secondary' | 'ghost' | 'danger' | 'outline' | 'link';
 
 type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
@@ -46,7 +41,7 @@ export function Button({
 
   const variantClasses = {
     primary:
-      'bg-indigo-600/40 text-indigo-100 border border-indigo-500/25 hover:bg-indigo-600/55 hover:border-indigo-500/35',
+      'bg-indigo-600 text-on-accent border border-indigo-600 hover:bg-indigo-700',
     secondary:
       'bg-slate-800/40 text-slate-300 border border-slate-700/25 hover:bg-slate-700/40',
     ghost: 'bg-transparent text-slate-200 hover:bg-slate-800/40',
@@ -63,7 +58,7 @@ export function Button({
       type={resolvedType}
       disabled={disabled || showLoading}
       className={clsx(
-        'relative inline-flex items-center justify-center rounded-md font-medium transition-colors cursor-pointer',
+        'relative inline-flex items-center justify-center rounded-xl font-medium transition-colors cursor-pointer',
         'disabled:cursor-not-allowed disabled:opacity-70',
         sizeClasses[resolvedSize],
         variantClasses[resolvedVariant],

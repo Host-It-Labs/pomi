@@ -1,10 +1,10 @@
 import type { Intention, List } from '@pomi/shared';
 import { useEffect, useState } from 'react';
+import { useI18n } from '../../i18n';
 import { apiClient } from '../../utils/apiClient';
 import { submitUserMutation } from '../../utils/userActionQueue';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
-import { useI18n } from '../../i18n';
 
 type Draft = {
   kind: 'intention' | 'list';
@@ -203,7 +203,7 @@ export function DescriptionWizardModal({
             onClick={() => void editManually()}
             className="flex min-h-32 flex-col justify-center rounded-xl border border-slate-700 bg-slate-900/70 p-5 text-left transition hover:border-slate-500 hover:bg-slate-800/80"
           >
-            <span className="text-sm font-semibold text-white">
+            <span className="text-sm font-semibold text-ink">
               {t('description.writeManually')}
             </span>
             <span className="mt-2 text-xs leading-relaxed text-slate-400">
@@ -215,7 +215,7 @@ export function DescriptionWizardModal({
             onClick={() => void generate()}
             className="flex min-h-32 flex-col justify-center rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-5 text-left transition hover:border-indigo-400/60 hover:bg-indigo-500/15"
           >
-            <span className="text-sm font-semibold text-white">
+            <span className="text-sm font-semibold text-ink">
               {t('description.generateWithAi')}
             </span>
             <span className="mt-2 text-xs leading-relaxed text-slate-300">
@@ -257,7 +257,7 @@ export function DescriptionWizardModal({
                       )
                     )
                   }
-                  className="w-full resize-y rounded-lg border border-slate-700 bg-slate-950 p-2 text-sm text-white outline-none focus:border-indigo-500"
+                  className="w-full resize-y rounded-lg border border-slate-700 bg-slate-950 p-2 text-sm text-ink outline-none focus:border-indigo-500"
                 />
               </label>
             ))}

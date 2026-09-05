@@ -2,12 +2,12 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
 import { ActionQueueDetails } from '../components/UserActionIndicator';
 import { Spinner } from '../components/ui/Spinner';
+import { useI18n } from '../i18n';
 import { useAuthStore } from '../stores/authStore';
 import { useConnectionStatusUi } from '../stores/connectionStatusUiStore';
 import { useTimerStore } from '../stores/timerStore';
-import { useUserActionQueue } from '../utils/userActionQueue';
 import { requestBackendConnectionRecovery } from '../utils/backendConnectionRecovery';
-import { useI18n } from '../i18n';
+import { useUserActionQueue } from '../utils/userActionQueue';
 
 const CONNECTION_STATUS_POLL_MS = 1000;
 const RESUME_CONNECTION_STATUS_DELAY_MS = 3000;
@@ -156,8 +156,8 @@ export function ConnectionStatus() {
       : t('connection.connectingEllipsis');
   const statusClasses =
     statusTone === 'offline'
-      ? 'bg-red-600/90 text-white'
-      : 'bg-yellow-600/90 text-white';
+      ? 'bg-red-600/90 text-ink'
+      : 'bg-yellow-600/90 text-ink';
   const dismissToast = () => {
     setDetailsOpen(false);
     dismiss(statusTone);
@@ -187,7 +187,7 @@ export function ConnectionStatus() {
             {actions.length > 1 && (
               <span
                 data-testid="connection-action-count"
-                className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-slate-700 px-1 text-[10px] font-bold text-white"
+                className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-slate-700 px-1 text-[10px] font-bold text-ink"
               >
                 {actions.length}
               </span>
@@ -219,7 +219,7 @@ export function ConnectionStatus() {
               event.stopPropagation();
               dismissToast();
             }}
-            className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded text-base leading-none text-white/75 transition hover:bg-black/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/80"
+            className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded text-base leading-none text-ink/75 transition hover:bg-black/10 hover:text-ink focus:outline-none focus:ring-2 focus:ring-white/80"
           >
             <span aria-hidden="true">×</span>
           </button>

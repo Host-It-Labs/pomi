@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
   loadTasks: vi.fn().mockResolvedValue(undefined),
   createTask: vi.fn().mockResolvedValue(true),
   updateTask: vi.fn().mockResolvedValue(true),
-  reorderTasks: vi.fn().mockResolvedValue(true),
   loadVacationStatus: vi.fn().mockResolvedValue(undefined),
   updatePreferenceWithResult: vi.fn().mockResolvedValue(true),
   createOrResumeTimer: vi.fn().mockResolvedValue(undefined),
@@ -26,7 +25,6 @@ vi.mock('../stores/tasksStore', () => ({
       loadTasks: () => mocks.loadTasks,
       createTask: () => mocks.createTask,
       updateTask: () => mocks.updateTask,
-      reorderTasks: () => mocks.reorderTasks,
     },
   },
 }));
@@ -76,6 +74,9 @@ vi.mock('../stores/uiStore', () => ({
   useUiStore: {
     use: {
       setTaskMode: () => mocks.setTaskMode,
+      taskMode: () => 'general',
+      taskFilterResetRequest: () => 0,
+      taskModeToggleRequest: () => 0,
       taskCreateRequested: () => false,
       taskCreateInitialTitle: () => '',
       clearTaskCreateRequest: () => mocks.clearTaskCreateRequest,
@@ -192,7 +193,7 @@ vi.mock('../components/toast/ToastContext', () => ({
 }));
 
 import { apiClient } from '../utils/apiClient';
-import { Tasks } from './Tasks';
+import { TaskWorkspace } from './TaskWorkspace';
 
 beforeAll(() => {
   vi.stubGlobal(
@@ -236,7 +237,7 @@ describe('Tasks page interactions', () => {
         headers: new Headers(),
       });
 
-    render(<Tasks />);
+    render(<TaskWorkspace />);
     fireEvent.click(screen.getByRole('button', { name: 'Archived' }));
 
     expect(await screen.findByText('Archived one')).toBeInTheDocument();
@@ -255,7 +256,7 @@ describe('Tasks page interactions', () => {
       body: { message: 'Not found' },
       headers: new Headers(),
     } as never);
-    render(<Tasks />);
+    render(<TaskWorkspace />);
     fireEvent.click(screen.getByRole('button', { name: 'Archived' }));
 
     expect(
@@ -271,7 +272,7 @@ describe('Tasks page interactions', () => {
       headers: new Headers(),
     } as never);
 
-    render(<Tasks />);
+    render(<TaskWorkspace />);
     fireEvent.click(screen.getByRole('button', { name: 'Archived' }));
 
     expect(
@@ -294,7 +295,7 @@ describe('Tasks page interactions', () => {
       }),
     ];
 
-    render(<Tasks />);
+    render(<TaskWorkspace />);
 
     await screen.findByText('Today task');
     expect(screen.getByText('Later task')).toBeInTheDocument();
@@ -324,77 +325,6 @@ describe('Tasks page interactions', () => {
       })
     );
   });
-
-  it('keeps contextual follow-ups out of reorder targets and payloads', async () => {
-    mocks.intentions = [intention()];
-    mocks.tasks = [
-      task({
-        id: 'task-a',
-        title: 'Task A',
-        intentionSlug: 'focus',
-        createdAt: '2026-08-23T12:00:00.000Z',
-      }),
-      task({
-        id: 'follow-up',
-        title: 'Contextual follow-up',
-        intentionSlug: 'focus',
-        followUpParent: { id: 'parent-task', title: 'Parent task' },
-        createdAt: '2026-08-23T11:00:00.000Z',
-      }),
-      task({
-        id: 'task-b',
-        title: 'Task B',
-        intentionSlug: 'focus',
-        createdAt: '2026-08-23T10:00:00.000Z',
-      }),
-    ];
-
-    render(<Tasks />);
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Focus' }));
-    const taskADragHandle = await screen.findByRole('button', {
-      name: 'Drag Task A',
-    });
-    expect(
-      screen.queryByRole('button', { name: 'Drag Contextual follow-up' })
-    ).not.toBeInTheDocument();
-
-    const rects = new Map([
-      ['task-a', 0],
-      ['follow-up', 40],
-      ['task-b', 80],
-    ]);
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockImplementation(function (this: HTMLElement) {
-        const top = rects.get(this.dataset.taskId ?? '') ?? 0;
-        return domRect(top);
-      });
-
-    fireEvent.mouseDown(taskADragHandle, { button: 0, clientY: 10 });
-    fireEvent.mouseMove(window, { clientY: 70 });
-
-    expect(screen.getByTestId('task-list')).not.toHaveAttribute(
-      'data-drop-target-id',
-      'follow-up'
-    );
-    fireEvent.mouseUp(window, { clientY: 70 });
-    expect(mocks.reorderTasks).not.toHaveBeenCalled();
-
-    fireEvent.mouseDown(taskADragHandle, { button: 0, clientY: 10 });
-    fireEvent.mouseUp(window, { clientY: 130 });
-
-    await waitFor(() => expect(mocks.reorderTasks).toHaveBeenCalledOnce());
-    const [updates] = mocks.reorderTasks.mock.calls[0] as [
-      Array<{ id: string }>,
-    ];
-    expect(updates.map(update => update.id)).toEqual(['task-b', 'task-a']);
-    expect(updates).not.toContainEqual(
-      expect.objectContaining({ id: 'follow-up' })
-    );
-
-    rectSpy.mockRestore();
-  });
 });
 
 function task(overrides: Partial<Task>): Task {
@@ -409,8 +339,6 @@ function task(overrides: Partial<Task>): Task {
     importSourceTaskId: null,
     dueDate: null,
     dueTime: null,
-    manualOrder: null,
-    manualOrderOverride: false,
     priority: 'normal',
     status: 'active',
     timerType: 'work',
@@ -430,40 +358,4 @@ function task(overrides: Partial<Task>): Task {
     updatedAt: '2026-08-23T10:00:00.000Z',
     ...overrides,
   };
-}
-
-function intention(): Intention {
-  return {
-    id: 'focus-id',
-    userId: 'user-1',
-    slug: 'focus',
-    title: 'Focus',
-    emoji: '🎯',
-    type: 'work',
-    parentIntentionId: null,
-    hasCustomDuration: false,
-    customDuration: null,
-    keepScreenAwake: false,
-    isHabit: false,
-    isArchived: false,
-    isFavorite: true,
-    allowsTasks: true,
-    usageCount: 0,
-    createdAt: '2026-08-23T10:00:00.000Z',
-    updatedAt: '2026-08-23T10:00:00.000Z',
-  };
-}
-
-function domRect(top: number): DOMRect {
-  return {
-    x: 0,
-    y: top,
-    top,
-    bottom: top + 40,
-    left: 0,
-    right: 100,
-    width: 100,
-    height: 40,
-    toJSON: () => ({}),
-  } as DOMRect;
 }

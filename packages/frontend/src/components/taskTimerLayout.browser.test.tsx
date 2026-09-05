@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../App.css';
 import { AdvancedSkipInlineStrip } from './AdvancedSkipInlineStrip';
 import { TaskRecurrenceFields } from './tasks/TaskRecurrenceFields';
-import { TimeRemainingCircle } from '../pages/timer/TimeRemainingCircle';
+import { CompactTimer } from './CompactTimer';
 import { useTimerStore } from '../stores/timerStore';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { useUiStore } from '../stores/uiStore';
@@ -87,28 +87,6 @@ describe('Task and Timer browser-component layout', () => {
     expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
   });
 
-  it('uses the five-percent-larger expanded mobile Timer circle', async () => {
-    host = document.createElement('div');
-    host.style.width = '390px';
-    host.style.height = '844px';
-    document.body.append(host);
-    createRoot(host).render(<TimeRemainingCircle isExpanded />);
-
-    await vi.waitFor(() =>
-      expect(
-        host?.querySelector('[data-testid="timer-circle-content"]')
-      ).toBeTruthy()
-    );
-    const content = host.querySelector<HTMLElement>(
-      '[data-testid="timer-circle-content"]'
-    )!;
-    expect(content.dataset.expandedScale).toBe('0.95');
-    expect(getComputedStyle(content).scale).toBe('0.95');
-    expect(content.getBoundingClientRect().width).toBeLessThanOrEqual(
-      host.getBoundingClientRect().width
-    );
-  });
-
   it('keeps paused Break extension and Skip controls collision-free', async () => {
     host = document.createElement('div');
     host.style.width = '380px';
@@ -148,7 +126,7 @@ describe('Task and Timer browser-component layout', () => {
       },
     });
 
-    createRoot(host).render(<TimeRemainingCircle isExpanded />);
+    createRoot(host).render(<CompactTimer />);
 
     await vi.waitFor(() => {
       expect(host?.querySelectorAll('button[aria-label]')).not.toHaveLength(0);

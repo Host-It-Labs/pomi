@@ -1,14 +1,14 @@
 import { Preferences } from '@pomi/shared';
 import { FaClock, FaLayerGroup, FaMagic, FaStopwatch } from 'react-icons/fa';
 import { ExtrasSection } from '../components/ExtrasSection';
+import { SettingsControlGroup } from '../components/settings/SettingsExperience';
 import { DurationValueBadge } from '../components/ui/DurationValueBadge';
 import { Separator } from '../components/ui/Separator';
 import { ToggleField } from '../components/ui/ToggleField';
-import { SettingsControlGroup } from '../components/settings/SettingsExperience';
 import { MILLISECONDS_PER_MINUTE } from '../constants/time';
+import { useI18n } from '../i18n';
 import { isDesktop } from '../utils/osUtils';
 import { getShortcutLabel } from '../utils/shortcutUtils';
-import { useI18n } from '../i18n';
 
 export const SessionSettings = ({
   preferences,
@@ -34,7 +34,7 @@ export const SessionSettings = ({
           <div className="flex justify-between items-center">
             <label
               htmlFor="sessionPomodorosCount"
-              className="text-sm text-white font-medium flex-1 mr-3"
+              className="text-sm text-ink font-medium flex-1 mr-3"
             >
               {t('session.focusBlocks')}
             </label>
@@ -71,7 +71,7 @@ export const SessionSettings = ({
               <div className="flex justify-between items-center">
                 <label
                   htmlFor="sessionLongBreakDuration"
-                  className="text-sm text-white font-medium flex-1 mr-3"
+                  className="text-sm text-ink font-medium flex-1 mr-3"
                 >
                   {t('session.longBreakDuration')}
                 </label>
@@ -96,6 +96,16 @@ export const SessionSettings = ({
         )}
       </SettingsControlGroup>
 
+      <ToggleField
+        id="sessionAutoDetectLongBreak"
+        checked={preferences.sessionAutoDetectLongBreak ?? false}
+        onChange={value =>
+          updatePreference('sessionAutoDetectLongBreak', value)
+        }
+        label={t('session.detectLongBreaks')}
+        icon={<FaMagic size={12} />}
+        description={t('session.detectLongBreaksDescription')}
+      />
       <ExtrasSection sectionId="sessions">
         <ToggleField
           id="sessionShowLongBreakButton"
@@ -135,17 +145,6 @@ export const SessionSettings = ({
         />
 
         <Separator />
-
-        <ToggleField
-          id="sessionAutoDetectLongBreak"
-          checked={preferences.sessionAutoDetectLongBreak ?? false}
-          onChange={value =>
-            updatePreference('sessionAutoDetectLongBreak', value)
-          }
-          label={t('session.detectLongBreaks')}
-          icon={<FaMagic size={12} />}
-          description={t('session.detectLongBreaksDescription')}
-        />
       </ExtrasSection>
     </div>
   );

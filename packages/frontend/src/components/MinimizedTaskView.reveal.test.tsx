@@ -320,8 +320,6 @@ function task(id: string, order: number): Task {
     importSourceTaskId: null,
     dueDate: null,
     dueTime: null,
-    manualOrder: null,
-    manualOrderOverride: false,
     priority: 'normal',
     status: 'active',
     timerType: 'work',

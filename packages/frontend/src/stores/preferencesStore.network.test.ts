@@ -70,11 +70,12 @@ const preferences = (overrides: Partial<Preferences>): Preferences => ({
   tasksShowSetupPrompts: true,
   tasksShowInMinimizedTimer: false,
   tasksAutoSwitchToIntentionMode: false,
-  tasksDuringBreaks: false,
+
   taskDefaultDueDateMode: 'off',
   taskDefaultDueDateDays: 1,
   taskDefaultSortMode: 'default',
   hiddenHelpTips: [],
+  dismissedSettingSuggestions: [],
   taskReminderPriorities: ['high', 'urgent'],
   taskBeforeDueReminderMinutes: 30,
   taskUrgentReminderRepeatEnabled: true,

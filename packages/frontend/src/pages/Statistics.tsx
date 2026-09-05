@@ -21,17 +21,17 @@ import { Modal } from '../components/ui/Modal';
 import { PageContainer } from '../components/ui/PageContainer';
 import { PageShell } from '../components/ui/PageShell';
 import { Spinner } from '../components/ui/Spinner';
+import { useI18n } from '../i18n';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { useStatisticsStore } from '../stores/statisticsStore';
 import { apiClient } from '../utils/apiClient';
-import { submitUserMutation } from '../utils/userActionQueue';
-import { subscribeToWorkTimerLogRefresh } from '../utils/recoveryRefresh';
 import { isDesktop } from '../utils/osUtils';
+import { subscribeToWorkTimerLogRefresh } from '../utils/recoveryRefresh';
+import { submitUserMutation } from '../utils/userActionQueue';
 import { LazyHeatmap } from './statistics/LazyHeatmap';
 import { StatCard } from './statistics/StatCard';
 import { TopIntentions } from './statistics/TopIntentions';
 import { WorkTimerLogsModal } from './statistics/WorkTimerLogsModal';
-import { useI18n } from '../i18n';
 
 export function Statistics() {
   const { t } = useI18n();
@@ -316,7 +316,7 @@ export function Statistics() {
   if (!statistics) {
     return (
       <PageShell>
-        <PageContainer className="p-6 text-white">
+        <PageContainer className="p-6 text-ink">
           <BackButton targetTab="timer" />
           <p className="mt-4">{t('statistics.none')}</p>
         </PageContainer>
@@ -333,7 +333,7 @@ export function Statistics() {
 
   return (
     <PageShell>
-      <PageContainer className=" text-white">
+      <PageContainer className=" text-ink">
         <div
           className={
             isDesktop ? 'pt-6' : 'pt-[calc(env(safe-area-inset-top)+0.25rem)]'
@@ -377,7 +377,7 @@ export function Statistics() {
                 onClick={() => setStatsMode('timer')}
                 className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
                   statsMode === 'timer'
-                    ? 'bg-slate-700/80 text-white shadow-sm'
+                    ? 'bg-slate-700/80 text-ink shadow-sm'
                     : 'text-slate-500 hover:bg-slate-800/60 hover:text-slate-200'
                 }`}
               >
@@ -389,7 +389,7 @@ export function Statistics() {
                 onClick={() => setStatsMode('tasks')}
                 className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
                   statsMode === 'tasks'
-                    ? 'bg-slate-700/80 text-white shadow-sm'
+                    ? 'bg-slate-700/80 text-ink shadow-sm'
                     : 'text-slate-500 hover:bg-slate-800/60 hover:text-slate-200'
                 }`}
               >
@@ -698,8 +698,6 @@ const TASK_STAT_PRIMARY_FILTERS: Array<{
 const TASK_STAT_HELP: Record<TaskStatisticsFilter, string> = {
   created: 'statistics.helpCreated',
   completed: 'statistics.helpCompleted',
-  overdue: 'statistics.helpOverdue',
-  onTime: 'statistics.helpOnTime',
   archived: 'statistics.helpArchived',
 };
 
@@ -715,7 +713,7 @@ function TaskStatsSelector({
   onFilterChange: (filter: TaskStatisticsFilter) => void;
 }) {
   const { t } = useI18n();
-  const completedFilter = ['completed', 'onTime', 'overdue'].includes(filter);
+  const completedFilter = filter === 'completed';
 
   return (
     <div className="grid w-full grid-cols-[minmax(0,1fr)_1.75rem] items-start gap-2 text-xs">
@@ -742,7 +740,7 @@ function TaskStatsSelector({
                 }}
                 className={`min-w-0 flex-1 rounded px-1 py-1 transition-colors ${
                   isActive
-                    ? 'bg-indigo-600 text-white'
+                    ? 'bg-indigo-600 text-ink'
                     : 'text-slate-400 hover:text-slate-100'
                 }`}
               >
@@ -764,30 +762,6 @@ function TaskStatsSelector({
             {t('statistics.overview')}
           </button>
         </div>
-        {view === 'activity' && completedFilter && (
-          <div className="flex justify-center gap-1 border-t border-slate-800 pt-1">
-            {[
-              ['completed', t('common.all')],
-              ['onTime', t('statistics.onTime')],
-              ['overdue', t('statistics.overdue')],
-            ].map(([filterValue, label]) => (
-              <button
-                key={filterValue}
-                type="button"
-                onClick={() =>
-                  onFilterChange(filterValue as TaskStatisticsFilter)
-                }
-                className={`rounded px-2 py-0.5 transition-colors ${
-                  filter === filterValue
-                    ? 'bg-slate-700 text-slate-100'
-                    : 'text-slate-500 hover:text-slate-200'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
       {view === 'activity' ? (
         <TaskStatsHelp filter={filter} />

@@ -5,13 +5,13 @@ import { Button } from '../components/ui/Button';
 import { FormField } from '../components/ui/FormField';
 import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
+import { isDevAutoLoginEnabled } from '../config/environmentVariables';
+import { normalizeLanguage, SUPPORTED_LANGUAGES, useI18n } from '../i18n';
 import { useAuthStore } from '../stores/authStore';
 import { useSystemStore } from '../stores/systemStore';
 import { useUiStore } from '../stores/uiStore';
 import { apiClient, baseUrl } from '../utils/apiClient';
 import { getApiErrorMessage } from '../utils/apiError';
-import { isDevAutoLoginEnabled } from '../config/environmentVariables';
-import { normalizeLanguage, SUPPORTED_LANGUAGES, useI18n } from '../i18n';
 import {
   BackendOriginError,
   clearStoredBackendUrl,
@@ -223,7 +223,7 @@ export function Login() {
   return (
     <div className="flex flex-col items-center justify-center min-h-dvh bg-slate-950 p-6">
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-white">{t('login.title')}</h1>
+        <h1 className="text-2xl font-bold text-ink">{t('login.title')}</h1>
         <p className="mt-2 text-slate-400 text-sm">{t('login.subtitle')}</p>
       </div>
 

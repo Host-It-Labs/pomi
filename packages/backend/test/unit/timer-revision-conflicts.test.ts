@@ -24,7 +24,7 @@ const conflict = (timer: Timer) => ({
 });
 
 describe('TimerService revision conflicts', () => {
-  it('arms extension from the atomic pause timestamp for an auto-started break', async () => {
+  it('preserves the existing extension start when pausing an auto-started break', async () => {
     const timer = currentTimer({
       type: TIMER_TYPES.BREAK,
       status: TIMER_STATUSES.RUNNING,
@@ -72,14 +72,7 @@ describe('TimerService revision conflicts', () => {
         status: TIMER_STATUSES.PAUSED,
         remainingTime: 290_000,
       }),
-      {
-        extensionState: {
-          originalTimerId: 'work-1',
-          originalDuration: 1_500_000,
-          extensionNextTimerType: TIMER_TYPES.BREAK,
-          startTime: 20_000,
-        },
-      }
+      undefined
     );
     now.mockRestore();
   });
@@ -113,7 +106,10 @@ describe('TimerService revision conflicts', () => {
         stopCountdown: vi.fn(),
       },
       timerIdleService: { cancelPausedTimerReminder: vi.fn() },
-      timerEvents: { emitTimerUpdate: vi.fn() },
+      timerEvents: {
+        emitTimerUpdate: vi.fn(),
+        emitExtensionStateUpdate: vi.fn(),
+      },
     }) as TimerService;
 
     await service.pauseTimer('user-1');
@@ -206,15 +202,13 @@ describe('TimerService revision conflicts', () => {
         remainingTime: 300_000,
         hasConsumedFirstIntentionReset: true,
       }),
-      { extensionState: null }
+      undefined
     );
-    expect(
-      service.timerEvents.emitExtensionStateUpdate as ReturnType<typeof vi.fn>
-    ).toHaveBeenCalledWith('user-1', null);
+    expect(service.timerEvents.emitExtensionStateUpdate).not.toHaveBeenCalled();
     now.mockRestore();
   });
 
-  it('keeps reset provenance and arms extension after a later pause without resetting twice', async () => {
+  it('keeps reset provenance and preserves extension state after a later pause', async () => {
     let timer = currentTimer({
       type: TIMER_TYPES.BREAK,
       status: TIMER_STATUSES.RUNNING,
@@ -324,20 +318,8 @@ describe('TimerService revision conflicts', () => {
       remainingTime: 270_000,
       hasConsumedFirstIntentionReset: true,
     });
-    expect(commitCurrentTimer.mock.calls[3][3]).toEqual({
-      extensionState: {
-        originalTimerId: 'work-1',
-        originalDuration: 1_500_000,
-        extensionNextTimerType: TIMER_TYPES.BREAK,
-        startTime: 80_000,
-      },
-    });
-    expect(emitExtensionStateUpdate).toHaveBeenLastCalledWith('user-1', {
-      originalTimerId: 'work-1',
-      originalDuration: 1_500_000,
-      extensionNextTimerType: TIMER_TYPES.BREAK,
-      startTime: 80_000,
-    });
+    expect(commitCurrentTimer.mock.calls[3][3]).toBeUndefined();
+    expect(emitExtensionStateUpdate).not.toHaveBeenCalled();
     now.mockRestore();
   });
 
@@ -375,7 +357,10 @@ describe('TimerService revision conflicts', () => {
         extensionState: null,
       })),
       commitCurrentTimer,
-      timerEvents: { emitTimerUpdate: vi.fn() },
+      timerEvents: {
+        emitTimerUpdate: vi.fn(),
+        emitExtensionStateUpdate: vi.fn(),
+      },
       buildHistoryEntry: vi.fn(async () => ({})),
       pushTimerHistory: vi.fn(async () => undefined),
     }) as TimerService;
@@ -691,7 +676,10 @@ describe('TimerService revision conflicts', () => {
       }),
       buildHistoryEntry: vi.fn(async () => ({})),
       pushTimerHistory: vi.fn(async () => undefined),
-      timerEvents: { emitTimerUpdate: vi.fn() },
+      timerEvents: {
+        emitTimerUpdate: vi.fn(),
+        emitExtensionStateUpdate: vi.fn(),
+      },
     }) as TimerService;
 
     const result = await service.stackTimer('user-1');
@@ -826,7 +814,10 @@ describe('TimerService revision conflicts', () => {
         associateTimerWithUser: vi.fn(async () => undefined),
       },
       timerCountdownService: { refreshCountdown: vi.fn() },
-      timerEvents: { emitTimerUpdate: vi.fn() },
+      timerEvents: {
+        emitTimerUpdate: vi.fn(),
+        emitExtensionStateUpdate: vi.fn(),
+      },
       applyCommittedTimerTransition: vi.fn(async () => undefined),
     }) as TimerService;
 
@@ -1303,7 +1294,10 @@ describe('TimerService revision conflicts', () => {
         })),
       },
       timerCountdownService: { refreshCountdown: vi.fn() },
-      timerEvents: { emitTimerUpdate: vi.fn() },
+      timerEvents: {
+        emitTimerUpdate: vi.fn(),
+        emitExtensionStateUpdate: vi.fn(),
+      },
       snapshotRuntime: vi.fn(async () => ({})),
       buildHistoryEntry: vi.fn(async () => ({})),
       pushTimerHistory: vi.fn(),

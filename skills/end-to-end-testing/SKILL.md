@@ -26,7 +26,7 @@ The suite owns exactly these 13 workflows:
 5. Enable Tasks, create and edit a Task through the shared editor, then verify reload persistence.
 6. Pin a linked Task, reconcile Timer Intentions, and confirm Task completion.
 7. Complete and undo or archive a recurring Task while preserving its successor contract.
-8. Persist manual Task ordering across refresh.
+8. Apply the saved Task sort preference across refresh.
 9. Reconcile Task updates across two clients while isolating another user.
 10. Persist and cross-client-sync settings into affected Timer behavior.
 11. Produce real Timer and Task activity, then verify statistics and work-Timer logs.

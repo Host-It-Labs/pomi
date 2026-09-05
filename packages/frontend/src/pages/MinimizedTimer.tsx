@@ -1,28 +1,24 @@
+import { useI18n } from '../i18n';
 import { TIMER_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
 import clsx from 'clsx';
-import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { CompactTimerDisplay } from '../components/CompactTimer';
 import { MinimizedIntentionsPicker } from '../components/MinimizedIntentionsPicker';
 import { MinimizedTaskView } from '../components/MinimizedTaskView';
-import { SessionIndicator } from '../components/SessionIndicator';
 import { TimerActionButtons } from '../components/TimerActionButtons';
 import { IntentionEmojiPair } from '../components/ui/IntentionEmojiPair';
 import { KeyboardShortcut } from '../components/ui/KeyboardShortcut';
-import { COLORS } from '../config/colors';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { useTimerStore } from '../stores/timerStore';
 import { useUiStore } from '../stores/uiStore';
-import { hasOpenModal } from '../utils/modalRegistry';
-import { getDisplayedSessionPosition } from '../utils/sessionDisplay';
-import { getSelectedTimerIntentions } from '../utils/timerIntentions';
-import { formatTime } from '../utils/timeUtils';
 import { areMinimizedPickerInsetsEqual } from '../utils/minimizedIntentionsLayout';
+import { hasOpenModal } from '../utils/modalRegistry';
+import { getSelectedTimerIntentions } from '../utils/timerIntentions';
 
 export function MinimizedTimer() {
+  const { t } = useI18n();
   const timer = useTimerStore.use.timer();
   const extensionState = useTimerStore.use.extensionState();
-  const connectionStatus = useTimerStore.use.connectionStatus();
-  const toggleTimerAction = useTimerStore.use.toggleTimer();
   const preferences = usePreferencesStore.use.preferences();
   const advancedSkipModalOpen = useUiStore.use.advancedSkipModalOpen();
   const intentionPickerOpenRequest =
@@ -34,9 +30,6 @@ export function MinimizedTimer() {
   const actionSlotRef = useRef<HTMLDivElement | null>(null);
   const lastIntentionPickerOpenRequestRef = useRef(intentionPickerOpenRequest);
   const [pickerInset, setPickerInset] = useState({ left: 0, right: 0 });
-  const isDisconnected =
-    !connectionStatus.isConnected || connectionStatus.isReconnecting;
-  const displayedSessionPosition = getDisplayedSessionPosition(timer);
   const selectedIntentionEmojis = getSelectedTimerIntentions(timer)
     .map(slug => ({
       slug,
@@ -48,20 +41,6 @@ export function MinimizedTimer() {
         (slug === timer?.intention ? timer?.subIntentionEmoji : undefined),
     }))
     .filter(item => item.parent || item.sub);
-
-  const textColorClass =
-    timer?.type === TIMER_TYPES.WORK
-      ? COLORS.indigo.text
-      : timer?.type === TIMER_TYPES.LONG_BREAK
-        ? COLORS.purple.secondaryText
-        : COLORS.green.secondaryText;
-
-  const showSessionIndicator =
-    preferences?.sessionsExtension &&
-    displayedSessionPosition &&
-    timer?.sessionTotal &&
-    timer?.type === TIMER_TYPES.WORK &&
-    timer?.status !== TIMER_STATUSES.PAUSED;
 
   const showIntentionsPicker =
     preferences?.intentionExtension &&
@@ -76,18 +55,7 @@ export function MinimizedTimer() {
   const showMinimizedTaskView =
     preferences?.tasksExtension &&
     preferences.tasksShowInMinimizedTimer &&
-    (timer?.type === TIMER_TYPES.WORK ||
-      ((timer?.type === TIMER_TYPES.BREAK ||
-        timer?.type === TIMER_TYPES.LONG_BREAK) &&
-        preferences.tasksDuringBreaks)) &&
     !timer?.isExtension;
-
-  const toggleTimer = () => {
-    if (isDisconnected) {
-      return;
-    }
-    toggleTimerAction();
-  };
 
   const openIntentionsPicker = () => {
     if (showIntentionsPicker && !advancedSkipModalOpen) {
@@ -259,7 +227,7 @@ export function MinimizedTimer() {
     <div
       ref={rootRef}
       className={clsx(
-        'relative flex w-full h-full',
+        'minimized-timer relative flex w-full h-full',
         showMinimizedTaskView
           ? 'items-start justify-between pt-[32px]'
           : 'items-center justify-between'
@@ -275,73 +243,43 @@ export function MinimizedTimer() {
       />
       <div
         ref={timerSlotRef}
-        className={clsx(
-          'flex min-w-30 items-center',
-          !showMinimizedTaskView && 'translate-y-[4px]'
-        )}
+        className={clsx('flex h-8 shrink-0 items-center')}
       >
         <div className="ml-2.5 flex flex-col items-center justify-center relative">
-          {timer?.status !== TIMER_STATUSES.COMPLETED &&
-            selectedIntentionEmojis.length > 0 && (
-              <div
-                data-testid="minimized-selected-intentions"
-                onClick={openIntentionsPicker}
-                className={`absolute right-[-0.2rem] top-[-0.8rem] z-20 flex flex-row-reverse items-start gap-0.5 text-md cursor-pointer transition-all duration-500 ease-in-out
+          <CompactTimerDisplay
+            intentionEmojis={
+              timer?.status !== TIMER_STATUSES.COMPLETED &&
+              selectedIntentionEmojis.length > 0 && (
+                <button
+                  type="button"
+                  aria-label={t('navigation.currentIntentions')}
+                  title={t('navigation.currentIntentions')}
+                  data-testid="minimized-selected-intentions"
+                  onClick={openIntentionsPicker}
+                  className={`minimized-countdown-intentions z-20 flex flex-row items-start gap-0.5 text-md cursor-pointer transition-opacity duration-100 ease-in-out
                 ${showEmoji ? 'opacity-100' : 'opacity-0'}`}
-              >
-                <span className="flex flex-row-reverse items-center gap-0.5 leading-none">
-                  {selectedIntentionEmojis.map(item => (
-                    <IntentionEmojiPair
-                      key={item.slug}
-                      parentEmoji={item.parent}
-                      subEmoji={item.sub}
-                      size="sm"
-                    />
-                  ))}
-                </span>
-                <span className="relative mt-[-5px] inline-flex h-3.5 w-3.5">
-                  <KeyboardShortcut
-                    text="0"
-                    position="topRight"
-                    showModIcon={false}
-                  />
-                </span>
-              </div>
-            )}
-
-          <h1
-            aria-disabled={isDisconnected}
-            className={`text-4xl font-mono font-bold select-none transition-all ${
-              isDisconnected
-                ? 'cursor-not-allowed opacity-50'
-                : 'cursor-pointer hover:scale-110'
-            } ${textColorClass}`}
-            onClick={toggleTimer}
-          >
-            {timer ? formatTime(timer.remainingTime) : '00:00'}
-          </h1>
-
-          <AnimatePresence>
-            {showSessionIndicator &&
-              displayedSessionPosition &&
-              timer?.sessionTotal && (
-                <motion.div
-                  className="absolute -bottom-4"
-                  initial={{ opacity: 0, y: -30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -30 }}
-                  transition={{ duration: 0.4, ease: 'easeInOut' }}
                 >
-                  <SessionIndicator
-                    currentPosition={displayedSessionPosition}
-                    totalPomodoros={timer.sessionTotal}
-                    isDisconnected={isDisconnected}
-                    isExpanded={false}
-                    stackedSessions={timer.stackedSessions}
-                  />
-                </motion.div>
-              )}
-          </AnimatePresence>
+                  <span className="flex flex-row items-center gap-0.5 leading-none">
+                    {selectedIntentionEmojis.map(item => (
+                      <IntentionEmojiPair
+                        key={item.slug}
+                        parentEmoji={item.parent}
+                        subEmoji={item.sub}
+                        size="sm"
+                      />
+                    ))}
+                  </span>
+                  <span className="relative mt-[-5px] inline-flex h-3.5 w-3.5">
+                    <KeyboardShortcut
+                      text="0"
+                      position="topRight"
+                      showModIcon={false}
+                    />
+                  </span>
+                </button>
+              )
+            }
+          />
         </div>
       </div>
 
@@ -350,7 +288,7 @@ export function MinimizedTimer() {
           'pointer-events-none absolute z-20 flex justify-center',
           showMinimizedTaskView
             ? 'top-[32px] h-8 items-start overflow-visible'
-            : 'inset-y-0 translate-y-1.5 items-center'
+            : 'inset-y-0 items-center'
         )}
         style={{ left: pickerInset.left, right: pickerInset.right }}
       >
@@ -366,10 +304,7 @@ export function MinimizedTimer() {
       {!hideActionButtons && (
         <div
           ref={actionSlotRef}
-          className={clsx(
-            'mr-2.5 flex justify-end',
-            !showMinimizedTaskView && 'translate-y-[4px]'
-          )}
+          className={clsx('mr-2.5 flex h-8 items-center justify-end')}
         >
           <TimerActionButtons
             compactMinimizedControls={

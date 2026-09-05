@@ -171,8 +171,6 @@ export const TASK_STATUSES = {
   ARCHIVED: 'archived',
 } as const;
 
-export const TASK_MANUAL_ORDER_BOTTOM = 2_147_483_647;
-
 export const TASK_TITLE_MAX_LENGTH = 500;
 export const TASK_DESCRIPTION_MAX_LENGTH = 10_000;
 export const TASK_SLUG_MAX_LENGTH = 255;
@@ -321,3 +319,25 @@ export const ACCENT_HEX_COLORS = {
   green: '#10b981',
   purple: '#9333ea',
 } as const;
+
+export const SETTINGS_SUGGESTION_IDS = [
+  'sessionShowEta',
+  'intentionShowDailyCount',
+  'sessionShowLongBreakButton',
+  'tasksShowInMinimizedTimer',
+  'intentionHabits',
+  'intentionMultiSelect',
+  'vacationExtension',
+  'assistantExtension',
+  'intentionBreakIntentions',
+  'sessionStackTimers',
+  'destinationDescriptionsEnabled',
+  'intentionExtension',
+  'tasksExtension',
+  'sessionsExtension',
+  'listsExtension',
+  'intentionCustomDurations',
+  'intentionSubIntentions',
+  'advancedSkip',
+  'timerExtension',
+] as const;

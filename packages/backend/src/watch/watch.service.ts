@@ -4,7 +4,6 @@ import {
   DEFAULT_APP_LANGUAGE,
   Preferences,
   TASK_PRIORITIES,
-  TASK_MANUAL_ORDER_BOTTOM,
   TIMER_STATUSES,
   TIMER_TYPES,
   TaskPriority,
@@ -245,8 +244,6 @@ export class WatchService {
       timerType: task.timerType,
       dueDate: task.dueDate,
       dueTime: task.dueTime,
-      manualOrder: task.manualOrder,
-      manualOrderOverride: task.manualOrderOverride,
       pinnedAt: task.pinnedAt?.toISOString() ?? null,
       intentionSlug: task.intentionSlug,
       subIntentionSlug: task.subIntentionSlug,
@@ -441,63 +438,17 @@ export class WatchService {
               !task.intentionSlug
           );
     const sortMode = mode === 'intention' && hasTimerFilter ? mode : 'general';
-    return this.applyManualOverrides(
-      [...filteredTasks].sort((a, b) =>
-        this.compareTasksForView(
-          a,
-          b,
-          focusedOrder,
-          timer,
-          sortMode,
-          now,
-          timeZone
-        )
-      ),
-      task => this.getTaskGroup(task, focusedOrder, timer, sortMode)
+    return [...filteredTasks].sort((a, b) =>
+      this.compareTasksForView(
+        a,
+        b,
+        focusedOrder,
+        timer,
+        sortMode,
+        now,
+        timeZone
+      )
     );
-  }
-
-  private applyManualOverrides(
-    tasks: TaskEntity[],
-    getGroup: (task: TaskEntity) => number
-  ) {
-    const positionsByGroup = new Map<
-      number,
-      Array<{ task: TaskEntity; index: number }>
-    >();
-    tasks.forEach((task, index) => {
-      const group = getGroup(task);
-      const positions = positionsByGroup.get(group) ?? [];
-      positions.push({ task, index });
-      positionsByGroup.set(group, positions);
-    });
-    positionsByGroup.forEach(positions => {
-      const usesManualOrder = (task: TaskEntity) =>
-        task.pinnedAt === null && task.manualOrderOverride;
-      const automatic = positions
-        .map(({ task }) => task)
-        .filter(task => !usesManualOrder(task));
-      const overrides = positions
-        .map(({ task }) => task)
-        .filter(usesManualOrder)
-        .sort(
-          (a, b) =>
-            (a.manualOrder ?? TASK_MANUAL_ORDER_BOTTOM) -
-              (b.manualOrder ?? TASK_MANUAL_ORDER_BOTTOM) ||
-            a.createdAt.getTime() - b.createdAt.getTime()
-        );
-      overrides.forEach(task => {
-        const position = Math.max(
-          0,
-          Math.min(task.manualOrder ?? automatic.length, automatic.length)
-        );
-        automatic.splice(position, 0, task);
-      });
-      positions.forEach(({ index }, position) => {
-        tasks[index] = automatic[position];
-      });
-    });
-    return tasks;
   }
 
   private formatTask(

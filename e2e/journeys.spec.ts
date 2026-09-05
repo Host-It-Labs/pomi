@@ -5,7 +5,6 @@ import {
   createSession,
   createTask,
   deterministicUsername,
-  dragAfter,
   E2E_PASSWORD,
   enableFeatures,
   expectTaskOrder,
@@ -316,6 +315,7 @@ test('5. enables Tasks, creates and edits through the shared editor, and reloads
     .click();
   const editDialog = page.getByRole('dialog', { name: 'Edit task' });
   await editDialog.getByLabel('Task title').fill(edited);
+  await editDialog.getByRole('button', { name: 'More options' }).click();
   await editDialog.getByLabel('Task priority').selectOption('high');
   await editDialog.getByRole('button', { name: 'Save' }).click();
   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -473,11 +473,12 @@ test('7. completes, undoes, and archives a recurring Task without violating its 
     .toBe(false);
 });
 
-test('8. persists manual Task ordering across refresh', async ({
+test('8. applies the saved Task sort preference across refresh', async ({
   page,
 }, testInfo) => {
   await loginJourneyUser(page, testInfo);
   await enableFeatures(page, ['intentionExtension', 'tasksExtension']);
+  await updatePreferences(page, { taskDefaultSortMode: 'created-asc' });
   const prefix = deterministicUsername(testInfo, 'order');
   const intention = await createIntention(page, {
     title: `${prefix} lane`,
@@ -504,27 +505,9 @@ test('8. persists manual Task ordering across refresh', async ({
     .click();
   const taskRows = page.locator('[data-testid="task-row"]');
   await expect(taskRows).toHaveCount(2, { timeout: 15_000 });
-  const initialOrder = await taskRows.evaluateAll(rows =>
-    rows.map(row => row.getAttribute('data-task-title')!)
-  );
-  expect(initialOrder).toHaveLength(2);
-  const [draggedTitle, targetTitle] = initialOrder;
-  const receipt = page.waitForResponse(
-    response =>
-      new URL(response.url()).pathname === '/user-actions' &&
-      response.request().method() === 'POST' &&
-      response.status() === 202
-  );
-  await dragAfter(
-    page,
-    taskRow(page, draggedTitle).getByRole('button', {
-      name: `Drag ${draggedTitle}`,
-    }),
-    taskRow(page, targetTitle)
-  );
-  expect((await receipt).ok()).toBeTruthy();
-  const persistedOrder = [targetTitle, draggedTitle];
-  await expectTaskOrder(page, persistedOrder);
+  await expectTaskOrder(page, [first, second]);
+  await updatePreferences(page, { taskDefaultSortMode: 'created-desc' });
+  const persistedOrder = [second, first];
   await page.reload({ waitUntil: 'domcontentloaded' });
   await new TestHelpers(page).expandWindow();
   await openTasks(page);

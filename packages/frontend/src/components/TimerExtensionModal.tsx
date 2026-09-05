@@ -4,13 +4,13 @@ import type {
 } from '@pomi/shared';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useI18n } from '../i18n';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { isDesktop } from '../utils/osUtils';
 import { shouldIgnoreModalLocalShortcut } from '../utils/shortcutUtils';
 import { formatTimeWithUnit } from '../utils/timeUtils';
 import { IntentionEmojiPair } from './ui/IntentionEmojiPair';
 import { Modal } from './ui/Modal';
-import { useI18n } from '../i18n';
 
 type TimerExtensionModalProps = {
   isOpen: boolean;
@@ -116,7 +116,7 @@ export function TimerExtensionModal({
           <div className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
             {t('timer.logTotal')}
           </div>
-          <div className="mt-0.5 text-base font-bold tabular-nums text-white">
+          <div className="mt-0.5 text-base font-bold tabular-nums text-ink">
             {formatTimeWithUnit(totalDuration)}
           </div>
           {showKeyHints && (
@@ -133,7 +133,7 @@ export function TimerExtensionModal({
           <div className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
             {t('timer.addFiveMinutes')}
           </div>
-          <div className="mt-0.5 text-base font-bold tabular-nums text-white">
+          <div className="mt-0.5 text-base font-bold tabular-nums text-ink">
             {formatTimeWithUnit(totalDuration)} + 5m
           </div>
           {showKeyHints && (

@@ -224,11 +224,11 @@ export interface Preferences {
   tasksShowSetupPrompts: boolean;
   tasksShowInMinimizedTimer: boolean;
   tasksAutoSwitchToIntentionMode: boolean;
-  tasksDuringBreaks: boolean;
   taskDefaultDueDateMode: TaskDefaultDueDateMode;
   taskDefaultDueDateDays: number;
   taskDefaultSortMode: TaskSortMode;
   hiddenHelpTips: string[];
+  dismissedSettingSuggestions: string[];
   taskReminderPriorities: TaskPriority[];
   taskBeforeDueReminderMinutes: number;
   taskUrgentReminderRepeatEnabled: boolean;
@@ -258,8 +258,7 @@ export interface TaskStatisticsSummary {
   firstLogDate: string | null;
 }
 
-export type TaskStatisticsFilter =
-  'created' | 'completed' | 'overdue' | 'onTime' | 'archived';
+export type TaskStatisticsFilter = 'created' | 'completed' | 'archived';
 
 export interface TaskEventLog {
   id: string;
@@ -397,8 +396,6 @@ export interface Task {
   importSourceTaskId: string | null;
   dueDate: string | null;
   dueTime: string | null;
-  manualOrder: number | null;
-  manualOrderOverride: boolean;
   priority: TaskPriority;
   status: TaskStatus;
   timerType: TimerTypes;
@@ -458,8 +455,6 @@ export interface ListItem {
   dueDate: string | null;
   priority: TaskPriority;
   status: TaskStatus;
-  manualOrder: number | null;
-  manualOrderOverride: boolean;
   itemKind: 'listItem';
   vacationEligible: boolean;
   createdAt: string;

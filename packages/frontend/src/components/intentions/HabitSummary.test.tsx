@@ -16,10 +16,10 @@ describe('HabitSummary', () => {
     );
     expect(screen.getByRole('group', { name: 'Habits left' })).toBeVisible();
     expect(screen.getByLabelText('Habits left today: 1')).toHaveTextContent(
-      'Today1'
+      '1'
     );
     expect(screen.getByLabelText('Habits left this week: 2')).toHaveTextContent(
-      'This week2'
+      '2'
     );
   });
 

@@ -378,7 +378,6 @@ describe.runIf(hasInfrastructure)('Watch HTTP integration', () => {
     await request(app.getHttpServer())
       .patch(`/tasks/${generalTask.id}`)
       .set(authenticated(auth))
-      .send({ manualOrder: 0, manualOrderOverride: true })
       .expect(200);
     await timerAction(auth, 'startOrResume', {
       timerType: 'work',

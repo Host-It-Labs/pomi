@@ -132,8 +132,6 @@ export class ListsController {
       dueDate: item.dueDate,
       priority: item.priority,
       status: item.status,
-      manualOrder: item.manualOrder,
-      manualOrderOverride: item.manualOrderOverride,
       itemKind: 'listItem' as const,
       vacationEligible: item.vacationEligible,
       createdAt: item.createdAt.toISOString(),

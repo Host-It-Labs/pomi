@@ -1,3 +1,4 @@
+import { ASSISTANT_MAX_RECORDING_MINUTES } from '@pomi/shared/src/constants';
 import {
   useCallback,
   useEffect,
@@ -6,33 +7,32 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { useFeedbackRecorderStore } from '../feedback/FeedbackRecorder';
-import { v4 as uuid } from 'uuid';
-import { ASSISTANT_MAX_RECORDING_MINUTES } from '@pomi/shared/src/constants';
 import {
   FaMicrophone,
   FaMicrophoneSlash,
   FaSpinner,
   FaStop,
 } from 'react-icons/fa';
-import { showToastFromStore } from '../toast/ToastContext';
-import { apiClient } from '../../utils/apiClient';
-import { submitUserMutation } from '../../utils/userActionQueue';
-import { blobToBase64 } from '../../utils/blobToBase64';
+import { v4 as uuid } from 'uuid';
+import { useI18n } from '../../i18n';
 import { useAssistantStore } from '../../stores/assistantStore';
+import { useAuthStore } from '../../stores/authStore';
 import { usePreferencesStore } from '../../stores/preferencesStore';
 import { useTasksStore } from '../../stores/tasksStore';
-import { useAuthStore } from '../../stores/authStore';
 import { useUiStore } from '../../stores/uiStore';
-import { hasOpenModal } from '../../utils/modalRegistry';
+import { apiClient } from '../../utils/apiClient';
 import {
   prepareAssistantVoiceWithRetry,
   waitForAssistantRetry,
 } from '../../utils/assistantVoicePreparation';
+import { blobToBase64 } from '../../utils/blobToBase64';
+import { hasOpenModal } from '../../utils/modalRegistry';
 import { forceReconnect } from '../../utils/socketManager';
+import { submitUserMutation } from '../../utils/userActionQueue';
+import { useFeedbackRecorderStore } from '../feedback/FeedbackRecorder';
+import { showToastFromStore } from '../toast/ToastContext';
 import { IconButton } from '../ui/IconButton';
 import { KeyboardShortcut } from '../ui/KeyboardShortcut';
-import { useI18n } from '../../i18n';
 
 type AssistantStage = 'idle' | 'recording' | 'processing' | 'result' | 'error';
 
@@ -349,7 +349,7 @@ export function AssistantLauncher() {
               label: t('task.viewUpdated'),
               onClick: () => {
                 setExpanded(true);
-                setActiveTab('tasks');
+                setActiveTab('timer');
                 requestTaskItemReveal(
                   createdTask
                     ? { kind: 'task', id: createdTask.id }
@@ -611,17 +611,17 @@ export function AssistantLauncher() {
           size="md"
           variant="secondary"
           onClick={toggleAssistantRecording}
-          className="h-[38px] w-[38px] !p-0"
+          className="h-[32px] w-[32px] !p-0"
         >
           <FaMicrophone />
           <KeyboardShortcut text="B" showModIcon={false} />
         </IconButton>
       ) : stage === 'recording' ? (
-        <div className="relative h-[38px] w-[38px]">
+        <div className="relative h-[32px] w-[32px]">
           <button
             type="button"
             onClick={cancelRecording}
-            className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] text-slate-400 hover:text-white"
+            className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] text-slate-400 hover:text-ink"
           >
             {t('common.cancel')}
           </button>
@@ -630,7 +630,7 @@ export function AssistantLauncher() {
             aria-label={t('assistant.stopRecording')}
             title={t('assistant.stopRecording')}
             onClick={stopRecording}
-            className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-red-600 text-white shadow-sm shadow-red-950/30 transition hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-400/60"
+            className="flex h-[32px] w-[32px] items-center justify-center rounded-full bg-red-600 text-ink shadow-sm shadow-red-950/30 transition hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-400/60"
           >
             <FaStop size={9} />
           </button>
@@ -646,22 +646,22 @@ export function AssistantLauncher() {
           role="status"
           aria-label={t('assistant.processing')}
           title={t('navigation.assistantProcessing')}
-          className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-slate-700/40 bg-indigo-600/90 text-white shadow-sm shadow-indigo-950/30"
+          className="flex h-[32px] w-[32px] items-center justify-center rounded-full border border-slate-700/40 bg-indigo-600/90 text-ink shadow-sm shadow-indigo-950/30"
         >
           <FaSpinner className="animate-spin" />
         </div>
       ) : stage === 'result' ? (
-        <div className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-emerald-500/35 bg-emerald-950/90 text-[9px] text-emerald-300">
+        <div className="flex h-[32px] w-[32px] items-center justify-center rounded-full border border-emerald-500/35 bg-emerald-950/90 text-[9px] text-emerald-300">
           {t('common.done')}
         </div>
       ) : (
-        <div className="relative h-[38px] w-[38px]">
+        <div className="relative h-[32px] w-[32px]">
           <button
             type="button"
             onClick={() => void startRecording()}
             aria-label={t('assistant.recordAgain')}
             title={t('navigation.recordAssistantAgain')}
-            className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-red-500/40 bg-red-950/90 text-red-300 transition hover:bg-red-900/90 focus:outline-none focus:ring-2 focus:ring-red-400/60"
+            className="flex h-[32px] w-[32px] items-center justify-center rounded-full border border-red-500/40 bg-red-950/90 text-red-300 transition hover:bg-red-900/90 focus:outline-none focus:ring-2 focus:ring-red-400/60"
           >
             <FaMicrophoneSlash />
           </button>
@@ -671,7 +671,7 @@ export function AssistantLauncher() {
           <button
             type="button"
             onClick={cancelRecording}
-            className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] text-slate-400 hover:text-white"
+            className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] text-slate-400 hover:text-ink"
           >
             {t('common.dismiss')}
           </button>

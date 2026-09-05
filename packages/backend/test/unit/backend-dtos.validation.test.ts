@@ -46,10 +46,6 @@ import { WorkTimerLogParamDto } from '../../src/statistics/dto/work-timer-log-pa
 import { WorkTimerLogsQueryDto } from '../../src/statistics/dto/work-timer-logs-query.dto';
 import { CreateTaskDto } from '../../src/tasks/dto/create-task.dto';
 import { TaskArchiveQueryDto } from '../../src/tasks/dto/task-archive-query.dto';
-import {
-  ReorderTaskDto,
-  ReorderTasksDto,
-} from '../../src/tasks/dto/reorder-tasks.dto';
 import { TaskImportDto } from '../../src/tasks/dto/task-import.dto';
 import { TaskEventLogParamDto } from '../../src/tasks/dto/task-event-log-param.dto';
 import { TaskIdParamDto } from '../../src/tasks/dto/task-id.param';
@@ -640,7 +636,6 @@ describe('intentions and preferences DTO validation', () => {
       'tasksShowSetupPrompts',
       'tasksShowInMinimizedTimer',
       'tasksAutoSwitchToIntentionMode',
-      'tasksDuringBreaks',
       'taskUrgentReminderRepeatEnabled',
       'advancedSkip',
       'timerExtension',
@@ -811,11 +806,9 @@ describe('Task DTO validation', () => {
     });
     const updated = await expectValid(UpdateTaskDto, {
       ...taskPayload,
-      manualOrder: '0',
-      manualOrderOverride: false,
       status: TASK_STATUSES.COMPLETED,
     });
-    expect(updated).toMatchObject({ manualOrder: 0 });
+    expect(updated.priority).toBe(TASK_PRIORITIES.URGENT);
     for (const Dto of [CreateTaskDto, UpdateTaskDto]) {
       await expectInvalid(Dto, { title: '' }, 'title');
       await expectInvalid(Dto, { title: 'x', dueDate: 'bad' }, 'dueDate');
@@ -826,8 +819,8 @@ describe('Task DTO validation', () => {
         'recurrenceInterval'
       );
     }
-    await expectInvalid(UpdateTaskDto, { manualOrder: -1 }, 'manualOrder');
     await expectInvalid(UpdateTaskDto, { status: 'waiting' }, 'status');
+    expect(updated.priority).toBe(TASK_PRIORITIES.URGENT);
     for (const Dto of [CreateTaskDto, UpdateTaskDto]) {
       await expectValid(Dto, { title: 'x', customDuration: null });
       await expectInvalid(
@@ -846,6 +839,7 @@ describe('Task DTO validation', () => {
         'customDuration'
       );
     }
+    expect(updated.priority).toBe(TASK_PRIORITIES.URGENT);
     for (const Dto of [CreateTaskDto, UpdateTaskDto]) {
       await expectInvalid(Dto, { title: 'x'.repeat(501) }, 'title');
       await expectInvalid(
@@ -854,20 +848,6 @@ describe('Task DTO validation', () => {
         'description'
       );
     }
-  });
-
-  it('transforms and validates nested Task reordering', async () => {
-    const result = await expectValid(ReorderTasksDto, {
-      tasks: [{ id: UUID, manualOrder: '0', manualOrderOverride: true }],
-    });
-    expect(result).toMatchObject({ tasks: [{ manualOrder: 0 }] });
-    await expectValid(ReorderTaskDto, { id: UUID, manualOrder: 0 });
-    await expectInvalid(ReorderTasksDto, { tasks: [] }, 'tasks');
-    await expectInvalid(
-      ReorderTasksDto,
-      { tasks: [{ id: 'not-a-uuid', manualOrder: -1 }] },
-      'tasks'
-    );
   });
 
   it('validates Task import envelopes and rows before service dispatch', async () => {

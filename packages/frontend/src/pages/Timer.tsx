@@ -1,65 +1,42 @@
+import { IntentionsManager } from './IntentionsManager';
 import type { TimerExtensionResolutionAction } from '@pomi/shared';
-import { TIMER_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
 import clsx from 'clsx';
-import { AnimatePresence, motion } from 'framer-motion';
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react';
+import { useEffect, useState } from 'react';
 import {
   FaCoffee,
   FaCog,
   FaExpandAlt,
   FaPlus,
   FaRedo,
-  FaTasks,
   FaTimes,
   FaUndo,
 } from 'react-icons/fa';
 import { IoStatsChart } from 'react-icons/io5';
-import { SessionIndicator } from '../components/SessionIndicator';
+import { CompactTimer } from '../components/CompactTimer';
 import { TimerExtensionModal } from '../components/TimerExtensionModal';
-import { MinimizedTaskView } from '../components/MinimizedTaskView';
 import { TaskImportModal } from '../components/tasks/TaskImportModal';
 import { Button } from '../components/ui/Button';
 import { IconButton } from '../components/ui/IconButton';
 import { IntentionEmojiPair } from '../components/ui/IntentionEmojiPair';
 import { KeyboardShortcut } from '../components/ui/KeyboardShortcut';
 import { Modal } from '../components/ui/Modal';
+import { useI18n } from '../i18n';
 import { useAssistantStore } from '../stores/assistantStore';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { useTasksStore } from '../stores/tasksStore';
 import { useTimerStore } from '../stores/timerStore';
 import { type HistorySource, useUiStore } from '../stores/uiStore';
-import { isDesktop, isIos, isLinux } from '../utils/osUtils';
 import { apiClient } from '../utils/apiClient';
-import { getDisplayedSessionPosition } from '../utils/sessionDisplay';
 import { shouldShowIntentionsPicker } from '../utils/intentionsPickerVisibility';
-import { getAdditionalSelectedIntentionsCount } from '../utils/timerIntentions';
 import { getLongBreakSwitchAction } from '../utils/longBreakSwitch';
+import { isDesktop, isLinux } from '../utils/osUtils';
+import { getAdditionalSelectedIntentionsCount } from '../utils/timerIntentions';
+import { TaskWorkspace } from './TaskWorkspace';
 import { ExpandedIntentionsPicker } from './timer/ExpandedIntentionsPicker';
-import { TimeRemainingCircle } from './timer/TimeRemainingCircle';
-import {
-  getTimerStagePanelReservation,
-  shouldShowExpandedTaskView,
-} from './timer/timerLayout';
-import { MOBILE_TASK_ROW_HEIGHT } from '../constants/mobileTaskLayout';
-import { useI18n } from '../i18n';
 
 interface TimerProps {
   useTallSafeAreaFallback: boolean;
 }
-
-const MOBILE_PICKER_NAV_GAP = 2;
-const MOBILE_TIMER_PICKER_GAP = 15;
-const MOBILE_TIMER_TASK_GAP = 4;
-const MOBILE_TIMER_VISUAL_UPWARD_BIAS = 8;
-const MOBILE_MAX_TASK_ROWS = 5;
-const MOBILE_MIN_TASK_ROWS = 3;
-const DEFAULT_TASK_ROWS = 3;
 
 export function Timer({ useTallSafeAreaFallback }: TimerProps) {
   const { t } = useI18n();
@@ -98,19 +75,7 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
   const [isEnablingTasks, setIsEnablingTasks] = useState(false);
   const [taskStartChoiceOpen, setTaskStartChoiceOpen] = useState(false);
   const [taskImportOpen, setTaskImportOpen] = useState(false);
-  const [mobilePickerTop, setMobilePickerTop] = useState(64);
-  const [mobileTaskRowLimit, setMobileTaskRowLimit] =
-    useState(MOBILE_MAX_TASK_ROWS);
-  const [mobileTimerStageBounds, setMobileTimerStageBounds] = useState<{
-    top: number;
-    bottom: number;
-  } | null>(null);
-  const [mobileTimerVisualOffset, setMobileTimerVisualOffset] = useState(0);
-  const topNavigationRef = useRef<HTMLDivElement | null>(null);
-  const expandedPickerRef = useRef<HTMLDivElement | null>(null);
-  const expandedTasksRef = useRef<HTMLDivElement | null>(null);
   const additionalIntentionsCount = getAdditionalSelectedIntentionsCount(timer);
-  const displayedSessionPosition = getDisplayedSessionPosition(timer);
   const activeIntentionLabel =
     timer?.subIntentionTitle ?? timer?.intentionTitle ?? timer?.intention;
   const undoActionSource = getHistorySource(
@@ -183,7 +148,7 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
         return;
       }
 
-      setActiveTab('tasks');
+      setActiveTab('timer');
     } finally {
       setIsEnablingTasks(false);
     }
@@ -192,7 +157,7 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
   const handleCreateFirstTask = () => {
     setTaskStartChoiceOpen(false);
     requestTaskCreate();
-    setActiveTab('tasks');
+    setActiveTab('timer');
   };
 
   const handleImportFirstTasks = () => {
@@ -200,14 +165,6 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
     setTaskImportOpen(true);
   };
 
-  const hasSessionProgress =
-    preferences?.sessionsExtension &&
-    displayedSessionPosition &&
-    timer?.sessionTotal;
-  const showMinimizedSessionIndicator =
-    hasSessionProgress &&
-    timer?.type === TIMER_TYPES.WORK &&
-    timer.status !== TIMER_STATUSES.PAUSED;
   const longBreakSwitchAction = getLongBreakSwitchAction(
     timer?.type,
     preferences
@@ -224,195 +181,15 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
     preferences,
     timer,
   });
-  const showExpandedTaskView = shouldShowExpandedTaskView({
-    isExpanded: expanded,
-    tasksExtension: preferences?.tasksExtension,
-    timerType: timer?.type,
-    tasksDuringBreaks: preferences?.tasksDuringBreaks,
-  });
+  const showExpandedTaskView = expanded && preferences?.tasksExtension === true;
   const showExpandedIntentionsPicker =
     showIntentionsPicker && !timer?.isExtension;
   const showDisabledIntentionsSkeleton =
-    isDesktop &&
-    expanded &&
-    preferences?.intentionExtension === false &&
-    !timer?.isExtension;
+    preferences?.intentionExtension === false;
   const showTasksSetupPlaceholder =
-    expanded &&
     preferences?.tasksExtension === false &&
-    timer?.type === TIMER_TYPES.WORK &&
     preferences?.tasksShowSetupPrompts !== false &&
-    !tasksSetupPromptClosed &&
-    !timer?.isExtension;
-  const showBottomPanel =
-    (showExpandedIntentionsPicker && !showExpandedTaskView) ||
-    showDisabledIntentionsSkeleton ||
-    showExpandedTaskView;
-  const showTopTaskPanel = showExpandedTaskView || showTasksSetupPlaceholder;
-  const showTopIntentionsPicker =
-    showExpandedIntentionsPicker && showExpandedTaskView;
-  const isLoadingTimerLayout = expanded && (!preferences || !timer);
-  const { hasBottomPanel: hasTimerStageBottomPanel } =
-    getTimerStagePanelReservation({
-      isExpanded: expanded,
-      isLoading: isLoadingTimerLayout,
-      hasTopPanel: Boolean(showTopIntentionsPicker || showTopTaskPanel),
-      hasBottomPanel: Boolean(showBottomPanel),
-    });
-  const hasTimerStageTopIntentionsPanel =
-    showTopIntentionsPicker || isLoadingTimerLayout;
-
-  const measureMobileTimerLayout = useCallback(() => {
-    if (
-      isDesktop ||
-      (!showExpandedIntentionsPicker &&
-        !showExpandedTaskView &&
-        !isLoadingTimerLayout)
-    ) {
-      setMobileTimerStageBounds(null);
-      setMobileTimerVisualOffset(0);
-      setMobileTaskRowLimit(DEFAULT_TASK_ROWS);
-      return;
-    }
-
-    const navigationBounds = topNavigationRef.current?.getBoundingClientRect();
-    if (navigationBounds) {
-      setMobilePickerTop(
-        Math.round(navigationBounds.bottom + MOBILE_PICKER_NAV_GAP)
-      );
-    }
-
-    const pickerBounds = expandedPickerRef.current?.getBoundingClientRect();
-    const taskBounds = expandedTasksRef.current?.getBoundingClientRect();
-    const timerVisualElements = Array.from(
-      document.querySelectorAll<SVGGraphicsElement | HTMLElement>(
-        '[data-testid="timer-circle-content"], [data-testid="session-progress-eta"]'
-      )
-    );
-    const timerVisualBounds = timerVisualElements.map(element =>
-      element.getBoundingClientRect()
-    );
-    const timerCircleBounds = document
-      .querySelector<HTMLElement>('[data-testid="time-remaining-circle"]')
-      ?.getBoundingClientRect();
-    const taskGridBounds = expandedTasksRef.current
-      ?.querySelector<HTMLElement>('[data-testid="minimized-task-grid"]')
-      ?.getBoundingClientRect();
-    if (
-      !navigationBounds ||
-      !timerCircleBounds ||
-      timerVisualBounds.length === 0 ||
-      ((showExpandedIntentionsPicker || isLoadingTimerLayout) &&
-        !pickerBounds) ||
-      (isLoadingTimerLayout && !taskBounds) ||
-      (showExpandedTaskView && (!taskBounds || !taskGridBounds))
-    ) {
-      return;
-    }
-
-    const timerVisualHeight =
-      Math.max(...timerVisualBounds.map(bounds => bounds.bottom)) -
-      Math.min(...timerVisualBounds.map(bounds => bounds.top));
-    const timerVisualCenter =
-      (Math.max(...timerVisualBounds.map(bounds => bounds.bottom)) +
-        Math.min(...timerVisualBounds.map(bounds => bounds.top))) /
-      2;
-    const timerCircleCenter =
-      timerCircleBounds.top + timerCircleBounds.height / 2;
-
-    const topSurfaceBottom =
-      showTopIntentionsPicker || isLoadingTimerLayout
-        ? navigationBounds.bottom + MOBILE_PICKER_NAV_GAP + pickerBounds!.height
-        : navigationBounds.bottom;
-    const bottomSurfaceTop =
-      showExpandedTaskView || isLoadingTimerLayout
-        ? taskBounds!.top
-        : pickerBounds?.top;
-    if (bottomSurfaceTop === undefined) return;
-
-    if (showExpandedTaskView) {
-      const bottomInset = Math.max(0, window.innerHeight - taskBounds!.bottom);
-      const taskChromeHeight = Math.max(
-        0,
-        taskBounds!.height - taskGridBounds!.height
-      );
-      const availableTaskHeight = Math.max(
-        0,
-        window.innerHeight -
-          topSurfaceBottom -
-          timerVisualHeight -
-          MOBILE_TIMER_PICKER_GAP -
-          MOBILE_TIMER_TASK_GAP -
-          bottomInset
-      );
-      let nextTaskRowLimit = MOBILE_MIN_TASK_ROWS;
-      for (let rowCount = MOBILE_MAX_TASK_ROWS; rowCount >= 1; rowCount -= 1) {
-        if (
-          taskChromeHeight + rowCount * MOBILE_TASK_ROW_HEIGHT <=
-          availableTaskHeight
-        ) {
-          nextTaskRowLimit = Math.max(MOBILE_MIN_TASK_ROWS, rowCount);
-          break;
-        }
-      }
-      setMobileTaskRowLimit(nextTaskRowLimit);
-    }
-
-    setMobileTimerStageBounds({
-      top: topSurfaceBottom + MOBILE_TIMER_PICKER_GAP,
-      bottom: window.innerHeight - bottomSurfaceTop + MOBILE_TIMER_TASK_GAP,
-    });
-    setMobileTimerVisualOffset(
-      timerCircleCenter - timerVisualCenter - MOBILE_TIMER_VISUAL_UPWARD_BIAS
-    );
-  }, [
-    showExpandedIntentionsPicker,
-    showExpandedTaskView,
-    isLoadingTimerLayout,
-    showTopIntentionsPicker,
-  ]);
-
-  useLayoutEffect(() => {
-    if (isDesktop) return;
-
-    const frame = window.requestAnimationFrame(measureMobileTimerLayout);
-    const observer = new ResizeObserver(measureMobileTimerLayout);
-    const timerCircle = document.querySelector<HTMLElement>(
-      '[data-testid="time-remaining-circle"]'
-    );
-    const timerMutationObserver = new MutationObserver(
-      measureMobileTimerLayout
-    );
-    [
-      topNavigationRef.current,
-      expandedPickerRef.current,
-      expandedTasksRef.current,
-      timerCircle,
-    ].forEach(element => {
-      if (element) observer.observe(element);
-    });
-    if (timerCircle) {
-      timerMutationObserver.observe(timerCircle, {
-        childList: true,
-        subtree: true,
-      });
-    }
-    window.addEventListener('resize', measureMobileTimerLayout);
-    window.addEventListener('orientationchange', measureMobileTimerLayout);
-    window.visualViewport?.addEventListener('resize', measureMobileTimerLayout);
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      observer.disconnect();
-      timerMutationObserver.disconnect();
-      window.removeEventListener('resize', measureMobileTimerLayout);
-      window.removeEventListener('orientationchange', measureMobileTimerLayout);
-      window.visualViewport?.removeEventListener(
-        'resize',
-        measureMobileTimerLayout
-      );
-    };
-  }, [measureMobileTimerLayout]);
+    !tasksSetupPromptClosed;
 
   useEffect(() => {
     void loadAssistantStatus();
@@ -452,15 +229,14 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
   }, [extensionState, setTimerExtensionModalOpen, timerExtensionModalOpen]);
 
   return (
-    <div className="flex flex-col items-center h-full relative text-gray-100 overflow-hidden">
+    <div className="focus-workspace flex flex-col h-full relative text-gray-100 overflow-hidden">
       <div
-        ref={topNavigationRef}
         data-testid="timer-top-navigation"
         className={clsx(
-          'absolute right-2 z-20 flex items-center px-2 pb-2',
+          'workspace-navigation z-20 flex shrink-0 items-center justify-end px-3 pb-2',
           isDesktop
-            ? 'top-2 gap-2 pt-4'
-            : 'top-[calc(env(safe-area-inset-top)+0.25rem)] gap-1.5 pt-2'
+            ? 'gap-1.5 pt-2'
+            : 'gap-1.5 pt-[calc(env(safe-area-inset-top)+0.5rem)]'
         )}
       >
         <div id="feedback-session-slot-timer" />
@@ -510,17 +286,6 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
           data-testid="timer-nav-utility-group"
           className="flex items-center gap-2"
         >
-          {expanded && preferences?.tasksExtension && (
-            <IconButton
-              label={t('timer.openTasks')}
-              onClick={() => setActiveTab('tasks')}
-              variant="secondary"
-              size="md"
-            >
-              <FaTasks />
-              <KeyboardShortcut text="T" showModIcon={false} />
-            </IconButton>
-          )}
           <IconButton
             label={t('timer.statistics')}
             onClick={() => setActiveTab('statistics')}
@@ -563,10 +328,8 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
       {expanded && (
         <div
           className={clsx(
-            'absolute left-3 z-20 flex items-center gap-3 px-2 pb-2',
-            isDesktop
-              ? 'top-2 translate-y-1 pt-4'
-              : 'top-[calc(env(safe-area-inset-top)+0.25rem)] translate-y-2 pt-2'
+            'timer-history-actions absolute left-3 z-20 flex items-center gap-3 px-2 pb-2',
+            isDesktop ? 'top-0 pt-2' : 'top-[env(safe-area-inset-top)] pt-2'
           )}
         >
           <IconButton
@@ -620,214 +383,26 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
         </div>
       )}
 
-      <div className="absolute inset-0 z-0 pointer-events-none">
-        <div
-          data-testid="timer-circle-stage"
-          data-mobile-task-row-limit={
-            !isDesktop && showExpandedTaskView ? mobileTaskRowLimit : undefined
-          }
-          className={clsx(
-            'flex w-full items-center justify-center pointer-events-auto',
-            isDesktop &&
-              expanded &&
-              hasTimerStageTopIntentionsPanel &&
-              '-translate-y-[20px]',
-            isDesktop
-              ? [
-                  'absolute left-0 right-0',
-                  hasTimerStageTopIntentionsPanel
-                    ? 'top-[236px]'
-                    : showTopTaskPanel
-                      ? 'top-[210px]'
-                      : 'top-[64px]',
-                  hasTimerStageBottomPanel
-                    ? hasTimerStageTopIntentionsPanel
-                      ? 'bottom-[176px]'
-                      : 'bottom-[204px]'
-                    : 'bottom-0',
-                ]
-              : mobileTimerStageBounds
-                ? 'absolute left-0 right-0'
-                : 'h-full'
-          )}
-          style={
-            !isDesktop && mobileTimerStageBounds
-              ? {
-                  top: mobileTimerStageBounds.top,
-                  bottom: mobileTimerStageBounds.bottom,
-                }
-              : undefined
-          }
-        >
-          <div
-            data-testid="timer-visual-positioner"
-            data-mobile-visual-offset={
-              !isDesktop ? mobileTimerVisualOffset.toFixed(2) : undefined
-            }
-            className="flex w-full items-center justify-center"
-            style={
-              !isDesktop
-                ? { transform: `translateY(${mobileTimerVisualOffset}px)` }
-                : undefined
-            }
-          >
-            <TimeRemainingCircle
-              showSessionIndicator={!!hasSessionProgress}
-              sessionPosition={displayedSessionPosition}
-              sessionTotal={timer?.sessionTotal}
-              isExpanded={expanded}
+      <div className="workspace-focus-panel shrink-0">
+        {showExpandedIntentionsPicker && (
+          <div data-testid="expanded-intentions-surface" className="shrink-0">
+            <ExpandedIntentionsPicker
+              useTallSafeAreaFallback={useTallSafeAreaFallback}
+              placement="top"
             />
           </div>
+        )}
+        <div className="workspace-timer shrink-0 px-3 py-2">
+          <CompactTimer />
         </div>
       </div>
-
-      {/* Session indicator for minimized view - positioned below timer */}
-      <AnimatePresence>
-        {showMinimizedSessionIndicator &&
-          !expanded &&
-          displayedSessionPosition &&
-          timer?.sessionTotal && (
-            <motion.div
-              className={clsx(
-                'absolute',
-                isDesktop ? 'bottom-[35%]' : 'bottom-[33%]'
-              )}
-              initial={{ opacity: 0, y: -30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              transition={{ duration: 0.4, ease: 'easeInOut' }}
-            >
-              <SessionIndicator
-                currentPosition={displayedSessionPosition}
-                totalPomodoros={timer.sessionTotal}
-                isDisconnected={isDisconnected}
-                isExpanded={false}
-                stackedSessions={timer.stackedSessions}
-              />
-            </motion.div>
-          )}
-      </AnimatePresence>
-
-      {showExpandedIntentionsPicker && (
-        <div
-          ref={expandedPickerRef}
-          data-testid="expanded-intentions-surface"
-          className={clsx(
-            'left-0 right-0 w-full z-10',
-            showTopIntentionsPicker
-              ? isDesktop
-                ? 'absolute top-[78px]'
-                : 'fixed'
-              : isDesktop
-                ? 'absolute bottom-0'
-                : 'fixed bottom-0'
-          )}
-          style={
-            !isDesktop && showTopIntentionsPicker
-              ? { top: mobilePickerTop }
-              : undefined
-          }
-        >
-          <ExpandedIntentionsPicker
-            useTallSafeAreaFallback={useTallSafeAreaFallback}
-            placement={showTopIntentionsPicker ? 'top' : 'bottom'}
-          />
-        </div>
-      )}
-
-      {isLoadingTimerLayout && (
-        <>
-          <div
-            ref={expandedPickerRef}
-            data-testid="timer-loading-intentions-surface"
-            aria-hidden="true"
-            className={clsx(
-              'left-0 right-0 z-10 w-full',
-              isDesktop ? 'absolute top-[78px]' : 'fixed'
-            )}
-            style={!isDesktop ? { top: mobilePickerTop } : undefined}
-          >
-            <div className="w-full px-3 pb-2 pt-1.5">
-              <div className="flex flex-col gap-1.5">
-                {Array.from({ length: 3 }).map((_, rowIndex) => (
-                  <div
-                    key={`timer-loading-intentions-row-${rowIndex}`}
-                    className="flex justify-center gap-1.5"
-                  >
-                    {Array.from({ length: 3 }).map((__, itemIndex) => (
-                      <div
-                        key={`timer-loading-intention-${rowIndex}-${itemIndex}`}
-                        className={clsx(
-                          'w-[30%] max-w-40 animate-pulse rounded-md bg-slate-800/45',
-                          isDesktop ? 'h-8' : 'h-12'
-                        )}
-                      />
-                    ))}
-                  </div>
-                ))}
-              </div>
-              <div className="mt-1 min-h-8" />
-            </div>
-          </div>
-
-          <div
-            ref={expandedTasksRef}
-            data-testid="timer-loading-tasks-surface"
-            aria-hidden="true"
-            className={clsx(
-              'left-0 right-0 z-10 w-full px-2',
-              isDesktop
-                ? 'absolute bottom-2'
-                : [
-                    'fixed bottom-[calc(env(safe-area-inset-bottom)+0.25rem)]',
-                    isIos ? 'translate-y-2' : 'translate-y-3',
-                  ]
-            )}
-          >
-            <div className="mx-auto max-w-md px-4 py-2">
-              <div className="mb-2 min-h-9" />
-              <div className="grid min-h-[96px] grid-rows-3 gap-1">
-                {Array.from({ length: 3 }).map((_, rowIndex) => (
-                  <div
-                    key={`timer-loading-task-${rowIndex}`}
-                    className="min-h-8 animate-pulse rounded-md border border-slate-800/60 bg-slate-900/55"
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {showExpandedTaskView && (
-        <div
-          ref={expandedTasksRef}
-          data-testid="minimized-tasks-surface"
-          className={clsx(
-            'left-0 right-0 w-full z-10 px-2',
-            isDesktop
-              ? 'absolute bottom-2'
-              : [
-                  'fixed bottom-[calc(env(safe-area-inset-bottom)+0.25rem)]',
-                  isIos ? 'translate-y-2' : 'translate-y-3',
-                ]
-          )}
-        >
-          <MinimizedTaskView
-            visibleRowLimit={isDesktop ? DEFAULT_TASK_ROWS : mobileTaskRowLimit}
-          />
-        </div>
-      )}
+      {showExpandedTaskView && <TaskWorkspace />}
+      {preferences?.intentionExtension && <IntentionsManager editorOnly />}
 
       {showDisabledIntentionsSkeleton && (
         <div
           data-testid="disabled-intentions-picker-skeleton"
-          className={clsx(
-            'absolute left-0 right-0 z-10 w-full px-2',
-            showExpandedTaskView
-              ? 'top-[64px] pt-2 pb-3 bg-linear-to-b from-slate-900 to-transparent'
-              : 'bottom-0 pt-4 pb-3 bg-linear-to-t from-slate-900 to-transparent'
-          )}
+          className={clsx('relative z-10 w-full px-2', 'relative py-3')}
         >
           <div
             className="pointer-events-none flex flex-col gap-2"
@@ -865,9 +440,7 @@ export function Timer({ useTallSafeAreaFallback }: TimerProps) {
           data-testid="tasks-setup-placeholder"
           className={clsx(
             'left-0 right-0 z-10 w-full px-2 pt-4 pb-2',
-            isDesktop
-              ? 'absolute top-[68px]'
-              : 'fixed top-[calc(env(safe-area-inset-top)+0.25rem)] bg-linear-to-b from-slate-900 to-transparent'
+            isDesktop ? 'relative' : 'relative'
           )}
         >
           <div className="relative mx-auto max-w-md rounded-lg border border-slate-700/45 bg-slate-900/70 px-4 py-3 opacity-80 shadow-lg shadow-slate-950/30">

@@ -1,6 +1,6 @@
+import clsx from 'clsx';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect } from 'react';
-import clsx from 'clsx';
 import {
   IN_APP_NOTIFICATION_TYPES,
   InAppNotificationType,
@@ -161,7 +161,7 @@ export function InAppNotification({
             <div className="flex-1 min-w-0">
               <h3
                 className={clsx(
-                  'font-semibold text-white',
+                  'font-semibold text-ink',
                   isMinimized
                     ? 'line-clamp-2 text-[13px] leading-4'
                     : 'truncate text-base'
@@ -171,7 +171,7 @@ export function InAppNotification({
               </h3>
               <p
                 className={clsx(
-                  'text-white/80',
+                  'text-ink/80',
                   isMinimized
                     ? 'mt-1 line-clamp-2 text-[11px] leading-[14px]'
                     : 'mt-0.5 line-clamp-2 text-sm'
@@ -191,7 +191,7 @@ export function InAppNotification({
             >
               <svg
                 className={clsx(
-                  'text-white/70',
+                  'text-ink/70',
                   isMinimized ? 'h-3 w-3' : 'h-5 w-5'
                 )}
                 fill="none"

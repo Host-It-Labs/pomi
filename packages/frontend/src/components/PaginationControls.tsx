@@ -117,7 +117,7 @@ export function PaginationControls({
           buttonClasses,
           previousDisabled
             ? 'text-slate-500'
-            : 'text-slate-300 hover:bg-slate-800/50 hover:text-white'
+            : 'text-slate-300 hover:bg-slate-800/50 hover:text-ink'
         )}
       >
         <PreviousIcon size={iconSize} />
@@ -151,7 +151,7 @@ export function PaginationControls({
           buttonClasses,
           nextDisabled
             ? 'text-slate-500'
-            : 'text-slate-300 hover:bg-slate-800/50 hover:text-white'
+            : 'text-slate-300 hover:bg-slate-800/50 hover:text-ink'
         )}
       >
         <NextIcon size={iconSize} />

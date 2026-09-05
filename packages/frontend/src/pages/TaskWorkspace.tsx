@@ -1,3 +1,8 @@
+import { FavoriteDestinationShortcuts } from '../components/tasks/FavoriteDestinationShortcuts';
+import { getSelectedTimerIntentions } from '../utils/timerIntentions';
+import { TaskModeToggle } from '../components/TaskModeToggle';
+import { hasOpenModal } from '../utils/modalRegistry';
+import { isDesktop } from '../utils/osUtils';
 import {
   Intention,
   List,
@@ -6,11 +11,7 @@ import {
   type TaskSortMode,
   TaskStatus,
 } from '@pomi/shared';
-import {
-  TASK_MANUAL_ORDER_BOTTOM,
-  TASK_STATUSES,
-  TIMER_TYPES,
-} from '@pomi/shared/src/constants';
+import { TASK_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
 import clsx from 'clsx';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -20,16 +21,14 @@ import {
   useMemo,
   useRef,
   useState,
-  type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
   type Ref,
 } from 'react';
 import {
   FaArchive,
+  FaChevronUp,
+  FaChevronDown,
   FaEdit,
   FaFileImport,
-  FaGripVertical,
-  FaListUl,
   FaRegStar,
   FaSearch,
   FaSort,
@@ -40,7 +39,6 @@ import {
   FaTimes,
   FaUndo,
 } from 'react-icons/fa';
-import { BackButton } from '../components/BackButton';
 import {
   IntentionAssignmentPicker,
   type IntentionAssignmentPickerChange,
@@ -61,7 +59,6 @@ import { TaskInlineProperties } from '../components/tasks/TaskInlineProperties';
 import { TaskArchiveConfirmationModal } from '../components/tasks/TaskArchiveConfirmationModal';
 import { CompletionButton } from '../components/tasks/CompletionButton';
 import { MobileSwipeActionRow } from '../components/tasks/MobileSwipeActionRow';
-import { FavoriteIntentionFilters } from '../components/tasks/FavoriteIntentionFilters';
 import {
   EMPTY_TASK_PROPERTY_FILTERS,
   hasTaskPropertyFilters,
@@ -75,8 +72,6 @@ import { Button } from '../components/ui/Button';
 import { IconButton } from '../components/ui/IconButton';
 import { KeyboardShortcut } from '../components/ui/KeyboardShortcut';
 import { Modal } from '../components/ui/Modal';
-import { PageContainer } from '../components/ui/PageContainer';
-import { PageShell } from '../components/ui/PageShell';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { useAuthStore } from '../stores/authStore';
 import { useTasksStore } from '../stores/tasksStore';
@@ -92,11 +87,7 @@ import {
   isTaskOverdue,
   isInlineTaskPropertyUpdate,
 } from '../utils/taskUi';
-import {
-  applyIntentionFamilyManualOrder,
-  buildTaskView,
-  type TaskOrderingClock,
-} from '../utils/taskView';
+import { buildTaskView, isTaskLinkedToTimer } from '../utils/taskView';
 import { showToastFromStore } from '../components/toast/ToastContext';
 import { VacationControl } from '../components/vacation/VacationControl';
 import { isMobile } from '../utils/osUtils';
@@ -113,10 +104,8 @@ import { useI18n } from '../i18n';
 import { useDefaultTaskSort } from './taskDefaultSort';
 import { useUpdatedTaskReveal } from './taskUpdatedReveal';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
-import { TASKS_PAGE_CONTAINER_CLASS } from '../constants/taskLayout';
 
 type TaskIntentionFilterValue = string | null;
-type TaskDropPlacement = 'before' | 'after';
 type TaskIntentionFilterOption = {
   value: string;
   title: string;
@@ -126,7 +115,9 @@ type TaskIntentionFilterOption = {
   subIntention: Intention | null;
 };
 
-export function Tasks() {
+const TASKS_PER_PAGE = 5;
+
+export function TaskWorkspace() {
   const { t } = useI18n();
   const tasks = useTasksStore.use.tasks();
   const completingTaskIds = useTasksStore.use.completingTaskIds();
@@ -135,7 +126,6 @@ export function Tasks() {
   const loadTasks = useTasksStore.use.loadTasks();
   const createTask = useTasksStore.use.createTask();
   const updateTask = useTasksStore.use.updateTask();
-  const reorderTasks = useTasksStore.use.reorderTasks();
   const user = useAuthStore.use.user();
   const preferences = usePreferencesStore.use.preferences();
   const vacationStatus = useVacationStore.use.status();
@@ -146,6 +136,12 @@ export function Tasks() {
   const orderingClock = useTaskOrderingClock();
   const createOrResumeTimer = useTimerStore.use.createOrResumeTimer();
   const setTaskMode = useUiStore.use.setTaskMode();
+  const taskMode = useUiStore.use.taskMode();
+  const hasTimerIntention = getSelectedTimerIntentions(timer).length > 0;
+  useEffect(() => {
+    if (!hasTimerIntention && taskMode === 'intention') setTaskMode('general');
+  }, [hasTimerIntention, taskMode, setTaskMode]);
+  const [taskPage, setTaskPage] = useState(0);
   const taskCreateRequested = useUiStore.use.taskCreateRequested();
   const taskCreateInitialTitle = useUiStore.use.taskCreateInitialTitle();
   const clearTaskCreateRequest = useUiStore.use.clearTaskCreateRequest();
@@ -161,10 +157,6 @@ export function Tasks() {
   const [lists, setLists] = useState<List[]>([]);
   const [listItems, setListItems] = useState<ListItem[]>([]);
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
-  const [isCreateListOpen, setIsCreateListOpen] = useState(false);
-  const [newListTitle, setNewListTitle] = useState('');
-  const [newListEmoji, setNewListEmoji] = useState('');
-  const [isCreatingList, setIsCreatingList] = useState(false);
   const [editingListItem, setEditingListItem] = useState<ListItem | null>(null);
   const [completingListItemIds, setCompletingListItemIds] = useState<string[]>(
     []
@@ -173,14 +165,39 @@ export function Tasks() {
     null
   );
   const [isResetListOpen, setIsResetListOpen] = useState(false);
-  const [intentionsLoaded, setIntentionsLoaded] = useState(false);
-  const [reserveFavoriteRow, setReserveFavoriteRow] = useState(() =>
-    readFavoriteRowMemory(null)
-  );
   const [intentionsError, setIntentionsError] = useState<string | null>(null);
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const [selectedIntentionFilter, setSelectedIntentionFilter] =
     useState<TaskIntentionFilterValue>(null);
+  useEffect(() => {
+    if (taskMode === 'intention') {
+      setSelectedIntentionFilter(null);
+      setSelectedListId(null);
+    }
+  }, [taskMode]);
+  const taskModeToggleRequest = useUiStore.use.taskModeToggleRequest();
+  const lastModeToggleRequest = useRef(taskModeToggleRequest);
+  useEffect(() => {
+    if (lastModeToggleRequest.current === taskModeToggleRequest) return;
+    lastModeToggleRequest.current = taskModeToggleRequest;
+    const next =
+      selectedIntentionFilter ||
+      selectedListId ||
+      taskMode === 'intention' ||
+      !hasTimerIntention
+        ? 'general'
+        : 'intention';
+    setSelectedIntentionFilter(null);
+    setSelectedListId(null);
+    setTaskMode(next);
+  }, [
+    taskModeToggleRequest,
+    selectedIntentionFilter,
+    selectedListId,
+    taskMode,
+    hasTimerIntention,
+    setTaskMode,
+  ]);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createInitialTitle, setCreateInitialTitle] = useState('');
@@ -258,16 +275,9 @@ export function Tasks() {
           intention => !intention.isArchived
         );
         setIntentions(activeIntentions);
-        const hasFavorites = activeIntentions.some(
-          intention => intention.isFavorite
-        );
-        setReserveFavoriteRow(hasFavorites);
-        writeFavoriteRowMemory(user?.id ?? null, hasFavorites);
-        setIntentionsLoaded(true);
         setIntentionsError(null);
         return;
       }
-      setIntentionsLoaded(true);
       setIntentionsError(t('intention.loadFailed'));
     };
 
@@ -298,10 +308,6 @@ export function Tasks() {
   }, [loadLists, preferences?.listsExtension]);
 
   useEffect(() => {
-    setReserveFavoriteRow(readFavoriteRowMemory(user?.id ?? null));
-  }, [user?.id]);
-
-  useEffect(() => {
     if (!taskCreateRequested) {
       return;
     }
@@ -328,6 +334,55 @@ export function Tasks() {
     );
     return buildTaskIntentionFilterOptions(availableIntentions);
   }, [intentions, propertyFilters.timerTypes]);
+  const timerDestinations = getSelectedTimerIntentions(timer).map(slug => {
+    const parent = intentions.find(
+      item =>
+        item.slug === slug &&
+        item.type === timer?.type &&
+        !item.parentIntentionId
+    );
+    const subSlug =
+      timer?.subIntentions?.[slug] ??
+      (slug === timer?.intention ? timer?.subIntention : null);
+    const sub = subSlug
+      ? intentions.find(
+          item => item.slug === subSlug && item.parentIntentionId === parent?.id
+        )
+      : null;
+    return {
+      title: sub?.title ?? parent?.title ?? slug,
+      emoji:
+        sub?.emoji ?? parent?.emoji ?? timer?.intentionEmojis?.[slug] ?? '🎯',
+    };
+  });
+  const timerFilterLabel =
+    taskMode === 'intention' && timerDestinations.length > 0 ? (
+      <span
+        className="truncate"
+        title={timerDestinations.map(item => item.title).join(', ')}
+        aria-label={timerDestinations.map(item => item.title).join(', ')}
+      >
+        {timerDestinations.length === 1
+          ? `${timerDestinations[0].emoji} ${timerDestinations[0].title}`
+          : timerDestinations.map(item => item.emoji).join(' ')}
+      </span>
+    ) : undefined;
+  const favoriteDestinations = [
+    ...filterOptions
+      .filter(option => option.intention.isFavorite)
+      .map(option => ({
+        value: option.value,
+        title: option.title,
+        emoji: option.emoji,
+      })),
+    ...lists
+      .filter(list => list.isFavorite)
+      .map(list => ({
+        value: buildListFilterValue(list.id),
+        title: list.title,
+        emoji: list.emoji ?? '📋',
+      })),
+  ];
   const selectedFilterOption = useMemo(
     () =>
       selectedIntentionFilter
@@ -337,28 +392,19 @@ export function Tasks() {
         : null,
     [filterOptions, selectedIntentionFilter]
   );
-  const favoriteFilterOptions = useMemo(
-    () => [
-      ...filterOptions
-        .filter(option => option.intention.isFavorite)
-        .map(option => ({
-          value: option.value,
-          title: option.title,
-          emoji: getFilterOptionEmojiText(option),
-        })),
-      ...lists
-        .filter(list => list.isFavorite)
-        .map(list => ({
-          value: buildListFilterValue(list.id),
-          title: list.title,
-          emoji: list.emoji ?? '📋',
-        })),
-    ],
-    [filterOptions, lists]
-  );
   const taskFormDefaultIntention = useMemo(() => {
     if (!selectedFilterOption) {
-      return null;
+      if (taskMode !== 'intention' || !timer) return null;
+      const intentionSlug = getSelectedTimerIntentions(timer)[0];
+      return intentionSlug
+        ? {
+            intentionSlug,
+            subIntentionSlug:
+              timer.subIntentions?.[intentionSlug] ??
+              (timer.intention === intentionSlug ? timer.subIntention : null) ??
+              null,
+          }
+        : null;
     }
 
     return {
@@ -367,9 +413,10 @@ export function Tasks() {
         selectedFilterOption.intention.slug,
       subIntentionSlug: selectedFilterOption.subIntention?.slug ?? null,
     };
-  }, [selectedFilterOption]);
+  }, [selectedFilterOption, taskMode, timer]);
   const taskFormDefaultTimerType =
     selectedFilterOption?.intention.type ??
+    (taskMode === 'intention' ? timer?.type : undefined) ??
     propertyFilters.timerTypes[0] ??
     TIMER_TYPES.WORK;
 
@@ -432,9 +479,6 @@ export function Tasks() {
           const next = current.map(item =>
             item.id === response.body.id ? response.body : item
           );
-          const hasFavorites = next.some(item => item.isFavorite);
-          setReserveFavoriteRow(hasFavorites);
-          writeFavoriteRowMemory(user?.id ?? null, hasFavorites);
           return next;
         });
         setIntentionsError(null);
@@ -476,42 +520,6 @@ export function Tasks() {
     },
     [loadLists, t]
   );
-
-  const createList = useCallback(async () => {
-    const title = newListTitle.trim();
-    if (!title || isCreatingList) return;
-    setIsCreatingList(true);
-    try {
-      const result = await submitUserMutation({
-        kind: 'lists',
-        label: t('task.createList'),
-        payload: {
-          operation: 'create',
-          title,
-          emoji: newListEmoji.trim() || null,
-        },
-        reconcile: loadLists,
-      });
-      const response =
-        result &&
-        typeof result === 'object' &&
-        'status' in result &&
-        'body' in result
-          ? (result as { status: number; body: List })
-          : { status: 201, body: result as List };
-      if (response.status === 201 && response.body.id) {
-        setNewListTitle('');
-        setNewListEmoji('');
-        setIsCreateListOpen(false);
-        setSelectedIntentionFilter(null);
-        setSelectedListId(response.body.id);
-        await loadLists();
-        requestListRefresh();
-      }
-    } finally {
-      setIsCreatingList(false);
-    }
-  }, [isCreatingList, loadLists, newListEmoji, newListTitle, t]);
 
   const selectedList = useMemo(
     () => lists.find(list => list.id === selectedListId) ?? null,
@@ -795,10 +803,11 @@ export function Tasks() {
   );
   const resetUpdatedTaskFilters = useCallback(() => {
     setTaskSearchQuery('');
+    setTaskMode('general');
     setSelectedIntentionFilter(null);
     setSelectedListId(null);
     setPropertyFilters(EMPTY_TASK_PROPERTY_FILTERS);
-  }, []);
+  }, [setTaskMode]);
   const revealUpdatedTask = useUpdatedTaskReveal({
     resetFilters: resetUpdatedTaskFilters,
     setDestinationTaskId: setUpdatedTaskDestinationId,
@@ -806,15 +815,22 @@ export function Tasks() {
   useEffect(() => {
     if (!taskItemRevealRequest) return;
     if (taskItemRevealRequest.kind === 'listItem') {
+      setTaskMode('general');
       setTaskSearchQuery('');
       setSelectedIntentionFilter(null);
       setPropertyFilters(EMPTY_TASK_PROPERTY_FILTERS);
       setSelectedListId(taskItemRevealRequest.listId);
+      setHighlightedTaskId(taskItemRevealRequest.id);
     } else {
       revealUpdatedTask(taskItemRevealRequest.id);
     }
     clearTaskItemRevealRequest();
-  }, [clearTaskItemRevealRequest, revealUpdatedTask, taskItemRevealRequest]);
+  }, [
+    clearTaskItemRevealRequest,
+    revealUpdatedTask,
+    taskItemRevealRequest,
+    setTaskMode,
+  ]);
   const createTaskWithViewFeedback = useCallback(
     async (input: Parameters<typeof createTask>[0]) => {
       const existingTaskIds = new Set(
@@ -879,11 +895,10 @@ export function Tasks() {
   const isTaskSearchActive = normalizeSearchText(taskSearchQuery).length > 0;
   const visibleTasks = useMemo(() => {
     const filteredTasks = taskView.tasks
-      .filter(task =>
-        isTaskSearchActive
-          ? true
-          : doesTaskMatchIntentionFilter(task, selectedFilterOption)
+      .filter(
+        task => taskMode !== 'intention' || isTaskLinkedToTimer(task, timer)
       )
+      .filter(task => doesTaskMatchIntentionFilter(task, selectedFilterOption))
       .filter(task => doesTaskMatchSearch(task, taskSearchQuery, intentions))
       .filter(task => matchesTaskPropertyFilters(task, propertyFilters));
     const sorted = sortTasksForMode(filteredTasks, taskSortMode);
@@ -892,11 +907,7 @@ export function Tasks() {
       selectedFilterOption,
       isTaskSearchActive
     );
-    const intentionOrdered =
-      selectedFilterOption && taskSortMode === 'default' && !isTaskSearchActive
-        ? applyIntentionFamilyManualOrder(ranked)
-        : ranked;
-    return intentionOrdered;
+    return ranked;
   }, [
     intentions,
     isTaskSearchActive,
@@ -905,13 +916,16 @@ export function Tasks() {
     taskSortMode,
     taskSearchQuery,
     taskView.tasks,
+    taskMode,
+    timer,
   ]);
   const eligibleMixedListItems = useMemo(() => {
     const query = normalizeSearchText(taskSearchQuery);
     if (
       selectedList !== null ||
       preferences?.listsExtension !== true ||
-      (!query && selectedFilterOption !== null) ||
+      selectedFilterOption !== null ||
+      taskMode === 'intention' ||
       !propertyFilters.timerTypes.includes(TIMER_TYPES.WORK)
     ) {
       return [];
@@ -938,6 +952,7 @@ export function Tasks() {
     propertyFilters,
     selectedFilterOption,
     selectedList,
+    taskMode,
     taskSearchQuery,
   ]);
   const mixedTaskItems = useMemo<MixedTaskItem[]>(
@@ -945,24 +960,6 @@ export function Tasks() {
       mixTaskAndListItems(visibleTasks, eligibleMixedListItems, taskSortMode),
     [eligibleMixedListItems, taskSortMode, visibleTasks]
   );
-  const orderedIntentionFamilyTasks = useMemo(() => {
-    if (!selectedFilterOption) return [];
-    const parentSlug =
-      selectedFilterOption.parent?.slug ?? selectedFilterOption.intention.slug;
-    const familyTasks = getAutomaticUnpinnedTasks(
-      tasks.filter(
-        task =>
-          task.status === TASK_STATUSES.ACTIVE &&
-          task.pinnedAt === null &&
-          !task.followUpParent &&
-          task.timerType === selectedFilterOption.intention.type &&
-          task.intentionSlug === parentSlug
-      ),
-      orderingClock
-    );
-    return applyIntentionFamilyManualOrder(familyTasks);
-  }, [orderingClock, selectedFilterOption, tasks]);
-
   useLayoutEffect(() => {
     if (!pinnedTaskDestinationId) return;
     const destination = Array.from(
@@ -972,14 +969,15 @@ export function Tasks() {
     destination.scrollIntoView({ behavior: 'auto', block: 'center' });
     destination.focus({ preventScroll: true });
     setPinnedTaskDestinationId(null);
-  }, [mixedTaskItems, pinnedTaskDestinationId]);
+  }, [mixedTaskItems, pinnedTaskDestinationId, taskPage]);
   useLayoutEffect(() => {
     if (!updatedTaskDestinationId) return;
     const destination = Array.from(
       document.querySelectorAll<HTMLElement>('[data-testid="task-row"]')
     ).find(row => row.dataset.taskId === updatedTaskDestinationId);
     if (!destination) return;
-    destination.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (!isDesktop)
+      destination.scrollIntoView({ behavior: 'auto', block: 'center' });
     destination.focus({ preventScroll: true });
     setHighlightedTaskId(updatedTaskDestinationId);
     setUpdatedTaskDestinationId(null);
@@ -990,7 +988,7 @@ export function Tasks() {
       setHighlightedTaskId(null);
       updatedTaskHighlightTimeoutRef.current = null;
     }, 1800);
-  }, [mixedTaskItems, updatedTaskDestinationId]);
+  }, [mixedTaskItems, updatedTaskDestinationId, taskPage]);
   useEffect(
     () => () => {
       if (updatedTaskHighlightTimeoutRef.current !== null) {
@@ -1000,6 +998,7 @@ export function Tasks() {
     []
   );
   const hasActiveFilters =
+    taskMode === 'intention' ||
     taskSearchQuery.trim().length > 0 ||
     selectedFilterOption !== null ||
     selectedList !== null ||
@@ -1022,546 +1021,566 @@ export function Tasks() {
             : 0)
         }`
       : `${mixedTaskItems.length}`;
+  const pageEntryCount = selectedList
+    ? activeListItems.length
+    : mixedTaskItems.length;
+  const pageCount = Math.max(1, Math.ceil(pageEntryCount / TASKS_PER_PAGE));
+  const visiblePage = Math.min(taskPage, pageCount - 1);
+  const resetTaskView = useCallback(() => {
+    setTaskSearchQuery('');
+    setSelectedIntentionFilter(null);
+    setSelectedListId(null);
+    setPropertyFilters(EMPTY_TASK_PROPERTY_FILTERS);
+    setTaskSortMode('default');
+    setTaskMode('general');
+    setTaskPage(0);
+    setIsPropertyMenuOpen(false);
+    setIsSortMenuOpen(false);
+  }, [setTaskSearchQuery, setTaskMode]);
+  useEffect(() => {
+    setTaskPage(0);
+  }, [
+    taskSearchQuery,
+    taskMode,
+    timer?.type,
+    timer?.intention,
+    timer?.intentionSlugs,
+    timer?.subIntention,
+    timer?.subIntentions,
+    selectedIntentionFilter,
+    selectedListId,
+    propertyFilters,
+    taskSortMode,
+  ]);
+  useEffect(() => {
+    const destinationId =
+      updatedTaskDestinationId ?? pinnedTaskDestinationId ?? highlightedTaskId;
+    if (!destinationId || !isDesktop) return;
+    const index = selectedList
+      ? activeListItems.findIndex(item => item.id === destinationId)
+      : mixedTaskItems.findIndex(entry =>
+          entry.kind === 'task'
+            ? entry.task.id === destinationId
+            : entry.item.id === destinationId
+        );
+    if (index >= 0) setTaskPage(Math.floor(index / TASKS_PER_PAGE));
+  }, [
+    updatedTaskDestinationId,
+    pinnedTaskDestinationId,
+    highlightedTaskId,
+    mixedTaskItems,
+    selectedList,
+    activeListItems,
+  ]);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        hasOpenModal() ||
+        preferences?.keyboardShortcuts === false
+      )
+        return;
+      const target = event.target as HTMLElement;
+      const editing = target.closest(
+        'input, textarea, select, [contenteditable="true"]'
+      );
+      if (
+        !editing &&
+        (event.metaKey || event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.altKey
+      ) {
+        if (event.code === 'KeyG') {
+          event.preventDefault();
+          resetTaskView();
+          return;
+        }
+      }
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.shiftKey &&
+        event.code === 'KeyF'
+      ) {
+        event.preventDefault();
+        resetTaskView();
+        return;
+      }
+      if (
+        !isDesktop ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.shiftKey ||
+        target.closest(
+          'input, textarea, select, [contenteditable="true"], [role="menu"], [role="listbox"]'
+        )
+      )
+        return;
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        setTaskPage(page =>
+          Math.max(
+            0,
+            Math.min(pageCount - 1, page + (event.key === 'ArrowDown' ? 1 : -1))
+          )
+        );
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [pageCount, resetTaskView, preferences?.keyboardShortcuts]);
   const showImportAction = hasImportedTasks === false;
-  const hideTasksTitle =
-    showImportAction &&
-    preferences?.vacationExtension === true &&
-    preferences?.listsExtension === true;
-
-  const reorderVisibleTasks = useCallback(
-    async (
-      draggedTaskId: string,
-      targetTaskId: string,
-      placement: TaskDropPlacement
-    ) => {
-      if (!selectedFilterOption) {
-        return false;
-      }
-      const visibleFamilyTasks = orderedIntentionFamilyTasks.filter(
-        task =>
-          doesTaskMatchIntentionFilter(task, selectedFilterOption) &&
-          (!hideVacationCovered || !task.vacationEligible)
-      );
-      const reorderedVisibleTasks = moveTaskInList(
-        visibleFamilyTasks,
-        draggedTaskId,
-        targetTaskId,
-        placement
-      );
-      if (!reorderedVisibleTasks) {
-        return false;
-      }
-
-      let visibleIndex = 0;
-      const reorderedFamilyTasks = orderedIntentionFamilyTasks.map(task => {
-        const isVisibleFamilyTask =
-          doesTaskMatchIntentionFilter(task, selectedFilterOption) &&
-          (!hideVacationCovered || !task.vacationEligible);
-        return isVisibleFamilyTask
-          ? reorderedVisibleTasks[visibleIndex++]!
-          : task;
-      });
-      const naturalDraggedIndex = getAutomaticUnpinnedTasks(
-        reorderedFamilyTasks,
-        orderingClock
-      ).findIndex(task => task.id === draggedTaskId);
-      const droppedIndex = reorderedFamilyTasks.findIndex(
-        task => task.id === draggedTaskId
-      );
-      const draggedUsesManualOrder = droppedIndex !== naturalDraggedIndex;
-
-      return reorderTasks(
-        reorderedFamilyTasks.map((task, index) => {
-          const manualOrderOverride =
-            task.id === draggedTaskId
-              ? draggedUsesManualOrder
-              : task.manualOrderOverride;
-          const keepsBottomAnchor =
-            index === reorderedFamilyTasks.length - 1 &&
-            manualOrderOverride &&
-            (task.id === draggedTaskId
-              ? draggedUsesManualOrder
-              : task.manualOrder === TASK_MANUAL_ORDER_BOTTOM);
-          return {
-            id: task.id,
-            manualOrder: keepsBottomAnchor ? TASK_MANUAL_ORDER_BOTTOM : index,
-            manualOrderOverride,
-          };
-        })
-      );
-    },
-    [
-      orderedIntentionFamilyTasks,
-      hideVacationCovered,
-      orderingClock,
-      reorderTasks,
-      selectedFilterOption,
-    ]
-  );
 
   return (
-    <PageShell className="overflow-x-clip">
-      <PageContainer className={TASKS_PAGE_CONTAINER_CLASS}>
-        <header className="sticky top-0 z-30 -mx-4 border-b border-slate-800/70 bg-slate-950/94 px-4 pb-3 pt-5 shadow-[0_10px_24px_rgba(2,6,23,0.34)] backdrop-blur-md">
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-            <BackButton
-              targetTab="timer"
-              isModalOpen={descriptionTask !== null}
-              onModalClose={() => setDescriptionTask(null)}
-              className="flex items-center gap-1.5 text-sm text-slate-400 transition-colors hover:text-white"
-              wrapperClassName="shrink-0"
-            />
-            <div className="min-w-0 text-center">
-              {!hideTasksTitle && (
-                <h1 className="text-sm font-semibold tracking-tight text-slate-100">
-                  {t('task.tasks')}
-                </h1>
-              )}
-            </div>
-            <div className="flex items-center justify-end gap-1.5">
-              {preferences?.vacationExtension && <VacationControl />}
-              {preferences?.listsExtension && (
-                <IconButton
-                  label={t('task.newList')}
-                  title={t('task.newList')}
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setIsCreateListOpen(true)}
-                  className="h-8 w-8 !p-0"
-                >
-                  <FaListUl size={11} />
-                </IconButton>
-              )}
+    <section
+      data-testid="task-workspace"
+      aria-label={t('task.tasks')}
+      className="task-workspace"
+    >
+      <details className="workspace-task-actions">
+        <summary
+          aria-label={t('common.moreOptions')}
+          title={t('common.moreOptions')}
+        >
+          •••
+        </summary>
+        <div className="workspace-action-menu">
+          <div className="flex items-center justify-end gap-1.5">
+            {preferences?.vacationExtension && <VacationControl />}
+            <IconButton
+              label={t('common.archived')}
+              title={t('common.archived')}
+              size="sm"
+              variant="secondary"
+              onClick={() => setIsArchiveOpen(true)}
+              className="h-8 w-8 !p-0"
+            >
+              <FaArchive size={11} />
+            </IconButton>
+            {showImportAction && (
               <IconButton
-                label={t('common.archived')}
-                title={t('common.archived')}
+                label={t('task.import')}
+                title={t('task.import')}
                 size="sm"
                 variant="secondary"
-                onClick={() => setIsArchiveOpen(true)}
+                onClick={() => setIsImportOpen(true)}
+                disabled={isLoading}
                 className="h-8 w-8 !p-0"
               >
-                <FaArchive size={11} />
+                <FaFileImport size={11} />
               </IconButton>
-              {showImportAction && (
-                <IconButton
-                  label={t('task.import')}
-                  title={t('task.import')}
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setIsImportOpen(true)}
-                  disabled={isLoading}
-                  className="h-8 w-8 !p-0"
-                >
-                  <FaFileImport size={11} />
-                </IconButton>
-              )}
-            </div>
+            )}
           </div>
-        </header>
+        </div>
+      </details>
+      <section
+        aria-label={
+          selectedList
+            ? t('task.addToList', { title: selectedList.title })
+            : t('task.capture')
+        }
+        className="workspace-capture"
+      >
+        {selectedList ? (
+          <TaskQuickCreateRow
+            autoFocus
+            listId={selectedList.id}
+            focusRequest={taskQuickCreateFocusRequest}
+            onOpenAdvanced={initialTitle => {
+              setCreateInitialTitle(initialTitle);
+              setIsCreateOpen(true);
+            }}
+          />
+        ) : (
+          <TaskQuickCreateRow
+            focusRequest={taskQuickCreateFocusRequest}
+            createDefaults={{
+              timerType: taskFormDefaultTimerType,
+              intentionSlug: taskFormDefaultIntention?.intentionSlug ?? null,
+              subIntentionSlug:
+                taskFormDefaultIntention?.subIntentionSlug ?? null,
+            }}
+            assistantDefaults={{
+              timerType: taskFormDefaultTimerType,
+              intentionSlug: taskFormDefaultIntention?.intentionSlug ?? null,
+              subIntentionSlug:
+                taskFormDefaultIntention?.subIntentionSlug ?? null,
+            }}
+            onOpenAdvanced={initialTitle => {
+              setCreateInitialTitle(initialTitle);
+              setIsCreateOpen(true);
+            }}
+          />
+        )}
+      </section>
 
-        <section
-          aria-label={
-            selectedList
-              ? t('task.addToList', { title: selectedList.title })
-              : t('task.capture')
-          }
-          className="mt-4 rounded-xl border border-indigo-500/25 bg-linear-to-br from-indigo-950/40 via-slate-900/65 to-slate-950/75 p-2.5 shadow-sm shadow-indigo-950/30"
-        >
-          {selectedList ? (
-            <TaskQuickCreateRow autoFocus listId={selectedList.id} />
-          ) : (
-            <TaskQuickCreateRow
-              focusRequest={taskQuickCreateFocusRequest}
-              createDefaults={{
-                timerType: taskFormDefaultTimerType,
-                intentionSlug: taskFormDefaultIntention?.intentionSlug ?? null,
-                subIntentionSlug:
-                  taskFormDefaultIntention?.subIntentionSlug ?? null,
-              }}
-              assistantDefaults={{
-                timerType: taskFormDefaultTimerType,
-                intentionSlug: taskFormDefaultIntention?.intentionSlug ?? null,
-                subIntentionSlug:
-                  taskFormDefaultIntention?.subIntentionSlug ?? null,
-              }}
-              onOpenAdvanced={initialTitle => {
-                setCreateInitialTitle(initialTitle);
-                setIsCreateOpen(true);
-              }}
-            />
-          )}
-        </section>
-
-        <section
-          aria-label={t('task.filter')}
-          className="mt-3 rounded-xl border border-slate-800/70 bg-slate-900/35 p-2"
-        >
-          <div className="grid grid-cols-2 gap-2">
-            <TaskSearchInput
-              value={taskSearchQuery}
-              onChange={setTaskSearchQuery}
-              inputRef={taskSearchInputRef}
-            />
-            <TaskIntentionFilterDropdown
-              options={filterOptions}
-              lists={lists}
-              selectedValue={
-                selectedListId
-                  ? buildListFilterValue(selectedListId)
-                  : selectedIntentionFilter
-              }
-              onSelect={value => {
-                setSelectedListId(null);
-                setSelectedIntentionFilter(value);
-              }}
-              onSelectList={listId => {
-                setSelectedIntentionFilter(null);
-                setSelectedListId(listId);
-              }}
-              onToggleFavorite={toggleFavoriteIntention}
-              onToggleFavoriteList={toggleFavoriteList}
-              openRequest={intentionPickerOpenRequest}
-            />
-          </div>
-
-          <FavoriteIntentionFilters
-            items={favoriteFilterOptions}
+      <div className="workspace-toolbar">
+        <div className="workspace-destination">
+          <TaskIntentionFilterDropdown
+            options={filterOptions}
+            triggerContent={timerFilterLabel}
+            lists={lists}
             selectedValue={
               selectedListId
                 ? buildListFilterValue(selectedListId)
                 : selectedIntentionFilter
             }
             onSelect={value => {
-              if (isListFilterValue(value)) {
-                const listId = parseListFilterValue(value);
-                setSelectedIntentionFilter(null);
-                setSelectedListId(current =>
-                  current === listId ? null : listId
-                );
-                return;
-              }
+              setTaskMode('general');
               setSelectedListId(null);
-              setSelectedIntentionFilter(current =>
-                current === value ? null : value
+              setSelectedIntentionFilter(value);
+            }}
+            onSelectList={listId => {
+              setTaskMode('general');
+              setSelectedIntentionFilter(null);
+              setSelectedListId(listId);
+            }}
+            onToggleFavorite={toggleFavoriteIntention}
+            onToggleFavoriteList={toggleFavoriteList}
+            openRequest={intentionPickerOpenRequest}
+          />
+        </div>
+        <div className="workspace-search">
+          <TaskSearchInput
+            value={taskSearchQuery}
+            onChange={setTaskSearchQuery}
+            inputRef={taskSearchInputRef}
+          />
+        </div>
+        <TaskSortDropdown
+          mode={taskSortMode}
+          isOpen={isSortMenuOpen}
+          onOpenChange={setIsSortMenuOpen}
+          onChange={setTaskSortMode}
+        />
+        {!selectedList && (
+          <TaskPropertyFilterMenu
+            filters={propertyFilters}
+            isOpen={isPropertyMenuOpen}
+            onOpenChange={setIsPropertyMenuOpen}
+            onChange={updatePropertyFilters}
+          />
+        )}
+      </div>
+      <div className="workspace-filter-summary">
+        <span className="sr-only" data-testid="task-count">
+          {taskCountLabel}
+        </span>
+        <div className="workspace-mode">
+          <TaskModeToggle
+            compact
+            showShortcuts
+            mode={selectedIntentionFilter || selectedListId ? null : taskMode}
+            isIntentionDisabled={!hasTimerIntention}
+            onModeChange={mode => {
+              setSelectedIntentionFilter(null);
+              setSelectedListId(null);
+              setTaskMode(mode);
+            }}
+          />
+        </div>
+        {isDesktop && (
+          <nav
+            className="workspace-pagination"
+            aria-label={t('common.pagination')}
+          >
+            <button
+              type="button"
+              disabled={visiblePage === 0}
+              onClick={() => setTaskPage(visiblePage - 1)}
+              aria-label={t('common.previousPage')}
+              title={t('workspace.previousTasks')}
+            >
+              <FaChevronUp size={10} />
+            </button>
+            <button
+              type="button"
+              className="workspace-page-count text-[10px] text-slate-400"
+              aria-label={`${visiblePage + 1} / ${pageCount}${visiblePage > 0 ? ` — ${t('workspace.firstTaskPage')}` : ''}`}
+              title={visiblePage > 0 ? t('workspace.firstTaskPage') : undefined}
+              disabled={visiblePage === 0}
+              onClick={() => setTaskPage(0)}
+            >
+              <span className="workspace-page-number">
+                {visiblePage + 1} / {pageCount}
+              </span>
+              <FaUndo
+                className="workspace-page-reset"
+                size={10}
+                aria-hidden="true"
+              />
+            </button>
+            <button
+              type="button"
+              disabled={visiblePage >= pageCount - 1}
+              onClick={() => setTaskPage(visiblePage + 1)}
+              aria-label={t('common.nextPage')}
+              title={t('workspace.nextTasks')}
+            >
+              <FaChevronDown size={10} />
+            </button>
+          </nav>
+        )}
+        <div className="workspace-filter-actions">
+          <FavoriteDestinationShortcuts
+            destinations={favoriteDestinations}
+            selectedValue={
+              taskMode === 'intention'
+                ? null
+                : selectedListId
+                  ? buildListFilterValue(selectedListId)
+                  : selectedIntentionFilter
+            }
+            onSelect={value => {
+              setTaskMode('general');
+              setSelectedListId(
+                isListFilterValue(value) ? parseListFilterValue(value) : null
+              );
+              setSelectedIntentionFilter(
+                isListFilterValue(value) ? null : value
               );
             }}
-            reserveWhileLoading={!intentionsLoaded && reserveFavoriteRow}
           />
-        </section>
-
-        <div className="mt-4 flex min-h-7 items-center justify-between gap-3 px-0.5">
-          <div className="flex min-w-0 items-center gap-2">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
-              {t('common.active')}
-            </h2>
-            <span
-              className="text-[10px] tabular-nums text-slate-600"
-              data-testid="task-count"
-            >
-              {taskCountLabel}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={() => {
-                  setTaskSearchQuery('');
-                  setSelectedIntentionFilter(null);
-                  setSelectedListId(null);
-                  setPropertyFilters(EMPTY_TASK_PROPERTY_FILTERS);
-                }}
-                className="text-[11px] text-slate-500 transition-colors hover:text-slate-200"
-              >
-                {t('common.clearFilters')}
-              </button>
-            )}
-            {!selectedList && (
-              <TaskPropertyFilterMenu
-                filters={propertyFilters}
-                isOpen={isPropertyMenuOpen}
-                onOpenChange={setIsPropertyMenuOpen}
-                onChange={updatePropertyFilters}
-              />
-            )}
-            <TaskSortDropdown
-              mode={taskSortMode}
-              isOpen={isSortMenuOpen}
-              onOpenChange={setIsSortMenuOpen}
-              onChange={mode => {
-                setTaskSortMode(mode);
-              }}
-            />
-          </div>
+          <IconButton
+            size="sm"
+            disabled={!hasActiveFilters && taskSortMode === 'default'}
+            variant="secondary"
+            label={`${t('common.clearFilters')} (Mod+Shift+F)`}
+            onClick={resetTaskView}
+          >
+            <FaUndo />
+            <KeyboardShortcut text="⇧F" />
+          </IconButton>
         </div>
+      </div>
 
-        <div className="mt-2 space-y-2.5">
-          {error && <Alert variant="error">{error}</Alert>}
-          {intentionsError && <Alert variant="error">{intentionsError}</Alert>}
+      <div
+        className={clsx(
+          'workspace-task-rows app-scrollbar',
+          isDesktop && 'workspace-task-rows-desktop'
+        )}
+      >
+        {error && <Alert variant="error">{error}</Alert>}
+        {intentionsError && <Alert variant="error">{intentionsError}</Alert>}
 
-          {isLoading && (
+        {isLoading && (
+          <div className="rounded-lg border border-slate-800/60 bg-slate-900/35 px-5 py-8 text-center text-sm text-slate-400">
+            {t('task.loading')}
+          </div>
+        )}
+
+        {selectedList ? (
+          <SelectedListItems
+            list={selectedList}
+            intentions={intentions}
+            activeItems={
+              isDesktop
+                ? activeListItems.slice(
+                    visiblePage * TASKS_PER_PAGE,
+                    (visiblePage + 1) * TASKS_PER_PAGE
+                  )
+                : activeListItems
+            }
+            completedItems={completedListItems}
+            archivedItems={archivedListItems}
+            onEdit={setEditingListItem}
+            completingItemIds={completingListItemIds}
+            onComplete={completeListItem}
+            onArchive={setArchivingListItem}
+            onRestore={item =>
+              updateListItem(item, { status: TASK_STATUSES.ACTIVE })
+            }
+            onReset={() => setIsResetListOpen(true)}
+            onUpdate={updateListItem}
+            onConvertToTask={convertListItemToTask}
+          />
+        ) : null}
+
+        {!selectedList &&
+          !isLoading &&
+          mixedTaskItems.length === 0 &&
+          !hasActiveFilters && (
+            <button
+              type="button"
+              onClick={() => {
+                setCreateInitialTitle('');
+                setIsCreateOpen(true);
+              }}
+              className="w-full rounded-xl border border-dashed border-slate-700/60 bg-slate-900/25 px-5 py-10 text-sm text-slate-400 transition hover:border-indigo-500/60 hover:bg-indigo-950/15 hover:text-slate-200"
+            >
+              {t('task.add')}
+            </button>
+          )}
+
+        {!selectedList &&
+          !isLoading &&
+          mixedTaskItems.length === 0 &&
+          hasActiveFilters && (
             <div className="rounded-lg border border-slate-800/60 bg-slate-900/35 px-5 py-8 text-center text-sm text-slate-400">
-              {t('task.loading')}
+              {hasActiveFilters ? t('task.noMatching') : t('task.noTasks')}
             </div>
           )}
 
-          {selectedList ? (
-            <SelectedListItems
-              list={selectedList}
-              intentions={intentions}
-              activeItems={activeListItems}
-              completedItems={completedListItems}
-              archivedItems={archivedListItems}
-              onEdit={setEditingListItem}
-              completingItemIds={completingListItemIds}
-              onComplete={completeListItem}
-              onArchive={setArchivingListItem}
-              onRestore={item =>
-                updateListItem(item, { status: TASK_STATUSES.ACTIVE })
-              }
-              onReset={() => setIsResetListOpen(true)}
-              onUpdate={updateListItem}
-              onConvertToTask={convertListItemToTask}
-            />
-          ) : null}
-
-          {!selectedList &&
-            !isLoading &&
-            mixedTaskItems.length === 0 &&
-            !hasActiveFilters && (
-              <button
-                type="button"
-                onClick={() => {
-                  setCreateInitialTitle('');
-                  setIsCreateOpen(true);
-                }}
-                className="w-full rounded-xl border border-dashed border-slate-700/60 bg-slate-900/25 px-5 py-10 text-sm text-slate-400 transition hover:border-indigo-500/60 hover:bg-indigo-950/15 hover:text-slate-200"
-              >
-                {t('task.add')}
-              </button>
-            )}
-
-          {!selectedList &&
-            !isLoading &&
-            mixedTaskItems.length === 0 &&
-            hasActiveFilters && (
-              <div className="rounded-lg border border-slate-800/60 bg-slate-900/35 px-5 py-8 text-center text-sm text-slate-400">
-                {hasActiveFilters ? t('task.noMatching') : t('task.noTasks')}
-              </div>
-            )}
-
-          {!selectedList && !isLoading && mixedTaskItems.length > 0 && (
-            <MixedTaskList
-              entries={mixedTaskItems}
-              completingTaskIds={completingTaskIds}
-              completingListItemIds={completingListItemIds}
-              orderedUndatedTaskIds={orderedIntentionFamilyTasks.map(
-                task => task.id
-              )}
-              canReorder={
-                selectedFilterOption !== null &&
-                taskSortMode === 'default' &&
-                normalizeSearchText(taskSearchQuery).length === 0
-              }
-              intentions={intentions}
-              lists={lists}
-              onEdit={setEditingTask}
-              onEditListItem={setEditingListItem}
-              onCompleteListItem={completeListItem}
-              onArchiveListItem={setArchivingListItem}
-              onUpdateListItem={updateListItem}
-              onConvertListItemToTask={convertListItemToTask}
-              onOpenDescription={setDescriptionTask}
-              onUpdate={updateTaskWithPositionFeedback}
-              onConvertToListItem={convertTaskToListItem}
-              onReorder={reorderVisibleTasks}
-              showTypeBadge={
-                propertyFilters.timerTypes.length !== 1 || isTaskSearchActive
-              }
-              highlightedTaskId={highlightedTaskId}
-            />
-          )}
-        </div>
-
-        <TaskFormModal
-          isOpen={isCreateOpen || editingTask !== null}
-          task={editingTask}
-          intentions={intentions}
-          lists={lists}
-          preferences={preferences}
-          timer={timer}
-          taskMode="general"
-          defaultIntentionSelection={taskFormDefaultIntention}
-          defaultTimerType={taskFormDefaultTimerType}
-          initialTitle={createInitialTitle}
-          onClose={() => {
-            setIsCreateOpen(false);
-            setEditingTask(null);
-            setCreateInitialTitle('');
-          }}
-          onCreate={createTaskWithViewFeedback}
-          onUpdate={updateTaskWithPositionFeedback}
-          onCreateListItem={createListItemFromEditor}
-          onConvertToListItem={convertTaskToListItem}
-          onArchive={task =>
-            updateTask({ id: task.id, status: TASK_STATUSES.ARCHIVED })
-          }
-        />
-        <TaskDescriptionModal
-          task={descriptionTask}
-          onClose={() => setDescriptionTask(null)}
-        />
-        <TaskImportModal
-          isOpen={isImportOpen}
-          onClose={() => setIsImportOpen(false)}
-          onImported={loadImportStatus}
-        />
-        <TaskArchiveModal
-          isOpen={isArchiveOpen}
-          tasks={archivedTasks}
-          isLoading={isArchiveLoading}
-          isLoadingMore={isArchiveLoadingMore}
-          hasMore={archiveNextCursor !== null}
-          error={archiveError}
-          restoringTaskId={restoringTaskId}
-          onClose={() => setIsArchiveOpen(false)}
-          onRestore={restoreArchivedTask}
-          onLoadMore={() => {
-            if (archiveNextCursor) {
-              void loadTaskArchive(archiveNextCursor);
+        {!selectedList && !isLoading && mixedTaskItems.length > 0 && (
+          <MixedTaskList
+            entries={
+              isDesktop
+                ? mixedTaskItems.slice(
+                    visiblePage * TASKS_PER_PAGE,
+                    (visiblePage + 1) * TASKS_PER_PAGE
+                  )
+                : mixedTaskItems
             }
-          }}
-        />
-        <ListItemEditModal
-          item={editingListItem}
-          onClose={() => setEditingListItem(null)}
-          onArchive={item => setArchivingListItem(item)}
-          onSave={async (item, updates) => {
-            await updateListItem(item, updates);
-            setEditingListItem(null);
-          }}
-        />
-        <Modal
-          isOpen={archivingListItem !== null}
-          onClose={() => setArchivingListItem(null)}
-          title={t('task.archiveListItem')}
-          closeOnBackdropClick={true}
-          closeOnEscape={true}
-        >
-          <p className="text-sm text-slate-300">
-            {t('task.archiveListItemMessage', {
-              title: archivingListItem?.title ?? '',
-            })}
-          </p>
-          <div className="mt-5 flex gap-3">
-            <Button
-              variant="secondary"
-              className="flex-1"
-              onClick={() => setArchivingListItem(null)}
-            >
-              {t('common.cancel')}
-            </Button>
-            <Button
-              variant="danger"
-              className="flex-1"
-              onClick={() => {
-                const item = archivingListItem;
-                if (!item) return;
-                void updateListItem(item, {
-                  status: TASK_STATUSES.ARCHIVED,
-                }).then(() => {
-                  setArchivingListItem(null);
-                  if (editingListItem?.id === item.id) setEditingListItem(null);
-                });
-              }}
-            >
-              {t('common.archive')}
-            </Button>
-          </div>
-        </Modal>
-        <Modal
-          isOpen={isResetListOpen}
-          onClose={() => setIsResetListOpen(false)}
-          title={t('task.resetList')}
-          closeOnBackdropClick={true}
-          closeOnEscape={true}
-        >
-          <p className="text-sm text-slate-300">
-            {t('task.resetListMessage', {
-              count: completedListItems.length,
-              itemLabel: t(
-                completedListItems.length === 1
-                  ? 'task.completedItem'
-                  : 'task.completedItems'
-              ),
-              title: selectedList?.title ?? '',
-            })}
-          </p>
-          <div className="mt-5 flex gap-3">
-            <Button
-              variant="secondary"
-              className="flex-1"
-              onClick={() => setIsResetListOpen(false)}
-            >
-              {t('common.cancel')}
-            </Button>
-            <Button className="flex-1" onClick={() => void resetSelectedList()}>
-              {t('task.resetListAction')}
-            </Button>
-          </div>
-        </Modal>
-        <Modal
-          isOpen={isCreateListOpen}
-          onClose={() => setIsCreateListOpen(false)}
-          title={t('task.newList')}
-          closeOnBackdropClick={!isCreatingList}
-          closeOnEscape={!isCreatingList}
-        >
-          <form
-            className="space-y-4"
-            onSubmit={event => {
-              event.preventDefault();
-              void createList();
+            completingTaskIds={completingTaskIds}
+            completingListItemIds={completingListItemIds}
+            intentions={intentions}
+            lists={lists}
+            onEdit={setEditingTask}
+            onEditListItem={setEditingListItem}
+            onCompleteListItem={completeListItem}
+            onArchiveListItem={setArchivingListItem}
+            onUpdateListItem={updateListItem}
+            onConvertListItemToTask={convertListItemToTask}
+            onOpenDescription={setDescriptionTask}
+            onUpdate={updateTaskWithPositionFeedback}
+            onConvertToListItem={convertTaskToListItem}
+            showTypeBadge={
+              propertyFilters.timerTypes.length !== 1 || isTaskSearchActive
+            }
+            highlightedTaskId={highlightedTaskId}
+          />
+        )}
+      </div>
+
+      <TaskFormModal
+        isOpen={isCreateOpen || editingTask !== null}
+        task={editingTask}
+        intentions={intentions}
+        lists={lists}
+        preferences={preferences}
+        timer={timer}
+        taskMode={taskMode}
+        defaultIntentionSelection={taskFormDefaultIntention}
+        defaultTimerType={taskFormDefaultTimerType}
+        initialTitle={createInitialTitle}
+        initialListId={selectedListId}
+        onClose={() => {
+          setIsCreateOpen(false);
+          setEditingTask(null);
+          setCreateInitialTitle('');
+        }}
+        onCreate={createTaskWithViewFeedback}
+        onUpdate={updateTaskWithPositionFeedback}
+        onCreateListItem={createListItemFromEditor}
+        onConvertToListItem={convertTaskToListItem}
+        onArchive={task =>
+          updateTask({ id: task.id, status: TASK_STATUSES.ARCHIVED })
+        }
+      />
+      <TaskDescriptionModal
+        task={descriptionTask}
+        onClose={() => setDescriptionTask(null)}
+      />
+      <TaskImportModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImported={loadImportStatus}
+      />
+      <TaskArchiveModal
+        isOpen={isArchiveOpen}
+        tasks={archivedTasks}
+        isLoading={isArchiveLoading}
+        isLoadingMore={isArchiveLoadingMore}
+        hasMore={archiveNextCursor !== null}
+        error={archiveError}
+        restoringTaskId={restoringTaskId}
+        onClose={() => setIsArchiveOpen(false)}
+        onRestore={restoreArchivedTask}
+        onLoadMore={() => {
+          if (archiveNextCursor) {
+            void loadTaskArchive(archiveNextCursor);
+          }
+        }}
+      />
+      <ListItemEditModal
+        item={editingListItem}
+        onClose={() => setEditingListItem(null)}
+        onArchive={item => setArchivingListItem(item)}
+        onSave={async (item, updates) => {
+          await updateListItem(item, updates);
+          setEditingListItem(null);
+        }}
+      />
+      <Modal
+        isOpen={archivingListItem !== null}
+        onClose={() => setArchivingListItem(null)}
+        title={t('task.archiveListItem')}
+        closeOnBackdropClick={true}
+        closeOnEscape={true}
+      >
+        <p className="text-sm text-slate-300">
+          {t('task.archiveListItemMessage', {
+            title: archivingListItem?.title ?? '',
+          })}
+        </p>
+        <div className="mt-5 flex gap-3">
+          <Button
+            variant="secondary"
+            className="flex-1"
+            onClick={() => setArchivingListItem(null)}
+          >
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="danger"
+            className="flex-1"
+            onClick={() => {
+              const item = archivingListItem;
+              if (!item) return;
+              void updateListItem(item, {
+                status: TASK_STATUSES.ARCHIVED,
+              }).then(() => {
+                setArchivingListItem(null);
+                if (editingListItem?.id === item.id) setEditingListItem(null);
+              });
             }}
           >
-            <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3">
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-slate-400">
-                  {t('common.emoji')}
-                </span>
-                <input
-                  value={newListEmoji}
-                  onChange={event => setNewListEmoji(event.target.value)}
-                  maxLength={16}
-                  placeholder="📋"
-                  className="h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-center text-lg text-white outline-none focus:border-indigo-500"
-                />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-slate-400">
-                  {t('common.name')}
-                </span>
-                <input
-                  autoFocus
-                  value={newListTitle}
-                  onChange={event => setNewListTitle(event.target.value)}
-                  maxLength={120}
-                  placeholder={t('task.groceriesPlaceholder')}
-                  className="h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-white outline-none focus:border-indigo-500"
-                />
-              </label>
-            </div>
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isCreatingList || !newListTitle.trim()}
-            >
-              {isCreatingList ? t('common.creating') : t('task.createList')}
-            </Button>
-          </form>
-        </Modal>
-      </PageContainer>
-    </PageShell>
+            {t('common.archive')}
+          </Button>
+        </div>
+      </Modal>
+      <Modal
+        isOpen={isResetListOpen}
+        onClose={() => setIsResetListOpen(false)}
+        title={t('task.resetList')}
+        closeOnBackdropClick={true}
+        closeOnEscape={true}
+      >
+        <p className="text-sm text-slate-300">
+          {t('task.resetListMessage', {
+            count: completedListItems.length,
+            itemLabel: t(
+              completedListItems.length === 1
+                ? 'task.completedItem'
+                : 'task.completedItems'
+            ),
+            title: selectedList?.title ?? '',
+          })}
+        </p>
+        <div className="mt-5 flex gap-3">
+          <Button
+            variant="secondary"
+            className="flex-1"
+            onClick={() => setIsResetListOpen(false)}
+          >
+            {t('common.cancel')}
+          </Button>
+          <Button className="flex-1" onClick={() => void resetSelectedList()}>
+            {t('task.resetListAction')}
+          </Button>
+        </div>
+      </Modal>
+    </section>
   );
 }
 
@@ -1584,6 +1603,12 @@ function TaskSearchInput({
       />
       <input
         ref={inputRef}
+        onKeyDown={event => {
+          if (event.key === 'Escape') {
+            event.stopPropagation();
+            event.currentTarget.blur();
+          }
+        }}
         type="text"
         value={value}
         onChange={event => onChange(event.target.value)}
@@ -1678,6 +1703,7 @@ function TaskSortDropdown({
 }
 
 export function TaskIntentionFilterDropdown({
+  triggerContent,
   options,
   lists,
   selectedValue,
@@ -1687,6 +1713,7 @@ export function TaskIntentionFilterDropdown({
   onToggleFavoriteList,
   openRequest,
 }: {
+  triggerContent?: import('react').ReactNode;
   options: TaskIntentionFilterOption[];
   lists: List[];
   selectedValue: TaskIntentionFilterValue;
@@ -1703,17 +1730,16 @@ export function TaskIntentionFilterDropdown({
     selectedValue === null
       ? null
       : (options.find(option => option.value === selectedValue) ?? null);
-  const pickerOptions = useMemo(
-    () => [
+  const pickerOptions = useMemo(() => {
+    return [
       ...buildTaskFilterPickerOptions(options),
       ...lists.map(list => ({
         value: buildListFilterValue(list.id),
         title: `List · ${list.title}`,
         emoji: list.emoji ?? '📋',
       })),
-    ],
-    [lists, options]
-  );
+    ];
+  }, [lists, options]);
   const subIntentionsByParent = useMemo(
     () => buildTaskFilterSubIntentionsByParent(options),
     [options]
@@ -1780,6 +1806,7 @@ export function TaskIntentionFilterDropdown({
   return (
     <IntentionAssignmentPicker
       label={t('task.filterOpenList')}
+      triggerContent={triggerContent}
       showLabel={false}
       options={pickerOptions}
       subIntentionsByParent={subIntentionsByParent}
@@ -1790,9 +1817,9 @@ export function TaskIntentionFilterDropdown({
       onOpenChange={setIsOpen}
       onChange={handlePickerChange}
       allowClear
-      clearLabel={t('navigation.allTasks')}
-      emptyLabel={t('navigation.allTasks')}
-      noSelectionLabel={t('navigation.allTasks')}
+      clearLabel={t('common.all')}
+      emptyLabel={t('common.all')}
+      noSelectionLabel={t('common.all')}
       shortcut="I"
       shortcutShowModIcon
       shortcutPosition="topRight"
@@ -1800,7 +1827,8 @@ export function TaskIntentionFilterDropdown({
       searchAriaLabel={t('intention.searchIntentionsLists')}
       maxHeight={264}
       triggerClassName="relative flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/70 px-2 text-left text-xs text-slate-100 outline-none transition-colors hover:bg-slate-800/80 focus:border-indigo-400/70 disabled:opacity-60"
-      dropdownClassName="right-0 w-[min(75vw,42rem)] max-w-[calc(100vw-1rem)]"
+      dropdownClassName="left-0 right-auto task-destination-dropdown"
+      subIntentionDisplay="emoji"
       listTestId="task-intention-filter-list"
       triggerTestId="task-intention-filter-trigger"
       clearTestId="task-intention-filter-all"
@@ -1881,15 +1909,6 @@ function isListFilterValue(value: string | null): value is string {
 
 function parseListFilterValue(value: string) {
   return value.slice('list:'.length);
-}
-
-function getFilterOptionEmojiText(option: TaskIntentionFilterOption) {
-  return [
-    option.parent?.emoji ?? option.intention.emoji,
-    option.subIntention?.emoji,
-  ]
-    .filter(Boolean)
-    .join('');
 }
 
 function buildTaskFilterPickerOptions(
@@ -2071,7 +2090,7 @@ function SelectedListItems({
     <div className="space-y-4" data-testid="selected-list-items">
       <div>
         {activeItems.length > 0 && (
-          <div className="overflow-visible rounded-xl border border-slate-800/75 bg-slate-900/30 shadow-sm shadow-black/15">
+          <div className="relative overflow-visible rounded-xl border border-slate-800/75 bg-slate-900/30 shadow-sm shadow-black/15">
             {activeItems.map(item => (
               <div
                 key={item.id}
@@ -2363,7 +2382,7 @@ function ListItemEditModal({
               autoFocus
               value={title}
               onChange={event => setTitle(event.target.value)}
-              className="h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-white outline-none focus:border-indigo-500"
+              className="h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-ink outline-none focus:border-indigo-500"
             />
           </label>
           <div className="grid grid-cols-2 gap-3">
@@ -2376,7 +2395,7 @@ function ListItemEditModal({
                 onChange={event =>
                   setPriority(event.target.value as ListItem['priority'])
                 }
-                className="h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-white"
+                className="h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-ink"
               >
                 <option value="low">{t('common.low')}</option>
                 <option value="normal">{t('common.normal')}</option>
@@ -2392,7 +2411,7 @@ function ListItemEditModal({
                 type="date"
                 value={dueDate}
                 onChange={event => setDueDate(event.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-white"
+                className="h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-ink"
               />
             </label>
           </div>
@@ -2431,8 +2450,6 @@ function MixedTaskList({
   entries,
   completingTaskIds,
   completingListItemIds,
-  orderedUndatedTaskIds,
-  canReorder,
   intentions,
   lists,
   onEdit,
@@ -2444,15 +2461,12 @@ function MixedTaskList({
   onOpenDescription,
   onUpdate,
   onConvertToListItem,
-  onReorder,
   showTypeBadge,
   highlightedTaskId,
 }: {
   entries: MixedTaskItem[];
   completingTaskIds: string[];
   completingListItemIds: string[];
-  orderedUndatedTaskIds: string[];
-  canReorder: boolean;
   intentions: Intention[];
   lists: List[];
   onEdit: (task: Task) => void;
@@ -2475,7 +2489,6 @@ function MixedTaskList({
   onUpdate: (task: {
     id: string;
     status?: TaskStatus;
-    manualOrderOverride?: boolean;
     pinned?: boolean;
     dueDate?: string | null;
     dueTime?: string | null;
@@ -2496,220 +2509,25 @@ function MixedTaskList({
       vacationEligible: boolean;
     }
   ) => Promise<boolean>;
-  onReorder: (
-    draggedTaskId: string,
-    targetTaskId: string,
-    placement: TaskDropPlacement
-  ) => Promise<boolean>;
   showTypeBadge: boolean;
   highlightedTaskId: string | null;
 }) {
-  const tasks = entries
-    .filter(
-      (entry): entry is Extract<MixedTaskItem, { kind: 'task' }> =>
-        entry.kind === 'task' && !entry.task.followUpParent
-    )
-    .map(entry => entry.task);
-  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<{
-    id: string;
-    placement: TaskDropPlacement;
-  } | null>(null);
-  const draggingTaskIdRef = useRef<string | null>(null);
-  const lastDropTargetRef = useRef<{
-    id: string;
-    placement: TaskDropPlacement;
-  } | null>(null);
-  const dragPointerYRef = useRef<number | null>(null);
-  const autoScrollFrameRef = useRef<number | null>(null);
-
-  const stopAutoScroll = useCallback(() => {
-    if (autoScrollFrameRef.current !== null) {
-      window.cancelAnimationFrame(autoScrollFrameRef.current);
-      autoScrollFrameRef.current = null;
-    }
-    dragPointerYRef.current = null;
-  }, []);
-
-  const clearDragState = useCallback(() => {
-    draggingTaskIdRef.current = null;
-    lastDropTargetRef.current = null;
-    stopAutoScroll();
-    setDraggingTaskId(null);
-    setDropTarget(null);
-  }, [stopAutoScroll]);
-
-  const clearDropTarget = useCallback(() => {
-    if (!lastDropTargetRef.current) {
-      return;
-    }
-
-    lastDropTargetRef.current = null;
-    setDropTarget(null);
-  }, []);
-
-  const updateDropTargetFromPoint = useCallback(
-    (clientY: number) => {
-      const activeTaskId = draggingTaskIdRef.current;
-      if (!activeTaskId) {
-        return;
-      }
-
-      const nextTarget = getDropTargetFromPoint(tasks, clientY);
-      if (
-        !nextTarget ||
-        doesDropTargetKeepOrder(
-          orderedUndatedTaskIds,
-          activeTaskId,
-          nextTarget.id,
-          nextTarget.placement
-        )
-      ) {
-        clearDropTarget();
-        return;
-      }
-
-      lastDropTargetRef.current = nextTarget;
-      setDropTarget(nextTarget);
-    },
-    [clearDropTarget, orderedUndatedTaskIds, tasks]
-  );
-
-  const runAutoScroll = useCallback(() => {
-    const pointerY = dragPointerYRef.current;
-    if (!draggingTaskIdRef.current || pointerY === null) {
-      autoScrollFrameRef.current = null;
-      return;
-    }
-
-    const scrollDelta = getDragAutoScrollDelta(pointerY, window.innerHeight);
-    if (scrollDelta !== 0) {
-      window.scrollBy(0, scrollDelta);
-      updateDropTargetFromPoint(pointerY);
-    }
-
-    autoScrollFrameRef.current = window.requestAnimationFrame(runAutoScroll);
-  }, [updateDropTargetFromPoint]);
-
-  const startAutoScroll = useCallback(() => {
-    if (autoScrollFrameRef.current !== null) {
-      return;
-    }
-
-    autoScrollFrameRef.current = window.requestAnimationFrame(runAutoScroll);
-  }, [runAutoScroll]);
-
-  useEffect(() => {
-    if (!canReorder) {
-      clearDragState();
-    }
-  }, [canReorder, clearDragState]);
-
-  const startDrag = useCallback(
-    (task: Task, clientY: number) => {
-      draggingTaskIdRef.current = task.id;
-      dragPointerYRef.current = clientY;
-      setDraggingTaskId(task.id);
-      setDropTarget(null);
-      startAutoScroll();
-    },
-    [startAutoScroll]
-  );
-
-  const handlePointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLElement>, task: Task) => {
-      if (task.pinnedAt || task.followUpParent || event.button !== 0) {
-        return;
-      }
-
-      event.preventDefault();
-      startDrag(task, event.clientY);
-    },
-    [startDrag]
-  );
-
-  const handleMouseDown = useCallback(
-    (event: ReactMouseEvent<HTMLElement>, task: Task) => {
-      if (task.pinnedAt || task.followUpParent || event.button !== 0) {
-        return;
-      }
-
-      event.preventDefault();
-      startDrag(task, event.clientY);
-    },
-    [startDrag]
-  );
-
-  const finishDragAtPoint = useCallback(
-    async (clientY: number) => {
-      dragPointerYRef.current = clientY;
-      updateDropTargetFromPoint(clientY);
-      const activeTaskId = draggingTaskIdRef.current;
-      const target = lastDropTargetRef.current;
-      if (!activeTaskId || !target) {
-        clearDragState();
-        return;
-      }
-
-      const draggedTaskId = activeTaskId;
-      clearDragState();
-      await onReorder(draggedTaskId, target.id, target.placement);
-    },
-    [clearDragState, onReorder, updateDropTargetFromPoint]
-  );
-
-  useEffect(() => {
-    const handlePointerMove = (event: PointerEvent) => {
-      dragPointerYRef.current = event.clientY;
-      updateDropTargetFromPoint(event.clientY);
-    };
-    const handleMouseMove = (event: MouseEvent) => {
-      dragPointerYRef.current = event.clientY;
-      updateDropTargetFromPoint(event.clientY);
-    };
-    const handlePointerUp = (event: PointerEvent) => {
-      void finishDragAtPoint(event.clientY);
-    };
-    const handleMouseUp = (event: MouseEvent) => {
-      void finishDragAtPoint(event.clientY);
-    };
-
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('blur', clearDragState);
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('blur', clearDragState);
-    };
-  }, [clearDragState, finishDragAtPoint, updateDropTargetFromPoint]);
-
-  useEffect(() => () => stopAutoScroll(), [stopAutoScroll]);
-
   return (
     <section
       data-testid="task-list"
-      data-dragging-task-id={draggingTaskId ?? undefined}
-      data-drop-target-id={dropTarget?.id ?? undefined}
-      data-drop-placement={dropTarget?.placement ?? undefined}
-      className="overflow-visible rounded-xl border border-slate-800/75 bg-slate-900/30 shadow-sm shadow-black/15"
+      className="relative overflow-visible rounded-xl border border-slate-800/75 bg-slate-900/30 shadow-sm shadow-black/15"
     >
-      <AnimatePresence initial={false}>
+      <AnimatePresence initial={false} mode="popLayout">
         {entries.map(entry => {
           if (entry.kind === 'listItem') {
             const isCompleting = completingListItemIds.includes(entry.item.id);
             return (
               <motion.div
                 key={`list-item:${entry.item.id}`}
-                layout
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: isCompleting ? 0.5 : 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.22 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: isCompleting ? 0.5 : 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.07 }}
                 className="border-b border-slate-800/65 last:border-b-0"
               >
                 <ListItemTaskRow
@@ -2731,15 +2549,14 @@ function MixedTaskList({
           return (
             <motion.div
               key={task.id}
-              layout
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0 }}
               animate={
                 task.status === TASK_STATUSES.COMPLETED || isCompleting
-                  ? { opacity: 0.5, y: 0 }
-                  : { opacity: 1, y: 0 }
+                  ? { opacity: 0.5 }
+                  : { opacity: 1 }
               }
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.22 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.07 }}
               className="border-b border-slate-800/65 last:border-b-0"
             >
               <TaskRow
@@ -2751,18 +2568,6 @@ function MixedTaskList({
                 onOpenDescription={onOpenDescription}
                 onUpdate={onUpdate}
                 onConvertToListItem={onConvertToListItem}
-                canReorder={
-                  canReorder &&
-                  !task.pinnedAt &&
-                  !task.followUpParent &&
-                  !isCompleting
-                }
-                isDragging={draggingTaskId === task.id}
-                dropPlacement={
-                  dropTarget?.id === task.id ? dropTarget.placement : null
-                }
-                onPointerDown={event => handlePointerDown(event, task)}
-                onMouseDown={event => handleMouseDown(event, task)}
                 showTypeBadge={showTypeBadge}
                 isHighlighted={highlightedTaskId === task.id}
               />
@@ -2783,11 +2588,6 @@ function TaskRow({
   onOpenDescription,
   onUpdate,
   onConvertToListItem,
-  canReorder,
-  isDragging,
-  dropPlacement,
-  onPointerDown,
-  onMouseDown,
   showTypeBadge,
   isHighlighted,
 }: {
@@ -2800,7 +2600,6 @@ function TaskRow({
   onUpdate: (task: {
     id: string;
     status?: TaskStatus;
-    manualOrderOverride?: boolean;
     pinned?: boolean;
     dueDate?: string | null;
     dueTime?: string | null;
@@ -2821,11 +2620,6 @@ function TaskRow({
       vacationEligible: boolean;
     }
   ) => Promise<boolean>;
-  canReorder: boolean;
-  isDragging: boolean;
-  dropPlacement: TaskDropPlacement | null;
-  onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
-  onMouseDown: (event: ReactMouseEvent<HTMLElement>) => void;
   showTypeBadge: boolean;
   isHighlighted: boolean;
 }) {
@@ -2866,10 +2660,8 @@ function TaskRow({
       tabIndex={-1}
       className={clsx(
         'group/task-row relative transition-all duration-200',
-        isDragging && 'opacity-40',
         isPinned &&
           'bg-indigo-950/30 shadow-[inset_0_0_0_1px_rgba(129,140,248,0.24)]',
-        !isPinned && isOverdue && 'bg-red-950/20',
         !isPinned && !isOverdue && 'bg-transparent hover:bg-slate-800/25',
         task.followUpParent && 'ml-4 border-l-2 border-indigo-500/40',
         isCompleted && 'opacity-50',
@@ -2884,55 +2676,12 @@ function TaskRow({
           getTaskPriorityAccentClass(task.priority)
         )}
       />
-      {dropPlacement && (
-        <div
-          aria-hidden="true"
-          className={clsx(
-            'pointer-events-none absolute left-2 right-2 z-10 h-0.5 rounded-full bg-indigo-300 shadow shadow-indigo-300/40',
-            dropPlacement === 'before' ? 'top-0' : 'bottom-0'
-          )}
-        />
-      )}
       <div
         className={clsx(
           'grid min-h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 py-2 pr-2.5',
           'pl-3'
         )}
       >
-        {canReorder ? (
-          <div className="absolute -left-3 top-1/2 z-20 flex -translate-y-1/2 flex-col items-center">
-            {task.manualOrderOverride && (
-              <button
-                type="button"
-                aria-label={t('task.resetAutomaticOrderFor', {
-                  title: task.title,
-                })}
-                title={t('task.resetAutomaticOrder')}
-                onClick={() =>
-                  void onUpdate({ id: task.id, manualOrderOverride: false })
-                }
-                disabled={saving}
-                className="z-10 -mb-1 flex h-4 w-4 items-center justify-center rounded-full border border-indigo-300/60 bg-indigo-950 text-indigo-100 shadow-md shadow-black/40 hover:bg-indigo-900 disabled:opacity-50"
-              >
-                <FaUndo size={7} />
-              </button>
-            )}
-            <button
-              type="button"
-              aria-label={t('task.dragFor', { title: task.title })}
-              onPointerDown={onPointerDown}
-              onMouseDown={onMouseDown}
-              className={clsx(
-                'group/task-drag flex h-7 w-4 cursor-grab touch-none select-none items-center justify-center rounded border bg-slate-950/95 shadow-sm shadow-black/35 transition active:cursor-grabbing',
-                task.manualOrderOverride
-                  ? 'border-indigo-400/70 text-indigo-200 hover:bg-indigo-950 hover:text-indigo-100'
-                  : 'border-slate-700/80 text-slate-400 hover:border-slate-500 hover:bg-slate-800/60 hover:text-slate-100'
-              )}
-            >
-              <FaGripVertical size={13} />
-            </button>
-          </div>
-        ) : null}
         <CompletionButton
           label={task.title}
           isCompleted={task.status === TASK_STATUSES.COMPLETED}
@@ -3045,41 +2794,6 @@ function TaskRow({
   );
 }
 
-function getAutomaticUnpinnedTasks(
-  tasks: Task[],
-  orderingClock: TaskOrderingClock
-) {
-  const tasksById = new Map(tasks.map(task => [task.id, task]));
-  return buildTaskView({
-    tasks: tasks.map(task => ({
-      ...task,
-      manualOrder: null,
-      manualOrderOverride: false,
-    })),
-    mode: 'general',
-    filterTimerType: false,
-    hideVacationCovered: false,
-    today: orderingClock.today,
-    currentTime: orderingClock.currentTime,
-  }).tasks.map(task => tasksById.get(task.id)!);
-}
-
-function getFavoriteRowStorageKey(userId: string | null) {
-  return `pomi.tasks.favorite-row.${userId ?? 'unknown'}`;
-}
-
-function readFavoriteRowMemory(userId: string | null) {
-  if (typeof window === 'undefined') return false;
-  return window.localStorage.getItem(getFavoriteRowStorageKey(userId)) === '1';
-}
-
-function writeFavoriteRowMemory(userId: string | null, hasFavorites: boolean) {
-  if (typeof window === 'undefined') return;
-  const key = getFavoriteRowStorageKey(userId);
-  if (hasFavorites) window.localStorage.setItem(key, '1');
-  else window.localStorage.removeItem(key);
-}
-
 function sortTasksForMode(tasks: Task[], mode: TaskSortMode) {
   if (mode === 'default') {
     return tasks;
@@ -3113,146 +2827,6 @@ function rankTasksForSearch(
       (a.pinnedAt ?? '').localeCompare(b.pinnedAt ?? '')
     );
   });
-}
-
-function getDropTargetFromPoint(
-  tasks: Task[],
-  clientY: number
-): { id: string; placement: TaskDropPlacement } | null {
-  const rows = Array.from(
-    document.querySelectorAll<HTMLElement>('[data-testid="task-row"]')
-  )
-    .map(row => {
-      const task = tasks.find(candidate => candidate.id === row.dataset.taskId);
-      return task
-        ? {
-            row,
-            task,
-            rect: row.getBoundingClientRect(),
-          }
-        : null;
-    })
-    .filter((entry): entry is { row: HTMLElement; task: Task; rect: DOMRect } =>
-      Boolean(entry)
-    );
-  const unpinnedRows = rows.filter(entry => entry.task.pinnedAt === null);
-  if (unpinnedRows.length === 0) {
-    return null;
-  }
-
-  const firstUnpinnedRow = unpinnedRows[0];
-  const lastUnpinnedRow = unpinnedRows[unpinnedRows.length - 1];
-  if (clientY < firstUnpinnedRow.rect.top) {
-    return { id: firstUnpinnedRow.task.id, placement: 'before' };
-  }
-  if (clientY > lastUnpinnedRow.rect.bottom) {
-    return { id: lastUnpinnedRow.task.id, placement: 'after' };
-  }
-
-  for (const [index, entry] of unpinnedRows.entries()) {
-    if (clientY < entry.rect.top + entry.rect.height / 2) {
-      return index === 0
-        ? { id: entry.task.id, placement: 'before' }
-        : { id: unpinnedRows[index - 1].task.id, placement: 'after' };
-    }
-  }
-
-  return { id: lastUnpinnedRow.task.id, placement: 'after' };
-}
-
-const DRAG_AUTO_SCROLL_EDGE_PX = 80;
-const DRAG_AUTO_SCROLL_MAX_DELTA_PX = 18;
-
-function getDragAutoScrollDelta(clientY: number, viewportHeight: number) {
-  if (clientY < DRAG_AUTO_SCROLL_EDGE_PX) {
-    return -Math.ceil(
-      ((DRAG_AUTO_SCROLL_EDGE_PX - clientY) / DRAG_AUTO_SCROLL_EDGE_PX) *
-        DRAG_AUTO_SCROLL_MAX_DELTA_PX
-    );
-  }
-
-  const bottomDistance = viewportHeight - clientY;
-  if (bottomDistance < DRAG_AUTO_SCROLL_EDGE_PX) {
-    return Math.ceil(
-      ((DRAG_AUTO_SCROLL_EDGE_PX - bottomDistance) / DRAG_AUTO_SCROLL_EDGE_PX) *
-        DRAG_AUTO_SCROLL_MAX_DELTA_PX
-    );
-  }
-
-  return 0;
-}
-
-function doesDropTargetKeepOrder(
-  taskIds: string[],
-  draggedTaskId: string,
-  targetTaskId: string,
-  placement: TaskDropPlacement
-) {
-  const reorderedTaskIds = moveTaskIdInList(
-    taskIds,
-    draggedTaskId,
-    targetTaskId,
-    placement
-  );
-
-  return (
-    reorderedTaskIds === null ||
-    reorderedTaskIds.every((taskId, index) => taskId === taskIds[index])
-  );
-}
-
-function moveTaskInList(
-  tasks: Task[],
-  draggedTaskId: string,
-  targetTaskId: string,
-  placement: TaskDropPlacement
-) {
-  const taskIds = moveTaskIdInList(
-    tasks.map(task => task.id),
-    draggedTaskId,
-    targetTaskId,
-    placement
-  );
-  if (!taskIds) {
-    return null;
-  }
-
-  const tasksById = new Map(tasks.map(task => [task.id, task]));
-  const reorderedTasks = taskIds
-    .map(taskId => tasksById.get(taskId))
-    .filter((task): task is Task => Boolean(task));
-
-  if (reorderedTasks.every((task, index) => task.id === tasks[index]?.id)) {
-    return null;
-  }
-
-  return reorderedTasks;
-}
-
-function moveTaskIdInList(
-  taskIds: string[],
-  draggedTaskId: string,
-  targetTaskId: string,
-  placement: TaskDropPlacement
-) {
-  const draggedIndex = taskIds.indexOf(draggedTaskId);
-  const targetIndex = taskIds.indexOf(targetTaskId);
-  if (draggedIndex < 0 || targetIndex < 0) {
-    return null;
-  }
-
-  const withoutDragged = taskIds.filter(taskId => taskId !== draggedTaskId);
-  const adjustedTargetIndex = withoutDragged.indexOf(targetTaskId);
-  if (adjustedTargetIndex < 0) {
-    return null;
-  }
-
-  const insertIndex =
-    placement === 'before' ? adjustedTargetIndex : adjustedTargetIndex + 1;
-  const reorderedTaskIds = [...withoutDragged];
-  reorderedTaskIds.splice(insertIndex, 0, draggedTaskId);
-
-  return reorderedTaskIds;
 }
 
 function buildTaskIntentionFilterOptions(

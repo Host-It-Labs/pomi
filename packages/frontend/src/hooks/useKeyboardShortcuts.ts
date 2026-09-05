@@ -1,18 +1,16 @@
-import { TIMER_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { register, unregister } from '@tauri-apps/plugin-global-shortcut';
 import { useEffect } from 'react';
+import { useI18n } from '../i18n';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { useTasksStore } from '../stores/tasksStore';
 import { useTimerStore } from '../stores/timerStore';
 import { type HistorySource, useUiStore } from '../stores/uiStore';
-import { isDesktop, isLinux } from '../utils/osUtils';
 import { shouldOpenAdvancedSkipModal } from '../utils/advancedSkip';
-import { hasOpenModal } from '../utils/modalRegistry';
-import { getSelectedTimerIntentions } from '../utils/timerIntentions';
-import { canStackSessionTimer } from '../utils/sessionStacking';
 import { getLongBreakSwitchAction } from '../utils/longBreakSwitch';
-import { useI18n } from '../i18n';
+import { hasOpenModal } from '../utils/modalRegistry';
+import { isDesktop, isLinux } from '../utils/osUtils';
+import { canStackSessionTimer } from '../utils/sessionStacking';
 
 export function useKeyboardShortcuts() {
   const { t } = useI18n();
@@ -37,8 +35,7 @@ export function useKeyboardShortcuts() {
   const connectionStatus = useTimerStore.use.connectionStatus();
   const activeTab = useUiStore.use.activeTab();
   const setActiveTab = useUiStore.use.setActiveTab();
-  const setTaskMode = useUiStore.use.setTaskMode();
-  const requestTaskCreate = useUiStore.use.requestTaskCreate();
+  const requestTaskModeToggle = useUiStore.use.requestTaskModeToggle();
   const requestIntentionPickerOpen =
     useUiStore.use.requestIntentionPickerOpen();
   const requestTaskSearchFocus = useUiStore.use.requestTaskSearchFocus();
@@ -55,7 +52,6 @@ export function useKeyboardShortcuts() {
   const setTimerExtensionModalOpen =
     useUiStore.use.setTimerExtensionModalOpen();
   const preferences = usePreferencesStore.use.preferences();
-  const hasTimerIntentions = getSelectedTimerIntentions(timer).length > 0;
   const undoActionSource = getKeyboardHistorySource(
     latestUndoSource,
     undoVisible,
@@ -145,20 +141,6 @@ export function useKeyboardShortcuts() {
         },
       },
       {
-        id: 'undo-task-action',
-        match: (e: KeyboardEvent) =>
-          isMod(e) && !e.shiftKey && e.code === 'KeyZ',
-        when: () => canUndoTask && activeTab === 'tasks',
-        run: () => void undoTaskAction(),
-      },
-      {
-        id: 'redo-task-action',
-        match: (e: KeyboardEvent) =>
-          isMod(e) && e.shiftKey && e.code === 'KeyZ',
-        when: () => canRedoTask && activeTab === 'tasks',
-        run: () => void redoTaskAction(),
-      },
-      {
         id: 'add-five-minutes',
         match: (e: KeyboardEvent) =>
           isMod(e) && !e.shiftKey && e.code === 'KeyA',
@@ -203,10 +185,7 @@ export function useKeyboardShortcuts() {
       {
         id: 'open-extension-options',
         match: (e: KeyboardEvent) => isMod(e) && e.code === 'KeyD',
-        when: () =>
-          activeTab === 'timer' &&
-          !!extensionState &&
-          timer?.status === TIMER_STATUSES.PAUSED,
+        when: () => activeTab === 'timer' && !!extensionState,
         run: () => {
           if (!expanded) {
             setExpanded(true);
@@ -222,53 +201,40 @@ export function useKeyboardShortcuts() {
           if (!expanded) {
             setExpanded(true);
           }
-          setActiveTab('tasks');
+          setActiveTab('timer');
           requestTaskQuickCreateFocus();
         },
       },
       {
-        id: 'tasks-mode-all',
+        id: 'tasks-mode-toggle',
         match: (e: KeyboardEvent) =>
-          isMod(e) && !e.shiftKey && e.code === 'KeyG',
-        when: () => activeTab === 'tasks',
-        run: () => setTaskMode('general'),
+          isMod(e) && !e.altKey && !e.shiftKey && e.code === 'KeyG',
+        when: () =>
+          activeTab === 'timer' && expanded && !!preferences?.tasksExtension,
+        run: requestTaskModeToggle,
       },
       {
         id: 'tasks-create',
         match: (e: KeyboardEvent) =>
           isMod(e) && !e.shiftKey && e.code === 'KeyN',
-        when: () => activeTab === 'tasks',
+        when: () => activeTab === 'timer' && !!preferences?.tasksExtension,
         run: () => {
-          requestTaskCreate();
+          if (!expanded) setExpanded(true);
+          requestTaskQuickCreateFocus();
         },
-      },
-      {
-        id: 'tasks-mode-intention',
-        match: (e: KeyboardEvent) =>
-          isMod(e) && !e.altKey && !e.shiftKey && e.code === 'KeyI',
-        when: () =>
-          activeTab === 'timer' &&
-          expanded &&
-          !!preferences?.tasksExtension &&
-          (timer?.type === TIMER_TYPES.WORK ||
-            !!preferences?.tasksDuringBreaks) &&
-          hasTimerIntentions,
-        run: () => setTaskMode('intention'),
       },
       {
         id: 'open-active-intention-picker',
         match: (e: KeyboardEvent) =>
           isMod(e) && !e.altKey && !e.shiftKey && e.code === 'KeyI',
-        when: () => activeTab === 'tasks' || activeTab === 'timer',
+        when: () => activeTab === 'timer',
         run: () => requestIntentionPickerOpen(),
       },
       {
         id: 'focus-task-search',
         match: (e: KeyboardEvent) =>
           isMod(e) && !e.altKey && !e.shiftKey && e.code === 'KeyK',
-        when: () =>
-          !!preferences?.tasksExtension &&
-          (activeTab === 'tasks' || activeTab === 'timer'),
+        when: () => !!preferences?.tasksExtension && activeTab === 'timer',
         run: () => requestTaskSearchFocus(),
       },
       {
@@ -347,7 +313,6 @@ export function useKeyboardShortcuts() {
     preferences?.sessionsExtension,
     preferences?.sessionStackTimers,
     preferences?.tasksExtension,
-    preferences?.tasksDuringBreaks,
     resetTimer,
     redoTaskAction,
     setAdvancedSkipModalOpen,
@@ -371,12 +336,10 @@ export function useKeyboardShortcuts() {
     undoVisible,
     redoLastTimerAction,
     redoVisible,
-    requestTaskCreate,
     requestIntentionPickerOpen,
     requestTaskSearchFocus,
     requestTaskQuickCreateFocus,
-    hasTimerIntentions,
-    setTaskMode,
+    requestTaskModeToggle,
   ]);
 
   useEffect(() => {

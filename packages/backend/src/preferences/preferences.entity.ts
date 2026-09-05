@@ -1,4 +1,11 @@
 import {
+  AppLanguage,
+  DEFAULT_APP_LANGUAGE,
+  TaskDefaultDueDateMode,
+  TaskPriority,
+  TaskSortMode,
+} from '@pomi/shared';
+import {
   Column,
   CreateDateColumn,
   Entity,
@@ -8,13 +15,6 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { UserEntity } from '../users/users.entity';
-import {
-  AppLanguage,
-  DEFAULT_APP_LANGUAGE,
-  TaskDefaultDueDateMode,
-  TaskPriority,
-  TaskSortMode,
-} from '@pomi/shared';
 
 @Entity('preferences')
 export class Preferences {
@@ -81,7 +81,7 @@ export class Preferences {
   @Column({ default: true })
   keyboardShortcuts: boolean;
 
-  @Column({ default: false })
+  @Column({ default: true })
   intentionExtension: boolean;
 
   @Column({ default: false })
@@ -99,10 +99,10 @@ export class Preferences {
   @Column({ default: false })
   intentionShowBreakIntentionsInLongBreak: boolean;
 
-  @Column({ default: false })
+  @Column({ default: true })
   intentionCustomDurations: boolean;
 
-  @Column({ default: false })
+  @Column({ default: true })
   intentionSubIntentions: boolean;
 
   @Column({ default: false })
@@ -114,7 +114,7 @@ export class Preferences {
   @Column({ default: true })
   workTimerLogsExtension: boolean;
 
-  @Column({ default: false })
+  @Column({ default: true })
   sessionsExtension: boolean;
 
   @Column({ default: 3 })
@@ -153,7 +153,7 @@ export class Preferences {
   @Column({ default: false })
   undoAlerts: boolean;
 
-  @Column({ default: false })
+  @Column({ default: true })
   tasksExtension: boolean;
 
   @Column({ default: true })
@@ -164,9 +164,6 @@ export class Preferences {
 
   @Column({ default: true })
   tasksAutoSwitchToIntentionMode: boolean;
-
-  @Column({ default: false })
-  tasksDuringBreaks: boolean;
 
   @Column({ type: 'varchar', default: 'tomorrow' })
   taskDefaultDueDateMode: TaskDefaultDueDateMode;
@@ -179,6 +176,9 @@ export class Preferences {
 
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   hiddenHelpTips: string[];
+
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  dismissedSettingSuggestions: string[];
 
   @Column({
     type: 'jsonb',
@@ -195,10 +195,10 @@ export class Preferences {
   @Column({ default: true })
   taskUrgentReminderRepeatEnabled: boolean;
 
-  @Column({ default: false })
+  @Column({ default: true })
   advancedSkip: boolean;
 
-  @Column({ default: false })
+  @Column({ default: true })
   timerExtension: boolean;
 
   @Column({ default: false })
@@ -222,7 +222,7 @@ export class Preferences {
   @Column({ default: false })
   destinationDescriptionsEnabled: boolean;
 
-  @Column({ default: false })
+  @Column({ default: true })
   listsExtension: boolean;
 
   @Column({ default: false })

@@ -18,7 +18,7 @@ export function SectionHeader({
     <div className={clsx('space-y-1', className)}>
       <div className="flex items-center gap-2.5">
         {icon && <span className="text-slate-400">{icon}</span>}
-        <h2 className="text-2xl font-semibold text-white">{title}</h2>
+        <h2 className="text-2xl font-semibold text-ink">{title}</h2>
       </div>
       {description ? (
         <p className="text-sm text-slate-400">{description}</p>

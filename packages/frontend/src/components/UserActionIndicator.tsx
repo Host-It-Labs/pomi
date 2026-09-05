@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Spinner } from './ui/Spinner';
+import { useI18n } from '../i18n';
+import { useTimerStore } from '../stores/timerStore';
+import { requestBackendConnectionRecovery } from '../utils/backendConnectionRecovery';
 import {
   UserActionLifecycle,
   UserActionStatus,
   useUserActionQueue,
   useUserActionQueueBase,
 } from '../utils/userActionQueue';
-import { useTimerStore } from '../stores/timerStore';
-import { useI18n } from '../i18n';
-import { requestBackendConnectionRecovery } from '../utils/backendConnectionRecovery';
+import { Spinner } from './ui/Spinner';
 
 const INDICATOR_DELAY_MS = 1000;
 
@@ -75,7 +75,7 @@ export function ActionQueueDetails({
         {canRetryConnection && (
           <button
             type="button"
-            className="flex-1 rounded bg-amber-600/90 px-2 py-1 text-xs font-medium text-white hover:bg-amber-500"
+            className="flex-1 rounded bg-amber-600/90 px-2 py-1 text-xs font-medium text-ink hover:bg-amber-500"
             onClick={() => {
               useUserActionQueueBase.getState().retry();
               requestBackendConnectionRecovery();
@@ -90,7 +90,7 @@ export function ActionQueueDetails({
             aria-label={t('actionQueue.clear')}
             title={t('actionQueue.clear')}
             onClick={clearQueue}
-            className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-400 hover:border-slate-500 hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-400 hover:border-slate-500 hover:text-ink focus:outline-none focus:ring-2 focus:ring-indigo-400"
           >
             {t('actionQueue.clearUnsent')}
           </button>
@@ -175,7 +175,7 @@ export function UserActionIndicator() {
           {count > 1 && (
             <span
               data-testid="user-action-count"
-              className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-500 px-1 text-[10px] font-bold text-white"
+              className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-500 px-1 text-[10px] font-bold text-ink"
             >
               {count}
             </span>

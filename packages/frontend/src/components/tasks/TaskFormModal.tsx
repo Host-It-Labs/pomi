@@ -15,7 +15,6 @@ import {
   TIMER_TYPES,
 } from '@pomi/shared/src/constants';
 import clsx from 'clsx';
-import { FaArchive, FaClock } from 'react-icons/fa';
 import {
   type FormEvent,
   type ReactNode,
@@ -24,24 +23,26 @@ import {
   useRef,
   useState,
 } from 'react';
+import { FaArchive, FaClock } from 'react-icons/fa';
+import { MILLISECONDS_PER_MINUTE } from '../../constants/time';
+import { useI18n } from '../../i18n';
+import {
+  IntentionAssignmentPicker,
+  type IntentionAssignmentPickerChange,
+} from '../intentions/IntentionAssignmentPicker';
+import { showToastFromStore } from '../toast/ToastContext';
+import { BottomSheet, SheetOptions } from '../ui/BottomSheet';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { UnsavedChangesDialog } from '../ui/UnsavedChangesDialog';
-import { showToastFromStore } from '../toast/ToastContext';
-import { useI18n } from '../../i18n';
-import { MILLISECONDS_PER_MINUTE } from '../../constants/time';
+import { TaskArchiveConfirmationModal } from './TaskArchiveConfirmationModal';
 import {
   buildSimpleTaskRecurrence,
   parseSimpleTaskRecurrence,
   TaskRecurrenceFields,
   type TaskRecurrenceUnit,
 } from './TaskRecurrenceFields';
-import { TaskArchiveConfirmationModal } from './TaskArchiveConfirmationModal';
-import {
-  IntentionAssignmentPicker,
-  type IntentionAssignmentPickerChange,
-} from '../intentions/IntentionAssignmentPicker';
 
 const TASK_PRIORITY_OPTIONS: Array<{ value: TaskPriority }> = [
   { value: TASK_PRIORITIES.LOW },
@@ -53,7 +54,7 @@ const TASK_PRIORITY_OPTIONS: Array<{ value: TaskPriority }> = [
 type TaskMode = 'intention' | 'general';
 
 const selectClassName =
-  'h-[42px] w-full rounded border border-slate-700/40 bg-slate-800/40 px-3 py-2 text-sm text-white disabled:opacity-50';
+  'h-[42px] w-full rounded border border-slate-700/40 bg-slate-800/40 px-3 py-2 text-sm text-ink disabled:opacity-50';
 
 const getDefaultDueDate = (preferences: Preferences | null | undefined) => {
   const mode = preferences?.taskDefaultDueDateMode ?? 'tomorrow';
@@ -132,6 +133,7 @@ interface TaskFormModalProps {
   } | null;
   defaultTimerType?: TimerTypes;
   initialTitle?: string;
+  initialListId?: string | null;
   onClose: () => void;
   onCreate: (task: TaskFormPayload) => Promise<boolean>;
   onUpdate: (task: TaskFormUpdatePayload) => Promise<boolean>;
@@ -158,6 +160,7 @@ export function TaskFormModal({
   defaultIntentionSelection,
   defaultTimerType,
   initialTitle,
+  initialListId,
   onClose,
   onCreate,
   onUpdate,
@@ -350,7 +353,7 @@ export function TaskFormModal({
     const normalizedInitialTitle = initialTitle?.trim() ?? '';
     const initializationKey = task
       ? `task:${task.id}`
-      : `create:${normalizedInitialTitle}`;
+      : `create:${initialListId ?? ''}:${normalizedInitialTitle}`;
     if (initializedFormKeyRef.current === initializationKey) {
       return;
     }
@@ -478,7 +481,7 @@ export function TaskFormModal({
     setCustomDurationMinutes('');
     setIntentionSlug(hasDefaultIntention ? defaultIntention : '');
     setSubIntentionSlug(defaultSubIntention);
-    setSelectedListId('');
+    setSelectedListId(initialListId ?? '');
     setRecurrenceInterval('');
     setRecurrenceUnit('DAILY');
     setRecurrenceAnchorMode('planned');
@@ -541,6 +544,7 @@ export function TaskFormModal({
     defaultIntentionSelection,
     defaultTimerType,
     initialTitle,
+    initialListId,
     intentions,
     isOpen,
     preferences,
@@ -756,7 +760,7 @@ export function TaskFormModal({
 
   return (
     <>
-      <Modal
+      <BottomSheet
         isOpen={isOpen}
         onClose={closeForm}
         title={task ? t('task.editTask') : t('task.addTask')}
@@ -787,7 +791,7 @@ export function TaskFormModal({
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3 pr-1">
             <section className="space-y-3 rounded-xl border border-indigo-500/20 bg-indigo-950/15 p-3.5">
               <h3 className="text-sm font-semibold text-slate-100">
-                {t('task.whatNeedsDoing')}
+                {t('common.title')}
               </h3>
               <Input
                 aria-label={t('task.taskTitle')}
@@ -806,8 +810,8 @@ export function TaskFormModal({
                     placeholder={t('common.description')}
                     value={description}
                     onChange={event => setDescription(event.target.value)}
-                    rows={3}
-                    className="min-h-20 w-full resize-y rounded-md border border-slate-700/50 bg-slate-950/35 px-3 py-2 text-sm text-white transition-colors placeholder:text-slate-500 focus:border-indigo-500/60 focus:outline-none"
+                    rows={2}
+                    className="min-h-14 w-full resize-y rounded-md border border-slate-700/50 bg-slate-950/35 px-3 py-2 text-sm text-ink transition-colors placeholder:text-slate-500 focus:border-indigo-500/60 focus:outline-none"
                   />
                 </Field>
               )}
@@ -819,73 +823,143 @@ export function TaskFormModal({
                   {t('task.plan')}
                 </h3>
 
-                <Field
-                  label={t('task.intentionOrList')}
-                  help={t('task.chooseGeneralIntentionList')}
-                >
-                  <IntentionAssignmentPicker
+                <div className="grid grid-cols-2 items-start gap-2">
+                  <Field
                     label={t('task.intentionOrList')}
-                    showLabel={false}
-                    options={destinationOptions}
-                    subIntentionsByParent={subIntentionsByParent}
-                    selectedIntentions={intentionSlug ? [intentionSlug] : []}
-                    selectedSubIntentions={
-                      intentionSlug && subIntentionSlug
-                        ? { [intentionSlug]: subIntentionSlug }
-                        : {}
-                    }
-                    selectedListId={selectedListId || null}
-                    mode="single"
-                    isOpen={isDestinationPickerOpen}
-                    onOpenChange={setIsDestinationPickerOpen}
-                    onChange={handleDestinationChange}
-                    allowClear
-                    clearLabel={t('task.general')}
-                    emptyLabel={t('task.general')}
-                    noSelectionLabel={t('task.general')}
-                    searchAriaLabel={t('task.intentionOrList')}
-                    searchPlaceholder={t('common.search')}
-                    maxHeight={260}
-                    disabled={saving}
-                    triggerClassName="h-[42px] text-sm"
-                    triggerTestId="task-intention-dropdown"
-                  />
-                </Field>
-
-                {!isListDestination && (
-                  <Field label={t('task.timerType')}>
-                    <select
-                      aria-label={t('task.timerType')}
-                      value={timerType}
-                      onChange={event => {
-                        const nextType = event.target.value as TimerTypes;
-                        if (intentionSlug) {
-                          setIntentionSlug('');
-                          setSubIntentionSlug('');
-                          showToastFromStore(
-                            t('task.intentionCleared'),
-                            'info'
-                          );
-                        }
-                        setTimerType(nextType);
-                      }}
-                      className={selectClassName}
-                    >
-                      <option value={TIMER_TYPES.WORK}>
-                        {t('common.work')}
-                      </option>
-                      <option value={TIMER_TYPES.BREAK}>
-                        {t('common.break')}
-                      </option>
-                      <option value={TIMER_TYPES.LONG_BREAK}>
-                        {t('common.longBreak')}
-                      </option>
-                    </select>
+                    help={t('task.chooseGeneralIntentionList')}
+                  >
+                    <IntentionAssignmentPicker
+                      label={t('task.intentionOrList')}
+                      showLabel={false}
+                      options={destinationOptions}
+                      subIntentionsByParent={subIntentionsByParent}
+                      selectedIntentions={intentionSlug ? [intentionSlug] : []}
+                      selectedSubIntentions={
+                        intentionSlug && subIntentionSlug
+                          ? { [intentionSlug]: subIntentionSlug }
+                          : {}
+                      }
+                      selectedListId={selectedListId || null}
+                      mode="single"
+                      isOpen={isDestinationPickerOpen}
+                      onOpenChange={setIsDestinationPickerOpen}
+                      onChange={handleDestinationChange}
+                      allowClear
+                      clearLabel={t('task.general')}
+                      emptyLabel={t('task.general')}
+                      noSelectionLabel={t('task.general')}
+                      searchAriaLabel={t('task.intentionOrList')}
+                      searchPlaceholder={t('common.search')}
+                      maxHeight={260}
+                      disabled={saving}
+                      triggerClassName="h-[42px] text-sm"
+                      triggerTestId="task-intention-dropdown"
+                    />
                   </Field>
-                )}
+
+                  {!isListDestination && (
+                    <Field label={t('task.timerType')}>
+                      <select
+                        aria-label={t('task.timerType')}
+                        value={timerType}
+                        onChange={event => {
+                          const nextType = event.target.value as TimerTypes;
+                          if (intentionSlug) {
+                            setIntentionSlug('');
+                            setSubIntentionSlug('');
+                            showToastFromStore(
+                              t('task.intentionCleared'),
+                              'info'
+                            );
+                          }
+                          setTimerType(nextType);
+                        }}
+                        className={selectClassName}
+                      >
+                        <option value={TIMER_TYPES.WORK}>
+                          {t('common.work')}
+                        </option>
+                        <option value={TIMER_TYPES.BREAK}>
+                          {t('common.break')}
+                        </option>
+                        <option value={TIMER_TYPES.LONG_BREAK}>
+                          {t('common.longBreak')}
+                        </option>
+                      </select>
+                    </Field>
+                  )}
+                </div>
+                <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-2">
+                  <Field
+                    label={t('task.due')}
+                    help={t('task.dueHelp')}
+                    error={dueDateError}
+                  >
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                      <Input
+                        ref={dueDateInputRef}
+                        aria-label={t('task.taskDueDate')}
+                        aria-invalid={dueDateError ? true : undefined}
+                        aria-describedby={
+                          dueDateError ? 'task-due-date-error' : undefined
+                        }
+                        type="date"
+                        value={dueDate}
+                        onChange={event => {
+                          setDueDate(event.target.value);
+                          setDueDateTouched(true);
+                          if (!event.target.value) setDueTime('');
+                          if (event.target.value) setDueDateError('');
+                        }}
+                        className={clsx(
+                          'min-w-0',
+                          dueDateError &&
+                            '!border-red-500/80 focus:!border-red-400'
+                        )}
+                      />
+                      <Button
+                        size="xs"
+                        variant="secondary"
+                        className="w-7 !p-0"
+                        aria-label={t('task.clearDueDateTime')}
+                        onClick={() => {
+                          setDueDate('');
+                          setDueDateTouched(true);
+                          setDueTime('');
+                          setDueDateError('');
+                        }}
+                        disabled={Boolean(
+                          recurrenceInterval ||
+                          (task?.recurrenceRule && !recurrenceTouched)
+                        )}
+                        title={
+                          recurrenceInterval ||
+                          (task?.recurrenceRule && !recurrenceTouched)
+                            ? t('task.recurringRequiresDueDate')
+                            : t('task.clearDueDateTime')
+                        }
+                      >
+                        ×
+                      </Button>
+                    </div>
+                  </Field>
+                  {!isListDestination && (
+                    <Field label={t('task.time')}>
+                      <Input
+                        aria-label={t('task.taskDueTime')}
+                        type="time"
+                        value={dueTime}
+                        onChange={event => setDueTime(event.target.value)}
+                      />
+                    </Field>
+                  )}
+                </div>
+
+                <SheetOptions />
 
                 {!isListDestination && (
                   <Field
+                    advanced
                     label={t('task.customDuration')}
                     help={t('task.customDurationHelp')}
                   >
@@ -914,70 +988,7 @@ export function TaskFormModal({
                   </Field>
                 )}
 
-                <div className="grid grid-cols-1 gap-3 min-[600px]:grid-cols-2">
-                  <Field
-                    label={t('task.due')}
-                    help={t('task.dueHelp')}
-                    error={dueDateError}
-                  >
-                    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                      <Input
-                        ref={dueDateInputRef}
-                        aria-label={t('task.taskDueDate')}
-                        aria-invalid={dueDateError ? true : undefined}
-                        aria-describedby={
-                          dueDateError ? 'task-due-date-error' : undefined
-                        }
-                        type="date"
-                        value={dueDate}
-                        onChange={event => {
-                          setDueDate(event.target.value);
-                          setDueDateTouched(true);
-                          if (!event.target.value) setDueTime('');
-                          if (event.target.value) setDueDateError('');
-                        }}
-                        className={clsx(
-                          dueDateError &&
-                            '!border-red-500/80 focus:!border-red-400'
-                        )}
-                      />
-                      <Button
-                        size="xs"
-                        variant="secondary"
-                        onClick={() => {
-                          setDueDate('');
-                          setDueDateTouched(true);
-                          setDueTime('');
-                          setDueDateError('');
-                        }}
-                        disabled={Boolean(
-                          recurrenceInterval ||
-                          (task?.recurrenceRule && !recurrenceTouched)
-                        )}
-                        title={
-                          recurrenceInterval ||
-                          (task?.recurrenceRule && !recurrenceTouched)
-                            ? t('task.recurringRequiresDueDate')
-                            : t('task.clearDueDateTime')
-                        }
-                      >
-                        {t('common.clear')}
-                      </Button>
-                    </div>
-                  </Field>
-                  {!isListDestination && (
-                    <Field label={t('task.time')}>
-                      <Input
-                        aria-label={t('task.taskDueTime')}
-                        type="time"
-                        value={dueTime}
-                        onChange={event => setDueTime(event.target.value)}
-                      />
-                    </Field>
-                  )}
-                </div>
-
-                <Field label={t('task.priority')}>
+                <Field advanced label={t('task.priority')}>
                   <select
                     aria-label={t('task.priority')}
                     value={priority}
@@ -993,7 +1004,7 @@ export function TaskFormModal({
                     ))}
                   </select>
                 </Field>
-                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-800/70 bg-slate-900/45 px-3 py-2.5 text-xs text-slate-300 transition hover:border-slate-700">
+                <label className="sheet-extra flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-800/70 bg-slate-900/45 px-3 py-2.5 text-xs text-slate-300 transition hover:border-slate-700">
                   <span>
                     <span className="block font-medium text-slate-200">
                       {t('task.vacationCoverage')}
@@ -1016,7 +1027,7 @@ export function TaskFormModal({
               </section>
 
               {!isListDestination && !task?.followUpSourceTaskId && (
-                <section className="space-y-3 rounded-xl border border-slate-800/75 bg-slate-950/20 p-3">
+                <section className="sheet-extra space-y-3 rounded-xl border border-slate-800/75 bg-slate-950/20 p-3">
                   <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
                     {t('task.repeat')}
                   </h3>
@@ -1047,7 +1058,7 @@ export function TaskFormModal({
               )}
 
               {!isListDestination && !task?.followUpSourceTaskId && (
-                <section className="space-y-3 rounded-xl border border-slate-800/75 bg-slate-950/20 p-3">
+                <section className="sheet-extra space-y-3 rounded-xl border border-slate-800/75 bg-slate-950/20 p-3">
                   <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
                     {t('task.afterCompletion')}
                   </h3>
@@ -1105,7 +1116,7 @@ export function TaskFormModal({
                             setFollowUpDescription(event.target.value)
                           }
                           rows={2}
-                          className="w-full resize-y rounded border border-slate-700/40 bg-slate-800/40 px-3 py-2 text-sm text-white outline-none focus:border-indigo-400/70 disabled:opacity-50"
+                          className="w-full resize-y rounded border border-slate-700/40 bg-slate-800/40 px-3 py-2 text-sm text-ink outline-none focus:border-indigo-400/70 disabled:opacity-50"
                         />
                       </Field>
                       <div className="grid grid-cols-2 gap-3">
@@ -1144,7 +1155,7 @@ export function TaskFormModal({
                         </Field>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <Field label={t('task.priority')}>
+                        <Field advanced label={t('task.priority')}>
                           <select
                             aria-label={t('task.followUpPriority')}
                             value={followUpPriority}
@@ -1247,7 +1258,7 @@ export function TaskFormModal({
               )}
 
               {!isListDestination && task?.followUpSourceTaskId && (
-                <section className="space-y-2 rounded-xl border border-slate-800/75 bg-slate-950/20 p-3">
+                <section className="sheet-extra space-y-2 rounded-xl border border-slate-800/75 bg-slate-950/20 p-3">
                   <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
                     {t('task.followUp')}
                   </h3>
@@ -1272,7 +1283,7 @@ export function TaskFormModal({
             </Button>
           </div>
         </form>
-      </Modal>
+      </BottomSheet>
       <UnsavedChangesDialog
         isOpen={showDiscardConfirm}
         title={t('task.discardChanges')}
@@ -1356,18 +1367,24 @@ function serializeTaskFormState(state: {
 }
 
 function Field({
+  advanced,
   label,
   help,
   error,
   children,
 }: {
+  advanced?: boolean;
   label: string;
   help?: string;
   error?: string;
   children: ReactNode;
 }) {
   return (
-    <div className="relative space-y-1">
+    <div
+      className={
+        advanced ? 'sheet-extra relative space-y-1' : 'relative space-y-1'
+      }
+    >
       <div className="flex items-center gap-1 text-xs font-medium text-slate-300">
         <span>{label}</span>
         {help && <HelpButton label={label} help={help} />}

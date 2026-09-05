@@ -1,15 +1,15 @@
 import { FEEDBACK_MAX_TEXT_LENGTH } from '@pomi/shared/src/constants';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FaMicrophone } from 'react-icons/fa';
-import {
-  submitFeedbackText,
-  useFeedbackRecorderStore,
-} from './FeedbackRecorder';
+import { useI18n } from '../../i18n';
 import { showToastFromStore } from '../toast/ToastContext';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
 import { Modal } from '../ui/Modal';
-import { useI18n } from '../../i18n';
+import {
+  submitFeedbackText,
+  useFeedbackRecorderStore,
+} from './FeedbackRecorder';
 
 type TextFeedbackStage = 'ready' | 'sending' | 'error';
 
@@ -148,7 +148,7 @@ export function FeedbackModal({
           }
           size="sm"
           variant="secondary"
-          className="bg-transparent text-slate-400 hover:bg-transparent hover:text-white"
+          className="bg-transparent text-slate-400 hover:bg-transparent hover:text-ink"
         >
           <FaMicrophone size={14} />
         </IconButton>
@@ -207,7 +207,7 @@ export function FeedbackModal({
             maxLength={FEEDBACK_MAX_TEXT_LENGTH}
             onChange={event => setText(event.target.value)}
             placeholder={t('feedback.improve')}
-            className="w-full resize-y rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25"
+            className="w-full resize-y rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm text-ink outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25"
           />
           {(error || recordingError) && (
             <p className="text-sm text-red-300">{error || recordingError}</p>
