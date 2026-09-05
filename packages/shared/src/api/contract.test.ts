@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { z as zod3 } from 'zod/v3';
 import {
   TASK_FOLLOW_UP_DELAY_MAX_DAYS,
   TASK_DESCRIPTION_MAX_LENGTH,
@@ -11,6 +12,38 @@ import {
   userActionSchema,
   userActionStatusSchema,
 } from './contract';
+
+describe('Zod 4 contract compatibility', () => {
+  it('matches legacy archive-query acceptance and coercion', () => {
+    const legacySchema = zod3.object({
+      limit: zod3.coerce.number().int().min(1).max(100).optional(),
+      cursor: zod3.string().min(1).max(512).optional(),
+    });
+    const currentSchema = apiContract.tasks.archive.query;
+    const samples = [
+      {},
+      { limit: '50' },
+      { limit: 1, cursor: 'next-page' },
+      { limit: 0 },
+      { limit: 101 },
+      { cursor: '' },
+    ];
+
+    for (const sample of samples) {
+      const legacy = legacySchema.safeParse(sample);
+      const current = currentSchema.safeParse(sample);
+      expect(current.success).toBe(legacy.success);
+      if (current.success && legacy.success) {
+        expect(current.data).toEqual(legacy.data);
+      }
+    }
+
+    expect(
+      (currentSchema as unknown as { _zod: { version: { major: number } } })
+        ._zod.version.major
+    ).toBe(4);
+  });
+});
 
 function expectActionValid(action: unknown) {
   expect(userActionSchema.safeParse(action).success).toBe(true);
@@ -202,6 +235,22 @@ describe('accepted-action schemas', () => {
   });
 
   it('validates every conditional timer action requirement', () => {
+    expectActionInvalid(
+      {
+        kind: 'timer',
+        operation: 'pause',
+        expectedTimerId: 'timer-1',
+      },
+      'expectedTimerId'
+    );
+    expectActionInvalid(
+      {
+        kind: 'timer',
+        operation: 'pause',
+        expectedScheduleRevision: 'revision-1',
+      },
+      'expectedTimerId'
+    );
     expectActionInvalid(
       { kind: 'timer', operation: 'createOrResume' },
       'timerType'
@@ -700,5 +749,59 @@ describe('accepted-action schemas', () => {
     expect(
       preparationBody.safeParse({ kind: 'chunks', preparationId }).success
     ).toBe(true);
+  });
+
+  it('validates standard and Live Activity push-token updates', () => {
+    const pushTokenBody = apiContract.users.updatePushToken.body;
+
+    for (const platform of ['android', 'ios'] as const) {
+      expect(
+        pushTokenBody.safeParse({ token: 'token', platform }).success
+      ).toBe(true);
+      expect(pushTokenBody.safeParse({ token: null, platform }).success).toBe(
+        false
+      );
+    }
+
+    expect(
+      pushTokenBody.safeParse({
+        token: 'activity-token',
+        platform: 'ios-live-activity',
+      }).success
+    ).toBe(true);
+    expect(
+      pushTokenBody.safeParse({ token: null, platform: 'ios-live-activity' })
+        .success
+    ).toBe(true);
+    expect(
+      pushTokenBody.safeParse({ token: '', platform: 'ios-live-activity' })
+        .success
+    ).toBe(false);
+  });
+
+  it('bounds feedback payloads and requires a transcription idempotency key', () => {
+    const transcriptionBody = apiContract.feedback.transcribe.body;
+    const idempotencyKey = '550e8400-e29b-41d4-a716-446655440000';
+
+    expect(
+      transcriptionBody.safeParse({
+        audioBase64: 'YQ==',
+        mimeType: 'audio/webm',
+        idempotencyKey,
+      }).success
+    ).toBe(true);
+    expect(
+      transcriptionBody.safeParse({
+        audioBase64: 'YQ==',
+        mimeType: 'audio/webm',
+      }).success
+    ).toBe(false);
+    expect(
+      transcriptionBody.safeParse({
+        audioBase64: 'a'.repeat(4 * 1024 * 1024 + 1),
+        mimeType: 'audio/webm',
+        idempotencyKey,
+      }).success
+    ).toBe(false);
   });
 });

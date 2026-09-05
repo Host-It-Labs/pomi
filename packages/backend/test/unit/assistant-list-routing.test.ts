@@ -375,8 +375,8 @@ describe('Assistant explicit List routing', () => {
     ]);
   });
 
-  it('rejects an over-split selected List quick add instead of creating multiple items', () => {
-    expect(() =>
+  it('routes multiple independently extracted items into a selected List', () => {
+    expect(
       routeSelectedListItems.call(
         routingService,
         [{ title: 'Milk' }, { title: 'Eggs' }],
@@ -384,7 +384,10 @@ describe('Assistant explicit List routing', () => {
         'groceries-id',
         lists
       )
-    ).toThrow('Add one List item at a time');
+    ).toEqual([
+      { title: 'Milk', listId: 'groceries-id' },
+      { title: 'Eggs', listId: 'groceries-id' },
+    ]);
   });
 
   it('rejects a selected List that conflicts with an explicit List mention', () => {

@@ -8,11 +8,13 @@ const forceReconnect = vi.hoisted(() => vi.fn());
 const uuid = vi.hoisted(() => vi.fn());
 const auth = vi.hoisted(() => ({
   token: 'test-token' as string | null,
+  isAuthenticated: false,
+  user: { id: 'user-1' } as { id: string } | null,
   expireSession: vi.fn(),
   subscriber: undefined as
     | ((
-        state: { token: string | null },
-        previous: { token: string | null }
+        state: { token: string | null; user?: { id: string } | null },
+        previous: { token: string | null; user?: { id: string } | null }
       ) => void)
     | undefined,
 }));
@@ -22,6 +24,7 @@ const networkBlockedLog = vi.hoisted(() => vi.fn());
 
 vi.mock('uuid', () => ({ v4: uuid }));
 vi.mock('@sentry/react', () => ({
+  captureException: vi.fn(),
   logger: { info: timingLog, warn: networkBlockedLog },
 }));
 vi.mock('../stores/authStore', () => ({
@@ -29,8 +32,8 @@ vi.mock('../stores/authStore', () => ({
     getState: () => auth,
     subscribe: (
       subscriber: (
-        state: { token: string | null },
-        previous: { token: string | null }
+        state: { token: string | null; user?: { id: string } | null },
+        previous: { token: string | null; user?: { id: string } | null }
       ) => void
     ) => {
       auth.subscriber = subscriber;
@@ -89,6 +92,7 @@ const deferred = <T,>() => {
 
 beforeEach(() => {
   vi.resetModules();
+  localStorage.clear();
   vi.stubGlobal('fetch', vi.fn());
   uuid.mockReset();
   let actionIndex = 0;
@@ -96,6 +100,8 @@ beforeEach(() => {
   socketHandlers.clear();
   forceReconnect.mockReset();
   auth.token = 'test-token';
+  auth.isAuthenticated = false;
+  auth.user = { id: 'user-1' };
   auth.expireSession.mockReset();
   auth.subscriber = undefined;
   debug.lag = 0;
@@ -109,6 +115,24 @@ afterEach(() => {
 });
 
 describe('accepted action queue', () => {
+  it('discovers recoverable actions for an already-authenticated startup session', async () => {
+    auth.isAuthenticated = true;
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse(200, {
+        items: [],
+        nextCursor: null,
+        recoveryCursor: null,
+      })
+    );
+
+    await import('./userActionQueue');
+    await act(flush);
+
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe(
+      'http://backend.test/user-actions?limit=50'
+    );
+  });
+
   it('uses a caller-provided idempotency ID for prepared mutations', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(
@@ -879,15 +903,99 @@ describe('accepted action queue', () => {
     expect(useUserActionQueueBase.getState().isNetworkBlocked).toBe(false);
   });
 
+  it('discovers accepted actions after authentication and polls without resubmitting', async () => {
+    const terminal = deferred<Response>();
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          items: [
+            {
+              actionId: 'recovered-action',
+              status: 'accepted',
+              action: { kind: 'feedback', operation: 'submit' },
+              acceptedAt: 1,
+              updatedAt: 2,
+            },
+          ],
+          nextCursor: null,
+          recoveryCursor: 'checkpoint-1',
+        })
+      )
+      .mockReturnValueOnce(terminal.promise);
+    const { useUserActionQueueBase } = await import('./userActionQueue');
+
+    await useUserActionQueueBase.getState().hydrateRecoveredActions();
+    expect(useUserActionQueueBase.getState().actions).toEqual([
+      expect.objectContaining({
+        id: 'recovered-action',
+        status: 'accepted',
+        kind: 'feedback',
+        label: 'Send feedback',
+      }),
+    ]);
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe(
+      'http://backend.test/user-actions?limit=50'
+    );
+    expect(vi.mocked(fetch).mock.calls[1]?.[0]).toBe(
+      'http://backend.test/user-actions/recovered-action?waitMs=25000'
+    );
+    expect(
+      vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'POST')
+    ).toBe(false);
+
+    terminal.resolve(
+      jsonResponse(200, {
+        actionId: 'recovered-action',
+        status: 'succeeded',
+        action: { kind: 'feedback', operation: 'submit' },
+        acceptedAt: 1,
+        completedAt: 3,
+        updatedAt: 3,
+      })
+    );
+    await act(flush);
+    expect(useUserActionQueueBase.getState().actions).toEqual([]);
+    expect(localStorage.getItem('pomi-user-action-recovery:user-1')).toBe(
+      'checkpoint-1'
+    );
+  });
+
+  it('retries discovery after a transient startup failure', async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetch)
+      .mockRejectedValueOnce(new TypeError('backend restarting'))
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          items: [],
+          nextCursor: null,
+          recoveryCursor: null,
+        })
+      );
+    const { useUserActionQueueBase } = await import('./userActionQueue');
+
+    await useUserActionQueueBase.getState().hydrateRecoveredActions();
+    expect(forceReconnect).toHaveBeenCalledWith(false);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await act(flush);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it('clears the queue only when the authenticated account changes', async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse(404, {}));
     const { useUserActionQueueBase } = await import('./userActionQueue');
     expect(auth.subscriber).toBeDefined();
-    auth.subscriber?.({ token: 'same' }, { token: 'same' });
     useUserActionQueueBase.setState({ isNetworkBlocked: true });
-    auth.subscriber?.({ token: 'new' }, { token: 'old' });
-    expect(useUserActionQueueBase.getState().isNetworkBlocked).toBe(false);
-    useUserActionQueueBase.getState().setNetworkBlocked(true);
+    auth.subscriber?.(
+      { token: 'new', user: { id: 'user-1' } },
+      { token: 'old', user: { id: 'user-1' } }
+    );
     expect(useUserActionQueueBase.getState().isNetworkBlocked).toBe(true);
+
+    auth.subscriber?.(
+      { token: 'other', user: { id: 'user-2' } },
+      { token: 'new', user: { id: 'user-1' } }
+    );
+    expect(useUserActionQueueBase.getState().isNetworkBlocked).toBe(false);
   });
 });

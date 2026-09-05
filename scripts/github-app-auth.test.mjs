@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { generateKeyPairSync, verify } from 'node:crypto';
 import test from 'node:test';
 import {
+  ALLOWED_COMMANDS,
   appAuthenticatedEnvironment,
   createAppJwt,
+  githubRequest,
   readGitHubAppConfiguration,
+  validateMutationPermissions,
 } from './github-app-auth.mjs';
 
 test('creates a short-lived RS256 GitHub App JWT', () => {
@@ -118,7 +122,15 @@ test('isolates Git commands from stored personal GitHub credentials', () => {
       botUserId: 123456,
       permissions: { contents: 'write' },
     },
-    { GH_TOKEN: 'personal-token', GITHUB_TOKEN: 'personal-token' }
+    {
+      GH_TOKEN: 'personal-token',
+      GITHUB_TOKEN: 'personal-token',
+      POMI_RADAR_GITHUB_APP_PRIVATE_KEY: 'sentinel-private-key',
+      POMI_RADAR_GITHUB_APP_PRIVATE_KEY_PATH: 'sentinel-private-key-path',
+      GITHUB_FEEDBACK_APP_PRIVATE_KEY: 'sentinel-feedback-private-key',
+      GITHUB_FEEDBACK_APP_PRIVATE_KEY_PATH:
+        'sentinel-feedback-private-key-path',
+    }
   );
 
   assert.equal(environment.GH_TOKEN, 'installation-token');
@@ -133,4 +145,97 @@ test('isolates Git commands from stored personal GitHub credentials', () => {
   assert.equal(environment.GIT_SSH_COMMAND, 'false');
   assert.equal(environment.GIT_AUTHOR_NAME, 'Pomi Radar Bot');
   assert.match(environment.GIT_AUTHOR_EMAIL, /pomi-radar\[bot\]/);
+  assert.equal(environment.POMI_RADAR_GITHUB_APP_PRIVATE_KEY, undefined);
+  assert.equal(environment.POMI_RADAR_GITHUB_APP_PRIVATE_KEY_PATH, undefined);
+  assert.equal(environment.GITHUB_FEEDBACK_APP_PRIVATE_KEY, undefined);
+  assert.equal(environment.GITHUB_FEEDBACK_APP_PRIVATE_KEY_PATH, undefined);
+  assert.doesNotMatch(JSON.stringify(environment), /sentinel-private-key/);
+  assert.doesNotMatch(
+    JSON.stringify(environment),
+    /sentinel-feedback-private-key/
+  );
+});
+
+test('preserves implementation command capabilities without forwarding private keys', () => {
+  assert.deepEqual([...ALLOWED_COMMANDS].sort(), ['gh', 'git', 'node', 'pnpm']);
+  const environment = appAuthenticatedEnvironment(
+    {
+      token: 'installation-token',
+      app: { id: 4675891, name: 'Pomi Radar' },
+      botLogin: 'pomi-radar[bot]',
+      botUserId: 123456,
+      permissions: {
+        contents: 'write',
+        issues: 'write',
+        pull_requests: 'write',
+      },
+    },
+    {
+      POMI_RADAR_GITHUB_APP_PRIVATE_KEY: 'sentinel-private-key',
+      POMI_RADAR_GITHUB_APP_PRIVATE_KEY_PATH: 'sentinel-private-key-path',
+    }
+  );
+  const child = spawnSync(
+    process.execPath,
+    [
+      '-e',
+      "process.stdout.write(JSON.stringify({token: process.env.GH_TOKEN, key: process.env.POMI_RADAR_GITHUB_APP_PRIVATE_KEY})); process.stderr.write('safe diagnostic');",
+    ],
+    { encoding: 'utf8', env: environment }
+  );
+  assert.equal(child.status, 0);
+  assert.match(child.stdout, /installation-token/);
+  assert.doesNotMatch(child.stdout, /sentinel-private-key/);
+  assert.doesNotMatch(child.stderr, /sentinel-private-key/);
+});
+
+test('requires mutation permissions before spawning App-authenticated commands', () => {
+  assert.doesNotThrow(() =>
+    validateMutationPermissions({
+      contents: 'write',
+      issues: 'write',
+      pull_requests: 'write',
+    })
+  );
+  assert.throws(
+    () =>
+      validateMutationPermissions({
+        contents: 'write',
+        issues: 'read',
+        pull_requests: 'write',
+      }),
+    /lacks required contents, issues, or pull-request write permission/
+  );
+});
+
+test('preserves temporary HTTP failures even when GitHub returns HTML', async () => {
+  await assert.rejects(
+    githubRequest('/app/installations/123/access_tokens', {
+      method: 'POST',
+      token: 'test-token',
+      fetchImpl: async () =>
+        new globalThis.Response('<html>sensitive upstream diagnostics</html>', {
+          status: 503,
+        }),
+    }),
+    error =>
+      error.message ===
+      'GitHub POST /app/installations/123/access_tokens failed (503).'
+  );
+});
+
+test('distinguishes an App rate limit from a permanent permission error', async () => {
+  for (const [headers, expected] of [
+    [{ 'x-ratelimit-remaining': '0' }, /rate limit/],
+    [{ 'retry-after': '60' }, /rate limit/],
+    [{}, /failed \(403\)\.$/],
+  ]) {
+    await assert.rejects(
+      githubRequest('/app', {
+        fetchImpl: async () =>
+          new globalThis.Response('forbidden', { status: 403, headers }),
+      }),
+      expected
+    );
+  }
 });

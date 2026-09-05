@@ -1,9 +1,10 @@
-import type { Preferences, Timer } from '@pomi/shared';
+import type { Preferences, Timer, TimerSkipLogMode } from '@pomi/shared';
 import { TIMER_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
 import clsx from 'clsx';
 import { type KeyboardEvent, useEffect, useState } from 'react';
 import { FaForward, FaPause, FaPlay } from 'react-icons/fa';
 import { TimerActionButtons } from '../../components/TimerActionButtons';
+import { AdvancedSkipModal } from '../../components/AdvancedSkipModal';
 import { IconButton } from '../../components/ui/IconButton';
 import { IntentionEmojiPair } from '../../components/ui/IntentionEmojiPair';
 import { KeyboardShortcut } from '../../components/ui/KeyboardShortcut';
@@ -13,6 +14,7 @@ import { useUiStore } from '../../stores/uiStore';
 import { useTimerStore } from '../../stores/timerStore';
 import { isDesktop } from '../../utils/osUtils';
 import { formatTime } from '../../utils/timeUtils';
+import { shouldOpenAdvancedSkipModal } from '../../utils/advancedSkip';
 import { useI18n } from '../../i18n';
 
 interface TimeRemainingCircleProps {
@@ -453,6 +455,7 @@ export function TimeRemainingCircle({
     useUiStore.use.setAdvancedSkipStartPending();
   const advancedSkipStartPending = useUiStore.use.advancedSkipStartPending();
   const setAdvancedSkipModalOpen = useUiStore.use.setAdvancedSkipModalOpen();
+  const advancedSkipModalOpen = useUiStore.use.advancedSkipModalOpen();
   const setTimerExtensionModalOpen =
     useUiStore.use.setTimerExtensionModalOpen();
   const [playIconVisible, setPlayIconVisible] = useState(false);
@@ -485,7 +488,12 @@ export function TimeRemainingCircle({
   const showMinimizedExtensionControls =
     !isExpanded && hasPausedExtensionOpportunity;
   const showTimerActionButtons =
-    showActionButtons || showMinimizedExtensionControls;
+    showActionButtons ||
+    showMinimizedExtensionControls ||
+    (isExpanded &&
+      timer?.status === TIMER_STATUSES.PAUSED &&
+      !showPausedExtensionControls &&
+      !showPreStartSkip);
   const usesSharedExpandedGeometry = isExpanded;
 
   const handlePreStartSkip = () => {
@@ -493,6 +501,22 @@ export function TimeRemainingCircle({
     setAdvancedSkipStartPending(false);
     setAdvancedSkipModalOpen(false);
     skipTimer('none');
+  };
+
+  const handlePausedSkip = () => {
+    if (isDisconnected || !timer) return;
+    if (shouldOpenAdvancedSkipModal(timer, preferences)) {
+      setAdvancedSkipModalOpen(true);
+      return;
+    }
+    handlePreStartSkip();
+  };
+
+  const handleAdvancedPausedSkip = (logMode: TimerSkipLogMode) => {
+    if (isDisconnected || !timer) return;
+    setAdvancedSkipStartPending(false);
+    setAdvancedSkipModalOpen(false);
+    skipTimer(logMode);
   };
 
   const handleOpenTimerExtension = () => {
@@ -755,9 +779,9 @@ export function TimeRemainingCircle({
                 </span>
                 <KeyboardShortcut text="D" showModIcon={false} />
               </IconButton>
-              {showPreStartSkip && (
+              {timer?.status === TIMER_STATUSES.PAUSED && (
                 <IconButton
-                  onClick={handlePreStartSkip}
+                  onClick={handlePausedSkip}
                   label={t('timer.skipTo', {
                     target: t(
                       timer?.type === TIMER_TYPES.WORK
@@ -803,6 +827,12 @@ export function TimeRemainingCircle({
             </div>
           )}
       </div>
+      <AdvancedSkipModal
+        isOpen={advancedSkipModalOpen && showPausedExtensionControls}
+        timer={timer}
+        onCancel={() => setAdvancedSkipModalOpen(false)}
+        onSelect={handleAdvancedPausedSkip}
+      />
     </div>
   );
 }

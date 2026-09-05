@@ -1,6 +1,9 @@
 import { Controller, Query, Request, UseGuards } from '@nestjs/common';
 import { apiContract } from '@pomi/shared';
-import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
+import {
+  TsRestHandler,
+  tsRestHandler,
+} from '../validation/ts-rest-zod4.adapter';
 import { AuthGuard } from '../auth/auth.guard';
 import { WatchStatusQueryDto } from './dto/watch-status-query.dto';
 import { WatchService } from './watch.service';

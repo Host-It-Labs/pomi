@@ -346,6 +346,14 @@ impl<R: Runtime> Notifications<R> {
         }))
     }
 
+    pub async fn set_timer_projection(&self, _projection_json: String) -> crate::Result<()> {
+        Ok(())
+    }
+
+    pub async fn clear_timer_projection(&self) -> crate::Result<()> {
+        Ok(())
+    }
+
     pub async fn start_android_foreground_sync(&self) -> crate::Result<serde_json::Value> {
         self.get_android_foreground_sync_status().await
     }

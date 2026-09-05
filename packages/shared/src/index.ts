@@ -14,3 +14,4 @@ export * from './types';
 export * from './utils/redaction';
 export * from './watchSurface';
 export * from './user-actions';
+export * from './liveTimerProjection';

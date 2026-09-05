@@ -4,7 +4,11 @@ import { readFileSync } from 'node:fs';
 import { createSign } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadAutomationEnvironment, repositoryRoot } from './local-env.mjs';
+import {
+  loadAutomationEnvironment,
+  repositoryRoot,
+  resolveRepositoryPath,
+} from './local-env.mjs';
 import {
   fetchWithRetry,
   NETWORK_RETRY_DELAYS_MS,
@@ -19,11 +23,15 @@ const API_BASE = 'https://api.github.com';
 const PUBLIC_REPOSITORY = 'Host-It-Labs/pomi';
 export const EXPECTED_GITHUB_APP_ID = '4675891';
 export const EXPECTED_GITHUB_APP_BOT_LOGIN = 'pomi-radar[bot]';
-const PRIVATE_KEY_PATH = path.join(
-  repositoryRoot,
+const PRIVATE_KEY_PATH = resolveRepositoryPath(
   'config/secrets/pomi-radar.private-key.pem'
 );
-const ALLOWED_COMMANDS = new Set(['gh', 'git', 'node', 'pnpm']);
+export const ALLOWED_COMMANDS = new Set(['gh', 'git', 'node', 'pnpm']);
+const REQUIRED_MUTATION_PERMISSIONS = Object.freeze([
+  'contents',
+  'issues',
+  'pull_requests',
+]);
 
 function githubUrl(pathname) {
   const [pathPart, query = ''] = pathname.split('?', 2);
@@ -78,13 +86,16 @@ export async function githubRequest(
       : NO_NETWORK_RETRY_DELAYS_MS
   );
   const text = await response.text();
-  const data = text ? JSON.parse(text) : undefined;
   if (!response.ok) {
+    const rateLimited =
+      response.status === 403 &&
+      (response.headers.get('x-ratelimit-remaining') === '0' ||
+        response.headers.has('retry-after'));
     throw new Error(
-      `GitHub ${method} ${pathname} failed (${response.status}): ${data?.message || text}`
+      `GitHub ${method} ${pathname} failed (${response.status})${rateLimited ? ': rate limit' : ''}.`
     );
   }
-  return data;
+  return text ? JSON.parse(text) : undefined;
 }
 
 export function readGitHubAppConfiguration(environment = process.env) {
@@ -173,7 +184,7 @@ export async function getGitHubAppAuthentication({
 
 export function appAuthenticatedEnvironment(authentication, environment) {
   const botEmail = `${authentication.botUserId}+${authentication.botLogin}@users.noreply.github.com`;
-  return {
+  const childEnvironment = {
     ...environment,
     GH_TOKEN: authentication.token,
     GITHUB_TOKEN: authentication.token,
@@ -196,6 +207,22 @@ export function appAuthenticatedEnvironment(authentication, environment) {
     GIT_COMMITTER_NAME: `${authentication.app.name} Bot`,
     GIT_COMMITTER_EMAIL: botEmail,
   };
+  delete childEnvironment.POMI_RADAR_GITHUB_APP_PRIVATE_KEY;
+  delete childEnvironment.POMI_RADAR_GITHUB_APP_PRIVATE_KEY_PATH;
+  delete childEnvironment.GITHUB_FEEDBACK_APP_PRIVATE_KEY;
+  delete childEnvironment.GITHUB_FEEDBACK_APP_PRIVATE_KEY_PATH;
+  return childEnvironment;
+}
+
+export function validateMutationPermissions(permissions) {
+  const missing = REQUIRED_MUTATION_PERMISSIONS.filter(
+    permission => permissions?.[permission] !== 'write'
+  );
+  if (missing.length) {
+    throw new Error(
+      'The Pomi Radar GitHub App installation lacks required contents, issues, or pull-request write permission.'
+    );
+  }
 }
 
 async function runCli() {
@@ -231,6 +258,7 @@ async function runCli() {
       'Usage: node scripts/github-app-auth.mjs check | exec -- <command> [args...]'
     );
   }
+  validateMutationPermissions(authentication.permissions);
   const command = process.argv[4];
   const args = process.argv.slice(5);
   if (!ALLOWED_COMMANDS.has(command)) {
@@ -244,8 +272,8 @@ async function runCli() {
     cwd: repositoryRoot,
     env: appAuthenticatedEnvironment(authentication, process.env),
   });
-  child.on('error', error => {
-    console.error(error);
+  child.on('error', () => {
+    console.error('[pomi] GitHub App child command could not start.');
     process.exitCode = 1;
   });
   child.on('exit', (code, signal) => {

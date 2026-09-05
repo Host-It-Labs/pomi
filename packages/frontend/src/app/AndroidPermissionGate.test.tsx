@@ -7,6 +7,7 @@ import { usePreferencesStore } from '../stores/preferencesStore';
 const platform = vi.hoisted(() => ({
   isAndroid: true,
   isDesktop: false,
+  isIos: false,
   isMobile: true,
   isMac: false,
   isTauri: false,

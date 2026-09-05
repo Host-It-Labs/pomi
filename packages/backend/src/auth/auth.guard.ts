@@ -7,12 +7,14 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { UsersService } from '../users/users.service';
+import { SessionPayload, SessionService } from './session.service';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
     private jwtService: JwtService,
-    private usersService: UsersService
+    private usersService: UsersService,
+    private sessionService: SessionService
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -24,8 +26,17 @@ export class AuthGuard implements CanActivate {
     }
 
     try {
-      const payload = await this.jwtService.verifyAsync(token);
-      if (!payload?.sub || !(await this.usersService.userExists(payload.sub))) {
+      const payload = await this.jwtService.verifyAsync<SessionPayload>(token);
+      const userId = typeof payload?.sub === 'string' ? payload.sub : null;
+      const sessionId = typeof payload?.sid === 'string' ? payload.sid : null;
+      if (!userId) {
+        throw new UnauthorizedException();
+      }
+
+      const sessionIsActive = sessionId
+        ? await this.sessionService.isAccessSessionActive(sessionId, userId)
+        : this.sessionService.isLegacyTokenAllowed(payload);
+      if (!sessionIsActive || !(await this.usersService.userExists(userId))) {
         throw new UnauthorizedException();
       }
       request['user'] = payload;

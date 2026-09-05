@@ -13,11 +13,14 @@ import { getApiErrorMessage } from '../utils/apiError';
 import { isDevAutoLoginEnabled } from '../config/environmentVariables';
 import { normalizeLanguage, SUPPORTED_LANGUAGES, useI18n } from '../i18n';
 import {
+  BackendOriginError,
   clearStoredBackendUrl,
+  getBackendUrlQuarantine,
   getStoredBackendUrl,
-  sanitizeBackendUrl,
+  parseBackendOrigin,
   setStoredBackendUrl,
 } from '../utils/backendUrlStorage';
+import { sessionPlatform } from '../utils/sessionPlatform';
 
 type SessionResult = {
   status: number;
@@ -60,6 +63,7 @@ async function createLegacySession(
 ): Promise<SessionResult> {
   const response = await fetch(`${baseUrl().replace(/\/+$/, '')}/sessions`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
   });
@@ -76,21 +80,25 @@ async function createLegacySession(
 
 export function Login() {
   const { language, setLanguage, t } = useI18n();
-  const setUser = useAuthStore.use.setUser();
-  const setToken = useAuthStore.use.setToken();
+  const acceptSession = useAuthStore.use.acceptSession();
   const isAuthenticated = useAuthStore.use.isAuthenticated();
   const setActiveTab = useUiStore.use.setActiveTab();
   const setHasLoggedIn = useUiStore.use.setHasLoggedIn();
   const loadSystemInfo = useSystemStore.use.loadSystemInfo();
+  const systemInfo = useSystemStore.use.systemInfo();
   const { showToast } = useToast();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [bootstrapToken, setBootstrapToken] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [customBackendUrl, setCustomBackendUrl] = useState(() =>
     isDevAutoLoginEnabled ? '' : getStoredBackendUrl() || ''
   );
   const [selfHostInput, setSelfHostInput] = useState('');
   const [showSelfHostPrompt, setShowSelfHostPrompt] = useState(false);
+  const [backendQuarantine, setBackendQuarantine] = useState(() =>
+    getBackendUrlQuarantine()
+  );
 
   const openSelfHostingPrompt = () => {
     setSelfHostInput(customBackendUrl);
@@ -98,14 +106,23 @@ export function Login() {
   };
 
   const handleSaveSelfHosting = () => {
-    const sanitizedUrl = sanitizeBackendUrl(selfHostInput);
-    if (!sanitizedUrl) {
-      showToast(t('login.invalidUrl'), 'error');
+    let backendOrigin: string;
+    try {
+      backendOrigin = parseBackendOrigin(selfHostInput);
+    } catch (error) {
+      showToast(
+        error instanceof BackendOriginError &&
+          error.reason === 'insecure-remote'
+          ? t('login.httpsRequired')
+          : t('login.invalidUrl'),
+        'error'
+      );
       return;
     }
 
-    setStoredBackendUrl(sanitizedUrl);
-    setCustomBackendUrl(sanitizedUrl);
+    setStoredBackendUrl(backendOrigin);
+    setCustomBackendUrl(backendOrigin);
+    setBackendQuarantine(null);
     setShowSelfHostPrompt(false);
     loadSystemInfo();
     showToast(t('login.urlSaved'), 'success');
@@ -114,6 +131,7 @@ export function Login() {
   const handleUseHostedService = () => {
     clearStoredBackendUrl();
     setCustomBackendUrl('');
+    setBackendQuarantine(null);
     loadSystemInfo();
     showToast(t('login.hostedUrlSaved'), 'success');
   };
@@ -140,6 +158,10 @@ export function Login() {
             username,
             password,
             language,
+            platform: sessionPlatform,
+            ...(systemInfo?.requiresAdminBootstrapToken
+              ? { bootstrapToken }
+              : {}),
           } as Parameters<typeof apiClient.sessions.create>[0]['body'],
         })) as SessionResult;
       } catch (error) {
@@ -166,9 +188,9 @@ export function Login() {
           setLanguage(language, { persist: true });
         }
         setHasLoggedIn(true);
-        setUser(data.user);
-        setToken(data.token);
+        await acceptSession(data);
         setActiveTab('timer');
+        void loadSystemInfo();
 
         if (data.isNewUser) {
           showToast(t('login.accountCreated'), 'success');
@@ -223,6 +245,14 @@ export function Login() {
       </div>
 
       <form onSubmit={handleAuthenticate} className="space-y-4">
+        {backendQuarantine ? (
+          <div
+            role="alert"
+            className="rounded-lg bg-amber-950 p-3 text-xs text-amber-100"
+          >
+            {t('login.backendQuarantined')}
+          </div>
+        ) : null}
         <FormField label={t('login.username')} htmlFor="username">
           <Input
             id="username"
@@ -245,6 +275,22 @@ export function Login() {
             required
           />
         </FormField>
+        {systemInfo?.requiresAdminBootstrapToken ? (
+          <FormField
+            label={t('login.bootstrapToken')}
+            htmlFor="bootstrap-token"
+          >
+            <Input
+              id="bootstrap-token"
+              type="password"
+              placeholder={t('login.bootstrapTokenPlaceholder')}
+              value={bootstrapToken}
+              onChange={event => setBootstrapToken(event.target.value)}
+              className="rounded-lg p-3"
+              required
+            />
+          </FormField>
+        ) : null}
         <Button
           type="submit"
           isLoading={isLoading}

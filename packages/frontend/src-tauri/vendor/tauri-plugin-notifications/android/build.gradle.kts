@@ -52,6 +52,7 @@ android {
         }
     }
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -66,6 +67,7 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
     implementation("androidx.core:core-ktx:1.18.0")
     implementation("androidx.appcompat:appcompat:1.8.0")
     implementation("com.google.android.material:material:1.14.0")
@@ -76,7 +78,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("io.mockk:mockk-android:1.14.11")
     testImplementation("io.mockk:mockk-agent:1.14.11")
-    testImplementation("org.jetbrains.kotlin:kotlin-test:2.4.10")
+    testImplementation("org.jetbrains.kotlin:kotlin-test:2.2.21")
     testImplementation("org.json:json:20251224")
     testImplementation("org.robolectric:robolectric:4.16.1")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")

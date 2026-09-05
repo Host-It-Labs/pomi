@@ -1,4 +1,4 @@
-import { IntentionType, TIMER_TYPES } from '@pomi/shared';
+import { HabitCadence, IntentionType, TIMER_TYPES } from '@pomi/shared';
 import {
   Column,
   CreateDateColumn,
@@ -54,6 +54,9 @@ export class Intention {
 
   @Column({ default: false })
   isHabit: boolean;
+
+  @Column({ type: 'varchar', default: 'off' })
+  habitCadence: HabitCadence;
 
   @Column({ default: false })
   isArchived: boolean;

@@ -95,6 +95,8 @@ function App() {
   const expanded = useUiStore.use.expanded();
   const activeTab = useUiStore.use.activeTab();
   const isAuthenticated = useAuthStore.use.isAuthenticated();
+  const isAuthLoading = useAuthStore.use.isLoading();
+  const initializeSession = useAuthStore.use.initializeSession();
   const user = useAuthStore.use.user();
   const preferences = usePreferencesStore.use.preferences();
   const appWindow = useUiStore.use.appWindow();
@@ -119,8 +121,12 @@ function App() {
   );
   const minimizedWindowHeight = getMinimizedWindowHeight(showMinimizedTaskView);
 
+  useEffect(() => {
+    void initializeSession();
+  }, [initializeSession]);
+
   const isDevAutoLoginPending = useDevAutoLogin();
-  useApp({ pauseBootstrap: isDevAutoLoginPending });
+  useApp({ pauseBootstrap: isAuthLoading || isDevAutoLoginPending });
   useMobileFeatures();
 
   useLayoutEffect(() => {

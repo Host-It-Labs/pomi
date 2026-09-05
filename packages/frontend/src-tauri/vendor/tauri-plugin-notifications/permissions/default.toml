@@ -35,4 +35,6 @@ permissions = [
   "allow-get-android-foreground-sync-status",
   "allow-start-android-foreground-sync",
   "allow-stop-android-foreground-sync",
+  "allow-set-timer-projection",
+  "allow-clear-timer-projection",
 ]

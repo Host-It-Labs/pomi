@@ -1100,6 +1100,46 @@ describe('TimerService revision conflicts', () => {
     expect(recordCompletedTimer).not.toHaveBeenCalled();
   });
 
+  it('carries the captured Timer revision through an extension skip', async () => {
+    const timer = currentTimer({
+      isExtension: true,
+      extensionNextTimerType: TIMER_TYPES.BREAK,
+    });
+    const createOrResumeTimer = vi.fn(async () =>
+      currentTimer({ id: 'timer-next', type: TIMER_TYPES.BREAK })
+    );
+    const service = Object.assign(Object.create(TimerService.prototype), {
+      timerStore: { getCurrentTimer: vi.fn(async () => timer) },
+      preferencesService: {
+        getPreferences: vi.fn(async () => ({
+          advancedSkip: false,
+          sessionsExtension: false,
+          intentionExtension: false,
+          intentionRequireSelection: false,
+          autoStartBreak: false,
+        })),
+      },
+      statisticsService: { recordCompletedTimer: vi.fn() },
+      snapshotRuntime: vi.fn(async () => ({})),
+      snapshotStatistics: vi.fn(async () => new Map()),
+      createOrResumeTimer,
+      buildHistoryEntry: vi.fn(async () => ({})),
+      pushTimerHistory: vi.fn(async () => undefined),
+    }) as TimerService;
+
+    await service.skipTimer('user-1');
+
+    expect(createOrResumeTimer).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        expectedVersion: {
+          timerId: timer.id,
+          scheduleRevision: timer.scheduleRevision,
+        },
+      })
+    );
+  });
+
   it('marks post-transition skip effect failures as outcome unknown', async () => {
     const timer = currentTimer({
       status: TIMER_STATUSES.RUNNING,

@@ -1,11 +1,18 @@
-import { IsIn, IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import {
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class UpdatePushTokenDto {
   @IsString()
+  @IsOptional()
   @IsNotEmpty()
   @MaxLength(4096)
-  token: string;
+  token: string | null;
 
-  @IsIn(['android', 'ios'])
-  platform: 'android' | 'ios';
+  @IsIn(['android', 'ios', 'ios-live-activity'])
+  platform: 'android' | 'ios' | 'ios-live-activity';
 }

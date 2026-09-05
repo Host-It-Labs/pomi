@@ -4,8 +4,32 @@ This is the shared safety contract for all six Pomi Radar scheduled
 automations: the Feature/Bug, Performance, and Security planning parents and
 implementation children. Every scheduled prompt must read `AGENTS.md` and this
 file before lifecycle work, repository research, external mutation, or file
-writing. Track-specific prompts may add scope and workflow requirements, but
-must not weaken this contract.
+writing. The only exception is the bounded startup-synchronization bootstrap
+embedded in each installed prompt and defined below. Track-specific prompts may
+add scope and workflow requirements, but must not weaken this contract.
+
+## Startup synchronization
+
+The first phase of every run is startup synchronization. Each installed prompt
+contains this bootstrap sequence so it can be followed before opening the
+versioned lifecycle and policy files:
+
+- Take only the required read-only snapshot of `pwd -P`, the exact expected
+  branch, complete `git status --porcelain --untracked-files=all`, and
+  `git worktree list --porcelain`. Ignore only macOS `.DS_Store` entries. A
+  wrong path, branch, or any other dirty entry is a hard stop.
+- Acquire the durable per-worktree lock before any Git mutation. If acquisition
+  reports an existing owner, stop without reading or changing the checkout.
+- While holding the lock, use the GitHub App helper to fetch both the
+  automation branch's remote-tracking ref and `origin/main` without writing the
+  shared `FETCH_HEAD`. Fast-forward the local branch when it is behind its own
+  remote; preserve an ahead-only branch; stop on divergence. Merge `origin/main`
+  when it is not already an ancestor. On conflict, run `git merge --abort`,
+  verify the worktree is clean, release the lock, and stop. If the abort cannot
+  restore a clean worktree, keep the lock held for manual recovery.
+- Recheck the exact worktree, branch, and empty status. Only after this gate
+  succeeds may the run read `AGENTS.md`, this file, lifecycle files, or source
+  code, run preflight, research, delegate, build, or write.
 
 ## Worktree ownership and handoff
 
@@ -42,9 +66,12 @@ must not weaken this contract.
 
 ## Synchronization, credentials, and external writes
 
-- Use the dedicated `config/pomi-automation.env` profile. Never load
-  `.env.local`, enumerate or print secret values, or fall back to a personal
-  GitHub token or identity.
+- Credentials are supplied from the primary checkout's dedicated
+  `config/pomi-automation.env` profile. Never source or line-inspect that file,
+  enumerate or print secret values, load `.env.local`, or fall back to a
+  personal GitHub token or identity. Use only the supported Node loader and
+  GitHub App wrapper; raw multiline PEM values must never cross an output
+  boundary.
 - Run every GitHub-facing `git`, `gh`, and Radar lifecycle command through
   `node scripts/github-app-auth.mjs exec -- ...`, and stop before GitHub
   interaction if authentication does not resolve to `pomi-radar[bot]`.
@@ -59,12 +86,39 @@ must not weaken this contract.
   verify an empty status. Do not release the lock while on a source branch or
   with uncommitted work. Do not cross those ownership boundaries.
 
+## Rapid no-work gate
+
+- The first objective of every run is to decide whether its own stage has
+  actionable work. Before this decision, do only the mandatory lock, exact
+  worktree/branch/cleanliness checks, safe branch synchronization, credential
+  gate, and the required reading of `AGENTS.md`, this file,
+  `docs/agents/radar-lifecycle.md`, and `config/radar-lifecycle.json`.
+- Immediately run the scoped preflight with `--stage parent` or `--stage child`
+  as applicable. Do not inspect source files, history, diagnostics, PR details,
+  or issue details beyond that command; do not research, plan, implement, or
+  delegate first.
+- `stageNoWork` is authoritative for this early exit. If it is `true`, release
+  the lock and stop immediately with a concise no-work result. Do not spend the
+  run producing an inventory or looking for optional work. The broader
+  `noWork` field may include responsibilities owned by the other stage.
+
 ## Verification and reporting
 
+- After every source-PR push, run `node scripts/pr-readiness.mjs wait
+--github-app --timeout-seconds 1800` as one persistent command. App authentication
+  and transient GitHub failures are retried inside the same 30-minute deadline;
+  it polls every 60 seconds and prints only status changes. Keep the task active
+  and resume the running command with bounded waits until it exits. Follow the
+  exit-code and no-early-final-response rules in `AGENTS.md`. Fix action-required results,
+  push, and rerun. A timeout may end only as an explicit pending blocker and
+  must not advance issues to `radar:in-review` or claim readiness.
+- Move source issues into review only with App-authenticated `node
+scripts/radar-lifecycle.mjs mark-in-review` input. That command revalidates
+  current-head CI, the automatic Codex outcome, and processed review threads.
 - Use the cheapest reliable validation for the change and keep local results,
   remote CI, automatic review, browser/device checks, and deployment status
   distinct in reports.
-- Treat transient network errors as execution blockers and retry only the same
+- Outside the post-push readiness wait, treat transient network errors as execution blockers and retry only the same
   read-only operation once when the track-specific prompt permits it. Never
   infer an empty Radar index or continue past a failed required preflight.
 - Preserve user decisions and repository history. Do not perform destructive

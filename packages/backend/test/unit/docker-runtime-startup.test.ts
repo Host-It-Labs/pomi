@@ -21,4 +21,23 @@ describe('backend production startup', () => {
     );
     expect(entrypoint).toContain('node dist/src/main.js');
   });
+
+  it('resolves the shared TypeScript compiler from backend scripts', () => {
+    const backendPackage = JSON.parse(
+      repositoryFile('packages/backend/package.json')
+    ) as { scripts?: Record<string, string> };
+    const compilerPath =
+      'TS_NODE_COMPILER="$PWD/../../node_modules/typescript"';
+    const scriptEntries = Object.entries(backendPackage.scripts ?? {}).filter(
+      ([, command]) => command.includes('ts-node')
+    );
+
+    expect(scriptEntries.length).toBeGreaterThan(0);
+    for (const [name, command] of scriptEntries) {
+      expect(command, name).toContain(compilerPath);
+      expect(command, name).not.toContain(
+        'TS_NODE_COMPILER=../../node_modules/typescript'
+      );
+    }
+  });
 });

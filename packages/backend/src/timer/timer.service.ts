@@ -677,7 +677,10 @@ export class TimerService implements OnModuleInit {
 
     if (selectedIntentions.length === 0) {
       this.applySelectedIntentionsToTimer(timer, []);
-      if (timerNotStarted && preferences.intentionCustomDurations) {
+      if (
+        (timerNotStarted || shouldResetOnFirstIntention) &&
+        preferences.intentionCustomDurations
+      ) {
         timer.duration = this.getDefaultTimerDuration(
           timer.type,
           preferences,
@@ -841,24 +844,6 @@ export class TimerService implements OnModuleInit {
 
     const selectedIntentions = this.getTimerIntentions(timer);
     const selectedSubIntentions = this.getTimerSubIntentions(timer);
-    const preferences = await this.preferencesService.getPreferences(userId);
-    let customDuration: number | undefined;
-
-    if (
-      selectedIntentions.length > 0 &&
-      preferences.intentionCustomDurations &&
-      this.canTimerUseIntentions(timer.type, preferences)
-    ) {
-      const selection = await this.resolveIntentionSelection(
-        userId,
-        timer.type,
-        selectedIntentions,
-        selectedSubIntentions,
-        preferences
-      );
-      customDuration = selection.customDuration;
-    }
-
     const result = await this.createOrResumeTimer(userId, {
       type: timer.type,
       intention: this.getPrimaryIntention(selectedIntentions),
@@ -867,7 +852,6 @@ export class TimerService implements OnModuleInit {
       startPaused: timer.status === TIMER_STATUSES.PAUSED,
       isResetOrSkip: true,
       preserveSessionState: true,
-      customDuration,
       expectedVersion,
       sessionState: resetSessionState,
     });
@@ -877,7 +861,10 @@ export class TimerService implements OnModuleInit {
     return result;
   }
 
-  async pauseTimer(userId: string): Promise<Timer | null> {
+  async pauseTimer(
+    userId: string,
+    expectedVersion?: TimerVersion
+  ): Promise<Timer | null> {
     if (!userId) {
       throw new BadRequestException('User ID is required');
     }
@@ -885,6 +872,7 @@ export class TimerService implements OnModuleInit {
     if (!timer) {
       return null;
     }
+    this.assertExpectedTimerVersion(timer, expectedVersion);
     if (timer.status !== TIMER_STATUSES.RUNNING) {
       if (
         timer.status === TIMER_STATUSES.PAUSED &&
@@ -896,7 +884,7 @@ export class TimerService implements OnModuleInit {
       return timer;
     }
 
-    const expected = timerVersion(timer);
+    const expected = expectedVersion ?? timerVersion(timer);
     const pauseTimestamp = Date.now();
     timer.status = TIMER_STATUSES.PAUSED;
     const elapsedTime = pauseTimestamp - timer.startTime;
@@ -936,13 +924,15 @@ export class TimerService implements OnModuleInit {
 
   async skipTimer(
     userId: string,
-    requestedLogMode?: TimerSkipLogMode
+    requestedLogMode?: TimerSkipLogMode,
+    expectedVersion?: TimerVersion
   ): Promise<Timer | null> {
     const timer = await this.timerStore.getCurrentTimer(userId);
     if (!timer) {
       return null;
     }
-    const expectedVersion = timerVersion(timer);
+    this.assertExpectedTimerVersion(timer, expectedVersion);
+    const committedExpectedVersion = expectedVersion ?? timerVersion(timer);
     const before = await this.snapshotRuntime(userId);
 
     const selectedIntentions = this.getTimerIntentions(timer);
@@ -1079,7 +1069,7 @@ export class TimerService implements OnModuleInit {
         return recordHistory(
           await this.createOrResumeTimer(userId, {
             ...this.getExtensionNextTimerOptions(timer, preferences),
-            expectedVersion,
+            expectedVersion: committedExpectedVersion,
           })
         );
       }
@@ -1109,7 +1099,7 @@ export class TimerService implements OnModuleInit {
                 extensionCandidate: buildSkipExtensionCandidate(
                   TIMER_TYPES.LONG_BREAK
                 ),
-                expectedVersion,
+                expectedVersion: committedExpectedVersion,
                 sessionState: null,
               })
             );
@@ -1124,7 +1114,7 @@ export class TimerService implements OnModuleInit {
                 type: TIMER_TYPES.WORK,
                 startPaused: !autoStart,
                 isAutoStarted: autoStart,
-                expectedVersion,
+                expectedVersion: committedExpectedVersion,
                 sessionState: null,
               })
             );
@@ -1158,7 +1148,7 @@ export class TimerService implements OnModuleInit {
                 TIMER_TYPES.BREAK
               ),
               stackedSessions: timer.stackedSessions,
-              expectedVersion,
+              expectedVersion: committedExpectedVersion,
               sessionState: nextSessionState,
             })
           );
@@ -1220,17 +1210,21 @@ export class TimerService implements OnModuleInit {
         isResetOrSkip: shouldResetSession,
         stackedSessions:
           nextType === TIMER_TYPES.BREAK ? timer.stackedSessions : undefined,
-        expectedVersion,
+        expectedVersion: committedExpectedVersion,
       })
     );
   }
 
-  async addFiveMinutesTimer(userId: string): Promise<Timer | null> {
+  async addFiveMinutesTimer(
+    userId: string,
+    expectedVersion?: TimerVersion
+  ): Promise<Timer | null> {
     const timer = await this.timerStore.getCurrentTimer(userId);
     if (!timer) {
       return null;
     }
-    const expected = timerVersion(timer);
+    this.assertExpectedTimerVersion(timer, expectedVersion);
+    const expected = expectedVersion ?? timerVersion(timer);
     const preferences = await this.preferencesService.getPreferences(userId);
 
     const before = await this.snapshotRuntime(userId);
@@ -1269,13 +1263,18 @@ export class TimerService implements OnModuleInit {
     return timer;
   }
 
-  async startLongBreakTimer(userId: string): Promise<Timer> {
+  async startLongBreakTimer(
+    userId: string,
+    expectedVersion?: TimerVersion
+  ): Promise<Timer> {
     const current = await this.timerStore.getCurrentTimer(userId);
-    const expectedVersion = current ? timerVersion(current) : null;
+    if (current) this.assertExpectedTimerVersion(current, expectedVersion);
+    const committedExpectedVersion =
+      expectedVersion ?? (current ? timerVersion(current) : null);
     const before = await this.snapshotRuntime(userId);
     const timer = await this.createOrResumeTimer(userId, {
       type: TIMER_TYPES.LONG_BREAK,
-      expectedVersion,
+      expectedVersion: committedExpectedVersion,
       sessionState: null,
     });
     const entry = await this.buildHistoryEntry(
@@ -1928,6 +1927,19 @@ export class TimerService implements OnModuleInit {
     };
   }
 
+  private assertExpectedTimerVersion(
+    timer: Timer,
+    expectedVersion: TimerVersion | undefined
+  ): void {
+    if (
+      expectedVersion &&
+      (timer.id !== expectedVersion.timerId ||
+        timer.scheduleRevision !== expectedVersion.scheduleRevision)
+    ) {
+      throw new ConflictException('Timer changed before action was applied');
+    }
+  }
+
   async createOrResumeTimer(
     userId: string,
     options: CreateOrResumeTimerOptions
@@ -1936,6 +1948,14 @@ export class TimerService implements OnModuleInit {
       options.intention,
       options.intentions
     );
+    if (
+      options.customDuration != null &&
+      (!options.focusedTaskId || incomingIntentions.length === 0)
+    ) {
+      throw new BadRequestException(
+        'Task custom duration requires its confirmed Intention selection'
+      );
+    }
     const hasSelectionPayload =
       options.intention !== undefined ||
       options.intentions !== undefined ||
@@ -2059,10 +2079,13 @@ export class TimerService implements OnModuleInit {
               (preferences.intentionCustomDurations ||
                 options.customDuration != null)
             ) {
-              existingTimer.duration =
-                options.customDuration ??
-                selection.customDuration ??
-                defaultDuration;
+              existingTimer.duration = shouldResetOnFirstIntention
+                ? (selection.customDuration ??
+                  options.customDuration ??
+                  defaultDuration)
+                : (options.customDuration ??
+                  selection.customDuration ??
+                  defaultDuration);
               existingTimer.remainingTime = existingTimer.duration;
             } else if (
               !options.focusedTaskId &&

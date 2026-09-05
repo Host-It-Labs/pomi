@@ -46,6 +46,7 @@ const actionQueue = vi.hoisted(() => ({
 const auth = vi.hoisted(() => ({
   token: 'test-token' as string | null,
   expireSession: vi.fn(),
+  refreshSession: vi.fn(async () => false),
   subscriber: undefined as
     | ((
         state: { token: string | null },
@@ -112,6 +113,8 @@ beforeEach(() => {
   actionQueue.enqueue.mockReset();
   auth.token = 'test-token';
   auth.expireSession.mockReset();
+  auth.refreshSession.mockReset();
+  auth.refreshSession.mockResolvedValue(false);
   auth.subscriber = undefined;
   debug.lag = 0;
   serverMonitor.stop.mockReset();
@@ -167,10 +170,30 @@ describe('socket manager reconnect contracts', () => {
 
     getOrCreateSocket();
     socketHarness.handlers.get(SOCKET_EVENTS.SESSION_EXPIRED)?.();
-    expect(auth.expireSession).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(auth.expireSession).toHaveBeenCalledOnce());
+    expect(auth.refreshSession).toHaveBeenCalledOnce();
 
     auth.expireSession.mockReset();
     socketHarness.handlers.get('connect_error')?.(new Error('network down'));
+    expect(auth.expireSession).not.toHaveBeenCalled();
+  });
+
+  it('reconnects with the replacement token after session refresh', async () => {
+    const { getOrCreateSocket } = await import('./socketManager');
+    getOrCreateSocket();
+    auth.refreshSession.mockImplementationOnce(async () => {
+      auth.token = 'refreshed-token';
+      return true;
+    });
+
+    socketHarness.handlers.get(SOCKET_EVENTS.SESSION_EXPIRED)?.();
+
+    await vi.waitFor(() => expect(io).toHaveBeenCalledTimes(2));
+    expect(socketHarness.socket.disconnect).toHaveBeenCalledOnce();
+    expect(io).toHaveBeenLastCalledWith(
+      'http://backend.test',
+      expect.objectContaining({ auth: { token: 'refreshed-token' } })
+    );
     expect(auth.expireSession).not.toHaveBeenCalled();
   });
 

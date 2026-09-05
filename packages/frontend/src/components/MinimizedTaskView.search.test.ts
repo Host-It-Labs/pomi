@@ -5,6 +5,7 @@ import {
   getTaskDestinationPageIndex,
   searchMinimizedListItems,
   searchMinimizedTasks,
+  shouldDisplayMinimizedListItems,
 } from './MinimizedTaskView';
 
 function task(id: string, overrides: Partial<Task> = {}): Task {
@@ -196,5 +197,19 @@ describe('Minimized task search', () => {
         entry => entry.item.id
       )
     ).toEqual(['passport']);
+  });
+
+  it('treats List items as Work-only in minimized Timer views', () => {
+    expect(shouldDisplayMinimizedListItems('work', 'general', '')).toBe(true);
+    expect(shouldDisplayMinimizedListItems('work', 'intention', 'milk')).toBe(
+      true
+    );
+    expect(shouldDisplayMinimizedListItems('break', 'general', '')).toBe(false);
+    expect(shouldDisplayMinimizedListItems('break', 'intention', 'milk')).toBe(
+      false
+    );
+    expect(
+      shouldDisplayMinimizedListItems('longBreak', 'general', 'milk')
+    ).toBe(false);
   });
 });

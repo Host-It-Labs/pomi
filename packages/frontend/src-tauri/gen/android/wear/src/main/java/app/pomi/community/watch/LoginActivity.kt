@@ -31,6 +31,10 @@ class LoginActivity : WatchActivity() {
         backendUrl = sessionStore.defaultBackendUrl()
         username = sessionStore.username ?: ""
         buildView()
+        if (sessionStore.backendWasQuarantined) {
+            statusText.text = getString(R.string.unsafe_backend_removed)
+            statusText.setTextColor(WatchColors.Error)
+        }
     }
 
     override fun onDestroy() {
@@ -221,6 +225,7 @@ class LoginActivity : WatchActivity() {
                     nextBackendUrl,
                     nextUsername,
                     login.token,
+                    login.refreshToken,
                     login.language
                 )
                 WatchActionCoordinator.markAuthenticated()

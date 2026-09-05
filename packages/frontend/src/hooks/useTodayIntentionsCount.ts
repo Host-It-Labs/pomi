@@ -6,6 +6,7 @@ import { usePreferencesStore } from '../stores/preferencesStore';
 import { apiClient } from '../utils/apiClient';
 import { getBreakIntentionQueryTypes } from '../utils/breakIntentionPreview';
 import { isTauri } from '../utils/osUtils';
+import { mergeIntentionCounts } from '../utils/intentionCounts';
 import {
   connectionState,
   subscribeToConnectionState,
@@ -14,10 +15,7 @@ import {
 const DAY_CHECK_INTERVAL_MS = 10000;
 
 const getTodayKey = () => new Date().toDateString();
-export const getTypedCountKey = (type: IntentionType, slug: string) =>
-  `${type}:${slug}`;
-
-const getTodayRange = () => {
+export const getTodayRange = () => {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
   const end = new Date(start);
@@ -27,6 +25,16 @@ const getTodayRange = () => {
     start: start.getTime(),
     end: end.getTime(),
   };
+};
+
+export const getWeekRange = () => {
+  const start = new Date();
+  const day = start.getDay();
+  start.setDate(start.getDate() - (day === 0 ? 6 : day - 1));
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+  return { start: start.getTime(), end: end.getTime() };
 };
 
 export function useTodayIntentionsCount(
@@ -41,6 +49,12 @@ export function useTodayIntentionsCount(
     Record<string, number>
   >({});
   const [subCountByTypedSlug, setSubCountByTypedSlug] = useState<
+    Record<string, number>
+  >({});
+  const [weekCountByTypedSlug, setWeekCountByTypedSlug] = useState<
+    Record<string, number>
+  >({});
+  const [weekSubCountByTypedSlug, setWeekSubCountByTypedSlug] = useState<
     Record<string, number>
   >({});
   const [isLoading, setIsLoading] = useState(false);
@@ -64,6 +78,8 @@ export function useTodayIntentionsCount(
     setSubCountBySlug({});
     setCountByTypedSlug({});
     setSubCountByTypedSlug({});
+    setWeekCountByTypedSlug({});
+    setWeekSubCountByTypedSlug({});
   }, []);
 
   const fetchCount = useCallback(async () => {
@@ -77,7 +93,7 @@ export function useTodayIntentionsCount(
     const todayRange = getTodayRange();
     setIsLoading(true);
     try {
-      const responses = await Promise.all(
+      const responsesPromise = Promise.allSettled(
         queryTypes.map(queryType =>
           apiClient.statistics.intentionsToday({
             query: {
@@ -88,7 +104,20 @@ export function useTodayIntentionsCount(
           })
         )
       );
+      const weekRange = getWeekRange();
+      const weekResponsesPromise = Promise.allSettled(
+        queryTypes.map(queryType =>
+          apiClient.statistics.intentionsToday({
+            query: {
+              type: queryType,
+              start: weekRange.start,
+              end: weekRange.end,
+            },
+          })
+        )
+      );
 
+      const responses = await responsesPromise;
       const currentDate = getTodayKey();
       if (requestedDate !== currentDate) {
         lastCheckDateRef.current = currentDate;
@@ -96,44 +125,52 @@ export function useTodayIntentionsCount(
         return;
       }
 
-      const successfulResponses = responses
-        .map((response, index) => ({
-          response,
-          queryType: queryTypes[index],
-        }))
-        .filter(({ response }) => response.status === 200);
+      const successfulResponses = responses.flatMap((result, index) =>
+        result.status === 'fulfilled' && result.value.status === 200
+          ? [
+              {
+                type: queryTypes[index],
+                count: result.value.body.count,
+                bySlug: result.value.body.bySlug,
+                subBySlug: result.value.body.subBySlug,
+              },
+            ]
+          : []
+      );
 
       if (successfulResponses.length > 0) {
-        const nextCountBySlug: Record<string, number> = {};
-        const nextSubCountBySlug: Record<string, number> = {};
-        const nextCountByTypedSlug: Record<string, number> = {};
-        const nextSubCountByTypedSlug: Record<string, number> = {};
-        let nextCount = 0;
-
-        successfulResponses.forEach(({ response, queryType }) => {
-          if (response.status !== 200) return;
-
-          nextCount += response.body.count;
-          Object.entries(response.body.bySlug).forEach(([slug, value]) => {
-            nextCountBySlug[slug] = (nextCountBySlug[slug] ?? 0) + value;
-            nextCountByTypedSlug[getTypedCountKey(queryType, slug)] = value;
-          });
-          Object.entries(response.body.subBySlug ?? {}).forEach(
-            ([slug, value]) => {
-              nextSubCountBySlug[slug] =
-                (nextSubCountBySlug[slug] ?? 0) + value;
-              nextSubCountByTypedSlug[getTypedCountKey(queryType, slug)] =
-                value;
-            }
-          );
-        });
-
-        setCount(nextCount);
-        setCountBySlug(nextCountBySlug);
-        setSubCountBySlug(nextSubCountBySlug);
-        setCountByTypedSlug(nextCountByTypedSlug);
-        setSubCountByTypedSlug(nextSubCountByTypedSlug);
+        const nextCounts = mergeIntentionCounts(successfulResponses);
+        setCount(nextCounts.count);
+        setCountBySlug(nextCounts.bySlug);
+        setSubCountBySlug(nextCounts.subBySlug);
+        setCountByTypedSlug(nextCounts.byTypedSlug);
+        setSubCountByTypedSlug(nextCounts.subByTypedSlug);
         lastCheckDateRef.current = currentDate;
+      }
+
+      const weekResponses = await weekResponsesPromise;
+      if (requestedDate !== getTodayKey()) {
+        return;
+      }
+      const successfulWeekResponses = weekResponses.flatMap((result, index) =>
+        result.status === 'fulfilled' && result.value.status === 200
+          ? [
+              {
+                type: queryTypes[index],
+                count: result.value.body.count,
+                bySlug: result.value.body.bySlug,
+                subBySlug: result.value.body.subBySlug,
+              },
+            ]
+          : []
+      );
+      if (successfulWeekResponses.length > 0) {
+        const nextWeekCounts = mergeIntentionCounts(successfulWeekResponses);
+        setWeekCountByTypedSlug(nextWeekCounts.byTypedSlug);
+        setWeekSubCountByTypedSlug(nextWeekCounts.subByTypedSlug);
+      } else {
+        setWeekCountByTypedSlug({});
+        setWeekSubCountByTypedSlug({});
       }
     } catch (error) {
       console.error('Failed to fetch today intentions count:', error);
@@ -246,6 +283,8 @@ export function useTodayIntentionsCount(
     subCountBySlug,
     countByTypedSlug,
     subCountByTypedSlug,
+    weekCountByTypedSlug,
+    weekSubCountByTypedSlug,
     isLoading,
     refetch: fetchCount,
   };

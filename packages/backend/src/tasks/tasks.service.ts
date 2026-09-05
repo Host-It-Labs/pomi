@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { isUUID } from 'class-validator';
 import {
   TASK_CREATION_SOURCES,
   TASK_FOLLOW_UP_DELAY_MAX_DAYS,
@@ -26,6 +27,7 @@ import {
   TimerTypes,
   TopIntentionsPeriod,
   Preferences,
+  WatchTaskMode,
 } from '@pomi/shared';
 import {
   In,
@@ -87,6 +89,7 @@ type TaskStatisticsPeriodKey =
   | 'previousYear';
 type TaskStatisticsPeriodRange = { start: Date; end?: Date };
 type TaskStatisticsPeriodCounts = Record<TaskStatisticsPeriodKey, number>;
+type TaskArchiveCursor = { updatedAt: string; id: string };
 
 type ImportTaskRow = {
   sourceId: string;
@@ -136,6 +139,24 @@ export type PreparedTaskCreation = {
   preferences: Preferences;
 };
 
+export type WatchTaskQueryOptions = {
+  timerType: TimerTypes;
+  taskMode: WatchTaskMode;
+  timerIntentions: Array<{
+    slug: string;
+    subIntentionSlug: string | null;
+  }>;
+  limit: number;
+  now: Date;
+  timeZone: string;
+};
+
+export type WatchTaskQueryResult = {
+  tasks: TaskEntity[];
+  totalActiveTasks: number;
+  totalVisibleTasks: number;
+};
+
 @Injectable()
 export class TasksService {
   constructor(
@@ -166,6 +187,335 @@ export class TasksService {
     });
     await this.attachFollowUpParents(userId, tasks, this.tasksRepository);
     return tasks;
+  }
+
+  async getWatchTaskSnapshot(
+    userId: string,
+    options: WatchTaskQueryOptions
+  ): Promise<WatchTaskQueryResult> {
+    const activeQuery = this.createWatchTaskBaseQuery(userId, options);
+    const visibleQuery = activeQuery.clone();
+    this.addWatchVisibilityFilter(visibleQuery, options);
+
+    const [totalActiveTasks, totalVisibleTasks, tasks] = await Promise.all([
+      activeQuery.getCount(),
+      visibleQuery.getCount(),
+      this.getBoundedWatchTasks(userId, options),
+    ]);
+
+    return { tasks, totalActiveTasks, totalVisibleTasks };
+  }
+
+  private async getBoundedWatchTasks(
+    userId: string,
+    options: WatchTaskQueryOptions
+  ): Promise<TaskEntity[]> {
+    if (options.limit <= 0) return [];
+
+    const groups = this.getWatchTaskGroups(options);
+    const tasks: TaskEntity[] = [];
+    for (const group of groups) {
+      const remaining = options.limit - tasks.length;
+      if (remaining <= 0) break;
+      tasks.push(
+        ...(await this.getWatchTaskGroup(
+          userId,
+          { ...options, limit: remaining },
+          group
+        ))
+      );
+    }
+    await this.attachFollowUpParents(userId, tasks, this.tasksRepository);
+    return tasks;
+  }
+
+  private async getWatchTaskGroup(
+    userId: string,
+    options: WatchTaskQueryOptions,
+    group: 'pinned' | 'linked' | 'general'
+  ): Promise<TaskEntity[]> {
+    const automaticQuery = this.createWatchTaskBaseQuery(userId, options);
+    this.addWatchTaskGroupFilter(automaticQuery, options, group);
+    if (group !== 'pinned') {
+      automaticQuery.andWhere('task.manualOrderOverride = false');
+    }
+    this.addWatchTaskOrdering(automaticQuery, options, group);
+    const automatic = automaticQuery.take(options.limit).getMany();
+
+    if (group === 'pinned') return automatic;
+
+    const overrideQuery = this.createWatchTaskBaseQuery(userId, options);
+    this.addWatchTaskGroupFilter(overrideQuery, options, group);
+    overrideQuery
+      .andWhere('task.manualOrderOverride = true')
+      .orderBy('COALESCE(task.manualOrder, :watchManualOrderBottom)', 'ASC')
+      .addOrderBy('task.createdAt', 'DESC')
+      .addOrderBy('task.id', 'DESC')
+      .setParameter('watchManualOrderBottom', TASK_MANUAL_ORDER_BOTTOM);
+
+    const [automaticTasks, overrides] = await Promise.all([
+      automatic,
+      overrideQuery.take(options.limit).getMany(),
+    ]);
+    return this.applyWatchManualOverrides(
+      automaticTasks,
+      this.sortWatchManualOverridesForApplication(overrides),
+      options.limit
+    );
+  }
+
+  private sortWatchManualOverridesForApplication(overrides: TaskEntity[]) {
+    return [...overrides].sort(
+      (a, b) =>
+        (a.manualOrder ?? TASK_MANUAL_ORDER_BOTTOM) -
+          (b.manualOrder ?? TASK_MANUAL_ORDER_BOTTOM) ||
+        a.createdAt.getTime() - b.createdAt.getTime() ||
+        a.id.localeCompare(b.id)
+    );
+  }
+
+  private createWatchTaskBaseQuery(
+    userId: string,
+    options: WatchTaskQueryOptions
+  ) {
+    return this.tasksRepository
+      .createQueryBuilder('task')
+      .where('task.userId = :watchUserId', { watchUserId: userId })
+      .andWhere('task.status = :watchTaskStatus', {
+        watchTaskStatus: TASK_STATUSES.ACTIVE,
+      })
+      .andWhere('task.itemKind IN (:...watchTaskItemKinds)', {
+        watchTaskItemKinds: ['task', 'followUp'],
+      })
+      .andWhere('task.timerType = :watchTimerType', {
+        watchTimerType: options.timerType,
+      });
+  }
+
+  private addWatchVisibilityFilter(
+    query: SelectQueryBuilder<TaskEntity>,
+    options: WatchTaskQueryOptions
+  ) {
+    if (!this.usesWatchIntentionFilter(options)) return;
+
+    const linked = this.getWatchLinkedCondition(options, 'watchVisible');
+    query.andWhere(
+      `(task.pinnedAt IS NOT NULL OR task.intentionSlug IS NULL OR ${linked.sql})`,
+      linked.params
+    );
+  }
+
+  private addWatchTaskGroupFilter(
+    query: SelectQueryBuilder<TaskEntity>,
+    options: WatchTaskQueryOptions,
+    group: 'pinned' | 'linked' | 'general'
+  ) {
+    if (group === 'pinned') {
+      query.andWhere('task.pinnedAt IS NOT NULL');
+      return;
+    }
+
+    query.andWhere('task.pinnedAt IS NULL');
+    if (group === 'linked') {
+      const linked = this.getWatchLinkedCondition(options, 'watchLinked');
+      query.andWhere(linked.sql, linked.params);
+      return;
+    }
+
+    if (this.usesWatchIntentionFilter(options)) {
+      query.andWhere('task.intentionSlug IS NULL');
+    }
+  }
+
+  private getWatchTaskGroups(options: WatchTaskQueryOptions) {
+    return this.usesWatchIntentionFilter(options)
+      ? (['pinned', 'linked', 'general'] as const)
+      : (['pinned', 'general'] as const);
+  }
+
+  private usesWatchIntentionFilter(options: WatchTaskQueryOptions) {
+    return (
+      options.taskMode === 'intention' && options.timerIntentions.length > 0
+    );
+  }
+
+  private getWatchLinkedCondition(
+    options: WatchTaskQueryOptions,
+    parameterPrefix: string
+  ) {
+    const params: Record<string, string> = {};
+    const clauses = options.timerIntentions.map((intention, index) => {
+      const slugParameter = `${parameterPrefix}Slug${index}`;
+      params[slugParameter] = intention.slug;
+      if (intention.subIntentionSlug === null) {
+        return `task.intentionSlug = :${slugParameter}`;
+      }
+
+      const subSlugParameter = `${parameterPrefix}SubSlug${index}`;
+      params[subSlugParameter] = intention.subIntentionSlug;
+      return `(task.intentionSlug = :${slugParameter} AND (task.subIntentionSlug IS NULL OR task.subIntentionSlug = :${subSlugParameter}))`;
+    });
+
+    return {
+      sql: clauses.length > 0 ? `(${clauses.join(' OR ')})` : '1 = 0',
+      params,
+    };
+  }
+
+  private addWatchTaskOrdering(
+    query: SelectQueryBuilder<TaskEntity>,
+    options: WatchTaskQueryOptions,
+    group: 'pinned' | 'linked' | 'general'
+  ) {
+    if (group === 'pinned') {
+      query.orderBy('task.pinnedAt', 'ASC').addOrderBy('task.id', 'ASC');
+      return;
+    }
+
+    const dueDate = '"task"."dueDate"';
+    const dueTime = '"task"."dueTime"';
+    const priority = '"task"."priority"';
+    const createdAt = '"task"."createdAt"';
+    const dueBoundary = `CASE
+      WHEN ${dueDate} IS NULL THEN NULL
+      WHEN ${dueTime} IS NULL THEN
+        (CAST(${dueDate} AS timestamp) + INTERVAL '1 day') AT TIME ZONE :watchTimeZone
+      ELSE
+        (CAST(${dueDate} AS timestamp) + CAST(${dueTime} AS time)) AT TIME ZONE :watchTimeZone
+    END`;
+    const overdue = `CASE
+      WHEN ${dueBoundary} IS NOT NULL
+        AND CAST(:watchNow AS timestamptz) > (${dueBoundary})
+      THEN 0
+      ELSE 1
+    END`;
+    const priorityRank = `CASE ${priority}
+      WHEN '${TASK_PRIORITIES.URGENT}' THEN 0
+      WHEN '${TASK_PRIORITIES.HIGH}' THEN 1
+      WHEN '${TASK_PRIORITIES.NORMAL}' THEN 2
+      WHEN '${TASK_PRIORITIES.LOW}' THEN 3
+      ELSE 4
+    END`;
+
+    query
+      .setParameters({
+        watchNow: options.now,
+        watchTimeZone: options.timeZone,
+      })
+      .addOrderBy(overdue, 'ASC')
+      .addOrderBy(`CASE WHEN ${dueDate} IS NULL THEN 1 ELSE 0 END`, 'ASC')
+      .addOrderBy(
+        `CASE WHEN (${overdue}) = 0 THEN ${priorityRank} ELSE 4 END`,
+        'ASC'
+      )
+      .addOrderBy(
+        `CASE WHEN ${dueDate} IS NULL THEN DATE '9999-12-31' ELSE ${dueDate} END`,
+        'ASC'
+      )
+      .addOrderBy(`COALESCE(${dueTime}, '99:99')`, 'ASC')
+      .addOrderBy(
+        `CASE WHEN (${overdue}) = 1 THEN ${priorityRank} ELSE 4 END`,
+        'ASC'
+      )
+      .addOrderBy(`CASE WHEN ${dueDate} IS NULL THEN ${createdAt} END`, 'DESC')
+      .addOrderBy(
+        `CASE WHEN ${dueDate} IS NOT NULL THEN ${createdAt} END`,
+        'ASC'
+      )
+      .addOrderBy('task.id', 'ASC');
+  }
+
+  private applyWatchManualOverrides(
+    automatic: TaskEntity[],
+    overrides: TaskEntity[],
+    limit: number
+  ) {
+    const tasks = [...automatic];
+    overrides.forEach(task => {
+      const position = Math.max(
+        0,
+        Math.min(task.manualOrder ?? TASK_MANUAL_ORDER_BOTTOM, tasks.length)
+      );
+      tasks.splice(position, 0, task);
+    });
+    return tasks.slice(0, limit);
+  }
+
+  async getTaskArchivePage(userId: string, limit: number, cursor?: string) {
+    const query = this.tasksRepository
+      .createQueryBuilder('task')
+      .where('task.userId = :userId', { userId })
+      .andWhere('task.status IN (:...statuses)', {
+        statuses: [TASK_STATUSES.COMPLETED, TASK_STATUSES.ARCHIVED],
+      })
+      .andWhere('task.itemKind IN (:...itemKinds)', {
+        itemKinds: ['task', 'followUp'],
+      })
+      .orderBy('task.updatedAt', 'DESC')
+      .addOrderBy('task.id', 'DESC')
+      .addSelect(
+        `to_char(task.updatedAt, 'YYYY-MM-DD"T"HH24:MI:SS.US')`,
+        'taskArchiveUpdatedAt'
+      )
+      .take(limit + 1);
+
+    if (cursor) {
+      const decoded = this.decodeTaskArchiveCursor(cursor);
+      query.andWhere(
+        '(task.updatedAt < :updatedAt OR (task.updatedAt = :updatedAt AND task.id < :id))',
+        decoded
+      );
+    }
+
+    const { entities: tasks, raw } = await query.getRawAndEntities();
+    const hasNextPage = tasks.length > limit;
+    const items = hasNextPage ? tasks.slice(0, limit) : tasks;
+    await this.attachFollowUpParents(userId, items, this.tasksRepository);
+    const lastTask = items[items.length - 1];
+    const lastRaw = raw[items.length - 1] as
+      { taskArchiveUpdatedAt?: unknown } | undefined;
+    return {
+      items,
+      nextCursor:
+        hasNextPage &&
+        lastTask &&
+        typeof lastRaw?.taskArchiveUpdatedAt === 'string'
+          ? this.encodeTaskArchiveCursor(
+              lastRaw.taskArchiveUpdatedAt,
+              lastTask.id
+            )
+          : null,
+    };
+  }
+
+  private encodeTaskArchiveCursor(updatedAt: string, id: string): string {
+    return Buffer.from(
+      JSON.stringify({
+        updatedAt,
+        id,
+      } satisfies TaskArchiveCursor)
+    ).toString('base64url');
+  }
+
+  private decodeTaskArchiveCursor(cursor: string): TaskArchiveCursor {
+    try {
+      const value = JSON.parse(
+        Buffer.from(cursor, 'base64url').toString('utf8')
+      ) as Partial<TaskArchiveCursor>;
+      const updatedAt = value.updatedAt;
+      if (
+        typeof value.id !== 'string' ||
+        !isUUID(value.id) ||
+        typeof updatedAt !== 'string' ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}$/.test(updatedAt) ||
+        !Number.isFinite(new Date(`${updatedAt.slice(0, 23)}Z`).getTime())
+      ) {
+        throw new Error('Invalid archive cursor');
+      }
+      return { updatedAt, id: value.id };
+    } catch {
+      throw new BadRequestException('Invalid task archive cursor');
+    }
   }
 
   private async attachFollowUpParents(

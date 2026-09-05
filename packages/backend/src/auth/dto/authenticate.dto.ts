@@ -21,4 +21,18 @@ export class AuthenticateDto {
   @IsString()
   @IsIn(APP_LANGUAGE_VALUES)
   language?: (typeof APP_LANGUAGE_VALUES)[number];
+
+  @IsOptional()
+  @IsIn(['android', 'ios', 'web', 'macos', 'windows', 'linux'])
+  platform?: 'android' | 'ios' | 'web' | 'macos' | 'windows' | 'linux';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  bootstrapToken?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  deviceId?: string;
 }

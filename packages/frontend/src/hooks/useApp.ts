@@ -14,6 +14,10 @@ import {
   reconcileAndroidForegroundSync,
   stopAndroidForegroundSync,
 } from '../utils/androidForegroundSync';
+import {
+  publishLiveTimerProjection,
+  registerLiveTimerActionListeners,
+} from '../utils/liveTimerSurface';
 
 type UseAppOptions = {
   pauseBootstrap?: boolean;
@@ -36,6 +40,23 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
   const loadSystemInfo = useSystemStore.use.loadSystemInfo();
 
   useKeyboardShortcuts();
+
+  useEffect(() => {
+    if (pauseBootstrap || !isAuthenticated || !isMobile) return;
+    let cancelled = false;
+    let unregister: (() => void) | undefined;
+    void registerLiveTimerActionListeners().then(cleanup => {
+      if (cancelled) {
+        cleanup();
+        return;
+      }
+      unregister = cleanup;
+    });
+    return () => {
+      cancelled = true;
+      unregister?.();
+    };
+  }, [isAuthenticated, pauseBootstrap]);
 
   useEffect(() => {
     if (!isTauri || !isDesktop) {
@@ -174,6 +195,7 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
         useAuthStore.getState().token,
         usePreferencesStore.getState().preferences?.pushNotifications === true
       );
+      void publishLiveTimerProjection(useTimerStore.getState().timer);
     })
       .then(unsub => (unlisten = unsub))
       .catch(() => {});
@@ -183,6 +205,7 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
       console.warn('[App] Tauri suspend event, stopping local countdown');
       lastBackgroundTime = Date.now();
       stopLocalCountdown();
+      void publishLiveTimerProjection(useTimerStore.getState().timer);
     })
       .then(unsub => (unlistenSuspend = unsub))
       .catch(() => {});

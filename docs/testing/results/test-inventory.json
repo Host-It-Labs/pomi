@@ -8,37 +8,37 @@
     "sourceLines": "physical lines"
   },
   "vitest": {
-    "total": 802,
+    "total": 1020,
     "projects": {
       "shared-unit": {
-        "tests": 20,
-        "files": 4,
-        "staticCollectedTests": 20,
-        "declaredTests": 20
+        "tests": 28,
+        "files": 5,
+        "staticCollectedTests": 28,
+        "declaredTests": 28
       },
       "backend-unit": {
-        "tests": 455,
-        "files": 71,
-        "staticCollectedTests": 455,
-        "declaredTests": 446
+        "tests": 581,
+        "files": 91,
+        "staticCollectedTests": 581,
+        "declaredTests": 567
       },
       "frontend-unit": {
-        "tests": 249,
-        "files": 62,
-        "staticCollectedTests": 249,
-        "declaredTests": 249
+        "tests": 324,
+        "files": 75,
+        "staticCollectedTests": 324,
+        "declaredTests": 323
       },
       "backend-integration": {
-        "tests": 61,
-        "files": 8,
+        "tests": 68,
+        "files": 9,
         "staticCollectedTests": 1,
-        "declaredTests": 61
+        "declaredTests": 68
       },
       "frontend-browser": {
-        "tests": 17,
-        "files": 8,
-        "staticCollectedTests": 17,
-        "declaredTests": 17
+        "tests": 19,
+        "files": 9,
+        "staticCollectedTests": 19,
+        "declaredTests": 19
       }
     }
   },
@@ -47,22 +47,22 @@
     "files": 0
   },
   "native": {
-    "wearTests": 41,
-    "wearFiles": 9,
+    "wearTests": 45,
+    "wearFiles": 10,
     "rustTests": 3,
     "rustFiles": 2
   },
   "playwright": {
     "retainedJourneys": 13,
-    "retainedSpecLines": 844,
-    "retainedHelperLines": 409,
-    "retainedActiveSourceLines": 1253,
+    "retainedSpecLines": 833,
+    "retainedHelperLines": 406,
+    "retainedActiveSourceLines": 1239,
     "legacyTests": 0,
     "legacySpecFiles": 0,
     "legacySourceLines": 0
   },
   "totals": {
-    "nonE2eTests": 846,
-    "activeTests": 859
+    "nonE2eTests": 1068,
+    "activeTests": 1081
   }
 }

@@ -46,8 +46,12 @@ function Harness() {
   );
 }
 
-function createRecorderClass(options?: { startError?: Error }) {
+function createRecorderClass(options?: {
+  startError?: Error;
+  deferStop?: boolean;
+}) {
   let latest: FakeMediaRecorder | null = null;
+  const instances: FakeMediaRecorder[] = [];
 
   class FakeMediaRecorder {
     state = 'inactive';
@@ -59,6 +63,7 @@ function createRecorderClass(options?: { startError?: Error }) {
     constructor(_stream: MediaStream) {
       // eslint-disable-next-line @typescript-eslint/no-this-alias -- retain the fake instance for assertions
       latest = this;
+      instances.push(this);
     }
 
     start() {
@@ -69,7 +74,16 @@ function createRecorderClass(options?: { startError?: Error }) {
     stop() {
       this.stopCalls += 1;
       this.state = 'inactive';
-      this.ondataavailable?.({ data: new Blob(['voice']) });
+      if (options?.deferStop) return;
+      this.finish('voice');
+    }
+
+    emitData(value: string) {
+      this.ondataavailable?.({ data: new Blob([value]) });
+    }
+
+    finish(value?: string) {
+      if (value) this.ondataavailable?.({ data: new Blob([value]) });
       this.onstop?.();
     }
   }
@@ -77,6 +91,7 @@ function createRecorderClass(options?: { startError?: Error }) {
   return {
     Recorder: FakeMediaRecorder,
     getLatest: () => latest,
+    getInstances: () => instances,
   };
 }
 
@@ -97,6 +112,7 @@ describe('FeedbackRecorder', () => {
     });
     useAuthStoreBase.setState({
       token: 'token-a',
+      user: { id: 'user-1' } as never,
       isAuthenticated: true,
     });
     useUiStore.setState({ expanded: true, activeTab: 'timer' });
@@ -163,6 +179,48 @@ describe('FeedbackRecorder', () => {
     expect(getLatest()?.stopCalls).toBe(1);
   });
 
+  it('rotates complete recorder segments before transcribing them', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { Recorder, getInstances } = createRecorderClass();
+    vi.stubGlobal('MediaRecorder', Recorder);
+    mocks.transcribe
+      .mockResolvedValueOnce({
+        status: 200,
+        body: { transcript: 'First minute', costUsd: 0 },
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        body: { transcript: 'Second minute', costUsd: 0 },
+      });
+    render(<Harness />);
+
+    await act(async () => {
+      await useFeedbackRecorderStore.getState().startRecording();
+    });
+    act(() => {
+      vi.advanceTimersByTime(60 * 1000);
+    });
+
+    expect(getInstances()).toHaveLength(2);
+    expect(getInstances()[0].stopCalls).toBe(1);
+
+    useFeedbackRecorderStore.getState().stopRecording();
+
+    await waitFor(() => expect(mocks.transcribe).toHaveBeenCalledTimes(2));
+    expect(submitUserMutation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          text: 'First minute Second minute',
+        }),
+      })
+    );
+    const firstKey = mocks.transcribe.mock.calls[0][0].body.idempotencyKey;
+    const secondKey = mocks.transcribe.mock.calls[1][0].body.idempotencyKey;
+    expect(firstKey).toMatch(/^[0-9a-f-]{36}$/);
+    expect(secondKey).not.toBe(firstKey);
+    vi.useRealTimers();
+  });
+
   it('discards the recording when authentication is lost', async () => {
     const stopTrack = vi.fn();
     mocks.getUserMedia.mockResolvedValue({
@@ -180,7 +238,11 @@ describe('FeedbackRecorder', () => {
     );
 
     act(() => {
-      useAuthStoreBase.setState({ token: null, isAuthenticated: false });
+      useAuthStoreBase.setState({
+        token: null,
+        user: null,
+        isAuthenticated: false,
+      });
     });
 
     await waitFor(() =>
@@ -189,6 +251,45 @@ describe('FeedbackRecorder', () => {
     expect(getLatest()?.stopCalls).toBe(1);
     expect(stopTrack).toHaveBeenCalledOnce();
     expect(mocks.transcribe).not.toHaveBeenCalled();
+  });
+
+  it('keeps recording when the same account rotates its access token', async () => {
+    const { Recorder, getLatest } = createRecorderClass();
+    vi.stubGlobal('MediaRecorder', Recorder);
+    render(<Harness />);
+
+    await act(async () => {
+      await useFeedbackRecorderStore.getState().startRecording();
+    });
+    act(() => {
+      useAuthStoreBase.setState({ token: 'token-b' });
+    });
+
+    expect(useFeedbackRecorderStore.getState().stage).toBe('recording');
+    expect(getLatest()?.stopCalls).toBe(0);
+  });
+
+  it('ignores a cancelled recorder callback after a new recording starts', async () => {
+    const { Recorder, getInstances } = createRecorderClass({ deferStop: true });
+    vi.stubGlobal('MediaRecorder', Recorder);
+    mocks.transcribe.mockResolvedValue({
+      status: 200,
+      body: { transcript: 'New recording', costUsd: 0 },
+    });
+
+    await useFeedbackRecorderStore.getState().startRecording();
+    const first = getInstances()[0];
+    useFeedbackRecorderStore.getState().cancelRecording();
+    await useFeedbackRecorderStore.getState().startRecording();
+    const second = getInstances()[1];
+
+    second.emitData('new voice');
+    first.finish('stale voice');
+    expect(useFeedbackRecorderStore.getState().stage).toBe('recording');
+
+    useFeedbackRecorderStore.getState().stopRecording();
+    second.finish();
+    await waitFor(() => expect(mocks.transcribe).toHaveBeenCalledOnce());
   });
 
   it('auto-stops and submits when the app is backgrounded', async () => {

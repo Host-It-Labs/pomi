@@ -4,12 +4,16 @@ import '../App.css';
 import { AdvancedSkipInlineStrip } from './AdvancedSkipInlineStrip';
 import { TaskRecurrenceFields } from './tasks/TaskRecurrenceFields';
 import { TimeRemainingCircle } from '../pages/timer/TimeRemainingCircle';
+import { useTimerStore } from '../stores/timerStore';
+import { usePreferencesStore } from '../stores/preferencesStore';
+import { useUiStore } from '../stores/uiStore';
 
 let host: HTMLDivElement | null = null;
 
 afterEach(() => {
   host?.remove();
   host = null;
+  useTimerStore.setState({ timer: null, extensionState: null });
 });
 
 function expectOrderedWithoutOverlap(elements: Element[]) {
@@ -103,5 +107,61 @@ describe('Task and Timer browser-component layout', () => {
     expect(content.getBoundingClientRect().width).toBeLessThanOrEqual(
       host.getBoundingClientRect().width
     );
+  });
+
+  it('keeps paused Break extension and Skip controls collision-free', async () => {
+    host = document.createElement('div');
+    host.style.width = '380px';
+    host.style.height = '700px';
+    document.body.append(host);
+    useUiStore.setState({ expanded: true });
+    usePreferencesStore.setState({
+      preferences: {
+        advancedSkip: true,
+        intentionExtension: true,
+        intentionRequireSelection: true,
+        keyboardShortcuts: true,
+      } as never,
+    });
+    useTimerStore.setState({
+      timer: {
+        id: 'paused-break',
+        type: 'break',
+        status: 'paused',
+        duration: 300_000,
+        remainingTime: 180_000,
+        startTime: 0,
+        isExtension: false,
+      } as never,
+      extensionState: {
+        startTime: 100_000,
+        originalTimerId: 'work-1',
+        originalDuration: 1_500_000,
+        extensionNextTimerType: 'break',
+      },
+      connectionStatus: {
+        isConnected: true,
+        isReconnecting: false,
+        isWaitingForServer: false,
+        reconnectAttempts: 0,
+        lastError: null,
+      },
+    });
+
+    createRoot(host).render(<TimeRemainingCircle isExpanded />);
+
+    await vi.waitFor(() => {
+      expect(host?.querySelectorAll('button[aria-label]')).not.toHaveLength(0);
+    });
+    const extension = host.querySelector<HTMLElement>(
+      'button[aria-label="Open timer extension options"]'
+    );
+    const skip = host.querySelector<HTMLElement>(
+      'button[aria-label="Skip to Work"]'
+    );
+    expect(extension).not.toBeNull();
+    expect(skip).not.toBeNull();
+    expectOrderedWithoutOverlap([extension!, skip!]);
+    expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
   });
 });

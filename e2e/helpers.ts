@@ -2,51 +2,57 @@ import { Page, expect } from '@playwright/test';
 
 type SettingsFeatureName = 'Sessions' | 'Intentions' | 'Tasks';
 
-export async function getApiAuthContext(page: Page) {
-  const authContext = await page.evaluate(() => {
-    const authData = localStorage.getItem('pomi-auth-storage');
-    if (!authData) {
-      return null;
-    }
+type ApiAuthContext = {
+  token: string;
+  backendOrigin: string;
+  user: { isAdmin?: boolean };
+};
 
-    let token: string | null = null;
-    try {
-      token = JSON.parse(authData)?.state?.token ?? null;
-    } catch {
-      return null;
-    }
+const apiAuthContexts = new WeakMap<Page, ApiAuthContext>();
 
-    if (!token) {
-      return null;
-    }
-
-    return {
-      token,
-      storedBackend: localStorage.getItem('pomi-backend-url') ?? '',
-      protocol: window.location.protocol,
-    };
-  });
-
-  if (!authContext) {
-    return null;
-  }
-
-  const sanitizedBackend = authContext.storedBackend
+export async function getApiBackendOrigin(page: Page) {
+  const browserContext = await page.evaluate(() => ({
+    storedBackend: localStorage.getItem('pomi-backend-url') ?? '',
+    protocol: window.location.protocol,
+  }));
+  const sanitizedBackend = browserContext.storedBackend
     .trim()
     .replace(/\/+$/g, '');
   const fallbackBackend =
     process.env.POMI_BACKEND_BASE_URL ||
     `http://localhost:${process.env.POMI_BACKEND_PORT || '3000'}`;
   const backendHost = sanitizedBackend || fallbackBackend;
-  const protocol = authContext.protocol === 'https:' ? 'https://' : 'http://';
-  const backendOrigin = /^https?:\/\//i.test(backendHost)
+  const protocol =
+    browserContext.protocol === 'https:' ? 'https://' : 'http://';
+  return /^https?:\/\//i.test(backendHost)
     ? backendHost
     : `${protocol}${backendHost}`;
+}
 
-  return {
-    token: authContext.token,
-    backendOrigin,
+export async function getApiAuthContext(page: Page) {
+  const backendOrigin = await getApiBackendOrigin(page);
+  const cached = apiAuthContexts.get(page);
+  if (cached?.backendOrigin === backendOrigin) return cached;
+
+  const response = await page.request.post(
+    `${backendOrigin}/sessions/refresh`,
+    { data: { platform: 'web' } }
+  );
+  if (!response.ok()) return null;
+
+  const session = (await response.json()) as {
+    token?: unknown;
+    user?: { isAdmin?: boolean };
   };
+  if (typeof session.token !== 'string' || !session.user) return null;
+
+  const authContext = {
+    token: session.token,
+    backendOrigin,
+    user: session.user,
+  };
+  apiAuthContexts.set(page, authContext);
+  return authContext;
 }
 
 export async function createIntentionViaApi(
@@ -178,6 +184,7 @@ export class TestHelpers {
   constructor(public readonly page: Page) {}
 
   async login(username: string, password: string) {
+    apiAuthContexts.delete(this.page);
     await this.page.goto('/');
     await this.page.fill('#username', username);
     await this.page.fill('#password', password);
@@ -206,6 +213,7 @@ export class TestHelpers {
     const settingsButton = this.page.locator('button[aria-label="Settings"]');
     await expect(settingsButton).toBeVisible({ timeout: 10000 });
     await expect(settingsButton).toBeEnabled({ timeout: 10000 });
+    apiAuthContexts.delete(this.page);
   }
 
   async navigateToTab(

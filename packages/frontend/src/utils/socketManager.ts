@@ -220,7 +220,13 @@ const setupSocketListeners = (sock: Socket) => {
   });
 
   sock.on(SOCKET_EVENTS.SESSION_EXPIRED, () => {
-    useAuthStore.getState().expireSession();
+    void useAuthStore
+      .getState()
+      .refreshSession()
+      .then(refreshed => {
+        if (refreshed) forceReconnect(false);
+        else useAuthStore.getState().expireSession();
+      });
   });
 
   sock.on('disconnect', () => {

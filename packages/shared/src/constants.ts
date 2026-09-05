@@ -4,6 +4,10 @@ export const TIMER_TYPES = {
   LONG_BREAK: 'longBreak',
 } as const;
 
+export const FEEDBACK_TRANSCRIPTION_MAX_ENCODED_BYTES = 4 * 1024 * 1024;
+export const FEEDBACK_TRANSCRIPTION_JSON_LIMIT = '5mb';
+export const FEEDBACK_MAX_TEXT_LENGTH = 60_000;
+
 /**
  * Languages supported by the Pomi UI and native clients.
  *
@@ -283,6 +287,7 @@ export const NOTIFICATION_KEY_VALUES = Object.values(NOTIFICATION_KEYS) as [
 export const PUSH_PLATFORMS = {
   ANDROID: 'android',
   IOS: 'ios',
+  IOS_LIVE_ACTIVITY: 'ios-live-activity',
 } as const;
 
 export type PushPlatform = (typeof PUSH_PLATFORMS)[keyof typeof PUSH_PLATFORMS];

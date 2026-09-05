@@ -1,10 +1,11 @@
 import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApnsClient, Host, Notification, Priority } from 'apns2';
+import { ApnsClient, Host, Notification, Priority, PushType } from 'apns2';
 import { cert, initializeApp, type App } from 'firebase-admin/app';
 import * as firebaseMessaging from 'firebase-admin/messaging';
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
+import { createHash } from 'node:crypto';
 
 import {
   ACCENT_HEX_COLORS,
@@ -117,6 +118,113 @@ export class NotificationService {
     } catch (error) {
       this.logger.error('Failed to initialize APNs:', error);
     }
+  }
+
+  async sendLiveActivityTimerUpdate(
+    userId: string,
+    timer: Timer
+  ): Promise<void> {
+    const token = await this.usersService.getLiveActivityToken(userId);
+    if (!token || !this.apnProvider || !timer.scheduleRevision) return;
+
+    const isCompleted = timer.status === 'completed';
+    const timestamp = Math.floor(Date.now() / 1000);
+    const contentState = this.buildLiveActivityContentState(timer, isCompleted);
+    const bundleId =
+      this.configService.get<string>('APN_BUNDLE_ID') || 'app.pomi.community';
+
+    try {
+      await this.apnProvider.send(
+        new Notification(token, {
+          type: PushType.liveactivity,
+          topic: `${bundleId}.push-type.liveactivity`,
+          priority: Priority.immediate,
+          expiration: isCompleted
+            ? timestamp + 60
+            : Math.ceil((timer.startTime + timer.duration) / 1000) + 3600,
+          aps: {
+            timestamp,
+            event: isCompleted ? 'end' : 'update',
+            'content-state': contentState,
+            ...(isCompleted ? { 'dismissal-date': timestamp } : {}),
+          },
+        })
+      );
+      this.logger.info('Live Activity Timer update sent');
+    } catch (error) {
+      const reason =
+        typeof error === 'object' && error !== null && 'reason' in error
+          ? String(error.reason)
+          : undefined;
+      if (
+        reason === 'BadDeviceToken' ||
+        reason === 'Unregistered' ||
+        reason === 'DeviceTokenNotForTopic'
+      ) {
+        await this.usersService.clearPushToken(userId, 'ios-live-activity');
+        return;
+      }
+      this.logger.warn(
+        'Live Activity Timer update failed',
+        error instanceof Error ? error.name : undefined
+      );
+    }
+  }
+
+  private buildLiveActivityContentState(timer: Timer, completed: boolean) {
+    const revision = timer.scheduleRevision!;
+    const status = completed ? 'paused' : timer.status;
+    const actionKinds = completed
+      ? []
+      : [status === 'running' ? 'pause' : 'resume', 'addFive', 'skip'];
+    const actions = actionKinds.map(kind => {
+      const candidate = `native:${timer.id}:${revision}:${kind}`;
+      const id =
+        candidate.length <= 128 && /^[A-Za-z0-9._:-]+$/.test(candidate)
+          ? candidate
+          : `native:${createHash('sha256').update(candidate).digest('hex').slice(0, 16)}:${kind}`;
+      const query = new URLSearchParams({
+        action: kind,
+        actionId: id,
+        timerId: timer.id,
+        expectedScheduleRevision: revision,
+        timerType: timer.type,
+      });
+      return {
+        id,
+        kind,
+        expectedTimerRevision: revision,
+        isSupported: false,
+        deepLink: `pomi://timer-action?${query.toString()}`,
+      };
+    });
+
+    return {
+      version: 1,
+      timerRevision: revision,
+      status,
+      timerType: timer.type,
+      emoji:
+        timer.type === TIMER_TYPES.BREAK
+          ? '☕️'
+          : timer.type === TIMER_TYPES.LONG_BREAK
+            ? '🌿'
+            : '🎯',
+      intentionEmoji: timer.subIntentionEmoji ?? timer.intentionEmoji ?? null,
+      intentionTitle: null,
+      absoluteDeadline:
+        status === 'running'
+          ? (timer.startTime + timer.duration) / 1000 - 978_307_200
+          : null,
+      pausedRemainingSeconds:
+        status === 'paused'
+          ? completed
+            ? 0
+            : Math.max(0, Math.ceil(timer.remainingTime / 1000))
+          : null,
+      actions,
+      deepLink: 'pomi://timer',
+    };
   }
 
   arePushNotificationsEnabled() {

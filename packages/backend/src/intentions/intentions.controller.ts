@@ -7,7 +7,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { apiContract, TIMER_TYPES } from '@pomi/shared';
-import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
+import {
+  TsRestHandler,
+  tsRestHandler,
+} from '../validation/ts-rest-zod4.adapter';
 import { AuthGuard } from '../auth/auth.guard';
 import { CreateIntentionDto } from './dto/create-intention.dto';
 import { IntentionsQueryDto } from './dto/intentions-query.dto';
@@ -87,7 +90,8 @@ export class IntentionsController {
         data.parentIntentionId ?? null,
         data.isFavorite === true,
         data.description,
-        data.allowsTasks !== false
+        data.allowsTasks !== false,
+        data.habitCadence
       );
 
       return {
@@ -182,7 +186,8 @@ export class IntentionsController {
         data.parentIntentionId,
         data.isFavorite,
         data.description,
-        data.allowsTasks
+        data.allowsTasks,
+        data.habitCadence
       );
 
       return {

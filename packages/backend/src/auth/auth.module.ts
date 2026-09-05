@@ -11,6 +11,7 @@ import { AuthAttemptStore } from './auth-attempt.store';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { DebugGuard } from './debug.guard';
+import { SessionsModule } from './sessions.module';
 
 @Module({
   imports: [
@@ -21,12 +22,13 @@ import { DebugGuard } from './debug.guard';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         secret: configService.getOrThrow<string>('JWT_SECRET'),
-        signOptions: { expiresIn: '90d' },
+        signOptions: { expiresIn: '15m' },
       }),
     }),
     PreferencesModule,
     SystemModule,
     TimerModule,
+    SessionsModule,
   ],
   providers: [AuthService, AuthAttemptStore, AdminGuard, DebugGuard],
   controllers: [AuthController],

@@ -54,6 +54,11 @@ targets:
         CFBundleShortVersionString: 0.0.1
         CFBundleVersion: '1'
         NSMicrophoneUsageDescription: Pomi uses the microphone when you record Assistant voice commands.
+        NSSupportsLiveActivities: true
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLSchemes:
+              - pomi
     entitlements:
       path: pomi_iOS/pomi_iOS.entitlements
     scheme:
@@ -71,6 +76,8 @@ targets:
         EXCLUDED_ARCHS[sdk=iphoneos*]: x86_64
       groups: [app]
     dependencies:
+      - target: PomiLiveActivity
+        embed: true
       - framework: libapp.a
         embed: false
       - sdk: CoreGraphics.framework
@@ -87,3 +94,28 @@ targets:
         outputFiles:
           - $(SRCROOT)/Externals/x86_64/${CONFIGURATION}/libapp.a
           - $(SRCROOT)/Externals/arm64/${CONFIGURATION}/libapp.a
+
+  PomiLiveActivity:
+    type: app-extension
+    platform: iOS
+    deploymentTarget:
+      iOS: 16.1
+    sources:
+      - path: PomiLiveActivity
+      - path: Sources/pomi/PomiLiveActivityModel.swift
+        group: Sources/pomi
+    info:
+      path: PomiLiveActivity/Info.plist
+      properties:
+        CFBundleDisplayName: Pomi Timer
+        CFBundleShortVersionString: 0.0.1
+        CFBundleVersion: '1'
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PomiLiveActivityWidget
+    settings:
+      base:
+        PRODUCT_NAME: PomiLiveActivity
+        PRODUCT_BUNDLE_IDENTIFIER: app.pomi.community.PomiLiveActivity
+        SWIFT_VERSION: 5.0
+        APPLICATION_EXTENSION_API_ONLY: true

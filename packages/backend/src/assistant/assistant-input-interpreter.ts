@@ -308,6 +308,23 @@ export class AssistantInputInterpreter {
     }
     if (
       rawTasks.length > 0 &&
+      this.taskPolicy.hasAmbiguousSourceOwnership(rawTasks, input.text)
+    ) {
+      throw new AssistantInterpretationError(
+        translateAssistant(
+          input.accountLanguage,
+          'assistantSourceEvidenceInvalid'
+        ),
+        {
+          costUsd,
+          invalidParserOutput: invalidParserOutput ?? '',
+          modelCalls,
+          timings,
+        }
+      );
+    }
+    if (
+      rawTasks.length > 0 &&
       (this.taskPolicy.hasInvalidSourceSegments(rawTasks, input.text) ||
         this.taskPolicy.hasUnassignedSourceUrls(rawTasks, input.text))
     ) {

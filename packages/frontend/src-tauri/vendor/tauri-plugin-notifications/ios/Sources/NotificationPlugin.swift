@@ -153,9 +153,14 @@ struct SetClickListenerActiveArgs: Decodable {
   let active: Bool
 }
 
+struct TimerProjectionArgs: Decodable {
+  let projectionJson: String
+}
+
 class NotificationPlugin: Plugin {
   let notificationHandler = NotificationHandler()
   let notificationManager = NotificationManager()
+  private var liveActivityPushTokenObserver: NSObjectProtocol?
 
   #if ENABLE_PUSH_NOTIFICATIONS
     // Completion handler for push token registration
@@ -173,6 +178,21 @@ class NotificationPlugin: Plugin {
   public override func load(webview: WKWebView) {
     super.load(webview: webview)
 
+    liveActivityPushTokenObserver = NotificationCenter.default.addObserver(
+      forName: Notification.Name("PomiLiveActivityPushToken"),
+      object: nil,
+      queue: .main
+    ) { [weak self] notification in
+      guard let activityID = notification.userInfo?["activityID"] as? String,
+            let token = notification.userInfo?["token"] as? String else {
+        return
+      }
+      try? self?.trigger(
+        "liveActivityPushToken",
+        data: ["activityId": activityID, "token": token]
+      )
+    }
+
     #if ENABLE_PUSH_NOTIFICATIONS
       // Store reference to this plugin for event triggering
       AppDelegateSwizzler.plugin = self
@@ -180,6 +200,12 @@ class NotificationPlugin: Plugin {
       // swizzle UIApplicationDelegate push methods
       AppDelegateSwizzler.swizzlePushCallbacks()
     #endif
+  }
+
+  deinit {
+    if let liveActivityPushTokenObserver {
+      NotificationCenter.default.removeObserver(liveActivityPushTokenObserver)
+    }
   }
 
   @objc public func show(_ invoke: Invoke) throws {
@@ -390,6 +416,71 @@ class NotificationPlugin: Plugin {
     } catch {
       invoke.reject(error.localizedDescription)
     }
+  }
+
+  @objc func setTimerProjection(_ invoke: Invoke) {
+    do {
+      let args = try invoke.parseArgs(TimerProjectionArgs.self)
+      guard let bridge = liveActivityBridge() else {
+        invoke.reject("Pomi Live Activities are unavailable")
+        return
+      }
+      let selector = NSSelectorFromString("setProjectionWithProjectionJSON:completion:")
+      guard bridge.responds(to: selector) else {
+        invoke.reject("Pomi Live Activity bridge is unavailable")
+        return
+      }
+      let completion: @convention(block) (String?, NSError?) -> Void = {
+        activityID, error in
+        if let error {
+          invoke.reject(error.localizedDescription)
+        } else {
+          invoke.resolve(["activityId": activityID ?? ""])
+        }
+      }
+      bridge.perform(selector, with: args.projectionJson, with: completion)
+    } catch {
+      invoke.reject(error.localizedDescription)
+    }
+  }
+
+  @objc func clearTimerProjection(_ invoke: Invoke) {
+    guard let bridge = liveActivityBridge() else {
+      invoke.resolve()
+      return
+    }
+    let selector = NSSelectorFromString("endActivityWithCompletion:")
+    guard bridge.responds(to: selector) else {
+      invoke.resolve()
+      return
+    }
+    let completion: @convention(block) (NSError?) -> Void = { error in
+      if let error {
+        invoke.reject(error.localizedDescription)
+      } else {
+        invoke.resolve()
+      }
+    }
+    bridge.perform(selector, with: completion)
+  }
+
+  private func liveActivityBridge() -> NSObject? {
+    let candidates = [
+      "PomiLiveActivityBridge",
+      "pomi_iOS.PomiLiveActivityBridge",
+      "pomi.PomiLiveActivityBridge",
+    ]
+    let sharedSelector = NSSelectorFromString("shared")
+    for candidate in candidates {
+      guard let bridgeClass = NSClassFromString(candidate) as? NSObject.Type,
+            bridgeClass.responds(to: sharedSelector),
+            let bridge = bridgeClass.perform(sharedSelector)?.takeUnretainedValue()
+              as? NSObject else {
+        continue
+      }
+      return bridge
+    }
+    return nil
   }
 }
 

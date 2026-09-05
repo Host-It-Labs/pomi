@@ -46,6 +46,7 @@ pub fn desktop_main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_keyring::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_mcp_bridge::init())
         .setup(|app| {

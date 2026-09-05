@@ -17,11 +17,14 @@ services:
       - DATABASE_URL=postgres://user:password@db:5432/pomodoro
       - REDIS_URL=redis://redis:6379
       - NODE_ENV=development
+      - NODE_PATH=/app/packages/backend/dist
       - PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false
       - TRUST_PROXY_HOPS=${TRUST_PROXY_HOPS:-0}
       - NEST_PORT=3000
       - APP_NAME=${APP_NAME:-pomi}
       - JWT_SECRET=${JWT_SECRET:-pomi-development-only-secret-never-use-in-production}
+      - POMI_ADMIN_BOOTSTRAP_TOKEN=${POMI_ADMIN_BOOTSTRAP_TOKEN:-pomi-development-admin-bootstrap-token}
+      - POMI_LEGACY_JWT_MIGRATION_UNTIL=${POMI_LEGACY_JWT_MIGRATION_UNTIL:-}
       - CORS_ORIGINS=${CORS_ORIGINS:-}
       - NEST_SENTRY_DSN=${NEST_SENTRY_DSN:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}

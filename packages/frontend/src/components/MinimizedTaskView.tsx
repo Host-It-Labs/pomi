@@ -112,6 +112,17 @@ export function getTaskDestinationPageIndex(
     : Math.floor(destinationIndex / tasksPerPage);
 }
 
+export function shouldDisplayMinimizedListItems(
+  timerType: TaskViewTimer['type'] | undefined,
+  displayedTaskMode: 'general' | 'intention',
+  query: string
+) {
+  return (
+    timerType === TIMER_TYPES.WORK &&
+    (displayedTaskMode === 'general' || query.trim().length > 0)
+  );
+}
+
 export function MinimizedTaskView({
   className,
   compact = false,
@@ -556,7 +567,15 @@ export function MinimizedTaskView({
   ]);
   const displayListItems = useMemo(() => {
     const query = effectiveTaskSearchQuery.trim();
-    if (!query && displayedTaskMode !== 'general') return [];
+    if (
+      !shouldDisplayMinimizedListItems(
+        taskViewTimer?.type,
+        displayedTaskMode,
+        query
+      )
+    ) {
+      return [];
+    }
     return searchMinimizedListItems(
       listItems,
       lists,
@@ -569,6 +588,7 @@ export function MinimizedTaskView({
     hideVacationCovered,
     listItems,
     lists,
+    taskViewTimer?.type,
   ]);
   const displayEntries = useMemo(
     () => mixTaskAndListItems(displayTasks, displayListItems, 'default'),

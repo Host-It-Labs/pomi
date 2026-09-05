@@ -7,6 +7,7 @@ import { PreferencesModule } from 'src/preferences/preferences.module';
 import { RedisModule } from 'src/redis/redis.module';
 import { StatisticsModule } from 'src/statistics/statistics.module';
 import { DebugGuard } from '../auth/debug.guard';
+import { SessionsModule } from '../auth/sessions.module';
 import { TimerCountdownService } from './timer-countdown.service';
 import { TimerCompletionEffectsService } from './timer-completion-effects.service';
 import { TimerCompletionOutboxService } from './timer-completion-outbox.service';
@@ -23,6 +24,7 @@ import { TimerStore } from './timer-store';
 import { TimerController } from './timer.controller';
 import { TimerGateway } from './timer.gateway';
 import { TimerService } from './timer.service';
+import { LiveActivityUpdateService } from './live-activity-update.service';
 
 @Module({
   imports: [
@@ -32,6 +34,7 @@ import { TimerService } from './timer.service';
     StatisticsModule,
     forwardRef(() => NotificationsModule),
     IntentionsModule,
+    SessionsModule,
   ],
   providers: [
     TimerService,
@@ -49,6 +52,7 @@ import { TimerService } from './timer.service';
     TimerIdleDetectionStreamService,
     TimerIdleService,
     TimerNotificationService,
+    LiveActivityUpdateService,
     DebugGuard,
   ],
   controllers: [TimerController],

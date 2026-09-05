@@ -1,4 +1,5 @@
 import type {
+  HabitCadence,
   TaskCreationSource,
   TaskPriority,
   TaskRecurrenceAnchorMode,
@@ -45,6 +46,8 @@ export interface TimerUserAction {
   extensionAction?: 'logElapsed' | 'addFiveMinutes';
   requestedLogMode?: 'none' | 'elapsed' | 'full';
   resetOnFirstIntention?: boolean;
+  expectedTimerId?: string;
+  expectedScheduleRevision?: string;
 }
 
 export type TaskImportUserActionRow = {
@@ -115,6 +118,7 @@ export interface IntentionsUserAction {
   customDuration?: number;
   keepScreenAwake?: boolean;
   isHabit?: boolean;
+  habitCadence?: HabitCadence;
   isFavorite?: boolean;
   allowsTasks?: boolean;
   parentIntentionId?: string | null;
@@ -247,4 +251,26 @@ export interface UserActionStatus<T = unknown> {
   startedAt?: number;
   completedAt?: number;
   updatedAt: number;
+}
+
+export type RecoverableUserAction = {
+  kind: UserAction['kind'];
+  operation: string;
+};
+
+export interface RecoverableUserActionStatus {
+  actionId: string;
+  status: UserActionLifecycle;
+  action: RecoverableUserAction;
+  outcomeUnknown?: boolean;
+  acceptedAt: number;
+  startedAt?: number;
+  completedAt?: number;
+  updatedAt: number;
+}
+
+export interface RecoverableUserActionsPage {
+  items: RecoverableUserActionStatus[];
+  nextCursor: string | null;
+  recoveryCursor: string | null;
 }

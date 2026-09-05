@@ -6,7 +6,11 @@ import { createSystemStore } from './systemStore';
 
 const server = setupServer(
   http.get('http://localhost:3000/system', () =>
-    HttpResponse.json({ hostingMode: 'self-hosted', selfHosted: true })
+    HttpResponse.json({
+      hostingMode: 'self-hosted',
+      selfHosted: true,
+      requiresAdminBootstrapToken: false,
+    })
   )
 );
 
@@ -16,18 +20,19 @@ afterAll(() => server.close());
 
 describe('system store network boundary', () => {
   it('loads validated server state through the real ts-rest client', async () => {
-    const store = createSystemStore(apiClient);
+    const store = createSystemStore(apiClient, () => 'http://localhost:3000');
 
     await store.getState().loadSystemInfo();
 
     expect(store.getState().systemInfo).toEqual({
       hostingMode: 'self-hosted',
       selfHosted: true,
+      requiresAdminBootstrapToken: false,
     });
   });
 
   it('does not replace confirmed state after an HTTP failure', async () => {
-    const store = createSystemStore(apiClient);
+    const store = createSystemStore(apiClient, () => 'http://localhost:3000');
     await store.getState().loadSystemInfo();
     server.use(
       http.get('http://localhost:3000/system', () =>

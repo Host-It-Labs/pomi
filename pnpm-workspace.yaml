@@ -1,12 +1,14 @@
 packages:
   - 'packages/*'
 overrides:
+  zod: 4.5.4
   '@anatine/zod-openapi>ts-deepmerge': 8.0.0
   'gaxios>uuid': 11.1.1
   'teeny-request>uuid': 11.1.1
 allowBuilds:
   '@firebase/util': true
   '@nestjs/core': true
+  '@sentry/cli': true
   '@swc/core': true
   bcrypt: true
   esbuild: true
@@ -14,3 +16,7 @@ allowBuilds:
   protobufjs: true
 patchedDependencies:
   '@anatine/zod-openapi@1.14.2': patches/@anatine__zod-openapi@1.14.2.patch
+  '@ts-rest/open-api@3.52.1': patches/@ts-rest__open-api@3.52.1.patch
+peerDependencyRules:
+  allowedVersions:
+    zod: 4.5.4

@@ -6,6 +6,12 @@ export type TranslationCatalog = Record<string, string>;
  * add namespaces without changing the runtime or fallback behavior.
  */
 const english: TranslationCatalog = {
+  'common.daily': 'Daily',
+  'common.weekly': 'Weekly',
+  'intention.habitsRemaining': 'Habits left',
+  'intention.thisWeek': 'This week',
+  'intention.dailyHabitsRemaining': 'Habits left today: {{count}}',
+  'intention.weeklyHabitsRemaining': 'Habits left this week: {{count}}',
   'common.loading': 'Loading...',
   'common.retry': 'Retry',
   'common.save': 'Save',
@@ -41,6 +47,11 @@ const english: TranslationCatalog = {
     'Enter the base URL for your hosted Pomi server.',
   'login.urlPlaceholder': 'https://pomi.yourdomain.com',
   'login.invalidUrl': 'Please enter a valid URL',
+  'login.httpsRequired': 'Remote backends must use HTTPS',
+  'login.backendQuarantined':
+    'An unsafe saved backend was removed. Enter its HTTPS origin to reconnect.',
+  'login.bootstrapToken': 'First-admin setup token',
+  'login.bootstrapTokenPlaceholder': 'Enter the server setup token',
   'login.urlSaved': 'Self-hosting URL saved',
   'login.hostedUrlSaved': 'Using hosted service URL',
   'settings.essentials': 'Essentials',
@@ -132,6 +143,8 @@ const english: TranslationCatalog = {
   'intention.add': 'Add intention',
   'intention.habitPendingToday': 'Habit pending today',
   'intention.habitDoneToday': 'Habit done today',
+  'intention.habitPendingThisWeek': 'Habit pending this week',
+  'intention.habitDoneThisWeek': 'Habit done this week',
   'intention.previousSubIntentions': 'Previous sub-intentions',
   'intention.nextSubIntentions': 'Next sub-intentions',
   'intention.editIntentions': 'Edit intentions',
@@ -386,6 +399,12 @@ const english: TranslationCatalog = {
   'notifications.personalize': 'Personalize',
   'notifications.timerFinished': 'Timer finished',
   'notifications.notifyBeforeTimerEnds': 'Notify before timer ends',
+  'notifications.liveTimerSurface': 'Show Timer on lock screen',
+  'notifications.liveTimerSurfaceDescription':
+    'Keep one confirmed Timer visible on this phone without opening Pomi.',
+  'notifications.liveTimerIntentionTitles': 'Show Intention titles',
+  'notifications.liveTimerIntentionTitlesDescription':
+    'Allow private Intention titles on this phone’s lock screen. Emoji and Timer type remain visible when off.',
 
   'connection.connecting': 'Connecting to server',
   'connection.dismiss': 'Dismiss connection status',
@@ -513,6 +532,7 @@ const english: TranslationCatalog = {
   'task.filterOpenList': 'Filter Tasks or open a List',
   'task.loading': 'Loading tasks...',
   'task.loadingArchived': 'Loading archived Tasks...',
+  'task.loadMore': 'Load more',
   'task.noArchived': 'No archived Tasks',
   'task.resetAutomaticOrder': 'Reset to automatic order',
   'task.resetAutomaticOrderFor': 'Reset {{title}} to automatic order',
@@ -669,6 +689,7 @@ const english: TranslationCatalog = {
   'intention.discardListMessage':
     'Closing now will discard unsaved List changes.',
   'intention.habit': 'Habit',
+  'intention.habitCadence': 'Habit cadence',
   'intention.keepStatistics': 'Keep statistics',
   'intention.keepStatisticsDescription':
     'Past logs will remain tagged as "No Intention"',
@@ -685,6 +706,9 @@ const english: TranslationCatalog = {
   'settings.saveChangesFirst': 'Save changes first',
   'intention.habits': 'Habits',
   'intention.habitsDescription': 'Track this intention as a daily habit.',
+  'intention.prioritizeUnfinishedHabits': 'Prioritize unfinished habits',
+  'intention.prioritizeUnfinishedHabitsDescription':
+    'Move unfinished habits ahead of your normal Intention order.',
   'intention.multiSelect': 'Multi-select',
   'intention.multiSelectDescription':
     'Allow selecting more than one intention at a time.',
@@ -856,6 +880,8 @@ const english: TranslationCatalog = {
   'description.saveIntention': 'Save Intention description',
   'feedback.sentThankYou': 'Thank you for your feedback.',
   'feedback.transcribeFailed': 'Failed to transcribe feedback recording',
+  'feedback.chunkTooLarge': 'One recording segment was too large to send.',
+  'feedback.tooLong': 'Feedback is too long to send.',
   'feedback.microphoneUnavailable': 'Microphone unavailable',
   'feedback.backgroundStopped': 'Recording stopped while app was backgrounded.',
   'feedback.discardedAfterSignOut': 'Recording discarded after sign-out.',
@@ -982,6 +1008,10 @@ const english: TranslationCatalog = {
   'task.skipFor': 'Skip {{title}}',
   'task.keepFor': 'Keep {{title}}',
   'task.capture': 'Capture a Task',
+  'task.batchCaptureHelp':
+    'List multiple tasks or items explicitly in one prompt to create them together.',
+  'task.captureInProgress':
+    'Adding… Your submitted text is locked until this capture is confirmed.',
   'task.noTasks': 'No tasks',
   'intention.changeFor': 'Change intention for {{title}}',
   'intention.setForUnlinkedTask':
@@ -3262,6 +3292,90 @@ type GeneratedPhraseTargets = readonly [
 ];
 
 const generatedPhraseRows: Array<[string, GeneratedPhraseTargets]> = [
+  [
+    'Daily',
+    [
+      '每天',
+      'दैनिक',
+      'A diario',
+      'يوميًا',
+      'Chaque jour',
+      'প্রতিদিন',
+      'Diariamente',
+      'Harian',
+      'روزانہ',
+    ],
+  ],
+  [
+    'Weekly',
+    [
+      '每周',
+      'साप्ताहिक',
+      'Semanalmente',
+      'أسبوعيًا',
+      'Chaque semaine',
+      'প্রতি সপ্তাহে',
+      'Semanalmente',
+      'Mingguan',
+      'ہفتہ وار',
+    ],
+  ],
+  [
+    'Habits left',
+    [
+      '剩余习惯',
+      'बाकी आदतें',
+      'Hábitos pendientes',
+      'العادات المتبقية',
+      'Habitudes restantes',
+      'বাকি অভ্যাস',
+      'Hábitos pendentes',
+      'Kebiasaan tersisa',
+      'باقی عادتیں',
+    ],
+  ],
+  [
+    'This week',
+    [
+      '本周',
+      'इस सप्ताह',
+      'Esta semana',
+      'هذا الأسبوع',
+      'Cette semaine',
+      'এই সপ্তাহে',
+      'Esta semana',
+      'Minggu ini',
+      'اس ہفتے',
+    ],
+  ],
+  [
+    'Habits left today: {{count}}',
+    [
+      '今天还剩 {{count}} 个习惯',
+      'आज {{count}} आदतें बाकी हैं',
+      '{{count}} hábitos pendientes hoy',
+      '{{count}} عادات متبقية اليوم',
+      '{{count}} habitudes restantes aujourd’hui',
+      'আজ {{count}}টি অভ্যাস বাকি',
+      '{{count}} hábitos pendentes hoje',
+      '{{count}} kebiasaan tersisa hari ini',
+      'آج {{count}} عادتیں باقی ہیں',
+    ],
+  ],
+  [
+    'Habits left this week: {{count}}',
+    [
+      '本周还剩 {{count}} 个习惯',
+      'इस सप्ताह {{count}} आदतें बाकी हैं',
+      '{{count}} hábitos pendientes esta semana',
+      '{{count}} عادات متبقية هذا الأسبوع',
+      '{{count}} habitudes restantes cette semaine',
+      'এই সপ্তাহে {{count}}টি অভ্যাস বাকি',
+      '{{count}} hábitos pendentes esta semana',
+      '{{count}} kebiasaan tersisa minggu ini',
+      'اس ہفتے {{count}} عادتیں باقی ہیں',
+    ],
+  ],
   [
     'Back to Timer',
     [
@@ -6747,6 +6861,34 @@ const auditedGeneratedPhraseRows: Array<[string, GeneratedPhraseTargets]> = [
       'Abrir configurações de notificações',
       'Buka Pengaturan Notifikasi',
       'اطلاعات کی ترتیبات کھولیں',
+    ],
+  ],
+  [
+    'List multiple tasks or items explicitly in one prompt to create them together.',
+    [
+      '在一个提示中明确列出多个任务或项目，即可一起创建。',
+      'एक ही प्रॉम्प्ट में कई कार्य या आइटम स्पष्ट रूप से लिखकर उन्हें साथ में बनाएँ।',
+      'Escribe varias tareas o elementos explícitamente en un solo mensaje para crearlos juntos.',
+      'اكتب عدة مهام أو عناصر بوضوح في طلب واحد لإنشائها معًا.',
+      'Énumérez explicitement plusieurs tâches ou éléments dans une seule demande pour les créer ensemble.',
+      'একটি প্রম্পটে একাধিক কাজ বা আইটেম স্পষ্টভাবে লিখলে সেগুলো একসঙ্গে তৈরি হবে।',
+      'Liste várias tarefas ou itens explicitamente em um único prompt para criá-los juntos.',
+      'Cantumkan beberapa tugas atau item secara jelas dalam satu prompt untuk membuatnya sekaligus.',
+      'ایک ہی پرامپٹ میں متعدد کام یا آئٹمز واضح طور پر لکھیں تاکہ وہ ایک ساتھ بن جائیں۔',
+    ],
+  ],
+  [
+    'Adding… Your submitted text is locked until this capture is confirmed.',
+    [
+      '正在添加… 在此次捕获得到确认前，已提交的文字会保持锁定。',
+      'जोड़ा जा रहा है… इस कैप्चर की पुष्टि होने तक आपका भेजा गया पाठ लॉक रहेगा।',
+      'Añadiendo… El texto enviado permanecerá bloqueado hasta confirmar esta captura.',
+      'جارٍ الإضافة… سيظل النص الذي أرسلته مقفلاً حتى تأكيد هذا الالتقاط.',
+      'Ajout en cours… Le texte envoyé reste verrouillé jusqu’à confirmation de cette saisie.',
+      'যোগ করা হচ্ছে… এই ক্যাপচার নিশ্চিত না হওয়া পর্যন্ত আপনার পাঠানো লেখা লক থাকবে।',
+      'Adicionando… O texto enviado fica bloqueado até esta captura ser confirmada.',
+      'Menambahkan… Teks yang dikirim terkunci sampai tangkapan ini dikonfirmasi.',
+      'شامل کیا جا رہا ہے… اس کیپچر کی تصدیق تک آپ کا بھیجا ہوا متن مقفل رہے گا۔',
     ],
   ],
 ];

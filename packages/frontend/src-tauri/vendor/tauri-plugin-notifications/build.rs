@@ -30,6 +30,8 @@ const COMMANDS: &[&str] = &[
     "get_android_foreground_sync_status",
     "start_android_foreground_sync",
     "stop_android_foreground_sync",
+    "set_timer_projection",
+    "clear_timer_projection",
 ];
 
 fn main() {

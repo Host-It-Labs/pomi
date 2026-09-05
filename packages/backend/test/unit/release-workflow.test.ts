@@ -77,6 +77,20 @@ describe('public release workflow', () => {
     );
   });
 
+  it('uploads private source maps for both desktop and Android builds', async () => {
+    const workflow = await readFile(
+      new URL('../../../../.github/workflows/release.yml', import.meta.url),
+      'utf8'
+    );
+
+    expect(
+      workflow.match(/POMI_UPLOAD_SENTRY_SOURCEMAPS: 'true'/g)
+    ).toHaveLength(2);
+    expect(workflow).toMatch(
+      /build-android-wear:[\s\S]*?POMI_UPLOAD_SENTRY_SOURCEMAPS: 'true'[\s\S]*?Verify Android private source maps were removed/
+    );
+  });
+
   it('keeps local cross-platform builds isolated and non-publishing', async () => {
     const [amd64Script, arm64Script, dockerScript] = await Promise.all([
       readFile(

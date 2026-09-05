@@ -26,6 +26,16 @@ afterEach(() => {
 });
 
 describe('language catalog and detection', () => {
+  it('provides the daily and weekly habit cadence labels', () => {
+    expect(sourceTranslationCatalogs.en['common.daily']).toBe('Daily');
+    expect(sourceTranslationCatalogs.en['common.weekly']).toBe('Weekly');
+    for (const language of SUPPORTED_LANGUAGES) {
+      const catalog = sourceTranslationCatalogs[language.code];
+      expect(catalog['common.daily']).toBeTruthy();
+      expect(catalog['common.weekly']).toBeTruthy();
+    }
+  });
+
   it('normalizes regional browser tags to one of the supported languages', () => {
     expect(normalizeLanguage('pt-PT')).toBe('pt-BR');
     expect(normalizeLanguage('zh-TW')).toBe('zh-Hans');

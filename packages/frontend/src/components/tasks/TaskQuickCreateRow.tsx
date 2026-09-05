@@ -12,6 +12,7 @@ import {
   type KeyboardEvent,
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
 } from 'react';
@@ -111,6 +112,8 @@ export function TaskQuickCreateRow({
   const submissionGenerationRef = useRef(0);
   const recordingStartedAtRef = useRef<number | null>(null);
   const debugLogIdRef = useRef<string | null>(null);
+  const isSavingRef = useRef(false);
+  const batchGuidanceId = useId();
 
   const canUseAssistantTasks =
     assistantStatus?.aiTaskCaptureEnabled === true &&
@@ -148,6 +151,7 @@ export function TaskQuickCreateRow({
       cancelRef.current = true;
       recordingRequestIdRef.current += 1;
       submissionGenerationRef.current += 1;
+      isSavingRef.current = false;
       pendingAssistantPreparationRef.current = null;
       if (recorderRef.current && recorderRef.current.state !== 'inactive') {
         recorderRef.current.stop();
@@ -163,6 +167,10 @@ export function TaskQuickCreateRow({
   }, []);
 
   const insertTranscript = useCallback((transcript: string) => {
+    if (isSavingRef.current) {
+      return;
+    }
+
     const normalized = transcript.trim();
     if (!normalized) {
       return;
@@ -262,6 +270,10 @@ export function TaskQuickCreateRow({
   }, [stopTaskSpeechStream]);
 
   const startTaskSpeechRecording = useCallback(async () => {
+    if (isSavingRef.current) {
+      return;
+    }
+
     if (
       !navigator.mediaDevices?.getUserMedia ||
       typeof MediaRecorder === 'undefined'
@@ -279,7 +291,11 @@ export function TaskQuickCreateRow({
       cancelRef.current = false;
       rotateRecordingRef.current = false;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (requestId !== recordingRequestIdRef.current || cancelRef.current) {
+      if (
+        requestId !== recordingRequestIdRef.current ||
+        cancelRef.current ||
+        isSavingRef.current
+      ) {
         stopStream(stream);
         return;
       }
@@ -378,7 +394,7 @@ export function TaskQuickCreateRow({
       stopTaskSpeechRecording();
       return;
     }
-    if (isTranscribing) {
+    if (isTranscribing || isSavingRef.current) {
       return;
     }
     void startTaskSpeechRecording();
@@ -392,10 +408,11 @@ export function TaskQuickCreateRow({
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const title = text.trim();
-    if (!title || isSaving) {
+    if (!title || isSavingRef.current) {
       return;
     }
 
+    isSavingRef.current = true;
     setIsSaving(true);
     setError(null);
     const submissionGeneration = ++submissionGenerationRef.current;
@@ -560,6 +577,7 @@ export function TaskQuickCreateRow({
       );
     } finally {
       if (isCurrentSubmission()) {
+        isSavingRef.current = false;
         setIsSaving(false);
       }
     }
@@ -570,6 +588,7 @@ export function TaskQuickCreateRow({
     recordingRequestIdRef.current += 1;
     submissionGenerationRef.current += 1;
     pendingAssistantPreparationRef.current = null;
+    isSavingRef.current = false;
     setIsSaving(false);
     stopTaskSpeechRecording();
     reset();
@@ -582,6 +601,11 @@ export function TaskQuickCreateRow({
       !event.altKey &&
       !event.shiftKey &&
       event.code === 'KeyN';
+    if (isSavingRef.current && (event.key === 'Enter' || isCreateShortcut)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     if (event.key === 'Escape' || (onCancel && isCreateShortcut)) {
       event.preventDefault();
       handleCancel();
@@ -602,55 +626,78 @@ export function TaskQuickCreateRow({
           compact && 'gap-1.5'
         )}
       >
-        <label className="relative min-w-0">
-          <span className="sr-only">{t('task.add')}</span>
-          <FaPlus
-            aria-hidden="true"
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500"
-          />
-          <input
-            ref={inputRef}
-            type="text"
-            value={text}
-            onChange={event => {
-              setText(event.target.value);
-              setError(null);
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder={t('task.add')}
-            aria-label={t('task.add')}
-            className={clsx(
-              'h-9 w-full rounded-md border border-slate-800 bg-slate-900/70 py-0 pl-7 text-xs text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-indigo-400/70',
-              canUseTaskSpeech ? 'pr-10' : 'pr-3'
-            )}
-          />
-          {canUseTaskSpeech && (
-            <button
-              type="button"
-              aria-label={
-                isRecording ? t('task.stopDictation') : t('task.dictate')
+        <div className="relative min-w-0">
+          <label className="relative block min-w-0">
+            <span className="sr-only">{t('task.add')}</span>
+            <FaPlus
+              aria-hidden="true"
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500"
+            />
+            <input
+              ref={inputRef}
+              type="text"
+              value={text}
+              readOnly={isSaving}
+              aria-busy={isSaving}
+              aria-describedby={batchGuidanceId}
+              title={
+                isSaving
+                  ? `${t('task.captureInProgress')} ${t('task.batchCaptureHelp')}`
+                  : t('task.batchCaptureHelp')
               }
-              title={isRecording ? t('task.stopDictation') : t('task.dictate')}
-              onClick={toggleTaskSpeechRecording}
-              disabled={isTranscribing}
+              onChange={event => {
+                if (isSavingRef.current) {
+                  return;
+                }
+                setText(event.target.value);
+                setError(null);
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder={t('task.add')}
+              aria-label={t('task.add')}
               className={clsx(
-                'absolute right-1 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border text-[11px] transition',
-                isRecording
-                  ? 'border-indigo-400/50 bg-indigo-600/60 text-indigo-50'
-                  : 'border-slate-700/50 bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white',
-                isTranscribing && 'cursor-not-allowed opacity-60'
+                'h-9 w-full rounded-md border border-slate-800 bg-slate-900/70 py-0 pl-7 text-xs text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-indigo-400/70',
+                canUseTaskSpeech ? 'pr-10' : 'pr-3',
+                isSaving &&
+                  'cursor-not-allowed border-slate-700/60 bg-slate-950/70 text-slate-400 opacity-70 focus:border-slate-700/60'
               )}
-            >
-              {isTranscribing ? (
-                <FaSpinner className="animate-spin" />
-              ) : isRecording ? (
-                <FaStop />
-              ) : (
-                <FaMicrophone />
-              )}
-            </button>
-          )}
-        </label>
+            />
+            {canUseTaskSpeech && (
+              <button
+                type="button"
+                aria-label={
+                  isRecording ? t('task.stopDictation') : t('task.dictate')
+                }
+                title={
+                  isRecording ? t('task.stopDictation') : t('task.dictate')
+                }
+                onClick={toggleTaskSpeechRecording}
+                disabled={isTranscribing || (isSaving && !isRecording)}
+                className={clsx(
+                  'absolute right-1 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border text-[11px] transition',
+                  isRecording
+                    ? 'border-indigo-400/50 bg-indigo-600/60 text-indigo-50'
+                    : 'border-slate-700/50 bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white',
+                  (isTranscribing || (isSaving && !isRecording)) &&
+                    'cursor-not-allowed opacity-60'
+                )}
+              >
+                {isTranscribing ? (
+                  <FaSpinner className="animate-spin" />
+                ) : isRecording ? (
+                  <FaStop />
+                ) : (
+                  <FaMicrophone />
+                )}
+              </button>
+            )}
+          </label>
+          <span id={batchGuidanceId} className="sr-only">
+            {isSaving
+              ? `${t('task.captureInProgress')} ${t('task.batchCaptureHelp')}`
+              : t('task.batchCaptureHelp')}
+          </span>
+        </div>
         {onOpenAdvanced && (
           <IconButton
             type="button"

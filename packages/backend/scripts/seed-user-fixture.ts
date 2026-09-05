@@ -7,8 +7,10 @@ import {
   TaskRecurrenceAnchorMode,
   TaskStatus,
   TimerTypes,
+  UserActionStatus,
 } from '@pomi/shared';
 import * as bcrypt from 'bcrypt';
+import Redis from 'ioredis';
 import { isDeepStrictEqual } from 'node:util';
 import { addDays, format, startOfDay, subDays } from 'date-fns';
 import dataSource from '../data-source';
@@ -22,6 +24,8 @@ import { Statistic } from '../src/statistics/statistics.entity';
 import { TaskEntity, TaskEventEntity } from '../src/tasks/tasks.entity';
 import { UserEntity } from '../src/users/users.entity';
 import { fixtureCredentialFingerprint } from '../src/development-fixtures/fixture-credential';
+import { DEFAULT_REDIS_URL } from '../src/redis/redis.constants';
+import { UserActionsStore } from '../src/user-actions/user-actions.store';
 
 const WORK_DURATION_MS = 25 * 60 * 1000;
 const BREAK_DURATION_MS = 5 * 60 * 1000;
@@ -37,6 +41,7 @@ type SeedIntention = {
   hasCustomDuration?: boolean;
   customDuration?: number;
   keepScreenAwake?: boolean;
+  habitCadence?: 'off' | 'daily' | 'weekly';
 };
 
 type SeedSession = {
@@ -87,6 +92,16 @@ const COPYME_LIST_ITEMS = [
     dueOffsetDays: null,
     priority: TASK_PRIORITIES.NORMAL,
   },
+  {
+    title: 'Check pantry staples',
+    dueOffsetDays: null,
+    priority: TASK_PRIORITIES.NORMAL,
+  },
+  {
+    title: 'Plan work errands',
+    dueOffsetDays: null,
+    priority: TASK_PRIORITIES.NORMAL,
+  },
 ] as const;
 
 type SeedUserFixtureOptions = {
@@ -95,6 +110,7 @@ type SeedUserFixtureOptions = {
   successLabel: string;
   isAdmin?: boolean;
   includeCanonicalLists?: boolean;
+  includeUserActionRecoveryFixtures?: boolean;
   fixtureMarker?: {
     fixtureName: string;
     seedVersion: number;
@@ -107,6 +123,55 @@ type SeedUserFixtureOptions = {
     ) => ReturnType<typeof buildFixturePreferences>;
   };
 };
+
+const COPYME_RECOVERY_ACTION_IDS = {
+  timer: '00000000-0000-4000-8000-000000000222',
+  task: '00000000-0000-4000-8000-000000000223',
+} as const;
+const COPYME_RECOVERY_TIMESTAMP = Date.UTC(2026, 8, 1, 12);
+
+export function buildCopymeRecoveryStatuses(now: number): UserActionStatus[] {
+  return [
+    {
+      actionId: COPYME_RECOVERY_ACTION_IDS.timer,
+      status: 'succeeded',
+      action: { kind: 'timer', operation: 'pause' },
+      acceptedAt: now - 2_000,
+      startedAt: now - 1_500,
+      completedAt: now - 1_000,
+      updatedAt: now - 1_000,
+    },
+    {
+      actionId: COPYME_RECOVERY_ACTION_IDS.task,
+      status: 'succeeded',
+      action: { kind: 'tasks', operation: 'update' },
+      acceptedAt: now - 1_000,
+      startedAt: now - 750,
+      completedAt: now - 500,
+      updatedAt: now - 500,
+    },
+  ];
+}
+
+async function seedCopymeRecoveryStatuses(username: string): Promise<void> {
+  const user = await dataSource.getRepository(UserEntity).findOne({
+    where: { username },
+  });
+  if (!user) throw new Error(`Fixture user ${username} was not found`);
+  const redis = new Redis(process.env.REDIS_URL || DEFAULT_REDIS_URL, {
+    maxRetriesPerRequest: 1,
+  });
+  try {
+    const store = new UserActionsStore(redis);
+    for (const status of buildCopymeRecoveryStatuses(
+      COPYME_RECOVERY_TIMESTAMP
+    )) {
+      await store.write(user.id, status);
+    }
+  } finally {
+    await redis.quit();
+  }
+}
 
 class FixturePhaseError extends Error {
   constructor(
@@ -145,6 +210,7 @@ function buildFixturePreferences(userId: string) {
     intentionCustomDurations: true,
     intentionSubIntentions: true,
     intentionHabits: true,
+    intentionPrioritizeUnfinishedHabits: false,
     assistantExtension: true,
     assistantTaskTranscriptsEnabled: true,
     assistantTaskTranscriptMinWords: 15,
@@ -211,8 +277,8 @@ const seedIntentions: SeedIntention[] = [
   { title: 'Budget', emoji: '💸', type: 'work' },
   { title: 'Groceries', emoji: '🛒', type: 'work' },
   { title: 'Laundry', emoji: '🧺', type: 'work' },
-  { title: 'Workout', emoji: '🏋️', type: 'work' },
-  { title: 'Read', emoji: '📚', type: 'work' },
+  { title: 'Workout', emoji: '🏋️', type: 'work', habitCadence: 'daily' },
+  { title: 'Read', emoji: '📚', type: 'work', habitCadence: 'weekly' },
   { title: 'Errands', emoji: '🧾', type: 'work' },
   { title: 'Calls', emoji: '📞', type: 'work' },
   { title: 'Social', emoji: '🤝', type: 'work' },
@@ -244,7 +310,7 @@ const seedIntentions: SeedIntention[] = [
   { title: 'Friends', emoji: '🫂', type: 'work', parentTitle: 'Social' },
   { title: 'Family', emoji: '🏡', type: 'work', parentTitle: 'Social' },
   { title: 'Follow Up', emoji: '✉️', type: 'work', parentTitle: 'Social' },
-  { title: 'Stretch', emoji: '🧘', type: 'break' },
+  { title: 'Stretch', emoji: '🧘', type: 'break', habitCadence: 'daily' },
   { title: 'Hydrate', emoji: '💧', type: 'break' },
   { title: 'Walk', emoji: '🚶', type: 'break' },
   { title: 'Tea', emoji: '🍵', type: 'break' },
@@ -433,6 +499,20 @@ const baseSeedTasks: SeedTask[] = [
     recurrenceAnchorMode: 'planned',
   },
   {
+    title: 'Take a focused breathing break',
+    description:
+      'Pinned Break example where the selected Breathe Intention duration takes precedence over the Task duration.',
+    dueOffsetDays: 0,
+    dueTime: null,
+    priority: TASK_PRIORITIES.NORMAL,
+    status: TASK_STATUSES.ACTIVE,
+    timerType: TIMER_TYPES.BREAK,
+    customDuration: 8 * 60 * 1000,
+    intentionTitle: 'Breathe',
+    recurrenceRule: null,
+    recurrenceAnchorMode: 'planned',
+  },
+  {
     title: 'Prepare tomorrow’s lunch',
     dueOffsetDays: 4,
     dueTime: '18:30',
@@ -524,7 +604,14 @@ const SEED_TASK_CATALOG: Array<{
   },
 ];
 
-const SEED_TASK_BATCH_LABELS = ['This week', 'Next pass', 'Later review'];
+const SEED_TASK_BATCH_LABELS = [
+  'This week',
+  'Next pass',
+  'Later review',
+  'Previous sprint',
+  'Last month',
+  'Earlier archive',
+];
 
 const GENERATED_TASK_RECURRENCE_RULES: Array<{
   rule: string | null;
@@ -881,7 +968,10 @@ async function findFixtureHealthIssues(
         (expected.hasCustomDuration
           ? (expected.customDuration ?? null)
           : null) ||
-      intention.keepScreenAwake !== (expected.keepScreenAwake === true)
+      intention.keepScreenAwake !== (expected.keepScreenAwake === true) ||
+      intention.habitCadence !== (expected.habitCadence ?? 'off') ||
+      intention.isHabit !==
+        (expected.habitCadence !== undefined && expected.habitCadence !== 'off')
     ) {
       issues.push(
         `canonical intention ${expected.type}:${expected.title} is missing or changed`
@@ -1212,6 +1302,9 @@ export async function seedUserFixture({
           hasCustomDuration: item.hasCustomDuration === true,
           customDuration: item.hasCustomDuration ? item.customDuration : null,
           keepScreenAwake: item.keepScreenAwake === true,
+          isHabit:
+            item.habitCadence !== undefined && item.habitCadence !== 'off',
+          habitCadence: item.habitCadence ?? 'off',
           usageCount: 0,
         })
       )
@@ -1241,6 +1334,9 @@ export async function seedUserFixture({
           hasCustomDuration: item.hasCustomDuration === true,
           customDuration: item.hasCustomDuration ? item.customDuration : null,
           keepScreenAwake: item.keepScreenAwake === true,
+          isHabit:
+            item.habitCadence !== undefined && item.habitCadence !== 'off',
+          habitCadence: item.habitCadence ?? 'off',
           usageCount: 0,
         });
       })
@@ -1554,6 +1650,11 @@ export async function runSeedUserFixture(
   options: SeedUserFixtureOptions
 ): Promise<void> {
   await seedUserFixture(options)
+    .then(async () => {
+      if (options.includeUserActionRecoveryFixtures) {
+        await seedCopymeRecoveryStatuses(options.username);
+      }
+    })
     .catch(error => {
       console.error(`Failed to seed ${options.username} user`, error);
       process.exitCode = 1;
@@ -1569,6 +1670,11 @@ export async function runEnsureSeedUserFixture(
   options: SeedUserFixtureOptions
 ): Promise<void> {
   await ensureSeedUserFixture(options)
+    .then(async () => {
+      if (options.includeUserActionRecoveryFixtures) {
+        await seedCopymeRecoveryStatuses(options.username);
+      }
+    })
     .catch(error => {
       const phase = error instanceof FixturePhaseError ? error.phase : 'ensure';
       const cause = error instanceof Error ? error.message : String(error);

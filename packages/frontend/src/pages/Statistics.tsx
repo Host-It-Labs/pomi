@@ -25,6 +25,7 @@ import { usePreferencesStore } from '../stores/preferencesStore';
 import { useStatisticsStore } from '../stores/statisticsStore';
 import { apiClient } from '../utils/apiClient';
 import { submitUserMutation } from '../utils/userActionQueue';
+import { subscribeToWorkTimerLogRefresh } from '../utils/recoveryRefresh';
 import { isDesktop } from '../utils/osUtils';
 import { LazyHeatmap } from './statistics/LazyHeatmap';
 import { StatCard } from './statistics/StatCard';
@@ -243,6 +244,10 @@ export function Statistics() {
       );
     }
   };
+
+  useEffect(() =>
+    subscribeToWorkTimerLogRefresh(refreshStatisticsAfterLogMutation)
+  );
 
   const taskHeatmapYears = useMemo(() => {
     const years: Record<

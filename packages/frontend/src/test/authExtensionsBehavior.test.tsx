@@ -18,7 +18,22 @@ import { useAuthStoreBase } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
 import { setLanguage } from '../i18n';
 
-const server = setupServer();
+const server = setupServer(
+  http.get('http://localhost:3000/system', () =>
+    HttpResponse.json({
+      hostingMode: 'self-hosted',
+      selfHosted: true,
+      requiresAdminBootstrapToken: false,
+    })
+  ),
+  http.get('https://self-hosted.example/system', () =>
+    HttpResponse.json({
+      hostingMode: 'self-hosted',
+      selfHosted: true,
+      requiresAdminBootstrapToken: false,
+    })
+  )
+);
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
@@ -100,6 +115,7 @@ describe('authentication behavior migrated from legacy Playwright documentation'
         username: 'documented-user',
         password: 'safe-password',
         language: 'en',
+        platform: 'web',
       },
     ]);
     expect(useUiStore.getState()).toMatchObject({
@@ -144,7 +160,12 @@ describe('authentication behavior migrated from legacy Playwright documentation'
       })
     );
     expect(requestBodies).toEqual([
-      { username: 'fr-user', password: 'safe-password', language: 'fr' },
+      {
+        username: 'fr-user',
+        password: 'safe-password',
+        language: 'fr',
+        platform: 'web',
+      },
     ]);
   });
 
@@ -195,6 +216,7 @@ describe('authentication behavior migrated from legacy Playwright documentation'
         username: 'legacy-user',
         password: 'safe-password',
         language: 'en',
+        platform: 'web',
       },
       { username: 'legacy-user', password: 'safe-password' },
     ]);
@@ -264,7 +286,7 @@ describe('authentication behavior migrated from legacy Playwright documentation'
     await user.click(screen.getByRole('button', { name: 'I am self-hosting' }));
     await user.type(
       screen.getByPlaceholderText('https://pomi.yourdomain.com'),
-      ' https://self-hosted.example/// '
+      ' https://self-hosted.example/ '
     );
     await user.click(screen.getByRole('button', { name: 'Save' }));
 

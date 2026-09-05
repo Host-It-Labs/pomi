@@ -3,6 +3,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
 import type Redis from 'ioredis';
 import request from 'supertest';
 import { DataSource, In } from 'typeorm';
@@ -13,6 +14,7 @@ import { clearAuthRateLimitKeys } from './auth-rate-limit-cleanup';
 
 const require = createRequire(import.meta.url);
 const { AppModule } = require('../../dist/src/app.module.js');
+const ADMIN_BOOTSTRAP_TOKEN = 'pomi-development-admin-bootstrap-token';
 
 const hasInfrastructure = Boolean(
   process.env.DATABASE_URL && process.env.REDIS_URL
@@ -20,6 +22,7 @@ const hasInfrastructure = Boolean(
 
 describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
   let app: INestApplication;
+  let dataSource: DataSource;
   let redis: Redis;
   let token: string;
   const usernames = [
@@ -36,11 +39,13 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
     });
     configureHttpApp(app as NestExpressApplication);
     await app.init();
+    dataSource = app.get(DataSource);
     redis = app.get<Redis>(REDIS_CLIENT);
     await clearAuthRateLimitKeys(redis);
     const session = await request(app.getHttpServer()).post('/sessions').send({
       username: usernames[0],
       password: 'vitest-password',
+      bootstrapToken: ADMIN_BOOTSTRAP_TOKEN,
     });
     token = session.body.token;
   });
@@ -48,7 +53,6 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
   afterAll(async () => {
     if (app) {
       if (redis) await clearAuthRateLimitKeys(redis);
-      const dataSource = app.get(DataSource);
       const entityTarget = (tableName: string) => {
         const metadata = dataSource.entityMetadatas.find(
           candidate => candidate.tableName === tableName
@@ -110,6 +114,7 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
     const response = await request(app.getHttpServer()).post('/sessions').send({
       username: usernames[1],
       password: 'vitest-password',
+      bootstrapToken: ADMIN_BOOTSTRAP_TOKEN,
     });
 
     expect(response.status).toBe(200);
@@ -117,11 +122,92 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
     expect(response.body.token).toEqual(expect.any(String));
   });
 
+  it('rotates the HttpOnly refresh cookie and renews access', async () => {
+    const created = await request(app.getHttpServer()).post('/sessions').send({
+      username: usernames[0],
+      password: 'vitest-password',
+    });
+    const createdCookie = created.headers['set-cookie']?.[0];
+
+    expect(created.status).toBe(200);
+    expect(created.body.refreshToken).toBeUndefined();
+    expect(createdCookie).toContain('pomi_refresh=');
+    expect(createdCookie).toContain('HttpOnly');
+    if (!createdCookie) throw new Error('Missing refresh cookie');
+
+    const refreshed = await request(app.getHttpServer())
+      .post('/sessions/refresh')
+      .set('cookie', createdCookie)
+      .send({ platform: 'web' });
+
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.body.token).toEqual(expect.any(String));
+    expect(refreshed.body.refreshToken).toBeUndefined();
+    expect(refreshed.headers['set-cookie']?.[0]).toContain('pomi_refresh=');
+    expect(refreshed.headers['set-cookie']?.[0]).not.toBe(createdCookie);
+  });
+
+  it('commits refresh-family revocation before rejecting a replay', async () => {
+    const created = await request(app.getHttpServer()).post('/sessions').send({
+      username: usernames[0],
+      password: 'vitest-password',
+    });
+    const originalCookie = created.headers['set-cookie']?.[0];
+    if (!originalCookie) throw new Error('Missing refresh cookie');
+
+    const rotated = await request(app.getHttpServer())
+      .post('/sessions/refresh')
+      .set('cookie', originalCookie)
+      .send({ platform: 'web' })
+      .expect(200);
+    const currentCookie = rotated.headers['set-cookie']?.[0];
+    if (!currentCookie) throw new Error('Missing rotated refresh cookie');
+
+    const tokenPayload = JSON.parse(
+      Buffer.from(created.body.token.split('.')[1], 'base64url').toString()
+    ) as { sid: string };
+    const dataSource = app.get(DataSource);
+    const sessionMetadata = dataSource.entityMetadatas.find(
+      candidate => candidate.tableName === 'auth_sessions'
+    );
+    if (!sessionMetadata) throw new Error('Missing auth_sessions metadata');
+    const sessions = dataSource.getRepository(sessionMetadata.target);
+    await sessions.update(tokenPayload.sid, {
+      previousRefreshTokenExpiresAt: new Date(0),
+    });
+
+    await request(app.getHttpServer())
+      .post('/sessions/refresh')
+      .set('cookie', originalCookie)
+      .send({ platform: 'web' })
+      .expect(401);
+    await expect(
+      sessions.findOneByOrFail({ id: tokenPayload.sid })
+    ).resolves.toMatchObject({ revocationReason: 'refresh-replay' });
+    await request(app.getHttpServer())
+      .post('/sessions/refresh')
+      .set('cookie', currentCookie)
+      .send({ platform: 'web' })
+      .expect(401);
+  });
+
+  it('rejects current access tokens at the legacy migration endpoint', async () => {
+    await request(app.getHttpServer())
+      .post('/sessions/migrate')
+      .set('authorization', `Bearer ${token}`)
+      .send({ platform: 'android' })
+      .expect(401);
+  });
+
   it('bounds repeated credentials and returns retry guidance', async () => {
     const username = usernames[2];
     await request(app.getHttpServer())
       .post('/sessions')
-      .send({ username, password: 'vitest-password' })
+      .send({
+        username,
+        password: 'vitest-password',
+        bootstrapToken: ADMIN_BOOTSTRAP_TOKEN,
+      })
       .expect(200);
 
     for (let attempt = 0; attempt < 9; attempt += 1) {
@@ -205,10 +291,45 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
     expect(status.body).toEqual({ hasImportedTasks: true });
   });
 
+  it('preserves PostgreSQL timestamp precision across Task archive pages', async () => {
+    const [{ id: userId }] = await dataSource.query(
+      'SELECT id FROM users WHERE username = $1',
+      [usernames[0]]
+    );
+    const newestId = randomUUID();
+    const olderId = randomUUID();
+    await dataSource.query(
+      `INSERT INTO tasks (id, "userId", title, status, "itemKind", "createdAt", "updatedAt")
+       VALUES ($1, $3, 'Newest microsecond Task', 'completed', 'task', now(), '2026-09-01 12:00:00.123456'),
+              ($2, $3, 'Older microsecond Task', 'completed', 'task', now(), '2026-09-01 12:00:00.123123')`,
+      [newestId, olderId, userId]
+    );
+
+    const firstPage = await request(app.getHttpServer())
+      .get('/tasks/archive?limit=1')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(firstPage.body.items.map(item => item.id)).toEqual([newestId]);
+    expect(firstPage.body.nextCursor).toEqual(expect.any(String));
+
+    const secondPage = await request(app.getHttpServer())
+      .get(
+        `/tasks/archive?limit=1&cursor=${encodeURIComponent(firstPage.body.nextCursor)}`
+      )
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(secondPage.body.items.map(item => item.id)).toEqual([olderId]);
+  });
+
   it('logs out through the authenticated production contract', async () => {
     await request(app.getHttpServer())
       .delete('/sessions/current?platform=web')
       .set('authorization', `Bearer ${token}`)
       .expect(200, { success: true });
+
+    await request(app.getHttpServer())
+      .get('/preferences')
+      .set('authorization', `Bearer ${token}`)
+      .expect(401);
   });
 });

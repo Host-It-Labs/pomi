@@ -48,6 +48,10 @@ export class CreateIntentionDto {
   isHabit?: boolean;
 
   @IsOptional()
+  @IsIn(['off', 'daily', 'weekly'])
+  habitCadence?: 'off' | 'daily' | 'weekly';
+
+  @IsOptional()
   @IsBoolean()
   isFavorite?: boolean;
 

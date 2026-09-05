@@ -258,6 +258,24 @@ export function TimerActionButtons({
       <KeyboardShortcut text="D" showModIcon={false} />
     </IconButton>
   ) : null;
+  const minimizedPausedSkipButton =
+    !expanded && !showLeftButtons && timer?.status === TIMER_STATUSES.PAUSED ? (
+      <IconButton
+        onClick={handleSkipClick}
+        label={t('timer.skipTo', {
+          target:
+            timer.type === TIMER_TYPES.WORK
+              ? t('common.break')
+              : t('common.work'),
+        })}
+        variant="secondary"
+        disabled={isDisconnected}
+        size={size}
+      >
+        <FaForward />
+        <KeyboardShortcut text="S" showModIcon={false} />
+      </IconButton>
+    ) : null;
 
   return (
     <>
@@ -456,6 +474,7 @@ export function TimerActionButtons({
               )}
 
               {minimizedTimerExtensionButton}
+              {minimizedPausedSkipButton}
 
               {!expanded &&
                 (showStartButton ? (

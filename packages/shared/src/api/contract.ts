@@ -1,9 +1,11 @@
 import { initContract } from '@ts-rest/core';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import {
   ASSISTANT_MAX_RECORDING_MINUTES,
   APP_LANGUAGE_VALUES,
   CLIENT_NOTIFICATION_TYPES,
+  FEEDBACK_MAX_TEXT_LENGTH,
+  FEEDBACK_TRANSCRIPTION_MAX_ENCODED_BYTES,
   TASK_DESCRIPTION_MAX_LENGTH,
   TASK_CREATION_SOURCES,
   TASK_FOLLOW_UP_DELAY_MAX_DAYS,
@@ -19,6 +21,10 @@ import {
 } from '../constants';
 
 const c = initContract();
+
+const router = <const Router extends Record<string, unknown>>(
+  routes: Router
+): Router => c.router(routes as never) as unknown as Router;
 
 const platformSchema = z.enum([
   'android',
@@ -83,9 +89,10 @@ const userSchema = z.object({
 const systemInfoSchema = z.object({
   hostingMode: z.enum(['hosted', 'self-hosted']),
   selfHosted: z.boolean(),
+  requiresAdminBootstrapToken: z.boolean(),
 });
 
-const userDataTransferRowSchema = z.record(z.unknown());
+const userDataTransferRowSchema = z.record(z.string(), z.unknown());
 const userDataTimerRuntimeSchema = z.object({
   currentTimer: userDataTransferRowSchema.nullable(),
   sessionState: userDataTransferRowSchema.nullable(),
@@ -162,6 +169,7 @@ const preferencesSchema = z.object({
   intentionCustomDurations: z.boolean(),
   intentionSubIntentions: z.boolean(),
   intentionHabits: z.boolean(),
+  intentionPrioritizeUnfinishedHabits: z.boolean().default(false),
   workTimerLogsExtension: z.boolean(),
   sessionsExtension: z.boolean(),
   sessionPomodorosCount: z.number().int(),
@@ -232,6 +240,7 @@ const intentionSchema = z.object({
   customDuration: z.number().nullable(),
   keepScreenAwake: z.boolean(),
   isHabit: z.boolean(),
+  habitCadence: z.enum(['off', 'daily', 'weekly']),
   isArchived: z.boolean(),
   isFavorite: z.boolean(),
   allowsTasks: z.boolean(),
@@ -324,7 +333,7 @@ const workTimerLogSchema = z.object({
         .optional(),
     })
   ),
-  subIntentions: z.record(z.string()).optional(),
+  subIntentions: z.record(z.string(), z.string()).optional(),
   duration: z.number().int(),
   completedAt: z.number().int(),
   date: z.string(),
@@ -334,6 +343,18 @@ const sessionCreateSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
   language: appLanguageSchema.optional(),
+  platform: platformSchema.optional(),
+  bootstrapToken: z.string().min(1).max(256).optional(),
+  deviceId: z.string().min(1).max(128).optional(),
+});
+
+const sessionRefreshSchema = z.object({
+  platform: platformSchema.optional(),
+  refreshToken: z.string().min(1).optional(),
+});
+
+const sessionMigrationSchema = z.object({
+  platform: platformSchema.optional(),
 });
 
 const sessionResponseSchema = z.object({
@@ -341,6 +362,7 @@ const sessionResponseSchema = z.object({
   token: z.string(),
   isNewUser: z.boolean(),
   language: appLanguageSchema,
+  refreshToken: z.string().optional(),
 });
 
 const intentionsQuerySchema = z.object({
@@ -368,6 +390,7 @@ const intentionCreateSchema = z.object({
   customDuration: z.number().int().min(1).optional(),
   keepScreenAwake: z.boolean().optional(),
   isHabit: z.boolean().optional(),
+  habitCadence: z.enum(['off', 'daily', 'weekly']).optional(),
   isFavorite: z.boolean().optional(),
   allowsTasks: z.boolean().optional(),
   parentIntentionId: z.string().nullable().optional(),
@@ -382,6 +405,7 @@ const intentionUpdateSchema = z.object({
   customDuration: z.number().int().min(1).optional(),
   keepScreenAwake: z.boolean().optional(),
   isHabit: z.boolean().optional(),
+  habitCadence: z.enum(['off', 'daily', 'weekly']).optional(),
   isFavorite: z.boolean().optional(),
   allowsTasks: z.boolean().optional(),
   parentIntentionId: z.string().nullable().optional(),
@@ -814,13 +838,13 @@ const assistantDebugProcessedOutputSchema = z.object({
       action: z.enum(['startTimer', 'pauseTimer', 'addFiveMinutes', 'none']),
       timerType: timerTypeSchema.optional(),
       intentionSlugs: z.array(z.string()),
-      subIntentions: z.record(z.string()),
+      subIntentions: z.record(z.string(), z.string()),
     })
     .optional(),
 });
 
 const assistantDebugModelCallAttemptSchema = z.object({
-  request: z.record(z.unknown()),
+  request: z.record(z.string(), z.unknown()),
   status: z.number().int().nullable(),
   response: z.any(),
   error: z.string().nullable(),
@@ -830,7 +854,7 @@ const assistantDebugModelCallSchema = z.object({
   provider: z.literal('openrouter'),
   endpoint: z.string().url(),
   stage: z.enum(['transcription', 'initial', 'repair', 'review']),
-  request: z.record(z.unknown()),
+  request: z.record(z.string(), z.unknown()),
   attempts: z.array(assistantDebugModelCallAttemptSchema),
   response: z.any(),
   content: z.string().nullable(),
@@ -1005,7 +1029,7 @@ const workTimerLogsQuerySchema = z.object({
 const workTimerLogUpdateSchema = z.object({
   intention: z.string().nullable().optional(),
   intentions: z.array(z.string()).optional(),
-  subIntentions: z.record(z.string()).optional(),
+  subIntentions: z.record(z.string(), z.string()).optional(),
   duration: z
     .number()
     .int()
@@ -1015,8 +1039,8 @@ const workTimerLogUpdateSchema = z.object({
 
 const todayIntentionsSchema = z.object({
   count: z.number().int(),
-  bySlug: z.record(z.number().int()),
-  subBySlug: z.record(z.number().int()).optional(),
+  bySlug: z.record(z.string(), z.number().int()),
+  subBySlug: z.record(z.string(), z.number().int()).optional(),
 });
 
 const notificationProviderSchema = z.object({
@@ -1065,7 +1089,7 @@ const userActionSchema = z
       timerType: timerTypeSchema.optional(),
       intention: z.string().optional(),
       intentions: z.array(z.string()).optional(),
-      subIntentions: z.record(z.string()).optional(),
+      subIntentions: z.record(z.string(), z.string()).optional(),
       focusedTaskId: z.string().optional(),
       customDuration: z.number().int().min(1).nullable().optional(),
       taskId: z.string().optional(),
@@ -1073,6 +1097,8 @@ const userActionSchema = z
       extensionAction: z.enum(['logElapsed', 'addFiveMinutes']).optional(),
       requestedLogMode: z.enum(['none', 'elapsed', 'full']).optional(),
       resetOnFirstIntention: z.boolean().optional(),
+      expectedTimerId: z.string().min(1).max(128).optional(),
+      expectedScheduleRevision: z.string().min(1).max(128).optional(),
     }),
     z.object({
       kind: z.literal('tasks'),
@@ -1158,6 +1184,7 @@ const userActionSchema = z
       customDuration: z.number().int().optional(),
       keepScreenAwake: z.boolean().optional(),
       isHabit: z.boolean().optional(),
+      habitCadence: z.enum(['off', 'daily', 'weekly']).optional(),
       isFavorite: z.boolean().optional(),
       allowsTasks: z.boolean().optional(),
       parentIntentionId: z.string().nullable().optional(),
@@ -1182,18 +1209,18 @@ const userActionSchema = z
         'updateDebugLogFlag',
         'clearDebugLogs',
       ]),
-      payload: z.record(z.unknown()).optional(),
+      payload: z.record(z.string(), z.unknown()).optional(),
     }),
     z.object({
       kind: z.literal('workTimerLog'),
       operation: z.enum(['update', 'delete']),
       logId: z.string(),
-      payload: z.record(z.unknown()).optional(),
+      payload: z.record(z.string(), z.unknown()).optional(),
     }),
     z.object({
       kind: z.literal('system'),
       operation: z.literal('importUserData'),
-      payload: z.record(z.unknown()),
+      payload: z.record(z.string(), z.unknown()),
     }),
     z.object({
       kind: z.literal('notifications'),
@@ -1203,7 +1230,7 @@ const userActionSchema = z
     z.object({
       kind: z.literal('feedback'),
       operation: z.literal('submit'),
-      text: z.string().trim().min(1).max(20_000),
+      text: z.string().trim().min(1).max(FEEDBACK_MAX_TEXT_LENGTH),
       diagnostics: z
         .object({
           appVersion: z.string().max(100).optional(),
@@ -1283,6 +1310,16 @@ const userActionSchema = z
   ])
   .superRefine((action, context) => {
     if (action.kind === 'timer') {
+      if (
+        (action.expectedTimerId === undefined) !==
+        (action.expectedScheduleRevision === undefined)
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['expectedTimerId'],
+          message: 'Expected Timer ID and revision must be provided together',
+        });
+      }
       if (action.operation === 'createOrResume' && !action.timerType) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
@@ -1454,11 +1491,29 @@ const userActionSchema = z
     }
   });
 
+const recoverableUserActionSchema = z.object({
+  kind: z.enum([
+    'timer',
+    'tasks',
+    'intentions',
+    'preferences',
+    'assistant',
+    'workTimerLog',
+    'system',
+    'notifications',
+    'feedback',
+    'lists',
+    'vacation',
+  ]),
+  operation: z.string().min(1),
+});
+
 const userActionStatusSchema = z.object({
   actionId: userActionIdSchema,
   status: z.enum(['accepted', 'running', 'succeeded', 'failed', 'cancelled']),
   action: z.union([
     userActionSchema,
+    recoverableUserActionSchema,
     z.object({ kind: z.literal('cancellation') }),
   ]),
   result: z.unknown().optional(),
@@ -1470,15 +1525,55 @@ const userActionStatusSchema = z.object({
   updatedAt: z.number().int(),
 });
 
-export { userActionIdSchema, userActionSchema, userActionStatusSchema };
-
-const pushTokenUpdateSchema = z.object({
-  token: z.string().min(1),
-  platform: z.enum(['android', 'ios']),
+const recoverableUserActionStatusSchema = z.object({
+  actionId: userActionIdSchema,
+  status: z.enum(['accepted', 'running', 'succeeded', 'failed', 'cancelled']),
+  action: recoverableUserActionSchema,
+  outcomeUnknown: z.boolean().optional(),
+  acceptedAt: z.number().int(),
+  startedAt: z.number().int().optional(),
+  completedAt: z.number().int().optional(),
+  updatedAt: z.number().int(),
 });
 
-export const apiContract = c.router({
-  userActions: c.router({
+export {
+  recoverableUserActionStatusSchema,
+  userActionIdSchema,
+  userActionSchema,
+  userActionStatusSchema,
+};
+
+const pushTokenUpdateSchema = z.discriminatedUnion('platform', [
+  z.object({
+    token: z.string().min(1),
+    platform: z.enum(['android', 'ios']),
+  }),
+  z.object({
+    token: z.string().min(1).nullable(),
+    platform: z.literal('ios-live-activity'),
+  }),
+]);
+
+export const apiContract = router({
+  userActions: router({
+    list: {
+      method: 'GET',
+      path: '/user-actions',
+      query: z.object({
+        cursor: z.string().min(1).max(1024).optional(),
+        after: z.string().min(1).max(1024).optional(),
+        limit: z.coerce.number().int().min(1).max(50).optional(),
+      }),
+      responses: {
+        200: z.object({
+          items: z.array(recoverableUserActionStatusSchema),
+          nextCursor: z.string().nullable(),
+          recoveryCursor: z.string().nullable(),
+        }),
+        400: errorSchema,
+        401: errorSchema,
+      },
+    },
     submit: {
       method: 'POST',
       path: '/user-actions',
@@ -1515,7 +1610,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  watch: c.router({
+  watch: router({
     status: {
       method: 'GET',
       path: '/watch/status',
@@ -1537,7 +1632,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  sessions: c.router({
+  sessions: router({
     create: {
       method: 'POST',
       path: '/sessions',
@@ -1548,6 +1643,24 @@ export const apiContract = c.router({
         401: errorSchema,
         409: errorSchema,
         429: errorSchema,
+      },
+    },
+    refresh: {
+      method: 'POST',
+      path: '/sessions/refresh',
+      body: sessionRefreshSchema,
+      responses: {
+        200: sessionResponseSchema,
+        401: errorSchema,
+      },
+    },
+    migrate: {
+      method: 'POST',
+      path: '/sessions/migrate',
+      body: sessionMigrationSchema,
+      responses: {
+        200: sessionResponseSchema,
+        401: errorSchema,
       },
     },
     deleteCurrent: {
@@ -1562,7 +1675,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  system: c.router({
+  system: router({
     get: {
       method: 'GET',
       path: '/system',
@@ -1601,7 +1714,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  preferences: c.router({
+  preferences: router({
     get: {
       method: 'GET',
       path: '/preferences',
@@ -1619,7 +1732,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  intentions: c.router({
+  intentions: router({
     list: {
       method: 'GET',
       path: '/intentions',
@@ -1715,7 +1828,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  tasks: c.router({
+  tasks: router({
     importStatus: {
       method: 'GET',
       path: '/tasks/import-status',
@@ -1753,6 +1866,21 @@ export const apiContract = c.router({
         200: taskSchema,
         400: errorSchema,
         404: errorSchema,
+      },
+    },
+    archive: {
+      method: 'GET',
+      path: '/tasks/archive',
+      query: z.object({
+        limit: z.coerce.number().int().min(1).max(100).optional(),
+        cursor: z.string().min(1).max(512).optional(),
+      }),
+      responses: {
+        200: z.object({
+          items: z.array(taskSchema),
+          nextCursor: z.string().nullable(),
+        }),
+        400: errorSchema,
       },
     },
     list: {
@@ -1805,7 +1933,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  lists: c.router({
+  lists: router({
     list: {
       method: 'GET',
       path: '/lists',
@@ -1876,7 +2004,7 @@ export const apiContract = c.router({
       responses: { 200: listItemSchema, 400: errorSchema, 404: errorSchema },
     },
   }),
-  vacation: c.router({
+  vacation: router({
     status: {
       method: 'GET',
       path: '/vacation',
@@ -1905,13 +2033,17 @@ export const apiContract = c.router({
       responses: { 200: vacationStateSchema },
     },
   }),
-  feedback: c.router({
+  feedback: router({
     transcribe: {
       method: 'POST',
       path: '/feedback/transcribe',
       body: z.object({
-        audioBase64: z.string().min(1),
+        audioBase64: z
+          .string()
+          .min(1)
+          .max(FEEDBACK_TRANSCRIPTION_MAX_ENCODED_BYTES),
         mimeType: z.string().min(1).max(100),
+        idempotencyKey: z.string().uuid(),
       }),
       responses: {
         200: z.object({ transcript: z.string(), costUsd: z.number() }),
@@ -1920,7 +2052,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  descriptions: c.router({
+  descriptions: router({
     generate: {
       method: 'POST',
       path: '/descriptions/generate',
@@ -1942,7 +2074,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  assistant: c.router({
+  assistant: router({
     status: {
       method: 'GET',
       path: '/assistant/status',
@@ -2118,7 +2250,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  statistics: c.router({
+  statistics: router({
     summary: {
       method: 'GET',
       path: '/statistics',
@@ -2172,7 +2304,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  workTimerLogs: c.router({
+  workTimerLogs: router({
     list: {
       method: 'GET',
       path: '/work-timer-logs',
@@ -2207,7 +2339,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  users: c.router({
+  users: router({
     byUsername: {
       method: 'GET',
       path: '/users/by-username/:username',
@@ -2252,7 +2384,7 @@ export const apiContract = c.router({
       },
     },
   }),
-  notifications: c.router({
+  notifications: router({
     provider: {
       method: 'GET',
       path: '/notification-providers/current',

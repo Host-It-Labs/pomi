@@ -9,7 +9,11 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
-import { loadReleaseEnvironment, repositoryRoot } from './local-env.mjs';
+import {
+  loadReleaseEnvironment,
+  repositoryRoot,
+  resolveRepositoryPath,
+} from './local-env.mjs';
 
 loadReleaseEnvironment();
 
@@ -20,23 +24,12 @@ const androidRoot = path.join(
 const googleServicesTarget = path.join(androidRoot, 'app/google-services.json');
 const keystorePropertiesTarget = path.join(androidRoot, 'keystore.properties');
 rmSync(keystorePropertiesTarget, { force: true });
-const secretPaths = {
-  'config/secrets/google-services.json': path.join(
-    repositoryRoot,
-    'config/secrets/google-services.json'
-  ),
-  'config/secrets/pomi-release.jks': path.join(
-    repositoryRoot,
-    'config/secrets/pomi-release.jks'
-  ),
-};
-
 function configuredSecretPath(value, expected, label) {
   if (!value) return undefined;
   if (value !== expected) {
     throw new Error(`${label} must use ${expected}.`);
   }
-  return secretPaths[expected];
+  return resolveRepositoryPath(expected);
 }
 
 function copyOptionalSecret(source, target, label, validate) {

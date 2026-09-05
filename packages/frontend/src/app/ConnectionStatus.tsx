@@ -5,23 +5,32 @@ import { Spinner } from '../components/ui/Spinner';
 import { useAuthStore } from '../stores/authStore';
 import { useConnectionStatusUi } from '../stores/connectionStatusUiStore';
 import { useTimerStore } from '../stores/timerStore';
-import { useUiStore } from '../stores/uiStore';
 import { useUserActionQueue } from '../utils/userActionQueue';
 import { requestBackendConnectionRecovery } from '../utils/backendConnectionRecovery';
 import { useI18n } from '../i18n';
 
-const CONNECTION_STATUS_DELAY_MS = 1000;
+const CONNECTION_STATUS_POLL_MS = 1000;
+const RESUME_CONNECTION_STATUS_DELAY_MS = 3000;
 const OFFLINE_THRESHOLD_MS = 30_000;
+
+export function getConnectionStatusDisplayDelay(input: {
+  isInitialConnection: boolean;
+  isNetworkBlocked: boolean;
+}): number {
+  if (input.isNetworkBlocked) return 0;
+  return input.isInitialConnection
+    ? OFFLINE_THRESHOLD_MS
+    : RESUME_CONNECTION_STATUS_DELAY_MS;
+}
 
 export function ConnectionStatus() {
   const connectionStatus = useTimerStore.use.connectionStatus();
-  const expanded = useUiStore.use.expanded();
-  const activeTab = useUiStore.use.activeTab();
   const isAuthenticated = useAuthStore.use.isAuthenticated();
   const actions = useUserActionQueue.use.actions();
   const isNetworkBlocked = useUserActionQueue.use.isNetworkBlocked();
   const isCollapsed = useConnectionStatusUi.use.isCollapsed();
   const dismiss = useConnectionStatusUi.use.dismiss();
+  const restore = useConnectionStatusUi.use.restore();
   const reset = useConnectionStatusUi.use.reset();
   const setTone = useConnectionStatusUi.use.setTone();
   const tone = useConnectionStatusUi.use.tone();
@@ -94,9 +103,10 @@ export function ConnectionStatus() {
       Date.now() - (reconnectingStartTimeRef.current ?? Date.now());
     // Initial bootstrap renders shell and skeletons silently. Only prolonged
     // initial outage becomes visible; later reconnects remain prompt.
-    const displayDelay = isInitialConnection
-      ? OFFLINE_THRESHOLD_MS
-      : CONNECTION_STATUS_DELAY_MS;
+    const displayDelay = getConnectionStatusDisplayDelay({
+      isInitialConnection,
+      isNetworkBlocked,
+    });
     const remainingDelay = Math.max(0, displayDelay - elapsed);
 
     if (remainingDelay === 0) {
@@ -120,7 +130,7 @@ export function ConnectionStatus() {
     clearOfflineCheck();
     offlineCheckIntervalRef.current = setInterval(
       updateOfflineState,
-      CONNECTION_STATUS_DELAY_MS
+      CONNECTION_STATUS_POLL_MS
     );
 
     return () => {
@@ -153,30 +163,19 @@ export function ConnectionStatus() {
     dismiss(statusTone);
   };
 
-  // Timer and minimized surfaces have no BackButton slot. Keep the dismissed
-  // connection state visible in the app chrome instead of dropping feedback.
-  // Full-page views render the same spinner through their BackButton slot.
-  const showGlobalCompactIndicator =
-    isCollapsed && (!expanded || activeTab === 'timer');
-
-  if (isCollapsed && showGlobalCompactIndicator) {
+  if (isCollapsed) {
     return (
-      <div className="pointer-events-none fixed left-2 top-[calc(env(safe-area-inset-top)+0.5rem)] z-[65] flex flex-col items-start gap-2">
+      <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 z-[65] flex flex-col items-end gap-2">
         <div className="pointer-events-auto relative">
           <button
             type="button"
             aria-label={t('connection.connecting')}
-            aria-expanded={detailsOpen}
+            aria-expanded={false}
             data-testid="connection-status-collapsed-global"
             title={t('connection.connecting')}
             onClick={() => {
-              if (actions.length > 0) setDetailsOpen(open => !open);
-            }}
-            onMouseEnter={() => {
-              if (actions.length > 0) setDetailsOpen(true);
-            }}
-            onFocus={() => {
-              if (actions.length > 0) setDetailsOpen(true);
+              setDetailsOpen(false);
+              restore();
             }}
             className={`relative flex h-9 w-9 items-center justify-center rounded-full border bg-slate-950 shadow-lg focus:outline-none focus:ring-2 ${
               statusTone === 'offline'
@@ -194,21 +193,9 @@ export function ConnectionStatus() {
               </span>
             )}
           </button>
-          {detailsOpen && actions.length > 0 && (
-            <div className="absolute left-0 top-full mt-2">
-              <ActionQueueDetails
-                actions={actions}
-                canRetryConnection={canRetryConnection}
-              />
-            </div>
-          )}
         </div>
       </div>
     );
-  }
-
-  if (isCollapsed) {
-    return null;
   }
 
   return (

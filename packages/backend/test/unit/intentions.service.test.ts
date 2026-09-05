@@ -142,6 +142,68 @@ function createService(options: ServiceOptions) {
 }
 
 describe('IntentionsService', () => {
+  it('preserves weekly cadence when a legacy-style update keeps the habit enabled', async () => {
+    const intention = {
+      id: 'intention-1',
+      userId: 'user-1',
+      title: 'Review',
+      emoji: '🔎',
+      slug: 'review',
+      type: TIMER_TYPES.WORK,
+      parentIntentionId: null,
+      parentIntention: null,
+      isHabit: true,
+      habitCadence: 'weekly',
+      allowsTasks: true,
+    };
+    const { service } = createService({ intention, intentions: [intention] });
+
+    const saved = await service.updateIntention(
+      'user-1',
+      'review',
+      'Review',
+      '🔎',
+      TIMER_TYPES.WORK,
+      undefined,
+      undefined,
+      undefined,
+      true
+    );
+
+    expect(saved).toMatchObject({ isHabit: true, habitCadence: 'weekly' });
+  });
+
+  it('defaults to daily only when enabling a non-habit through a legacy update', async () => {
+    const intention = {
+      id: 'intention-1',
+      userId: 'user-1',
+      title: 'Review',
+      emoji: '🔎',
+      slug: 'review',
+      type: TIMER_TYPES.WORK,
+      parentIntentionId: null,
+      parentIntention: null,
+      isHabit: false,
+      habitCadence: 'off',
+      allowsTasks: true,
+    };
+    const { service } = createService({ intention, intentions: [intention] });
+
+    const saved = await service.updateIntention(
+      'user-1',
+      'review',
+      'Review',
+      '🔎',
+      TIMER_TYPES.WORK,
+      undefined,
+      undefined,
+      undefined,
+      true
+    );
+
+    expect(saved).toMatchObject({ isHabit: true, habitCadence: 'daily' });
+  });
+
   it('updates unique Intention usage slugs with one set-based statement', async () => {
     const { service, usageQueries } = createService({});
 

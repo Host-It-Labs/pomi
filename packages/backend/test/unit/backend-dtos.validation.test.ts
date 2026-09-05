@@ -45,6 +45,7 @@ import { UpdateWorkTimerLogDto } from '../../src/statistics/dto/update-work-time
 import { WorkTimerLogParamDto } from '../../src/statistics/dto/work-timer-log-param.dto';
 import { WorkTimerLogsQueryDto } from '../../src/statistics/dto/work-timer-logs-query.dto';
 import { CreateTaskDto } from '../../src/tasks/dto/create-task.dto';
+import { TaskArchiveQueryDto } from '../../src/tasks/dto/task-archive-query.dto';
 import {
   ReorderTaskDto,
   ReorderTasksDto,
@@ -60,6 +61,7 @@ import { TestNotificationDto } from '../../src/timer/dto/test-notification.dto';
 import { CreateUserActionDto } from '../../src/user-actions/dto/create-user-action.dto';
 import { UserActionIdParam } from '../../src/user-actions/dto/user-action-id.param';
 import { UserActionStatusQuery } from '../../src/user-actions/dto/user-action-status.query';
+import { UserActionsListQuery } from '../../src/user-actions/dto/user-actions-list.query';
 import { UpdatePushTokenDto } from '../../src/users/dto/update-push-token.dto';
 import { UserIdParamDto } from '../../src/users/dto/user-id.param';
 import { UsernameParamDto } from '../../src/users/dto/username.param';
@@ -108,6 +110,12 @@ describe('backend scalar and parameter DTO validation', () => {
     invalid: Record<string, unknown>;
     property: string;
   }> = [
+    {
+      Dto: UserActionsListQuery,
+      valid: { cursor: 'opaque-cursor', limit: '20' },
+      invalid: { limit: '0' },
+      property: 'limit',
+    },
     {
       Dto: AssistantDebugLogParamDto,
       valid: { id: UUID },
@@ -161,6 +169,12 @@ describe('backend scalar and parameter DTO validation', () => {
       valid: { status: TASK_STATUSES.ACTIVE },
       invalid: { status: 'waiting' },
       property: 'status',
+    },
+    {
+      Dto: TaskArchiveQueryDto,
+      valid: { limit: '50', cursor: 'next-page' },
+      invalid: { limit: '101', cursor: '' },
+      property: 'limit',
     },
     {
       Dto: AssistantModelsQueryDto,
@@ -991,6 +1005,14 @@ describe('timer, user-action, user, and Watch DTO validation', () => {
       platform: 'android',
     });
     await expectValid(UpdatePushTokenDto, { token: 'token', platform: 'ios' });
+    await expectValid(UpdatePushTokenDto, {
+      token: 'token',
+      platform: 'ios-live-activity',
+    });
+    await expectValid(UpdatePushTokenDto, {
+      token: null,
+      platform: 'ios-live-activity',
+    });
     await expectInvalid(
       UpdatePushTokenDto,
       { token: '', platform: 'web' },

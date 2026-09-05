@@ -208,6 +208,21 @@ impl<R: Runtime> Notifications<R> {
             .map_err(Into::into)
     }
 
+    pub async fn set_timer_projection(&self, projection_json: String) -> crate::Result<()> {
+        let args = serde_json::json!({ "projectionJson": projection_json });
+        self.0
+            .run_mobile_plugin_async("setTimerProjection", args)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn clear_timer_projection(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("clearTimerProjection", ())
+            .await
+            .map_err(Into::into)
+    }
+
     #[cfg(target_os = "android")]
     pub async fn get_android_foreground_sync_status(&self) -> crate::Result<serde_json::Value> {
         self.0

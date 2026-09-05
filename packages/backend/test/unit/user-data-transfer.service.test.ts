@@ -5,6 +5,7 @@ describe('UserDataTransferService', () => {
   it('assigns fresh IDs and remaps related imported rows', async () => {
     const inserted = new Map<string, Record<string, unknown>[]>();
     let importedRuntime: Record<string, unknown> | null = null;
+    const invalidatedUsers: string[] = [];
     const targetUserId = 'target-user';
     const manager = {
       findOne: async () => ({ id: targetUserId }),
@@ -31,7 +32,12 @@ describe('UserDataTransferService', () => {
           importedRuntime = runtime;
         },
       } as never,
-      { emitTasksUpdate: () => undefined } as never
+      { emitTasksUpdate: () => undefined } as never,
+      {
+        invalidateCache: async (userId: string) => {
+          invalidatedUsers.push(userId);
+        },
+      } as never
     );
 
     await service.importUserData(targetUserId, {
@@ -52,6 +58,7 @@ describe('UserDataTransferService', () => {
             userId: 'source-user',
             slug: 'parent',
             parentIntentionId: null,
+            isHabit: true,
           },
           {
             id: 'source-child',
@@ -177,6 +184,8 @@ describe('UserDataTransferService', () => {
     expect(parent.id).not.toBe('source-parent');
     expect(child.id).not.toBe('source-child');
     expect(child.parentIntentionId).toBe(parent.id);
+    expect(parent).toMatchObject({ isHabit: true, habitCadence: 'daily' });
+    expect(child).toMatchObject({ isHabit: false, habitCadence: 'off' });
     expect(task.id).not.toBe('source-task');
     expect(task).toMatchObject({
       followUpTaskId: null,
@@ -245,6 +254,7 @@ describe('UserDataTransferService', () => {
         extensionNextTimerType: 'break',
       },
     });
+    expect(invalidatedUsers).toEqual([targetUserId]);
   });
 
   it('rejects an unsupported imported preference language before deleting data', async () => {
@@ -264,7 +274,8 @@ describe('UserDataTransferService', () => {
           callback(manager),
       } as never,
       { importUserData: async () => undefined } as never,
-      { emitTasksUpdate: () => undefined } as never
+      { emitTasksUpdate: () => undefined } as never,
+      { invalidateCache: async () => undefined } as never
     );
 
     await expect(

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AuthController } from '../../src/auth/auth.controller';
 import { AuthRateLimitException } from '../../src/auth/auth-rate-limit.exception';
 import { AuthService } from '../../src/auth/auth.service';
+import { createSessionServiceStub } from './auth-session-test-stubs';
 
 describe('authentication abuse controls', () => {
   it('stops a bounded request before database or bcrypt work', async () => {
@@ -15,7 +16,8 @@ describe('authentication abuse controls', () => {
         assertAuthenticationAllowed: vi.fn(async () => {
           throw new AuthRateLimitException(30);
         }),
-      } as never
+      } as never,
+      createSessionServiceStub()
     );
 
     await expect(
@@ -36,7 +38,8 @@ describe('authentication abuse controls', () => {
         assertRegistrationAllowed: vi.fn(async () => {
           throw new AuthRateLimitException(120);
         }),
-      } as never
+      } as never,
+      createSessionServiceStub()
     );
 
     await expect(
@@ -53,7 +56,8 @@ describe('authentication abuse controls', () => {
         }),
       } as never,
       {} as never,
-      {} as never
+      {} as never,
+      createSessionServiceStub()
     );
     const setHeader = vi.fn();
 

@@ -13,13 +13,21 @@ import {
   TaskPriority,
   TaskStatus,
 } from '@pomi/shared';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, DeepPartial, In, Repository } from 'typeorm';
 import { Intention } from '../intentions/intentions.entity';
 import { generateIntentionSlug } from '../intentions/intention-slug';
 import { RealtimeEvents } from '../realtime/realtime-events';
 import { TaskEntity } from '../tasks/tasks.entity';
 import { TimerStore } from '../timer/timer-store';
 import { ListEntity } from './lists.entity';
+
+type CreateListItemInput = {
+  title: string;
+  dueDate?: string | null;
+  priority?: TaskPriority;
+  creationSource?: 'manual' | 'assistant' | 'voice';
+  vacationEligible?: boolean;
+};
 
 @Injectable()
 export class ListsService {
@@ -124,57 +132,33 @@ export class ListsService {
     return saved;
   }
 
-  async createItem(
-    userId: string,
-    listId: string,
-    input: {
-      title: string;
-      dueDate?: string | null;
-      priority?: TaskPriority;
-      creationSource?: 'manual' | 'assistant' | 'voice';
-      vacationEligible?: boolean;
-    }
-  ) {
+  async createItem(userId: string, listId: string, input: CreateListItemInput) {
     const list = await this.requireList(userId, listId);
     if (list.isArchived) throw new BadRequestException('List is archived');
-    const title = input.title.trim();
-    if (!title) throw new BadRequestException('List item title is required');
-    const item = this.tasksRepository.create({
-      userId,
-      title,
-      description: null,
-      sourceTranscript: null,
-      creationSource: input.creationSource ?? TASK_CREATION_SOURCES.MANUAL,
-      importSource: null,
-      importSourceTaskId: null,
-      dueDate: input.dueDate ?? null,
-      dueTime: null,
-      manualOrder: null,
-      manualOrderOverride: false,
-      lastReminderKey: null,
-      priority: input.priority ?? TASK_PRIORITIES.NORMAL,
-      status: TASK_STATUSES.ACTIVE,
-      timerType: TIMER_TYPES.WORK,
-      customDuration: null,
-      pinnedAt: null,
-      intentionSlug: null,
-      subIntentionSlug: null,
-      recurrenceRule: null,
-      recurrenceInterval: null,
-      recurrenceSequenceIndex: 0,
-      recurrenceAnchorMode: 'planned',
-      followUpTaskId: null,
-      followUpDefinition: null,
-      followUpDelayDays: null,
-      followUpSourceTaskId: null,
-      itemKind: 'listItem',
-      listId,
-      taskRestoreState: null,
-      vacationEligible: input.vacationEligible ?? list.vacationDefault,
-      lastVacationRunId: null,
-      lastVacationShiftedOn: null,
-    });
+    const item = this.tasksRepository.create(
+      this.buildListItemValues(userId, list, input)
+    );
     const saved = await this.tasksRepository.save(item);
+    this.realtimeEvents.emitTasksUpdate(userId);
+    return saved;
+  }
+
+  async createItems(
+    userId: string,
+    listId: string,
+    inputs: CreateListItemInput[]
+  ) {
+    if (inputs.length === 0) return [];
+
+    const list = await this.requireList(userId, listId);
+    if (list.isArchived) throw new BadRequestException('List is archived');
+    const values = inputs.map(input =>
+      this.buildListItemValues(userId, list, input)
+    );
+    const saved = await this.dataSource.transaction(async manager => {
+      const repository = manager.getRepository(TaskEntity);
+      return repository.save(values.map(value => repository.create(value)));
+    });
     this.realtimeEvents.emitTasksUpdate(userId);
     return saved;
   }
@@ -499,6 +483,51 @@ export class ListsService {
     await this.listsRepository.save(list);
     this.realtimeEvents.emitTasksUpdate(userId);
     return intention;
+  }
+
+  private buildListItemValues(
+    userId: string,
+    list: Pick<ListEntity, 'id' | 'isArchived' | 'vacationDefault'>,
+    input: CreateListItemInput
+  ): DeepPartial<TaskEntity> {
+    const title = input.title.trim();
+    if (!title) throw new BadRequestException('List item title is required');
+
+    return {
+      userId,
+      title,
+      description: null,
+      sourceTranscript: null,
+      creationSource: input.creationSource ?? TASK_CREATION_SOURCES.MANUAL,
+      importSource: null,
+      importSourceTaskId: null,
+      dueDate: input.dueDate ?? null,
+      dueTime: null,
+      manualOrder: null,
+      manualOrderOverride: false,
+      lastReminderKey: null,
+      priority: input.priority ?? TASK_PRIORITIES.NORMAL,
+      status: TASK_STATUSES.ACTIVE,
+      timerType: TIMER_TYPES.WORK,
+      customDuration: null,
+      pinnedAt: null,
+      intentionSlug: null,
+      subIntentionSlug: null,
+      recurrenceRule: null,
+      recurrenceInterval: null,
+      recurrenceSequenceIndex: 0,
+      recurrenceAnchorMode: 'planned',
+      followUpTaskId: null,
+      followUpDefinition: null,
+      followUpDelayDays: null,
+      followUpSourceTaskId: null,
+      itemKind: 'listItem',
+      listId: list.id,
+      taskRestoreState: null,
+      vacationEligible: input.vacationEligible ?? list.vacationDefault,
+      lastVacationRunId: null,
+      lastVacationShiftedOn: null,
+    };
   }
 
   private async assertNoRunningFocusedItem(userId: string, itemIds: string[]) {

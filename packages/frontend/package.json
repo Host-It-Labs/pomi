@@ -22,7 +22,7 @@
   "dependencies": {
     "@choochmeque/tauri-plugin-notifications-api": "0.4.6",
     "@pomi/shared": "workspace:*",
-    "@sentry/react": "^10.70.0",
+    "@sentry/react": "^10.72.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/api": "~2.11.1",
     "@tauri-apps/plugin-deep-link": "2.4.9",
@@ -42,17 +42,20 @@
     "socket.io-client": "^4.8.3",
     "tailwindcss": "^4.3.3",
     "tauri-plugin-android-battery-optimization-api": "^0.1.0",
+    "tauri-plugin-keyring-api": "0.1.1",
     "uuid": "^14.0.2",
+    "zod": "4.5.4",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@sentry/vite-plugin": "^5.4.0",
     "@tauri-apps/cli": "~2.11.4",
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.4.0",
     "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
-    "@vitejs/plugin-react": "^6.1.0",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.1",
     "ts-node": "^10.9.2",
-    "typescript": "~6.0.3",
+    "typescript": "~7.0.2",
     "vite": "^8.2.2"
   }
 }

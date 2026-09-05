@@ -95,6 +95,10 @@ vi.mock('../utils/apiClient', () => ({
         .fn()
         .mockResolvedValue({ status: 200, body: { hasImportedTasks: true } }),
       list: vi.fn().mockResolvedValue({ status: 200, body: [] }),
+      archive: vi.fn().mockResolvedValue({
+        status: 200,
+        body: { items: [], nextCursor: null },
+      }),
     },
     intentions: {
       list: vi.fn(async () => ({ status: 200, body: mocks.intentions })),
@@ -187,6 +191,7 @@ vi.mock('../components/toast/ToastContext', () => ({
   showToastFromStore: vi.fn(),
 }));
 
+import { apiClient } from '../utils/apiClient';
 import { Tasks } from './Tasks';
 
 beforeAll(() => {
@@ -212,6 +217,69 @@ beforeEach(() => {
 });
 
 describe('Tasks page interactions', () => {
+  it('appends archive pages without replacing the visible history', async () => {
+    vi.mocked(apiClient.tasks.archive)
+      .mockResolvedValueOnce({
+        status: 200,
+        body: {
+          items: [task({ id: 'archived-1', title: 'Archived one' })],
+          nextCursor: 'next-page',
+        },
+        headers: new Headers(),
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        body: {
+          items: [task({ id: 'archived-2', title: 'Archived two' })],
+          nextCursor: null,
+        },
+        headers: new Headers(),
+      });
+
+    render(<Tasks />);
+    fireEvent.click(screen.getByRole('button', { name: 'Archived' }));
+
+    expect(await screen.findByText('Archived one')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+
+    expect(await screen.findByText('Archived two')).toBeInTheDocument();
+    expect(screen.getByText('Archived one')).toBeInTheDocument();
+    expect(apiClient.tasks.archive).toHaveBeenLastCalledWith({
+      query: { limit: 50, cursor: 'next-page' },
+    });
+  });
+
+  it('reports a missing archive endpoint without legacy fallback requests', async () => {
+    vi.mocked(apiClient.tasks.archive).mockResolvedValueOnce({
+      status: 404,
+      body: { message: 'Not found' },
+      headers: new Headers(),
+    } as never);
+    render(<Tasks />);
+    fireEvent.click(screen.getByRole('button', { name: 'Archived' }));
+
+    expect(
+      await screen.findByText('Failed to load archived Tasks.')
+    ).toBeInTheDocument();
+    expect(apiClient.tasks.list).not.toHaveBeenCalled();
+  });
+
+  it('does not run unbounded archive fallbacks for endpoint failures', async () => {
+    vi.mocked(apiClient.tasks.archive).mockResolvedValueOnce({
+      status: 500,
+      body: { message: 'Unavailable' },
+      headers: new Headers(),
+    } as never);
+
+    render(<Tasks />);
+    fireEvent.click(screen.getByRole('button', { name: 'Archived' }));
+
+    expect(
+      await screen.findByText('Failed to load archived Tasks.')
+    ).toBeInTheDocument();
+    expect(apiClient.tasks.list).not.toHaveBeenCalled();
+  });
+
   it('keeps all dated Tasks and individual actions in the list', async () => {
     mocks.tasks = [
       task({

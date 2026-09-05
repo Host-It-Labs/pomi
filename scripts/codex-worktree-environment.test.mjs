@@ -13,12 +13,6 @@ import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import test from 'node:test';
 
-import {
-  automaticReviewSummaryProblems,
-  pullRequestCompletionProblems,
-  unprocessedAutomaticReviewThreads,
-} from './cleanup-worktree-after-pr.mjs';
-
 const root = path.resolve(import.meta.dirname, '..');
 const environmentConfig = readFileSync(
   path.join(root, '.codex/environments/pomi-worktree.toml'),
@@ -74,6 +68,10 @@ test('Codex worktree setup installs the minimal development dependencies', () =>
     'PR completion cleanup must remain executable'
   );
   assert.match(afterPrCleanupScript, /--check-only/);
+  assert.match(
+    afterPrCleanupScript,
+    /node "\$ROOT_DIR\/scripts\/pr-readiness\.mjs" check/
+  );
 });
 
 test('worktree setup can reuse the primary pnpm content-addressable store', () => {
@@ -142,108 +140,4 @@ test('PR completion cleanup removes only worktree Node dependencies', () => {
   } finally {
     rmSync(temporaryRoot, { recursive: true, force: true });
   }
-});
-
-test('PR completion gate requires green checks and processed automatic reviews', () => {
-  const localHead = 'a'.repeat(40);
-  const summary = [
-    '<!-- codex-pull-request-review-summary -->',
-    '| 📝 **Code Review** | ✅ **Completed** |',
-    '| 🔒 **Security Review** | ✅ **Completed** |',
-  ].join('\n');
-  const pullRequest = {
-    state: 'OPEN',
-    isDraft: false,
-    headRefName: 'dev/example',
-    headRefOid: localHead,
-    statusCheckRollup: [
-      { name: 'tests', status: 'COMPLETED', conclusion: 'SUCCESS' },
-      { name: 'CodeQL', status: 'COMPLETED', conclusion: 'SUCCESS' },
-    ],
-  };
-
-  assert.deepEqual(
-    pullRequestCompletionProblems({
-      pullRequest,
-      localBranch: 'dev/example',
-      localHead,
-      comments: [
-        { author: { login: 'chatgpt-codex-connector' }, body: summary },
-      ],
-      reviewThreads: [
-        {
-          isResolved: true,
-          comments: {
-            nodes: [{ author: { login: 'github-advanced-security[bot]' } }],
-          },
-        },
-        {
-          isResolved: false,
-          comments: {
-            nodes: [
-              { author: { login: 'chatgpt-codex-connector' } },
-              {
-                author: { login: 'NeoHuncho' },
-                body: '<!-- pomi-review-disposition:v1 {"version":1,"outcome":"contradicts-request","requiresUserCheck":true} -->',
-              },
-            ],
-          },
-        },
-      ],
-    }),
-    []
-  );
-
-  const blocked = pullRequestCompletionProblems({
-    pullRequest: {
-      ...pullRequest,
-      statusCheckRollup: [
-        { name: 'tests', status: 'IN_PROGRESS', conclusion: null },
-      ],
-    },
-    localBranch: 'dev/example',
-    localHead,
-    comments: [
-      {
-        author: { login: 'chatgpt-codex-connector' },
-        body: summary.replace('Security Review', 'Pending Review'),
-      },
-    ],
-    reviewThreads: [
-      {
-        isResolved: false,
-        comments: {
-          nodes: [{ author: { login: 'chatgpt-codex-connector' } }],
-        },
-      },
-    ],
-  });
-  assert.ok(
-    blocked.some(problem => problem.includes('tests is not completed'))
-  );
-  assert.ok(blocked.some(problem => problem.includes('Security Review')));
-  assert.ok(
-    blocked.some(problem => problem.includes('automatic review thread'))
-  );
-
-  assert.deepEqual(
-    automaticReviewSummaryProblems([
-      { author: { login: 'NeoHuncho' }, body: summary },
-    ]),
-    ['Codex automatic review summary is missing.']
-  );
-  assert.equal(
-    unprocessedAutomaticReviewThreads([
-      {
-        isResolved: false,
-        comments: {
-          nodes: [
-            { author: { login: 'chatgpt-codex-connector' } },
-            { author: { login: 'NeoHuncho' }, body: 'I will investigate.' },
-          ],
-        },
-      },
-    ]).length,
-    1
-  );
 });
