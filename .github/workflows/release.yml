@@ -97,7 +97,7 @@ jobs:
   docker-backend-amd64:
     name: Build backend image (amd64)
     if: ${{ github.event_name == 'release' || inputs.radar_only != true }}
-    needs: [sentry-release, build-macos, build-android-wear]
+    needs: sentry-release
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -134,7 +134,7 @@ jobs:
   docker-backend-arm64:
     name: Build backend image (arm64)
     if: ${{ github.event_name == 'release' || inputs.radar_only != true }}
-    needs: [sentry-release, build-macos, build-android-wear]
+    needs: sentry-release
     runs-on: ubuntu-24.04-arm
     environment: release
     permissions:
@@ -171,7 +171,13 @@ jobs:
   docker-backend-manifest:
     name: Publish backend image manifest
     if: ${{ github.event_name == 'release' }}
-    needs: [docker-backend-amd64, docker-backend-arm64]
+    needs:
+      [
+        docker-backend-amd64,
+        docker-backend-arm64,
+        build-macos,
+        build-android-wear,
+      ]
     runs-on: ubuntu-latest
     environment: release
     permissions:
