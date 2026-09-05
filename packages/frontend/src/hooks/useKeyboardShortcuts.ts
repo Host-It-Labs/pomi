@@ -259,7 +259,7 @@ export function useKeyboardShortcuts() {
     ];
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat) return; // avoid repeat spam
+      if (event.defaultPrevented || event.repeat) return; // avoid repeat spam
       const isSurfaceNavigationShortcut =
         isMod(event) &&
         !event.altKey &&

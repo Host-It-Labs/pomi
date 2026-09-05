@@ -54,7 +54,6 @@ let localTimerInterval: NodeJS.Timeout | null = null;
 let lastSyncTime = 0;
 let isInitialized = false;
 const pendingTimerHistoryActionIds: HistoryActionId[] = [];
-let hasReceivedInitialTimer = false;
 
 interface TimerState {
   timer: Timer | null;
@@ -179,7 +178,6 @@ const useTimerStoreBase = create<TimerState>((set, get) => ({
     registerSocketEventHandler(SOCKET_EVENTS.TIMER_UPDATE, (data: unknown) => {
       const confirmedTimer = { ...(data as Timer) };
       const updatedTimer = { ...confirmedTimer };
-      const previousTimer = get().timer;
       if (updatedTimer.status === TIMER_STATUSES.RUNNING) {
         lastSyncTime = Date.now();
         const elapsedTime = updatedTimer.duration - updatedTimer.remainingTime;
@@ -188,15 +186,6 @@ const useTimerStoreBase = create<TimerState>((set, get) => ({
 
       set({ timer: { ...updatedTimer } });
       void publishLiveTimerProjection(confirmedTimer);
-
-      if (
-        hasReceivedInitialTimer &&
-        getTimerIntentionSignature(previousTimer) !==
-          getTimerIntentionSignature(updatedTimer)
-      ) {
-        useUiStore.getState().setTaskMode('intention');
-      }
-      hasReceivedInitialTimer = true;
 
       if (updatedTimer.status === TIMER_STATUSES.RUNNING) {
         get().startLocalCountdown();
@@ -565,17 +554,6 @@ const useTimerStoreBase = create<TimerState>((set, get) => ({
   },
 }));
 
-function getTimerIntentionSignature(timer: Timer | null) {
-  if (!timer) return '';
-  const intentions = (timer.intentionSlugs ?? []).map(
-    intention => `${intention}:${timer.subIntentions?.[intention] ?? ''}`
-  );
-  if (intentions.length === 0 && timer.intention) {
-    intentions.push(`${timer.intention}:${timer.subIntention ?? ''}`);
-  }
-  return intentions.sort().join('|');
-}
-
 function confirmPendingTimerHistoryAction() {
   pendingTimerHistoryActionIds.shift();
 }
@@ -614,9 +592,6 @@ function getUndoAlertLogNote(
 export const useTimerStore = createSelectors(useTimerStoreBase);
 
 useAuthStoreBase.subscribe((state, prevState) => {
-  if (state.token !== prevState.token) {
-    hasReceivedInitialTimer = false;
-  }
   if (!state.token && prevState.token && localTimerInterval) {
     clearInterval(localTimerInterval);
     localTimerInterval = null;

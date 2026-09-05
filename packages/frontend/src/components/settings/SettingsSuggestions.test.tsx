@@ -1,3 +1,4 @@
+import { SETTINGS_SUGGESTION_IDS } from '@pomi/shared/src/constants';
 import type { Preferences } from '@pomi/shared';
 import {
   fireEvent,
@@ -20,7 +21,7 @@ const preferences = {
 } as unknown as Preferences;
 beforeEach(() => usePreferencesStore.setState({ preferences }));
 it('offers two relevant tools in stable order without resurfacing dismissals', () => {
-  expect(getSettingSuggestions(preferences)).toEqual([
+  expect(getSettingSuggestions(preferences, true)).toEqual([
     'sessionShowEta',
     'intentionShowDailyCount',
   ]);
@@ -28,15 +29,17 @@ it('offers two relevant tools in stable order without resurfacing dismissals', (
     ...preferences,
     dismissedSettingSuggestions: ['sessionShowEta'],
   };
-  expect(getSettingSuggestions(dismissed)).not.toContain('sessionShowEta');
+  expect(getSettingSuggestions(dismissed, true)).not.toContain(
+    'sessionShowEta'
+  );
   expect(
-    getSettingSuggestions({ ...dismissed, sessionShowEta: true })
+    getSettingSuggestions({ ...dismissed, sessionShowEta: true }, true)
   ).not.toContain('sessionShowEta');
   expect(
-    getSettingSuggestions({ ...dismissed, sessionShowEta: false })
+    getSettingSuggestions({ ...dismissed, sessionShowEta: false }, true)
   ).not.toContain('sessionShowEta');
   expect(
-    getSettingSuggestions({ ...preferences, sessionsExtension: false })
+    getSettingSuggestions({ ...preferences, sessionsExtension: false }, true)
   ).not.toContain('sessionShowEta');
 });
 it('waits for confirmed dismissal without changing the feature value', async () => {
@@ -59,4 +62,17 @@ it('waits for confirmed dismissal without changing the feature value', async () 
     screen.getAllByRole('button', { name: 'Not interested' })
   ).toHaveLength(3);
   expect(usePreferencesStore.getState().preferences).toEqual(preferences);
+});
+
+it('suppresses Assistant setup until its infrastructure is configured', () => {
+  const onlyAssistant = {
+    ...preferences,
+    dismissedSettingSuggestions: SETTINGS_SUGGESTION_IDS.filter(
+      id => id !== 'assistantExtension'
+    ),
+  };
+  expect(getSettingSuggestions(onlyAssistant, false)).toEqual([]);
+  expect(getSettingSuggestions(onlyAssistant, true)).toEqual([
+    'assistantExtension',
+  ]);
 });

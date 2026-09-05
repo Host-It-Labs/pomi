@@ -25,7 +25,10 @@ export function getSessionTimeline(
       now +
       remaining +
       (timer.type === TIMER_TYPES.BREAK ? work : 0) +
-      ahead * (work + rest)
+      ahead * (work + rest) +
+      (timer.type === TIMER_TYPES.WORK && ahead > 0
+        ? Math.max(0, (timer.stackedSessions ?? 1) - 1) * rest
+        : 0)
     );
   });
   return {

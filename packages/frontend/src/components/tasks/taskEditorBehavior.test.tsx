@@ -1,4 +1,4 @@
-import type { Preferences, Task } from '@pomi/shared';
+import type { List, Preferences, Task } from '@pomi/shared';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -228,4 +228,18 @@ describe('shared Task editor behavior', () => {
       })
     );
   });
+});
+
+it('opens a List draft with inherited coverage as a clean form', async () => {
+  const { props } = renderTaskForm({
+    initialListId: 'list-1',
+    lists: [
+      { id: 'list-1', title: 'Groceries', vacationDefault: true } as List,
+    ],
+  });
+  await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+  expect(props.onClose).toHaveBeenCalledOnce();
+  expect(
+    screen.queryByRole('dialog', { name: /discard/i })
+  ).not.toBeInTheDocument();
 });

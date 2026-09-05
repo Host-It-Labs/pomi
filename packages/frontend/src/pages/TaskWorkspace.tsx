@@ -1,3 +1,4 @@
+import { getListWorkspacePages } from '../utils/listWorkspacePages';
 import { FavoriteDestinationShortcuts } from '../components/tasks/FavoriteDestinationShortcuts';
 import { getSelectedTimerIntentions } from '../utils/timerIntentions';
 import { TaskModeToggle } from '../components/TaskModeToggle';
@@ -1021,10 +1022,18 @@ export function TaskWorkspace() {
             : 0)
         }`
       : `${mixedTaskItems.length}`;
-  const pageEntryCount = selectedList
-    ? activeListItems.length
-    : mixedTaskItems.length;
-  const pageCount = Math.max(1, Math.ceil(pageEntryCount / TASKS_PER_PAGE));
+  const listPages = useMemo(
+    () =>
+      getListWorkspacePages(
+        activeListItems,
+        completedListItems,
+        archivedListItems
+      ),
+    [activeListItems, completedListItems, archivedListItems]
+  );
+  const pageCount = selectedList
+    ? listPages.length
+    : Math.max(1, Math.ceil(mixedTaskItems.length / TASKS_PER_PAGE));
   const visiblePage = Math.min(taskPage, pageCount - 1);
   const resetTaskView = useCallback(() => {
     setTaskSearchQuery('');
@@ -1057,7 +1066,11 @@ export function TaskWorkspace() {
       updatedTaskDestinationId ?? pinnedTaskDestinationId ?? highlightedTaskId;
     if (!destinationId || !isDesktop) return;
     const index = selectedList
-      ? activeListItems.findIndex(item => item.id === destinationId)
+      ? listPages.findIndex(page =>
+          [...page.active, ...page.completed, ...page.archived].some(
+            item => item.id === destinationId
+          )
+        ) * TASKS_PER_PAGE
       : mixedTaskItems.findIndex(entry =>
           entry.kind === 'task'
             ? entry.task.id === destinationId
@@ -1071,6 +1084,7 @@ export function TaskWorkspace() {
     mixedTaskItems,
     selectedList,
     activeListItems,
+    listPages,
   ]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -1081,21 +1095,6 @@ export function TaskWorkspace() {
       )
         return;
       const target = event.target as HTMLElement;
-      const editing = target.closest(
-        'input, textarea, select, [contenteditable="true"]'
-      );
-      if (
-        !editing &&
-        (event.metaKey || event.ctrlKey) &&
-        !event.shiftKey &&
-        !event.altKey
-      ) {
-        if (event.code === 'KeyG') {
-          event.preventDefault();
-          resetTaskView();
-          return;
-        }
-      }
       if (
         (event.metaKey || event.ctrlKey) &&
         event.shiftKey &&
@@ -1374,15 +1373,14 @@ export function TaskWorkspace() {
             list={selectedList}
             intentions={intentions}
             activeItems={
-              isDesktop
-                ? activeListItems.slice(
-                    visiblePage * TASKS_PER_PAGE,
-                    (visiblePage + 1) * TASKS_PER_PAGE
-                  )
-                : activeListItems
+              isDesktop ? listPages[visiblePage].active : activeListItems
             }
-            completedItems={completedListItems}
-            archivedItems={archivedListItems}
+            completedItems={
+              isDesktop ? listPages[visiblePage].completed : completedListItems
+            }
+            archivedItems={
+              isDesktop ? listPages[visiblePage].archived : archivedListItems
+            }
             onEdit={setEditingListItem}
             completingItemIds={completingListItemIds}
             onComplete={completeListItem}
@@ -2111,11 +2109,13 @@ function SelectedListItems({
             ))}
           </div>
         )}
-        {activeItems.length === 0 && (
-          <div className="rounded-xl border border-dashed border-slate-700/70 px-5 py-8 text-center text-sm text-slate-500">
-            {t('task.noActiveItemsInList', { title: list.title })}
-          </div>
-        )}
+        {activeItems.length === 0 &&
+          completedItems.length === 0 &&
+          archivedItems.length === 0 && (
+            <div className="rounded-xl border border-dashed border-slate-700/70 px-5 py-8 text-center text-sm text-slate-500">
+              {t('task.noActiveItemsInList', { title: list.title })}
+            </div>
+          )}
       </div>
 
       {completedItems.length > 0 && (

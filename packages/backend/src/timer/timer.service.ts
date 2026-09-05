@@ -1758,6 +1758,23 @@ export class TimerService implements OnModuleInit {
     );
 
     if (!isAddingTime) {
+      const timer = currentTimer
+        ? {
+            ...currentTimer,
+            startTime:
+              currentTimer.status === TIMER_STATUSES.RUNNING ? Date.now() : 0,
+            remainingTime: currentTimer.duration,
+            extensionCandidate: undefined,
+            hasNotifiedBeforeTimeNotification: false,
+            hasNotifiedPausedTimerReminder: false,
+          }
+        : null;
+      if (timer) {
+        await this.commitCurrentTimer(userId, expected, timer, {
+          extensionState: null,
+        });
+        this.timerEvents.emitTimerUpdate(userId, timer);
+      }
       if (elapsed > 0) {
         await this.statisticsService.appendDurationToStatistic(
           userId,
@@ -1768,7 +1785,6 @@ export class TimerService implements OnModuleInit {
       }
       await this.timerStore.clearExtensionState(userId);
       this.timerEvents.emitExtensionStateUpdate(userId, null);
-      const timer = await this.timerStore.getCurrentTimer(userId);
       const entry = await this.buildHistoryEntry(
         userId,
         'Log extension time',

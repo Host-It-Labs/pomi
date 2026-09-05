@@ -39,6 +39,19 @@ describe('compact session progress', () => {
         .timerEnd
     ).toBeNull();
   });
+  it('includes the stacked break before later Work timers', () => {
+    expect(
+      getSessionTimeline({ ...timer, stackedSessions: 3 }, preferences, 1_000)
+        .ends
+    ).toEqual([null, 601_000, 3_001_000]);
+    expect(
+      getSessionTimeline(
+        { ...timer, type: 'break', stackedSessions: 3, remainingTime: 900_000 },
+        preferences,
+        1_000
+      ).ends
+    ).toEqual([null, 2_401_000, 4_201_000]);
+  });
   it('weights stacked work and includes completed work in extension progress', () => {
     const stacked = getSessionSegments(
       { ...timer, duration: 3_000_000 },

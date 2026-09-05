@@ -11,6 +11,7 @@ import type { Preferences } from '@pomi/shared';
 import { SETTINGS_SUGGESTION_IDS } from '@pomi/shared/src/constants';
 import { useState } from 'react';
 import { usePreferencesStore } from '../../stores/preferencesStore';
+import { useAssistantStore } from '../../stores/assistantStore';
 import { useUiStore } from '../../stores/uiStore';
 import { useI18n } from '../../i18n';
 import { Button } from '../ui/Button';
@@ -37,8 +38,12 @@ const labels: Record<(typeof SETTINGS_SUGGESTION_IDS)[number], string> = {
   timerExtension: 'timerSettings.keepGoing',
 };
 
-export function getSettingSuggestions(preferences: Preferences) {
+export function getSettingSuggestions(
+  preferences: Preferences,
+  assistantConfigured: boolean
+) {
   return SETTINGS_SUGGESTION_IDS.filter(id => {
+    if (id === 'assistantExtension' && !assistantConfigured) return false;
     if (
       preferences[id] ||
       preferences.dismissedSettingSuggestions?.includes(id)
@@ -76,6 +81,7 @@ export function SettingsSuggestions({
 }) {
   const { t } = useI18n();
   const preferences = usePreferencesStore.use.preferences();
+  const assistantStatus = useAssistantStore.use.status();
   const update = usePreferencesStore.use.updatePreferenceWithResult();
   const setActiveTab = useUiStore.use.setActiveTab();
   const [busy, setBusy] = useState(false);
@@ -83,7 +89,10 @@ export function SettingsSuggestions({
     (typeof SETTINGS_SUGGESTION_IDS)[number] | null
   >(null);
   if (!preferences) return null;
-  const suggestions = getSettingSuggestions(preferences);
+  const suggestions = getSettingSuggestions(
+    preferences,
+    assistantStatus?.settingsConfigured === true
+  );
   if (!suggestions.length) return null;
   return (
     <section

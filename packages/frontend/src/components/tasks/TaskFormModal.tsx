@@ -496,11 +496,12 @@ export function TaskFormModal({
     setFollowUpSubIntentionSlug('');
     setFollowUpVacationEligible(false);
     setFollowUpDelayDays('');
-    const inheritedVacationCoverage =
-      intentions.find(
-        intention =>
-          intention.slug === defaultIntention && !intention.parentIntentionId
-      )?.vacationDefault === true;
+    const inheritedVacationCoverage = initialListId
+      ? lists?.find(list => list.id === initialListId)?.vacationDefault === true
+      : intentions.find(
+          intention =>
+            intention.slug === defaultIntention && !intention.parentIntentionId
+        )?.vacationDefault === true;
     setVacationEligible(inheritedVacationCoverage);
     setVacationEligibleTouched(false);
     setInitialFormKey(
@@ -529,7 +530,7 @@ export function TaskFormModal({
         followUpSubIntentionSlug: '',
         followUpVacationEligible: false,
         followUpDelayDays: '',
-        selectedListId: '',
+        selectedListId: initialListId ?? '',
         vacationEligible: inheritedVacationCoverage,
         vacationEligibleTouched: false,
       })
@@ -545,6 +546,7 @@ export function TaskFormModal({
     defaultTimerType,
     initialTitle,
     initialListId,
+    lists,
     intentions,
     isOpen,
     preferences,

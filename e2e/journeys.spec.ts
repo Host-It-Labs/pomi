@@ -138,17 +138,6 @@ test('2. enables Intentions, selects a Parent and Sub-intention, then records a 
   await expect(display).toBeVisible();
 
   await page.locator(`button[title*="${parentTitle}"]`).first().click();
-  await expect
-    .poll(async () => {
-      const timer = (await fetchWatchStatus(page)).timer;
-      return timer?.intentions?.map(
-        (intention: { slug: string; subSlug?: string }) => [
-          intention.slug,
-          intention.subSlug,
-        ]
-      );
-    })
-    .toEqual([[parent.slug, null]]);
   const subPicker = page.getByTestId('expanded-sub-intentions-picker');
   await expect(subPicker).toBeVisible();
   await subPicker.locator(`button[title*="${childTitle}"]`).click();
@@ -660,7 +649,9 @@ test('11. produces real Timer and Task activity for statistics and work-Timer lo
     .toBe(true);
 
   await page.getByRole('button', { name: 'Statistics', exact: true }).click();
-  await expect(page.getByText('Today', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Today', exact: true })
+  ).toBeVisible();
   await page
     .getByTestId('statistics-controls')
     .getByRole('button', { name: 'Tasks' })
@@ -714,8 +705,15 @@ test('12. preserves accepted-action FIFO through delayed indication, reconnect, 
   const timerDurationBeforeReconnect = statusBeforeReconnect.timer?.duration;
   expect(timerDurationBeforeReconnect).toBe(30 * 60_000);
 
-  await page.context().setOffline(true);
+  const acceptedAction = page.waitForResponse(
+    response =>
+      new URL(response.url()).pathname === '/user-actions' &&
+      response.request().method() === 'POST' &&
+      response.status() === 202
+  );
   await page.locator('button[aria-label^="Add 5 Minutes"]').first().click();
+  await acceptedAction;
+  await page.context().setOffline(true);
   await expect(page.getByTestId('connection-status-dismiss')).toBeVisible({
     timeout: 10_000,
   });
