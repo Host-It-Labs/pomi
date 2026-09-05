@@ -676,36 +676,17 @@ function resolveExtensionState(
   completedAt: number,
   nextType: TimerTypes
 ): TimerStateMutation<TimerExtensionState> {
-  if (nextType === TIMER_TYPES.WORK) {
-    return { kind: 'clear' };
-  }
   if (
-    timer.type !== TIMER_TYPES.WORK ||
-    timer.isExtension ||
-    !preferences.timerExtension
+    timer.type === TIMER_TYPES.WORK &&
+    !timer.isExtension &&
+    preferences.timerExtension
   ) {
-    return { kind: 'keep' };
+    return {
+      kind: 'set',
+      value: buildExtensionState(timer, preferences, completedAt, nextType),
+    };
   }
-  if (nextType === TIMER_TYPES.BREAK || nextType === TIMER_TYPES.LONG_BREAK) {
-    if (!resolveBreakAutoStart(preferences, nextType)) {
-      return {
-        kind: 'set',
-        value: buildExtensionState(timer, preferences, completedAt, nextType),
-      };
-    }
-    return { kind: 'keep' };
-  }
-  return { kind: 'keep' };
-}
-
-function resolveBreakAutoStart(
-  preferences: Preferences,
-  type: TimerTypes
-): boolean {
-  return (
-    (type === TIMER_TYPES.BREAK || type === TIMER_TYPES.LONG_BREAK) &&
-    resolveTimerAutoStart(preferences, type)
-  );
+  return { kind: 'clear' };
 }
 
 function resolveTimerAutoStart(preferences: Preferences, type: TimerTypes) {
@@ -728,12 +709,6 @@ function buildExtensionCandidate(
     return undefined;
   }
   return {
-    maxDuration:
-      preferences.sessionsExtension &&
-      preferences.sessionHasLongBreak &&
-      preferences.sessionAutoDetectLongBreak
-        ? preferences.sessionLongBreakDuration
-        : undefined,
     intention: timer.intention,
     intentionSlugs: timer.intentionSlugs,
     subIntentions: timer.subIntentions,

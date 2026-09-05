@@ -14,14 +14,14 @@ export function ExtrasSection({
 }: ExtrasSectionProps) {
   const { t } = useI18n();
   return (
-    <section
+    <details
       data-extras-section={sectionId}
       className="rounded-xl border border-slate-800/70 bg-slate-950/20 p-4"
     >
-      <h3 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-        {label ?? t('common.personalize')}
-      </h3>
-      <div className="space-y-5">{children}</div>
-    </section>
+      <summary className="cursor-pointer text-sm font-medium text-slate-400">
+        {label ?? t('common.moreOptions')}
+      </summary>
+      <div className="mt-4 space-y-5">{children}</div>
+    </details>
   );
 }

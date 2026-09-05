@@ -24,7 +24,7 @@ export const CheckboxRow = ({
       />
       <label
         htmlFor={`left-${leftLabel.replace(/\s/g, '')}`}
-        className="text-xs text-white cursor-pointer"
+        className="text-xs text-ink cursor-pointer"
       >
         {leftLabel}
       </label>
@@ -39,7 +39,7 @@ export const CheckboxRow = ({
       />
       <label
         htmlFor={`right-${rightLabel.replace(/\s/g, '')}`}
-        className="text-xs text-white cursor-pointer"
+        className="text-xs text-ink cursor-pointer"
       >
         {rightLabel}
       </label>

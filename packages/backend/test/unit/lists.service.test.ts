@@ -271,8 +271,6 @@ test('Task-to-List conversion snapshots and clears every Task-only field', async
     importSourceTaskId: null,
     dueDate: '2026-08-01',
     dueTime: '12:30',
-    manualOrder: 4,
-    manualOrderOverride: true,
     priority: 'high',
     status: 'active',
     timerType: 'break',
@@ -332,7 +330,6 @@ test('Task-to-List conversion snapshots and clears every Task-only field', async
   assert.equal(task.followUpTaskId, null);
   assert.equal(task.followUpDelayDays, null);
   assert.equal(task.followUpSourceTaskId, null);
-  assert.equal(task.manualOrder, null);
   assert.equal(task.vacationEligible, true);
   assert.deepEqual(task.taskRestoreState, {
     description: 'Detailed plan',
@@ -364,8 +361,6 @@ test('Task-to-List conversion snapshots and clears every Task-only field', async
     followUpSourceTaskId: null,
     lastReminderKey: 'old-key',
     recurrenceSequenceIndex: 3,
-    manualOrder: 4,
-    manualOrderOverride: true,
     itemKind: 'task',
   });
 });

@@ -27,6 +27,8 @@ interface UiState {
   activeTab: Tab;
   setActiveTab: (activeTab: Tab) => void;
   taskMode: TaskMode;
+  taskModeToggleRequest: number;
+  requestTaskModeToggle: () => void;
   setTaskMode: (taskMode: TaskMode) => void;
   latestUndoSource: HistorySource | null;
   latestRedoSource: HistorySource | null;
@@ -96,6 +98,9 @@ const useUiStoreBase = create<UiState>((set, state) => ({
   activeTab: 'timer',
   setActiveTab: (activeTab: Tab) => set({ activeTab }),
   taskMode: 'general',
+  taskModeToggleRequest: 0,
+  requestTaskModeToggle: () =>
+    set(state => ({ taskModeToggleRequest: state.taskModeToggleRequest + 1 })),
   setTaskMode: (taskMode: TaskMode) => set({ taskMode }),
   latestUndoSource: null,
   latestRedoSource: null,

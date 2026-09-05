@@ -36,7 +36,7 @@ export function Toast({
   const getToastStyles = () => {
     switch (type) {
       case 'success':
-        return 'bg-green-900/80 border-green-500 text-green-200';
+        return 'toast-work-success';
       case 'error':
         return 'bg-red-900/80 border-red-500 text-red-200';
       case 'warning':
@@ -52,7 +52,7 @@ export function Toast({
       case 'success':
         return (
           <svg
-            className="w-5 h-5 mr-2 text-green-500"
+            className="w-5 h-5 mr-2 toast-work-icon"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"

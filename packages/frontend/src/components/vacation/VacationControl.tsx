@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { FaUmbrellaBeach } from 'react-icons/fa';
+import { useI18n } from '../../i18n';
 import { usePreferencesStore } from '../../stores/preferencesStore';
 import { useVacationStore } from '../../stores/vacationStore';
 import { submitUserMutation } from '../../utils/userActionQueue';
@@ -7,7 +8,6 @@ import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
 import { Modal } from '../ui/Modal';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
-import { useI18n } from '../../i18n';
 import { VacationSetupModal } from './VacationSetupModal';
 
 export function VacationControl() {
@@ -152,7 +152,7 @@ export function VacationControl() {
                 value={endsOn}
                 min={tomorrow}
                 onChange={event => setEndsOn(event.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-white"
+                className="h-11 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-ink"
               />
             </label>
             <Button

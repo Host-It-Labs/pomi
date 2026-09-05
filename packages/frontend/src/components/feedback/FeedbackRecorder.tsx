@@ -2,20 +2,20 @@ import {
   FEEDBACK_MAX_TEXT_LENGTH,
   FEEDBACK_TRANSCRIPTION_MAX_ENCODED_BYTES,
 } from '@pomi/shared/src/constants';
-import { createPortal } from 'react-dom';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { create } from 'zustand';
+import { createPortal } from 'react-dom';
 import { FaMicrophoneSlash, FaSpinner, FaStop } from 'react-icons/fa';
+import { v4 as uuid } from 'uuid';
+import { create } from 'zustand';
+import { getLanguage, translate, useI18n } from '../../i18n';
+import { useAuthStore } from '../../stores/authStore';
+import { createSelectors } from '../../stores/createSelectors';
+import { useUiStore } from '../../stores/uiStore';
 import { apiClient } from '../../utils/apiClient';
 import { blobToBase64 } from '../../utils/blobToBase64';
 import { platformName } from '../../utils/osUtils';
 import { submitUserMutation } from '../../utils/userActionQueue';
-import { useAuthStore } from '../../stores/authStore';
-import { useUiStore } from '../../stores/uiStore';
-import { createSelectors } from '../../stores/createSelectors';
 import { showToastFromStore } from '../toast/ToastContext';
-import { getLanguage, translate, useI18n } from '../../i18n';
-import { v4 as uuid } from 'uuid';
 
 export type FeedbackRecordingStage =
   'idle' | 'starting' | 'recording' | 'sending' | 'error';
@@ -387,7 +387,7 @@ export function FeedbackRecorder() {
         <button
           type="button"
           onClick={cancelRecording}
-          className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] text-slate-400 hover:text-white"
+          className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] text-slate-400 hover:text-ink"
         >
           {t('common.cancel')}
         </button>
@@ -396,7 +396,7 @@ export function FeedbackRecorder() {
           aria-label={t('feedback.stopRecording')}
           title={t('feedback.stopRecording')}
           onClick={stopRecording}
-          className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-red-600 text-white shadow-sm shadow-red-950/30 transition hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-400/60"
+          className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-red-600 text-ink shadow-sm shadow-red-950/30 transition hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-400/60"
         >
           <FaStop size={9} />
         </button>
@@ -412,7 +412,7 @@ export function FeedbackRecorder() {
         role="status"
         aria-label={t('feedback.sending')}
         title={t('feedback.sending')}
-        className="relative z-[2147483647] flex h-[38px] w-[38px] items-center justify-center rounded-full border border-slate-700/40 bg-indigo-600/90 text-white shadow-sm shadow-indigo-950/30"
+        className="relative z-[2147483647] flex h-[38px] w-[38px] items-center justify-center rounded-full border border-slate-700/40 bg-indigo-600/90 text-ink shadow-sm shadow-indigo-950/30"
       >
         <FaSpinner className="animate-spin" />
       </div>
@@ -430,7 +430,7 @@ export function FeedbackRecorder() {
         <button
           type="button"
           onClick={cancelRecording}
-          className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] text-slate-400 hover:text-white"
+          className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] text-slate-400 hover:text-ink"
         >
           {t('common.dismiss')}
         </button>

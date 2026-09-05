@@ -3,12 +3,14 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdvancedSkipInlineStrip } from './AdvancedSkipInlineStrip';
-import { SessionIndicator } from './SessionIndicator';
+import { CompactTimerDisplay } from './CompactTimer';
 import { TimerExtensionModal } from './TimerExtensionModal';
 
 const mocks = vi.hoisted(() => ({
   preferences: { keyboardShortcuts: true } as Preferences,
   setSessionPosition: vi.fn(),
+  timer: null as Timer | null,
+  disconnected: false,
 }));
 
 vi.mock('../stores/preferencesStore', () => ({
@@ -19,7 +21,16 @@ vi.mock('../stores/preferencesStore', () => ({
 
 vi.mock('../stores/timerStore', () => ({
   useTimerStore: {
-    use: { setSessionPosition: () => mocks.setSessionPosition },
+    use: {
+      setSessionPosition: () => mocks.setSessionPosition,
+      timer: () => mocks.timer,
+      connectionStatus: () => ({
+        isConnected: !mocks.disconnected,
+        isReconnecting: false,
+      }),
+      toggleTimer: () => vi.fn(),
+      extensionState: () => null,
+    },
   },
 }));
 
@@ -55,36 +66,26 @@ afterEach(() => {
 });
 
 describe('Timer and Session presentation', () => {
-  it('renders active, completed, stacked, and disconnected Session states', async () => {
+  it('selects ring segments directly and disables them when disconnected', async () => {
     const user = userEvent.setup();
-    const { rerender } = render(
-      <SessionIndicator
-        currentPosition={2}
-        totalPomodoros={4}
-        isDisconnected={false}
-        stackedSessions={3}
-      />
-    );
-
-    const dots = screen.getAllByTestId('session-dot-expanded');
-    expect(dots).toHaveLength(4);
-    expect(dots[0]).toHaveClass('bg-indigo-400');
-    expect(dots[1]).toHaveAttribute('data-active', 'true');
-    expect(dots[1]).toHaveClass('bg-amber-500');
-    expect(screen.getByText('3x')).toBeInTheDocument();
-    expect(dots[1]).toHaveAttribute('title', 'Stacked Pomi (3x) - 2 of 4');
-
-    await user.click(dots[3]);
+    mocks.preferences = {
+      keyboardShortcuts: true,
+      sessionsExtension: true,
+    } as Preferences;
+    mocks.timer = timer({ sessionPosition: 2, sessionTotal: 4 });
+    mocks.disconnected = false;
+    const { rerender } = render(<CompactTimerDisplay />);
+    const segments = screen.getAllByRole('button', { name: /^Work [1-4]\/4$/ });
+    expect(segments).toHaveLength(4);
+    expect(segments[1]).toHaveAttribute('aria-pressed', 'true');
+    await user.click(segments[3]);
     expect(mocks.setSessionPosition).toHaveBeenCalledWith(4);
-    await user.click(dots[1]);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    mocks.disconnected = true;
+    rerender(<CompactTimerDisplay />);
+    await user.click(segments[2]);
     expect(mocks.setSessionPosition).toHaveBeenCalledOnce();
-
-    rerender(
-      <SessionIndicator currentPosition={2} totalPomodoros={4} isDisconnected />
-    );
-    await user.click(screen.getAllByTestId('session-dot-expanded')[2]);
-    expect(mocks.setSessionPosition).toHaveBeenCalledOnce();
-    expect(screen.getAllByTestId('session-dot-expanded')[2]).toBeDisabled();
+    expect(segments[2]).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('offers deterministic advanced-skip durations by pointer and keyboard', async () => {

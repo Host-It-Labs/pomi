@@ -1,5 +1,7 @@
 # App Experience Follow-up
 
+Desktop/mobile presentation decisions are superseded by [One warm workspace](0020-one-warm-workspace.md). Unrelated domain, Assistant, Wear, and confirmed-action decisions remain in force.
+
 Status: Accepted
 
 Pomi will refine Tasks, Timer and Assistant surfaces, Wear parity, local Copyme startup, and AI debug-log inspection as one coordinated experience update. The decisions preserve confirmed server-state rendering from ADR 0012, keep compact workflows predictable across desktop, mobile, Wear app, and Tile, and make local development startup constant-size when Copyme is healthy.

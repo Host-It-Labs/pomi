@@ -1,15 +1,16 @@
-import { Type } from 'class-transformer';
 import {
   APP_LANGUAGE_VALUES,
   HELP_TIP_IDS,
+  SETTINGS_SUGGESTION_IDS,
   TASK_DEFAULT_DUE_DATE_MODES,
   TASK_PRIORITIES,
   TASK_SORT_MODES,
   TaskPriority,
 } from '@pomi/shared';
+import { Type } from 'class-transformer';
 import {
-  IsArray,
   ArrayUnique,
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
@@ -209,10 +210,6 @@ export class UpdatePreferencesDto {
   tasksAutoSwitchToIntentionMode?: boolean;
 
   @IsOptional()
-  @IsBoolean()
-  tasksDuringBreaks?: boolean;
-
-  @IsOptional()
   @IsIn(Object.values(TASK_DEFAULT_DUE_DATE_MODES))
   taskDefaultDueDateMode?: 'off' | 'tomorrow' | 'week' | 'custom';
 
@@ -232,6 +229,12 @@ export class UpdatePreferencesDto {
   @IsString({ each: true })
   @IsIn(Object.values(HELP_TIP_IDS), { each: true })
   hiddenHelpTips?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsIn(SETTINGS_SUGGESTION_IDS, { each: true })
+  dismissedSettingSuggestions?: string[];
 
   @IsOptional()
   @IsArray()

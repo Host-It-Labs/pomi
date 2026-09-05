@@ -359,7 +359,7 @@ describe.runIf(hasInfrastructure)('Watch HTTP integration', () => {
     ]);
   });
 
-  it('keeps timer-linked Tasks ahead of manual General anchors', async () => {
+  it('keeps timer-linked Tasks ahead of urgent General Tasks', async () => {
     const auth = await createSession('task_groups');
     await updatePreferences(auth, { tasksExtension: true });
     const intention = await createIntention(
@@ -368,18 +368,13 @@ describe.runIf(hasInfrastructure)('Watch HTTP integration', () => {
       '🎯',
       'work'
     );
-    const generalTask = await createTask(auth, 'Manual General anchor', {
+    await createTask(auth, 'Urgent General task', {
       priority: 'urgent',
     });
     await createTask(auth, 'Current Watch task', {
       intentionSlug: intention.slug,
       priority: 'low',
     });
-    await request(app.getHttpServer())
-      .patch(`/tasks/${generalTask.id}`)
-      .set(authenticated(auth))
-      .send({ manualOrder: 0, manualOrderOverride: true })
-      .expect(200);
     await timerAction(auth, 'startOrResume', {
       timerType: 'work',
       intentionSlugs: [intention.slug],
@@ -388,7 +383,12 @@ describe.runIf(hasInfrastructure)('Watch HTTP integration', () => {
     const result = await status(auth, '?taskMode=intention&limit=4');
     expect(result.tasks.map((task: { title: string }) => task.title)).toEqual([
       'Current Watch task',
-      'Manual General anchor',
+      'Urgent General task',
+    ]);
+    const general = await status(auth, '?taskMode=general&limit=4');
+    expect(general.tasks.map((task: { title: string }) => task.title)).toEqual([
+      'Urgent General task',
+      'Current Watch task',
     ]);
   });
 

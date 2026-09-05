@@ -1,7 +1,7 @@
 import { Preferences } from '@pomi/shared';
+import { useState } from 'react';
 import {
   FaBell,
-  FaCoffee,
   FaExchangeAlt,
   FaFileImport,
   FaList,
@@ -9,17 +9,16 @@ import {
   FaThumbtack,
   FaWindowMinimize,
 } from 'react-icons/fa';
-import { useState } from 'react';
-import { VacationSetupModal } from '../components/vacation/VacationSetupModal';
 import { ExtrasSection } from '../components/ExtrasSection';
+import { SettingsControlGroup } from '../components/settings/SettingsExperience';
 import { TaskImportModal } from '../components/tasks/TaskImportModal';
 import { Button } from '../components/ui/Button';
 import { NumberField } from '../components/ui/NumberField';
 import { Separator } from '../components/ui/Separator';
 import { ToggleField } from '../components/ui/ToggleField';
-import { SettingsControlGroup } from '../components/settings/SettingsExperience';
-import { submitUserMutation } from '../utils/userActionQueue';
+import { VacationSetupModal } from '../components/vacation/VacationSetupModal';
 import { useI18n } from '../i18n';
+import { submitUserMutation } from '../utils/userActionQueue';
 
 interface TaskSettingsProps {
   preferences: Preferences;
@@ -156,17 +155,6 @@ export function TaskSettings({
           label={t('task.lists')}
           icon={<FaList size={12} />}
           description={t('task.listsDescription')}
-        />
-
-        <Separator />
-
-        <ToggleField
-          id="tasksDuringBreaks"
-          checked={preferences.tasksDuringBreaks ?? false}
-          onChange={value => updatePreference('tasksDuringBreaks', value)}
-          label={t('task.duringBreaks')}
-          icon={<FaCoffee size={12} />}
-          description={t('task.duringBreaksDescription')}
         />
 
         <Separator />

@@ -47,8 +47,6 @@ type TaskUpdateInput = {
   description?: string | null;
   dueDate?: string | null;
   dueTime?: string | null;
-  manualOrder?: number | null;
-  manualOrderOverride?: boolean;
   priority?: TaskPriority;
   timerType?: TimerTypes;
   customDuration?: number | null;
@@ -85,13 +83,6 @@ type TasksStore = {
   mergeTasks: (tasks: Task[]) => void;
   createTask: (task: TaskCreateInput) => Promise<boolean>;
   updateTask: (task: TaskUpdateInput) => Promise<boolean>;
-  reorderTasks: (
-    updates: Array<{
-      id: string;
-      manualOrder: number;
-      manualOrderOverride?: boolean;
-    }>
-  ) => Promise<boolean>;
   undoTaskAction: () => Promise<boolean>;
   redoTaskAction: () => Promise<boolean>;
 };
@@ -366,42 +357,6 @@ const useTasksStoreBase = create<TasksStore>((set, get) => ({
       return false;
     }
   },
-  reorderTasks: async updates => {
-    try {
-      const result = await submitUserMutation({
-        kind: 'tasks',
-        label: translateCurrent('task.reorderAction'),
-        payload: { operation: 'reorder', reorder: updates },
-        reconcile: () => get().loadTasks(),
-      });
-      const response = normalizeMutationResponse<Task[]>(result, 200);
-
-      if (response.status === 200) {
-        set(state => ({
-          // The reorder endpoint returns only active tasks without due dates.
-          // Keep the other task groups that were loaded during reconciliation.
-          tasks: mergeReorderedTasks(
-            state.tasks,
-            response.body,
-            getTaskOrderingClock(new Date())
-          ),
-          error: null,
-        }));
-        return true;
-      }
-
-      await get().loadTasks();
-      set({ error: translateCurrent('task.reorderFailed') });
-      showToastFromStore(translateCurrent('task.reorderFailed'), 'error');
-      return false;
-    } catch (error) {
-      console.error('Failed to reorder tasks:', error);
-      await get().loadTasks();
-      set({ error: translateCurrent('task.reorderFailed') });
-      showToastFromStore(translateCurrent('task.reorderFailed'), 'error');
-      return false;
-    }
-  },
   undoTaskAction: async () => {
     const entry = undoHistory.pop();
     if (!entry) {
@@ -508,8 +463,6 @@ function getTaskUpdatePayload(task: Task): Omit<TaskUpdateInput, 'id'> {
     description: task.description,
     dueDate: task.dueDate,
     dueTime: task.dueTime,
-    manualOrder: task.manualOrder,
-    manualOrderOverride: task.manualOrderOverride,
     priority: task.priority,
     timerType: task.timerType,
     customDuration: task.customDuration,
@@ -533,26 +486,6 @@ const sortTasks = (tasks: Task[], orderingClock: TaskOrderingClock) =>
     orderingClock.today,
     orderingClock.currentTime
   );
-
-function mergeReorderedTasks(
-  tasks: Task[],
-  reorderedTasks: Task[],
-  orderingClock: TaskOrderingClock
-) {
-  const reorderedById = new Map(
-    reorderedTasks.map(task => [task.id, task] as const)
-  );
-  const merged = tasks.map(task => reorderedById.get(task.id) ?? task);
-  const existingIds = new Set(tasks.map(task => task.id));
-
-  reorderedTasks.forEach(task => {
-    if (!existingIds.has(task.id)) {
-      merged.push(task);
-    }
-  });
-
-  return sortTasks(merged, orderingClock);
-}
 
 const upsertTask = (tasks: Task[], nextTask: Task) => {
   const hasTask = tasks.some(task => task.id === nextTask.id);

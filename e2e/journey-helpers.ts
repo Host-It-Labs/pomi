@@ -1,4 +1,4 @@
-import type { Locator, TestInfo } from '@playwright/test';
+import type { TestInfo } from '@playwright/test';
 import { expect, type Page } from './test';
 import { getApiAuthContext, getApiBackendOrigin, TestHelpers } from './helpers';
 
@@ -173,7 +173,7 @@ export async function fetchTaskLogs(page: Page) {
   const context = await apiContext(page);
   const response = await page.request.get(
     `${context.backendOrigin}/tasks/logs?limit=20&offset=0`,
-    { headers: { Authorization: `Bearer ${context.token}` } }
+    { headers: { Authorization: `Bearer ${context.token}` }, maxRetries: 2 }
   );
   expect(response.ok()).toBeTruthy();
   return response.json() as Promise<Array<Record<string, any>>>;
@@ -221,6 +221,7 @@ export async function fetchWatchStatus(page: Page) {
     `${context.backendOrigin}/watch/status`,
     {
       headers: { Authorization: `Bearer ${context.token}` },
+      maxRetries: 2,
     }
   );
   expect(response.ok()).toBeTruthy();
@@ -294,17 +295,10 @@ export async function createSession(
 }
 
 export async function openTasks(page: Page) {
-  const marker = page.getByTestId('task-search-field');
-  if (await marker.isVisible().catch(() => false)) return;
-
-  const button = page
-    .getByRole('button', { name: 'Open Tasks view', exact: true })
-    .or(page.getByRole('button', { name: 'Open Tasks', exact: true }))
-    .or(page.getByRole('button', { name: 'Tasks', exact: true }))
-    .first();
-  await expect(button).toBeVisible({ timeout: 10_000 });
-  await button.click();
-  await expect(marker).toBeVisible({ timeout: 10_000 });
+  await page.keyboard.press('ControlOrMeta+t');
+  await expect(page.getByTestId('task-workspace')).toBeVisible({
+    timeout: 10_000,
+  });
 }
 
 export async function enableFeatures(
@@ -320,7 +314,7 @@ export async function enableFeatures(
 }
 
 export function timerDisplay(page: Page) {
-  return page.locator('h1', { hasText: /\d{1,2}:\d{2}/ }).first();
+  return page.locator('.compact-countdown').first();
 }
 
 export function parseTimerSeconds(value: string) {
@@ -342,65 +336,4 @@ export async function expectTaskOrder(page: Page, titles: string[]) {
         )
     )
     .toEqual(titles);
-}
-
-export async function dragAfter(page: Page, handle: Locator, target: Locator) {
-  const [handleBox, targetBox] = await Promise.all([
-    handle.boundingBox(),
-    target.boundingBox(),
-  ]);
-  expect(handleBox).not.toBeNull();
-  expect(targetBox).not.toBeNull();
-  const start = {
-    x: handleBox!.x + handleBox!.width / 2,
-    y: handleBox!.y + handleBox!.height / 2,
-  };
-  const finish = {
-    x: targetBox!.x + 12,
-    y: targetBox!.y + targetBox!.height - 2,
-  };
-  const taskList = page.getByTestId('task-list');
-  const [draggedTaskId, targetTaskId] = await Promise.all([
-    handle
-      .locator('xpath=ancestor::*[@data-testid="task-row"]')
-      .getAttribute('data-task-id'),
-    target.getAttribute('data-task-id'),
-  ]);
-  expect(draggedTaskId).toBeTruthy();
-  expect(targetTaskId).toBeTruthy();
-  await handle.dispatchEvent('mousedown', {
-    bubbles: true,
-    button: 0,
-    buttons: 1,
-    clientX: start.x,
-    clientY: start.y,
-  });
-  await expect(taskList).toHaveAttribute(
-    'data-dragging-task-id',
-    draggedTaskId!
-  );
-  await page.evaluate(({ x, y }) => {
-    window.dispatchEvent(
-      new MouseEvent('mousemove', {
-        bubbles: true,
-        button: 0,
-        buttons: 1,
-        clientX: x,
-        clientY: y,
-      })
-    );
-  }, finish);
-  await expect(taskList).toHaveAttribute('data-drop-target-id', targetTaskId!);
-  await expect(taskList).toHaveAttribute('data-drop-placement', 'after');
-  await page.evaluate(({ x, y }) => {
-    window.dispatchEvent(
-      new MouseEvent('mouseup', {
-        bubbles: true,
-        button: 0,
-        buttons: 0,
-        clientX: x,
-        clientY: y,
-      })
-    );
-  }, finish);
 }

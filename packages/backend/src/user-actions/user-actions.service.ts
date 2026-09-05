@@ -982,10 +982,6 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
         return this.tasksService.updateTask(userId, action.taskId, {
           status: 'completed',
         });
-      case 'reorder':
-        if (!action.reorder)
-          throw new BadRequestException('Reorder payload is required');
-        return this.tasksService.reorderTasks(userId, action.reorder);
       case 'import':
         if (!action.importSource || !action.rows) {
           throw new BadRequestException('Import source and rows are required');

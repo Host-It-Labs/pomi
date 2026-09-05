@@ -1,8 +1,8 @@
 import { useCallback } from 'react';
 import { FaArrowLeft } from 'react-icons/fa';
 import { useBackNavigation } from '../hooks/useBackNavigation';
-import { useUiStore } from '../stores/uiStore';
 import { useI18n } from '../i18n';
+import { useUiStore } from '../stores/uiStore';
 
 interface BackButtonProps {
   targetTab: 'timer' | 'settings';
@@ -42,7 +42,7 @@ export function BackButton({
         data-testid="back-button"
         className={
           className ||
-          'flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors cursor-pointer'
+          'flex items-center gap-1.5 text-sm text-slate-400 hover:text-ink transition-colors cursor-pointer'
         }
       >
         <FaArrowLeft size={12} />

@@ -32,10 +32,10 @@ export function IconButton({
       title={tooltipLabel}
       className={clsx(
         'z-10 inline-flex items-center justify-center rounded-full transition-all cursor-pointer relative',
-        'hover:scale-110 focus:outline-none focus:ring-2',
+        'hover:brightness-95 focus:outline-none focus:ring-2',
         sizeClasses[size],
         {
-          'text-white focus:ring-indigo-500/50 bg-indigo-600/90 hover:bg-indigo-500 shadow-sm shadow-indigo-600/20':
+          'text-on-accent focus:ring-indigo-500/50 bg-indigo-600/90 hover:bg-indigo-500 ':
             variant === 'primary' && !disabled,
           'focus:ring-slate-500/50 bg-slate-800/80 text-slate-300 hover:bg-slate-700 border border-slate-700/40':
             variant === 'secondary' && !disabled,

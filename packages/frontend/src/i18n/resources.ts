@@ -1,3 +1,4 @@
+import { redesignTranslations } from './redesign';
 export type TranslationValues = Record<string, string | number>;
 export type TranslationCatalog = Record<string, string>;
 
@@ -534,8 +535,6 @@ const english: TranslationCatalog = {
   'task.loadingArchived': 'Loading archived Tasks...',
   'task.loadMore': 'Load more',
   'task.noArchived': 'No archived Tasks',
-  'task.resetAutomaticOrder': 'Reset to automatic order',
-  'task.resetAutomaticOrderFor': 'Reset {{title}} to automatic order',
   'task.pin': 'Pin',
   'task.unpin': 'Unpin',
   'task.pinFor': 'Pin {{title}}',
@@ -1052,8 +1051,6 @@ const english: TranslationCatalog = {
   'task.loadFailed': 'Failed to load tasks.',
   'task.updateAction': 'Update task',
   'task.updateFailed': 'Task update failed.',
-  'task.reorderAction': 'Reorder tasks',
-  'task.reorderFailed': 'Task reorder failed.',
   'task.undoChange': 'Undo task change',
   'task.archiveAction': 'Archive task',
   'task.historyUpdateFailed': 'Task history update failed.',
@@ -1116,7 +1113,6 @@ const english: TranslationCatalog = {
   'session.goToPosition': 'Go to Pomi {{position}} of {{total}}',
   'task.actionFor': '{{action}} {{title}}',
   'task.archiveFor': 'Archive {{title}}',
-  'task.dragFor': 'Drag {{title}}',
   'vacation.includeFor': 'Include {{label}}',
   'vacation.expandFor': 'Expand {{label}}',
   'task.changeDueDateFor': 'Change due date for {{title}}',
@@ -6374,20 +6370,6 @@ const auditedGeneratedPhraseRows: Array<[string, GeneratedPhraseTargets]> = [
     ],
   ],
   [
-    'Task reorder failed.',
-    [
-      '任务重新排序失败。',
-      'कार्यों का क्रम नहीं बदला जा सका।',
-      'No se pudieron reordenar las tareas.',
-      'فشل إعادة ترتيب المهام.',
-      'Échec de la réorganisation des tâches.',
-      'কাজের ক্রম বদলানো যায়নি।',
-      'Falha ao reordenar as tarefas.',
-      'Pengurutan ulang tugas gagal.',
-      'کاموں کی ترتیب نہیں بدلی جا سکی۔',
-    ],
-  ],
-  [
     'Undo task change',
     [
       '撤销任务更改',
@@ -7000,7 +6982,6 @@ const auditedTranslationOverrides: Record<
     'statistics.taskCountLabel': '任务',
     'statistics.sessionCountLabel': '会话',
     'task.loadFailed': '加载任务失败。',
-    'task.reorderAction': '重新排序任务',
     'task.dueTomorrow': '明天到期',
     'task.dueRelative': '{{relative}}到期',
     'task.recurrenceFromDue': '从到期日开始',
@@ -7016,7 +6997,6 @@ const auditedTranslationOverrides: Record<
     'common.completed': '已完成',
     'task.completedCount': '已完成（{{count}}）',
     'session.goToPosition': '前往第 {{position}} 个 Pomi，共 {{total}} 个',
-    'task.dragFor': '拖动 {{title}}',
     'vacation.includeFor': '包含 {{label}}',
     'vacation.expandFor': '展开 {{label}}',
     'common.aboutFor': '关于 {{label}}',
@@ -7040,7 +7020,6 @@ const auditedTranslationOverrides: Record<
     'statistics.taskCountLabel': 'कार्य',
     'statistics.sessionCountLabel': 'सत्र',
     'task.loadFailed': 'कार्य लोड नहीं हो सके।',
-    'task.reorderAction': 'कार्यों का क्रम बदलें',
     'task.dueTomorrow': 'कल देय',
     'task.dueRelative': '{{relative}} देय',
     'task.recurrenceFromDue': 'नियत तिथि से',
@@ -7056,7 +7035,6 @@ const auditedTranslationOverrides: Record<
     'common.completed': 'पूर्ण',
     'task.completedCount': 'पूर्ण ({{count}})',
     'session.goToPosition': 'Pomi {{position}} पर जाएं, कुल {{total}}',
-    'task.dragFor': '{{title}} को खींचें',
     'vacation.includeFor': '{{label}} शामिल करें',
     'vacation.expandFor': '{{label}} खोलें',
     'common.aboutFor': '{{label}} के बारे में',
@@ -7081,7 +7059,6 @@ const auditedTranslationOverrides: Record<
     'statistics.sessionCountLabel': 'sesiones',
     'statistics.noActivity': 'Todavía no hay actividad',
     'task.loadFailed': 'No se pudieron cargar las tareas.',
-    'task.reorderAction': 'Reordenar tareas',
     'task.noDueDate': 'Sin fecha de vencimiento',
     'task.dueTomorrow': 'vence mañana',
     'task.dueRelative': 'vence {{relative}}',
@@ -7098,7 +7075,6 @@ const auditedTranslationOverrides: Record<
     'common.completed': 'Completado',
     'task.completedCount': 'Completadas ({{count}})',
     'session.goToPosition': 'Ir al Pomi {{position}} de {{total}}',
-    'task.dragFor': 'Arrastrar {{title}}',
     'vacation.includeFor': 'Incluir {{label}}',
     'vacation.expandFor': 'Expandir {{label}}',
     'common.aboutFor': 'Acerca de {{label}}',
@@ -7122,7 +7098,6 @@ const auditedTranslationOverrides: Record<
     'statistics.taskCountLabel': 'مهام',
     'statistics.sessionCountLabel': 'جلسات',
     'task.loadFailed': 'تعذر تحميل المهام.',
-    'task.reorderAction': 'إعادة ترتيب المهام',
     'task.dueTomorrow': 'مستحقة غدًا',
     'task.dueRelative': 'مستحقة {{relative}}',
     'task.recurrenceFromDue': 'من تاريخ الاستحقاق',
@@ -7138,7 +7113,6 @@ const auditedTranslationOverrides: Record<
     'common.completed': 'مكتمل',
     'task.completedCount': 'مكتملة ({{count}})',
     'session.goToPosition': 'الانتقال إلى Pomi {{position}} من {{total}}',
-    'task.dragFor': 'سحب {{title}}',
     'vacation.includeFor': 'تضمين {{label}}',
     'vacation.expandFor': 'توسيع {{label}}',
     'common.aboutFor': 'حول {{label}}',
@@ -7164,7 +7138,6 @@ const auditedTranslationOverrides: Record<
     'statistics.taskCountLabel': 'tâches',
     'statistics.sessionCountLabel': 'cycles',
     'task.loadFailed': 'Impossible de charger les tâches.',
-    'task.reorderAction': 'Réorganiser les tâches',
     'task.dueTomorrow': 'à faire demain',
     'task.dueRelative': 'à faire {{relative}}',
     'task.recurrenceFromDue': 'à partir de l’échéance',
@@ -7184,7 +7157,6 @@ const auditedTranslationOverrides: Record<
     'common.completed': 'Terminé',
     'task.completedCount': 'Terminées ({{count}})',
     'session.goToPosition': 'Aller au Pomi {{position}} sur {{total}}',
-    'task.dragFor': 'Faire glisser {{title}}',
     'vacation.includeFor': 'Inclure {{label}}',
     'vacation.expandFor': 'Développer {{label}}',
     'common.aboutFor': 'À propos de {{label}}',
@@ -7208,7 +7180,6 @@ const auditedTranslationOverrides: Record<
     'statistics.taskCountLabel': 'কাজ',
     'statistics.sessionCountLabel': 'সেশন',
     'task.loadFailed': 'কাজ লোড করা যায়নি।',
-    'task.reorderAction': 'কাজের ক্রম বদলান',
     'task.dueTomorrow': 'আগামীকাল নির্ধারিত',
     'task.dueRelative': '{{relative}} নির্ধারিত',
     'task.recurrenceFromDue': 'নির্ধারিত তারিখ থেকে',
@@ -7224,7 +7195,6 @@ const auditedTranslationOverrides: Record<
     'common.completed': 'সম্পন্ন',
     'task.completedCount': 'সম্পন্ন ({{count}})',
     'session.goToPosition': 'Pomi {{position}} / {{total}}-এ যান',
-    'task.dragFor': '{{title}} টেনে নিন',
     'vacation.includeFor': '{{label}} অন্তর্ভুক্ত করুন',
     'vacation.expandFor': '{{label}} প্রসারিত করুন',
     'common.aboutFor': '{{label}} সম্পর্কে',
@@ -7248,7 +7218,6 @@ const auditedTranslationOverrides: Record<
     'statistics.taskCountLabel': 'tarefas',
     'statistics.sessionCountLabel': 'sessões',
     'task.loadFailed': 'Não foi possível carregar as tarefas.',
-    'task.reorderAction': 'Reordenar tarefas',
     'task.dueTomorrow': 'vence amanhã',
     'task.dueRelative': 'vence {{relative}}',
     'task.recurrenceFromDue': 'a partir do vencimento',
@@ -7265,7 +7234,6 @@ const auditedTranslationOverrides: Record<
     'common.completed': 'Concluído',
     'task.completedCount': 'Concluídas ({{count}})',
     'session.goToPosition': 'Ir para o Pomi {{position}} de {{total}}',
-    'task.dragFor': 'Arrastar {{title}}',
     'vacation.includeFor': 'Incluir {{label}}',
     'vacation.expandFor': 'Expandir {{label}}',
     'common.aboutFor': 'Sobre {{label}}',
@@ -7291,7 +7259,6 @@ const auditedTranslationOverrides: Record<
     'statistics.taskCountLabel': 'tugas',
     'statistics.sessionCountLabel': 'sesi',
     'task.loadFailed': 'Gagal memuat tugas.',
-    'task.reorderAction': 'Susun ulang tugas',
     'task.dueTomorrow': 'jatuh tempo besok',
     'task.dueRelative': 'jatuh tempo {{relative}}',
     'task.recurrenceFromDue': 'dari tanggal jatuh tempo',
@@ -7308,7 +7275,6 @@ const auditedTranslationOverrides: Record<
     'task.completedCount': 'Selesai ({{count}})',
     'task.editFor': 'Ubah {{title}}',
     'session.goToPosition': 'Buka Pomi {{position}} dari {{total}}',
-    'task.dragFor': 'Seret {{title}}',
     'vacation.includeFor': 'Sertakan {{label}}',
     'vacation.expandFor': 'Perluas {{label}}',
     'common.aboutFor': 'Tentang {{label}}',
@@ -7332,7 +7298,6 @@ const auditedTranslationOverrides: Record<
     'statistics.taskCountLabel': 'کام',
     'statistics.sessionCountLabel': 'سیشن',
     'task.loadFailed': 'کام لوڈ نہیں ہو سکے۔',
-    'task.reorderAction': 'کاموں کی ترتیب بدلیں',
     'task.dueTomorrow': 'کل واجب الادا',
     'task.dueRelative': '{{relative}} واجب الادا',
     'task.recurrenceFromDue': 'مقررہ تاریخ سے',
@@ -7348,7 +7313,6 @@ const auditedTranslationOverrides: Record<
     'common.completed': 'مکمل',
     'task.completedCount': 'مکمل ({{count}})',
     'session.goToPosition': 'Pomi {{position}} از {{total}} پر جائیں',
-    'task.dragFor': '{{title}} کو گھسیٹیں',
     'vacation.includeFor': '{{label}} شامل کریں',
     'vacation.expandFor': '{{label}} پھیلائیں',
     'common.aboutFor': '{{label}} کے بارے میں',
@@ -7483,6 +7447,8 @@ Object.assign(translations.ur, {
   'vacation.reconfigureCoverage': 'متاثرہ کام منتخب کریں',
 });
 
+Object.assign(english, redesignTranslations.en);
+
 function buildSourceCatalog(language: string) {
   if (language === 'en') return english;
   const generated = Object.fromEntries(
@@ -7495,6 +7461,7 @@ function buildSourceCatalog(language: string) {
     ...generated,
     ...(translations[language] ?? {}),
     ...(auditedTranslationOverrides[language] ?? {}),
+    ...(redesignTranslations[language] ?? {}),
   } as TranslationCatalog;
 }
 

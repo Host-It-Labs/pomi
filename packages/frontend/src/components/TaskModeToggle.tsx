@@ -1,11 +1,11 @@
 import clsx from 'clsx';
 import { FaBullseye, FaListUl } from 'react-icons/fa';
+import { useI18n } from '../i18n';
 import { TaskMode } from '../stores/uiStore';
 import { KeyboardShortcut } from './ui/KeyboardShortcut';
-import { useI18n } from '../i18n';
 
 interface TaskModeToggleProps {
-  mode: TaskMode;
+  mode: TaskMode | null;
   onModeChange: (mode: TaskMode) => void;
   showShortcuts?: boolean;
   isIntentionDisabled?: boolean;
@@ -24,7 +24,8 @@ export function TaskModeToggle({
     <div className="flex items-center gap-2">
       <div
         className={clsx(
-          'grid rounded-md border border-slate-700/55 bg-slate-950/45 p-0.5',
+          compact && 'task-mode-compact',
+          'relative grid rounded-md border border-slate-700/55 bg-slate-950/45 p-0.5',
           compact ? 'grid-cols-[auto_auto]' : 'grid-cols-2'
         )}
         data-testid="task-mode-toggle"
@@ -38,13 +39,12 @@ export function TaskModeToggle({
           className={clsx(
             'relative flex h-8 w-8 items-center justify-center rounded text-[11px] font-medium transition',
             mode === 'general'
-              ? 'bg-indigo-600 text-white'
+              ? 'bg-indigo-600 text-ink'
               : 'text-slate-400 hover:text-slate-100'
           )}
         >
           <FaListUl size={11} />
           <span className="sr-only">{t('navigation.allTasks')}</span>
-          {showShortcuts && <KeyboardShortcut text="G" showModIcon />}
         </button>
         <button
           type="button"
@@ -58,14 +58,18 @@ export function TaskModeToggle({
             isIntentionDisabled
               ? 'cursor-not-allowed text-slate-600'
               : mode === 'intention'
-                ? 'bg-indigo-600 text-white'
+                ? 'bg-indigo-600 text-ink'
                 : 'text-slate-400 hover:text-slate-100'
           )}
         >
           <FaBullseye size={11} />
           <span className="sr-only">{t('navigation.currentIntentions')}</span>
-          {showShortcuts && <KeyboardShortcut text="I" showModIcon />}
         </button>
+        {showShortcuts && (
+          <span className="task-mode-shortcut">
+            <KeyboardShortcut text="G" showModIcon />
+          </span>
+        )}
       </div>
     </div>
   );

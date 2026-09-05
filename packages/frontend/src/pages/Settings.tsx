@@ -11,41 +11,45 @@ import {
 import {
   FaBell,
   FaBullseye,
-  FaCog,
   FaClock,
-  FaKeyboard,
+  FaCog,
   FaCommentDots,
   FaFileAlt,
+  FaKeyboard,
   FaLayerGroup,
   FaRobot,
   FaTasks,
 } from 'react-icons/fa';
 import { CenteredPageHeader } from '../components/CenteredPageHeader';
+import { DescriptionWizardModal } from '../components/descriptions/DescriptionWizardModal';
+import { FeedbackModal } from '../components/feedback/FeedbackModal';
+import {
+  SettingsControlGroup,
+  SettingsSearchFilter,
+  SettingsSectionFrame,
+  SettingsStickySearch,
+} from '../components/settings/SettingsExperience';
+import { SettingsSuggestions } from '../components/settings/SettingsSuggestions';
+import { TaskImportModal } from '../components/tasks/TaskImportModal';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
 import { IconButton } from '../components/ui/IconButton';
+import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { NumberField } from '../components/ui/NumberField';
 import { PageContainer } from '../components/ui/PageContainer';
 import { PageShell } from '../components/ui/PageShell';
-import { TaskImportModal } from '../components/tasks/TaskImportModal';
 import { ToggleField } from '../components/ui/ToggleField';
-import {
-  SettingsControlGroup,
-  SettingsSectionFrame,
-  SettingsSearchFilter,
-  SettingsStickySearch,
-} from '../components/settings/SettingsExperience';
+import { useI18n } from '../i18n';
 import { useAssistantStore } from '../stores/assistantStore';
 import { useAuthStore } from '../stores/authStore';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { useTimerStore } from '../stores/timerStore';
 import { useUiStore } from '../stores/uiStore';
 import { apiClient } from '../utils/apiClient';
-import { submitUserMutation } from '../utils/userActionQueue';
 import { isDesktop, isIos } from '../utils/osUtils';
-import { AssistantSettings } from './AssistantSettings';
+import { submitUserMutation } from '../utils/userActionQueue';
+import { SessionConfigModal } from './extensions/SessionConfigModal';
 import { GeneralSettings } from './GeneralSettings';
 import { IntentionSettings } from './IntentionSettings';
 import { KeyboardShortcutsSettings } from './KeyboardShortcutsSettings';
@@ -53,10 +57,6 @@ import { NotificationsSettings } from './NotificationsSettings';
 import { SessionSettings } from './SessionSettings';
 import { TaskSettings } from './TaskSettings';
 import { TimerSettings } from './TimerSettings';
-import { FeedbackModal } from '../components/feedback/FeedbackModal';
-import { DescriptionWizardModal } from '../components/descriptions/DescriptionWizardModal';
-import { SessionConfigModal } from './extensions/SessionConfigModal';
-import { useI18n } from '../i18n';
 
 type FeaturePreferenceKey =
   | 'sessionsExtension'
@@ -123,6 +123,22 @@ const settingsSearchEntry = (
 });
 
 export function Settings() {
+  const preferences = usePreferencesStore.use.preferences();
+  const loadPreferences = usePreferencesStore.use.loadPreferences();
+  const { t } = useI18n();
+  useEffect(() => {
+    void loadPreferences();
+  }, [loadPreferences]);
+  return preferences ? (
+    <SettingsContent />
+  ) : (
+    <div role="status" className="p-6 text-slate-300">
+      {t('common.loading')}
+    </div>
+  );
+}
+
+function SettingsContent() {
   const { t } = useI18n();
   const preferences = usePreferencesStore.use.preferences();
   const loadPreferences = usePreferencesStore.use.loadPreferences();
@@ -210,7 +226,7 @@ export function Settings() {
   if (!preferences) {
     return (
       <PageShell className="flex items-center justify-center">
-        <div className="text-white">{t('common.loading')}</div>
+        <div className="text-ink">{t('common.loading')}</div>
       </PageShell>
     );
   }
@@ -258,7 +274,7 @@ export function Settings() {
   const handleCreateFirstTask = useCallback(() => {
     setShowTaskStartChoice(false);
     setExpanded(true);
-    setActiveTab('tasks');
+    setActiveTab('timer');
     requestTaskCreate();
   }, [requestTaskCreate, setActiveTab, setExpanded]);
 
@@ -324,6 +340,14 @@ export function Settings() {
             'general-account'
           ),
           settingsSearchEntry(t('common.logOut'), 'logout'),
+          ...(user?.isAdmin === true
+            ? [
+                settingsSearchEntry(
+                  t('workspace.aiAdministration'),
+                  'aiAdministration'
+                ),
+              ]
+            : []),
           settingsSearchEntry(
             [t('common.language'), t('common.languageDescription')],
             'settings-language'
@@ -348,37 +372,6 @@ export function Settings() {
             ],
             'hiddenTips'
           ),
-          ...(user?.isAdmin
-            ? [
-                settingsSearchEntry(
-                  [
-                    t('settings.admin'),
-                    t('settings.aiInfrastructure'),
-                    t('assistant.apiKeyRequired'),
-                    t('assistant.openRouterDetected'),
-                    t('assistant.openRouterMissing'),
-                    t('assistant.taskCaptureModel'),
-                    t('assistant.transcriptionModel'),
-                    t('assistant.spokenReplyModel'),
-                    t('assistant.spokenReplyVoice'),
-                    t('assistant.selectVoice'),
-                    t('assistant.recordingLimit'),
-                    t('assistant.recordingLimitAbout'),
-                    t('assistant.recordingLimitTitle', { max: 60 }),
-                    t('assistant.usageBudgetPeriod'),
-                    t('assistant.daily'),
-                    t('assistant.monthly'),
-                    t('assistant.budgetPerUser'),
-                    t('assistant.budgetAbout'),
-                    t('assistant.unlimitedBudget'),
-                    t('assistant.retryModelLoading'),
-                    t('assistant.retryingModels'),
-                    t('assistant.autosaves'),
-                  ],
-                  'admin'
-                ),
-              ]
-            : []),
         ],
         icon: <FaCog size={18} />,
         content: (
@@ -387,11 +380,6 @@ export function Settings() {
             updatePreference={updatePreference}
             updateLanguagePreference={updateLanguagePreference}
             reloadPreferences={loadPreferences}
-            adminContent={
-              user?.isAdmin === true ? (
-                <AssistantSettings onSaved={loadAssistantStatus} />
-              ) : undefined
-            }
           />
         ),
         visible: true,
@@ -531,7 +519,7 @@ export function Settings() {
           />
         ),
         visible: true,
-        accentClassName: 'text-amber-300',
+        accentClassName: 'text-indigo-300',
       },
       {
         key: 'shortcuts',
@@ -625,7 +613,7 @@ export function Settings() {
         ),
         visible: true,
         featureKey: 'sessionsExtension',
-        accentClassName: 'text-fuchsia-300',
+        accentClassName: 'text-indigo-300',
       },
       {
         key: 'intentions',
@@ -700,7 +688,7 @@ export function Settings() {
         ),
         visible: true,
         featureKey: 'intentionExtension',
-        accentClassName: 'text-cyan-300',
+        accentClassName: 'text-indigo-300',
       },
       {
         key: 'tasks',
@@ -755,10 +743,6 @@ export function Settings() {
             'listsExtension'
           ),
           settingsSearchEntry(
-            [t('task.duringBreaks'), t('task.duringBreaksDescription')],
-            'tasksDuringBreaks'
-          ),
-          settingsSearchEntry(
             [
               t('task.vacationMode'),
               t('task.vacationModeDescription'),
@@ -789,7 +773,7 @@ export function Settings() {
         ),
         visible: true,
         featureKey: 'tasksExtension',
-        accentClassName: 'text-rose-300',
+        accentClassName: 'text-indigo-300',
       },
       {
         key: 'assistant',
@@ -837,7 +821,7 @@ export function Settings() {
           assistantStatus?.settingsConfigured || preferences.assistantExtension
         ),
         featureKey: 'assistantExtension',
-        accentClassName: 'text-violet-300',
+        accentClassName: 'text-indigo-300',
       },
     ];
 
@@ -959,6 +943,10 @@ export function Settings() {
             >
               {t('settings.noMatchingSections')}
             </div>
+          )}
+
+          {!normalizedSearchQuery && (
+            <SettingsSuggestions onFind={setSearchQuery} />
           )}
 
           <div className="space-y-8">

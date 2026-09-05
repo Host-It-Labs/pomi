@@ -1,9 +1,9 @@
 import { Intention, TaskPriority, TimerTypes } from '@pomi/shared';
 import {
-  TASK_PRIORITIES,
-  TIMER_TYPES,
   TASK_IMPORT_SOURCES,
+  TASK_PRIORITIES,
   TASK_STATUSES,
+  TIMER_TYPES,
 } from '@pomi/shared/src/constants';
 import { strFromU8, unzipSync } from 'fflate';
 import {
@@ -28,27 +28,27 @@ import {
   FaRegSquare,
   FaTimes,
 } from 'react-icons/fa';
-import {
-  IntentionAssignmentPicker,
-  IntentionAssignmentPickerActionContext,
-  IntentionAssignmentOption,
-  IntentionAssignmentPickerChange,
-} from '../intentions/IntentionAssignmentPicker';
+import { translateCurrent, useI18n } from '../../i18n';
+import { useTasksStore } from '../../stores/tasksStore';
 import { apiClient } from '../../utils/apiClient';
-import { submitUserMutation } from '../../utils/userActionQueue';
 import { isDesktop } from '../../utils/osUtils';
 import {
   formatCompactTaskRecurrence,
   formatTaskRecurrence,
 } from '../../utils/taskUi';
+import { submitUserMutation } from '../../utils/userActionQueue';
+import {
+  IntentionAssignmentOption,
+  IntentionAssignmentPicker,
+  IntentionAssignmentPickerActionContext,
+  IntentionAssignmentPickerChange,
+} from '../intentions/IntentionAssignmentPicker';
 import { Alert } from '../ui/Alert';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
 import { KeyboardShortcut } from '../ui/KeyboardShortcut';
 import { Modal } from '../ui/Modal';
 import { UnsavedChangesDialog } from '../ui/UnsavedChangesDialog';
-import { useTasksStore } from '../../stores/tasksStore';
-import { translateCurrent, useI18n } from '../../i18n';
 import { normalizeVikunjaDescription } from './vikunjaDescription';
 
 type ImportPreviewTask = {
@@ -1032,7 +1032,7 @@ export function TaskImportModal({
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         <div className="mx-auto max-w-3xl space-y-4">
           {previewTasks.length === 0 && (
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-slate-700/70 bg-slate-950/40 px-4 py-5 text-sm font-medium text-slate-200 transition hover:border-indigo-500/60 hover:text-white">
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-slate-700/70 bg-slate-950/40 px-4 py-5 text-sm font-medium text-slate-200 transition hover:border-indigo-500/60 hover:text-ink">
               <FaFileImport size={14} />
               {t('task.chooseVikunjaExport')}
               <input

@@ -40,7 +40,7 @@ export function HelpTip({
               event.stopPropagation();
               onDismiss();
             }}
-            className="pointer-events-auto mt-2 inline-flex items-center gap-1 rounded-md border border-slate-700/50 bg-slate-900 px-2 py-1 text-[10px] font-medium text-slate-300 transition hover:border-indigo-500/50 hover:text-white"
+            className="pointer-events-auto mt-2 inline-flex items-center gap-1 rounded-md border border-slate-700/50 bg-slate-900 px-2 py-1 text-[10px] font-medium text-slate-300 transition hover:border-indigo-500/50 hover:text-ink"
           >
             <FaEyeSlash size={10} />
             {t('common.dontShow')}

@@ -80,8 +80,6 @@ function createTask(id: string, overrides: Record<string, unknown> = {}) {
     title: id,
     dueDate: null,
     dueTime: null,
-    manualOrder: null,
-    manualOrderOverride: false,
     priority: 'normal',
     timerType: 'work',
     pinnedAt: null,
@@ -99,10 +97,6 @@ describe('TasksService Watch query', () => {
       pinnedAt: new Date('2026-09-01T00:00:00.000Z'),
     });
     const automatic = createTask('automatic');
-    const override = createTask('override', {
-      manualOrder: 0,
-      manualOrderOverride: true,
-    });
     const builders: QueryBuilder[] = [];
     const repository = {
       createQueryBuilder() {
@@ -111,9 +105,7 @@ describe('TasksService Watch query', () => {
             ? [pinned]
             : builders.length === 2
               ? [automatic]
-              : builders.length === 3
-                ? [override]
-                : [];
+              : [];
         const builder = createBuilder(3, rows);
         builders.push(builder);
         return builder;
@@ -142,18 +134,14 @@ describe('TasksService Watch query', () => {
     expect(result).toMatchObject({
       totalActiveTasks: 3,
       totalVisibleTasks: 3,
-      tasks: [pinned, override],
+      tasks: [pinned, automatic],
     });
-    expect(builders).toHaveLength(4);
+    expect(builders).toHaveLength(3);
     expect(builders[1].takeValue).toBe(2);
     expect(builders[2].takeValue).toBe(1);
-    expect(builders[3].takeValue).toBe(1);
     expect(builders[2].conditions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ condition: 'task.pinnedAt IS NULL' }),
-        expect.objectContaining({
-          condition: 'task.manualOrderOverride = false',
-        }),
       ])
     );
     expect(builders[2].orders.map(order => order.expression)).toEqual(
@@ -162,54 +150,5 @@ describe('TasksService Watch query', () => {
         'task.id',
       ])
     );
-  });
-
-  it('keeps the newest overrides when a manual position exceeds the limit', async () => {
-    const overrides = Array.from({ length: 13 }, (_, index) =>
-      createTask(`override-${index}`, {
-        manualOrder: 0,
-        manualOrderOverride: true,
-        createdAt: new Date(
-          `2026-09-01T00:00:${String(index).padStart(2, '0')}Z`
-        ),
-      })
-    );
-    const builders: QueryBuilder[] = [];
-    const repository = {
-      createQueryBuilder() {
-        const rows = builders.length === 3 ? [...overrides].reverse() : [];
-        const builder = createBuilder(13, rows);
-        builders.push(builder);
-        return builder;
-      },
-      find: async () => [],
-    };
-    const service = new TasksService(
-      repository as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      {} as never
-    );
-
-    const result = await service.getWatchTaskSnapshot('user-1', {
-      timerType: 'work',
-      taskMode: 'general',
-      timerIntentions: [],
-      limit: 12,
-      now: new Date('2026-09-01T00:00:00.000Z'),
-      timeZone: 'UTC',
-    });
-
-    expect(result.tasks.map(task => task.id)).toEqual(
-      overrides
-        .slice()
-        .reverse()
-        .slice(0, 12)
-        .map(task => task.id)
-    );
-    expect(builders[3].takeValue).toBe(12);
   });
 });

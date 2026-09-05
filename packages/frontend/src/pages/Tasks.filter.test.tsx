@@ -1,7 +1,7 @@
 import type { Intention } from '@pomi/shared';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { TaskIntentionFilterDropdown } from './Tasks';
+import { TaskIntentionFilterDropdown } from './TaskWorkspace';
 
 describe('Tasks Intention filter', () => {
   it('clears the selected Intention when it is clicked again', () => {

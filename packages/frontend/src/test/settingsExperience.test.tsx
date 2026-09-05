@@ -43,6 +43,7 @@ vi.mock('../stores/preferencesStore', () => ({
       preferences: () => mocks.preferences,
       loadPreferences: () => mocks.loadPreferences,
       setPreferences: () => mocks.setPreferences,
+      updatePreferenceWithResult: () => vi.fn().mockResolvedValue(true),
     },
   },
 }));
@@ -272,17 +273,16 @@ describe('Settings experience', () => {
     expect(screen.queryByTestId('ai-infrastructure')).toBeNull();
   });
 
-  it('mounts Admin inside General without adding navigation', () => {
-    mocks.user = {
-      id: 'admin-1',
-      username: 'admin',
-      isAdmin: true,
-    } as User;
+  it('finds AI administration in the General section for administrators', async () => {
+    mocks.user = { id: 'admin-1', username: 'admin', isAdmin: true } as User;
+    const user = userEvent.setup();
     render(<Settings />);
-
-    expect(screen.queryByRole('navigation')).toBeNull();
-    expect(screen.getByTestId('ai-infrastructure')).toBeVisible();
-    expect(screen.getByRole('heading', { name: 'Admin' })).toBeVisible();
+    await user.type(
+      screen.getByRole('searchbox', { name: 'Search' }),
+      'AI administration'
+    );
+    expect(sectionKeys()).toEqual(['general']);
+    expect(screen.queryByTestId('ai-infrastructure')).toBeNull();
   });
 
   it('filters sections and their individual controls with a trimmed case-insensitive query', async () => {

@@ -62,16 +62,6 @@ export class UpdateTaskDto {
   expectedDueTime?: string | null;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  manualOrder?: number | null;
-
-  @IsOptional()
-  @IsBoolean()
-  manualOrderOverride?: boolean;
-
-  @IsOptional()
   @IsEnum(TASK_PRIORITIES)
   priority?: TaskPriority;
 

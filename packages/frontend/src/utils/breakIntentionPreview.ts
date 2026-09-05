@@ -76,8 +76,8 @@ export function getMixedBreakButtonClasses(
   if (sourceType === TIMER_TYPES.LONG_BREAK) {
     return {
       buttonClass: selected
-        ? 'bg-violet-950/35 ring-2 ring-violet-400 text-violet-100 shadow-md'
-        : 'bg-violet-950/18 ring-2 ring-violet-700/45 text-slate-100 hover:ring-violet-500/70',
+        ? 'bg-indigo-950/35 ring-2 ring-indigo-400 text-indigo-100 shadow-md'
+        : 'bg-indigo-950/18 ring-2 ring-indigo-700/45 text-slate-100 hover:ring-indigo-500/70',
       markerClass,
     };
   }
@@ -85,8 +85,8 @@ export function getMixedBreakButtonClasses(
   if (sourceType === TIMER_TYPES.BREAK) {
     return {
       buttonClass: selected
-        ? 'bg-emerald-950/35 ring-2 ring-emerald-400 text-emerald-100 shadow-md'
-        : 'bg-emerald-950/18 ring-2 ring-emerald-700/45 text-slate-100 hover:ring-emerald-500/70',
+        ? 'bg-indigo-950/35 ring-2 ring-indigo-400 text-indigo-100 shadow-md'
+        : 'bg-indigo-950/18 ring-2 ring-indigo-700/45 text-slate-100 hover:ring-indigo-500/70',
       markerClass,
     };
   }

@@ -10,22 +10,22 @@ import {
   UserActionStatus,
 } from '@pomi/shared';
 import * as bcrypt from 'bcrypt';
+import { addDays, format, startOfDay, subDays } from 'date-fns';
 import Redis from 'ioredis';
 import { isDeepStrictEqual } from 'node:util';
-import { addDays, format, startOfDay, subDays } from 'date-fns';
 import dataSource from '../data-source';
 import { AssistantDebugSettingEntity } from '../src/assistant/assistant-debug.entity';
 import { DevelopmentFixtureMarkerEntity } from '../src/development-fixtures/development-fixture-marker.entity';
+import { fixtureCredentialFingerprint } from '../src/development-fixtures/fixture-credential';
 import { generateIntentionSlug } from '../src/intentions/intention-slug';
 import { Intention } from '../src/intentions/intentions.entity';
 import { ListEntity } from '../src/lists/lists.entity';
 import { Preferences } from '../src/preferences/preferences.entity';
+import { DEFAULT_REDIS_URL } from '../src/redis/redis.constants';
 import { Statistic } from '../src/statistics/statistics.entity';
 import { TaskEntity, TaskEventEntity } from '../src/tasks/tasks.entity';
-import { UserEntity } from '../src/users/users.entity';
-import { fixtureCredentialFingerprint } from '../src/development-fixtures/fixture-credential';
-import { DEFAULT_REDIS_URL } from '../src/redis/redis.constants';
 import { UserActionsStore } from '../src/user-actions/user-actions.store';
+import { UserEntity } from '../src/users/users.entity';
 
 const WORK_DURATION_MS = 25 * 60 * 1000;
 const BREAK_DURATION_MS = 5 * 60 * 1000;
@@ -63,8 +63,6 @@ type SeedTask = {
   customDuration?: number | null;
   intentionTitle: string;
   subIntentionTitle?: string | null;
-  manualOrder?: number | null;
-  manualOrderOverride?: boolean;
   recurrenceRule: string | null;
   recurrenceInterval?: number | null;
   recurrenceAnchorMode: TaskRecurrenceAnchorMode;
@@ -100,6 +98,16 @@ const COPYME_LIST_ITEMS = [
   {
     title: 'Plan work errands',
     dueOffsetDays: null,
+    priority: TASK_PRIORITIES.NORMAL,
+  },
+  {
+    title: 'Restock coffee beans',
+    dueOffsetDays: -1,
+    priority: TASK_PRIORITIES.HIGH,
+  },
+  {
+    title: 'Choose meals for next week',
+    dueOffsetDays: 2,
     priority: TASK_PRIORITIES.NORMAL,
   },
 ] as const;
@@ -222,7 +230,7 @@ function buildFixturePreferences(userId: string) {
     resetBreakOnFirstIntention: true,
     resetLongBreakOnFirstIntention: false,
     resetWorkOnFirstIntention: true,
-    sessionShowLongBreakButton: true,
+    sessionShowLongBreakButton: false,
     longBreakToBreakEnabled: true,
     sessionShowEta: true,
     sessionStackTimers: true,
@@ -233,7 +241,6 @@ function buildFixturePreferences(userId: string) {
     tasksShowSetupPrompts: true,
     tasksShowInMinimizedTimer: true,
     tasksAutoSwitchToIntentionMode: true,
-    tasksDuringBreaks: true,
     vacationExtension: true,
     vacationCoverageConfigured: true,
     tasksShowVacationCovered: false,
@@ -241,6 +248,7 @@ function buildFixturePreferences(userId: string) {
     taskDefaultDueDateDays: 1,
     taskDefaultSortMode: 'default' as const,
     hiddenHelpTips: [],
+    dismissedSettingSuggestions: ['sessionStackTimers'],
     taskReminderPriorities: [TASK_PRIORITIES.HIGH, TASK_PRIORITIES.URGENT],
     taskBeforeDueReminderMinutes: 0,
     taskUrgentReminderRepeatEnabled: false,
@@ -278,7 +286,7 @@ const seedIntentions: SeedIntention[] = [
   { title: 'Groceries', emoji: '🛒', type: 'work' },
   { title: 'Laundry', emoji: '🧺', type: 'work' },
   { title: 'Workout', emoji: '🏋️', type: 'work', habitCadence: 'daily' },
-  { title: 'Read', emoji: '📚', type: 'work', habitCadence: 'weekly' },
+  { title: 'Read', emoji: '📚', type: 'work', habitCadence: 'daily' },
   { title: 'Errands', emoji: '🧾', type: 'work' },
   { title: 'Calls', emoji: '📞', type: 'work' },
   { title: 'Social', emoji: '🤝', type: 'work' },
@@ -303,6 +311,9 @@ const seedIntentions: SeedIntention[] = [
     keepScreenAwake: true,
   },
   { title: 'Review', emoji: '🔎', type: 'work', parentTitle: 'Focus' },
+  { title: 'Writing', emoji: '✍️', type: 'work', parentTitle: 'Focus' },
+  { title: 'Research', emoji: '🔬', type: 'work', parentTitle: 'Focus' },
+  { title: 'Learning', emoji: '🎓', type: 'work', parentTitle: 'Focus' },
   { title: 'Feature', emoji: '✨', type: 'work', parentTitle: 'Code' },
   { title: 'Refactor', emoji: '🧼', type: 'work', parentTitle: 'Code' },
   { title: 'Fix', emoji: '🩹', type: 'work', parentTitle: 'Debug' },
@@ -423,8 +434,6 @@ const baseSeedTasks: SeedTask[] = [
     priority: TASK_PRIORITIES.LOW,
     status: TASK_STATUSES.ACTIVE,
     intentionTitle: 'Inbox',
-    manualOrder: 1,
-    manualOrderOverride: true,
     recurrenceRule: null,
     recurrenceAnchorMode: 'planned',
   },
@@ -671,8 +680,6 @@ function buildGeneratedSeedTasks(): SeedTask[] {
             ? -(index + 3)
             : (index % 14) - 3;
       const dueHour = 8 + (index % 10);
-      const manualOrderOverride =
-        status === TASK_STATUSES.ACTIVE && dueOffsetDays === null;
 
       return {
         title: `${catalogItem.title} — ${batchLabel}`,
@@ -685,8 +692,6 @@ function buildGeneratedSeedTasks(): SeedTask[] {
         status,
         intentionTitle: catalogItem.intentionTitle,
         subIntentionTitle: catalogItem.subIntentionTitle,
-        manualOrder: manualOrderOverride ? index % 4 : null,
-        manualOrderOverride,
         recurrenceRule: recurrence.rule,
         recurrenceInterval: recurrence.interval,
         recurrenceAnchorMode: recurrence.anchor,
@@ -1004,8 +1009,6 @@ async function findFixtureHealthIssues(
       description: expected.description ?? null,
       dueDate: getSeedTaskDueDate(expected),
       dueTime: expected.dueTime,
-      manualOrder: expected.manualOrder ?? null,
-      manualOrderOverride: expected.manualOrderOverride ?? false,
       priority: expected.priority,
       status: expected.status,
       timerType: expected.timerType ?? TIMER_TYPES.WORK,
@@ -1296,6 +1299,7 @@ export async function seedUserFixture({
         intentionsRepository.create({
           userId: savedUser.id,
           title: item.title,
+          isFavorite: ['Read', 'Focus', 'Code', 'Workout'].includes(item.title),
           emoji: item.emoji,
           slug: slugify(item.title),
           type: item.type,
@@ -1457,8 +1461,6 @@ export async function seedUserFixture({
         description: task.description ?? null,
         dueDate: getSeedTaskDueDate(task),
         dueTime: task.dueTime,
-        manualOrder: task.manualOrder ?? null,
-        manualOrderOverride: task.manualOrderOverride ?? false,
         priority: task.priority,
         status: task.status,
         timerType: task.timerType ?? TIMER_TYPES.WORK,
@@ -1508,8 +1510,6 @@ export async function seedUserFixture({
                       'yyyy-MM-dd'
                     ),
               dueTime: null,
-              manualOrder: null,
-              manualOrderOverride: false,
               lastReminderKey: null,
               priority: item.priority,
               status: TASK_STATUSES.ACTIVE,

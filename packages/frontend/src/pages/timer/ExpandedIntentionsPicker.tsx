@@ -1,4 +1,3 @@
-import { HabitSummary } from '../../components/intentions/HabitSummary';
 import { Intention, IntentionType } from '@pomi/shared';
 import { TIMER_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
 import { motion } from 'framer-motion';
@@ -10,22 +9,23 @@ import {
   useState,
 } from 'react';
 import {
+  FaCheck,
   FaChevronLeft,
   FaChevronRight,
-  FaCheck,
   FaListUl,
   FaPlus,
 } from 'react-icons/fa';
+import { HabitSummary } from '../../components/intentions/HabitSummary';
 import { PaginationControls } from '../../components/PaginationControls';
 import { Button } from '../../components/ui/Button';
 import { IntentionEmojiPair } from '../../components/ui/IntentionEmojiPair';
 import { KeyboardShortcut } from '../../components/ui/KeyboardShortcut';
 import { useTodayIntentionsCount } from '../../hooks/useTodayIntentionsCount';
+import { useI18n } from '../../i18n';
 import { usePreferencesStore } from '../../stores/preferencesStore';
 import { useTimerStore } from '../../stores/timerStore';
 import { useUiStore } from '../../stores/uiStore';
 import { apiClient } from '../../utils/apiClient';
-import { subscribeToIntentionRefresh } from '../../utils/recoveryRefresh';
 import {
   getBreakIntentionQueryTypes,
   getMixedBreakButtonClasses,
@@ -40,8 +40,8 @@ import {
 } from '../../utils/intentionCounts';
 import { hasOpenModal } from '../../utils/modalRegistry';
 import { isIos, isMac, isMobile } from '../../utils/osUtils';
+import { subscribeToIntentionRefresh } from '../../utils/recoveryRefresh';
 import { getSelectedTimerIntentions } from '../../utils/timerIntentions';
-import { useI18n } from '../../i18n';
 
 interface ExpandedIntentionsPickerProps {
   useTallSafeAreaFallback: boolean;
@@ -419,8 +419,7 @@ export function ExpandedIntentionsPicker({
 
   const handleAddIntention = useCallback(() => {
     requestIntentionCreate();
-    setActiveTab('intentions');
-  }, [requestIntentionCreate, setActiveTab]);
+  }, [requestIntentionCreate]);
 
   const handleOpenIntentions = useCallback(() => {
     setActiveTab('intentions');
@@ -577,7 +576,7 @@ export function ExpandedIntentionsPicker({
   const isTopPlacement = placement === 'top';
   const compressPicker = isShortViewport;
   const itemsPerRow = 3;
-  const itemsPerPage = 9;
+  const itemsPerPage = 6;
   const safeAreaBasePadding = isIos ? 0 : compressPicker ? 4 : 8;
   const iosFallbackInset = 34;
   const effectiveIosInset = hasMeasuredIosSafeArea
@@ -663,7 +662,6 @@ export function ExpandedIntentionsPicker({
 
   const firstRow = currentIntentions.slice(0, itemsPerRow);
   const secondRow = currentIntentions.slice(itemsPerRow, itemsPerRow * 2);
-  const thirdRow = currentIntentions.slice(6, 9);
 
   useEffect(() => {
     if (!subPickerState) {
@@ -805,7 +803,7 @@ export function ExpandedIntentionsPicker({
         if (
           isModPressed &&
           !e.shiftKey &&
-          ((e.key >= '1' && e.key <= '9') ||
+          ((e.key >= '1' && e.key <= '6') ||
             e.key === 'ArrowLeft' ||
             e.key === 'ArrowRight')
         ) {
@@ -843,7 +841,7 @@ export function ExpandedIntentionsPicker({
       if (
         shortcutNumber !== null &&
         shortcutNumber >= 1 &&
-        shortcutNumber <= 9
+        shortcutNumber <= itemsPerPage
       ) {
         e.preventDefault();
         const index = shortcutNumber - 1;
@@ -894,7 +892,7 @@ export function ExpandedIntentionsPicker({
     }
 
     return (
-      <span className="absolute bottom-0 right-0 flex h-2.5 min-w-2.5 items-center justify-center rounded-full bg-blue-500 px-0.5 text-[7px] font-bold leading-none text-white">
+      <span className="absolute bottom-0 right-0 flex h-2.5 min-w-2.5 items-center justify-center rounded-full bg-blue-500 px-0.5 text-[7px] font-bold leading-none text-ink">
         {count}
       </span>
     );
@@ -962,11 +960,12 @@ export function ExpandedIntentionsPicker({
       <button
         key={intention.slug}
         onClick={() => handleIntentionClick(intention)}
+        aria-pressed={isSelected}
         className={`flex items-center rounded-md transition-all relative
-          ${isMobile ? 'w-full max-w-none' : 'w-[30%] max-w-40'} overflow-hidden select-none ${
+          w-[31%] max-w-40 overflow-hidden select-none ${
             isTopPlacement
               ? isMobile
-                ? 'h-10 p-2'
+                ? 'h-9 p-1.5'
                 : 'h-8 p-1.5'
               : compressPicker
                 ? 'h-9 p-1.5'
@@ -987,7 +986,7 @@ export function ExpandedIntentionsPicker({
           )}
           {habitDone && (
             <span
-              className="absolute left-0 top-0 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 text-white"
+              className="absolute left-0 top-0 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 text-ink"
               aria-label={getHabitAriaLabel(intention, 'done')}
             >
               <FaCheck size={7} />
@@ -1016,7 +1015,7 @@ export function ExpandedIntentionsPicker({
               initial={{ opacity: 0, scale: 0.85 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.16, ease: 'easeOut' }}
-              className={`absolute text-[9px] font-bold bg-indigo-600 text-white rounded-full min-w-3.5 h-3.5 flex items-center justify-center px-0.5 ${
+              className={`absolute text-[9px] font-bold bg-indigo-600 text-ink rounded-full min-w-3.5 h-3.5 flex items-center justify-center px-0.5 ${
                 selectedSubIntention ? 'top-5 -right-1' : '-top-1 -right-1'
               }`}
             >
@@ -1040,7 +1039,7 @@ export function ExpandedIntentionsPicker({
             className={`absolute bottom-0 left-0 right-0 h-0.5 ${previewClasses.markerClass}`}
           />
         )}
-        {pageIndex < 9 && preferences?.keyboardShortcuts && (
+        {pageIndex < itemsPerPage && preferences?.keyboardShortcuts && (
           <KeyboardShortcut text={`${pageIndex + 1}`} position="topRight" />
         )}
       </button>
@@ -1121,7 +1120,7 @@ export function ExpandedIntentionsPicker({
         )}
         {habitDone && (
           <span
-            className="absolute left-0.5 top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 text-white"
+            className="absolute left-0.5 top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 text-ink"
             aria-label={getHabitAriaLabel(subIntention, 'done')}
           >
             <FaCheck size={7} />
@@ -1142,7 +1141,7 @@ export function ExpandedIntentionsPicker({
             initial={{ opacity: 0, scale: 0.85 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.16, ease: 'easeOut' }}
-            className="absolute top-5 -right-1 text-[9px] font-bold bg-cyan-600 text-white rounded-full min-w-3.5 h-3.5 flex items-center justify-center px-0.5"
+            className="absolute top-5 -right-1 text-[9px] font-bold bg-cyan-600 text-ink rounded-full min-w-3.5 h-3.5 flex items-center justify-center px-0.5"
           >
             {count}
           </motion.span>
@@ -1255,12 +1254,22 @@ export function ExpandedIntentionsPicker({
   const controls = (
     <div
       data-testid="expanded-intentions-controls"
-      className="flex min-h-10 w-full items-center justify-between px-3"
+      className="flex min-h-7 w-full items-center justify-between gap-2"
     >
-      <div className="w-32" />
+      <div>
+        {habitsEnabled && (
+          <HabitSummary
+            habits={leafHabits.map(intention => ({
+              habitCadence: intention.habitCadence,
+              state: getHabitState(intention),
+            }))}
+            className="shrink-0"
+          />
+        )}
+      </div>
       <div className="flex flex-1 justify-center">
         <div className="flex items-center gap-2">
-          {maxPage > 0 && !isMobile && (
+          {maxPage > 0 && (
             <PaginationControls
               pageIndex={currentPage}
               pageCount={maxPage + 1}
@@ -1281,12 +1290,12 @@ export function ExpandedIntentionsPicker({
           )}
         </div>
       </div>
-      <div className="flex w-32 justify-end gap-1">
+      <div className="flex shrink-0 justify-end gap-1">
         <Button
           size="xs"
           variant="secondary"
           onClick={handleOpenIntentions}
-          className="h-8 w-8 rounded-lg p-0"
+          className="h-7 w-7 rounded-lg p-0"
           title={t('intention.editIntentions')}
           aria-label={t('intention.editIntentions')}
         >
@@ -1295,7 +1304,7 @@ export function ExpandedIntentionsPicker({
         <Button
           size="xs"
           onClick={handleAddIntention}
-          className="relative h-8 w-8 rounded-lg p-0"
+          className="relative h-7 w-7 rounded-lg p-0"
           title={`${t('intention.addNew')} (${isMac ? '⌘' : 'Ctrl+'}0)`}
           aria-label={t('intention.addNew')}
         >
@@ -1321,7 +1330,7 @@ export function ExpandedIntentionsPicker({
         isDisconnected ? 'opacity-50' : ''
       }`}
       style={{
-        paddingBottom: isTopPlacement ? '8px' : safeAreaPaddingBottom,
+        paddingBottom: isTopPlacement ? '4px' : safeAreaPaddingBottom,
       }}
       initial={{ opacity: 0, y: isTopPlacement ? -16 : 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -1330,53 +1339,24 @@ export function ExpandedIntentionsPicker({
       onTouchEnd={isMobile ? handlePickerTouchEnd : undefined}
     >
       <div className="flex flex-col">
-        {isMobile ? (
-          <div
-            data-testid="expanded-intentions-grid"
-            className="app-scrollbar grid w-full grid-flow-col grid-rows-3 gap-1.5 overflow-x-auto overscroll-x-contain p-1 [mask-image:linear-gradient(to_right,black_0,black_calc(100%-10px),transparent_100%)]"
-            style={{ gridAutoColumns: 'min(8.5rem, 38vw)' }}
-          >
-            {displayIntentions.map((intention, index) =>
-              renderIntentionButton(intention, index)
-            )}
-          </div>
-        ) : (
-          <div
-            data-testid="expanded-intentions-grid"
-            className={
-              isTopPlacement || compressPicker
-                ? isTopPlacement
-                  ? 'flex flex-col gap-1.5'
-                  : 'flex flex-col gap-1'
-                : 'flex flex-col gap-2'
-            }
-          >
-            {renderRow(firstRow, 0, 'empty-first')}
-            {renderRow(secondRow, itemsPerRow, 'empty-second')}
-            {renderRow(thirdRow, itemsPerRow * 2, 'empty-third')}
-          </div>
-        )}
+        <div
+          data-testid="expanded-intentions-grid"
+          className={
+            isTopPlacement || compressPicker
+              ? isTopPlacement
+                ? 'flex flex-col gap-1.5'
+                : 'flex flex-col gap-1'
+              : 'flex flex-col gap-2'
+          }
+        >
+          {renderRow(firstRow, 0, 'empty-first')}
+          {renderRow(secondRow, itemsPerRow, 'empty-second')}
+        </div>
+
         <div
           data-testid="expanded-intentions-bottom-slot"
           className={`relative flex items-center justify-center ${isTopPlacement || compressPicker ? 'mt-1 min-h-8' : 'mt-2 min-h-10'}`}
         >
-          {habitsEnabled && (
-            <HabitSummary
-              habits={leafHabits.map(intention => ({
-                habitCadence: intention.habitCadence,
-                state: getHabitState(intention),
-              }))}
-              className={`absolute ${
-                isMobile
-                  ? 'left-1'
-                  : isTopPlacement
-                    ? 'left-[max(calc(5%_-_0.375rem),calc(50%_-_15.375rem))]'
-                    : compressPicker
-                      ? 'left-[max(calc(5%_-_0.25rem),calc(50%_-_15.25rem))]'
-                      : 'left-[max(calc(5%_-_0.5rem),calc(50%_-_15.5rem))]'
-              }`}
-            />
-          )}
           {subPickerState ? renderSubIntentionsBand() : controls}
         </div>
       </div>

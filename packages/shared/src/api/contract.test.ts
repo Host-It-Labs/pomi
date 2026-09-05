@@ -367,14 +367,6 @@ describe('accepted-action schemas', () => {
       operation: 'revert',
       eventId: 'event-1',
     });
-    expectActionInvalid({ kind: 'tasks', operation: 'reorder' }, 'reorder');
-    expectActionValid({
-      kind: 'tasks',
-      operation: 'reorder',
-      reorder: [],
-    });
-
-    expectActionInvalid({ kind: 'tasks', operation: 'import' }, 'rows');
     expectActionInvalid(
       { kind: 'tasks', operation: 'import', importSource: 'todoist' },
       'rows'

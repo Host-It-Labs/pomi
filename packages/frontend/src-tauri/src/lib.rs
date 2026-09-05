@@ -30,7 +30,6 @@ pub fn mobile_main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_android_battery_optimization::init())
-        .plugin(tauri_plugin_mcp_bridge::init())
         .invoke_handler(tauri::generate_handler![greet])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

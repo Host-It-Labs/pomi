@@ -1,7 +1,7 @@
 import clsx from 'clsx';
 import {
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type PointerEvent as ReactPointerEvent,
   useEffect,
   useRef,
   useState,
@@ -196,7 +196,7 @@ export function MobileSwipeActionRow({
           className="absolute inset-0 flex items-center justify-between"
           data-testid="mobile-swipe-actions"
         >
-          <div className="flex h-full w-28 items-center gap-2 bg-emerald-600/90 pl-4 text-xs font-semibold text-white">
+          <div className="flex h-full w-28 items-center gap-2 bg-emerald-600/90 pl-4 text-xs font-semibold text-ink">
             <FaCheck
               style={{
                 opacity: 0.35 + progress * 0.65,
@@ -205,7 +205,7 @@ export function MobileSwipeActionRow({
             />
             {t('common.complete')}
           </div>
-          <div className="flex h-full w-28 items-center justify-end gap-2 bg-amber-600/90 pr-4 text-xs font-semibold text-white">
+          <div className="flex h-full w-28 items-center justify-end gap-2 bg-amber-600/90 pr-4 text-xs font-semibold text-ink">
             {t('common.archive')}
             <FaArchive
               style={{

@@ -639,7 +639,7 @@ export function DebugPanel() {
           />
 
           <Card className="p-4">
-            <h2 className="text-sm font-semibold text-white">
+            <h2 className="text-sm font-semibold text-ink">
               {t('debug.mobileSimulator')}
             </h2>
             <p className="mt-1 text-xs text-slate-400">
@@ -670,7 +670,7 @@ export function DebugPanel() {
                 aria-expanded={isUserDataOpen}
               >
                 <div>
-                  <h2 className="text-sm font-semibold text-white">
+                  <h2 className="text-sm font-semibold text-ink">
                     {t('debug.userData')}
                   </h2>
                   <p className="mt-1 text-xs text-slate-400">
@@ -733,7 +733,7 @@ export function DebugPanel() {
               aria-expanded={isNotificationsOpen}
             >
               <div>
-                <h2 className="text-sm font-semibold text-white">
+                <h2 className="text-sm font-semibold text-ink">
                   {t('debug.notifications')}
                 </h2>
                 <p className="mt-1 text-xs text-slate-400">
@@ -782,7 +782,7 @@ export function DebugPanel() {
               aria-expanded={isAssistantDebugOpen}
             >
               <div>
-                <h2 className="text-sm font-semibold text-white">
+                <h2 className="text-sm font-semibold text-ink">
                   {t('debug.aiLogs')}
                 </h2>
                 <p className="mt-1 text-xs text-slate-400">
@@ -1100,7 +1100,7 @@ export function DebugPanel() {
               aria-expanded={isSentryOpen}
             >
               <div>
-                <h2 className="text-sm font-semibold text-white">Sentry</h2>
+                <h2 className="text-sm font-semibold text-ink">Sentry</h2>
                 <p className="mt-1 text-xs text-slate-400">
                   {t('debug.sentryDescription')}
                 </p>
@@ -1153,7 +1153,7 @@ export function DebugPanel() {
               aria-expanded={isLagOpen}
             >
               <div>
-                <h2 className="text-sm font-semibold text-white">
+                <h2 className="text-sm font-semibold text-ink">
                   {t('debug.networkLagSimulator')}
                 </h2>
                 <p className="mt-1 text-xs text-slate-400">

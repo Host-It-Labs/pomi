@@ -1119,8 +1119,6 @@ export class AssistantCaptureService {
       dueDate: item.dueDate,
       priority: item.priority,
       status: item.status,
-      manualOrder: item.manualOrder,
-      manualOrderOverride: item.manualOrderOverride,
       itemKind: 'listItem',
       vacationEligible: item.vacationEligible,
       createdAt: item.createdAt.toISOString(),

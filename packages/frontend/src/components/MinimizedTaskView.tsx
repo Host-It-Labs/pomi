@@ -6,47 +6,30 @@ import {
 } from '@pomi/shared/src/constants';
 import clsx from 'clsx';
 import {
-  type TouchEvent,
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type TouchEvent,
 } from 'react';
 import { FaEdit, FaPlus, FaSearch, FaThumbtack, FaTimes } from 'react-icons/fa';
-import { TaskFormModal } from './tasks/TaskFormModal';
-import { CompletionButton } from './tasks/CompletionButton';
-import { TaskTimerTypeBadge } from './tasks/TaskTimerTypeBadge';
-import { TaskQuickCreateRow } from './tasks/TaskQuickCreateRow';
-import { useTasksStore } from '../stores/tasksStore';
+import { MOBILE_TASK_ROW_HEIGHT } from '../constants/mobileTaskLayout';
+import { useTaskOrderingClock } from '../hooks/useTaskOrderingClock';
+import { useI18n } from '../i18n';
 import { usePreferencesStore } from '../stores/preferencesStore';
-import { useVacationStore } from '../stores/vacationStore';
+import { useTasksStore } from '../stores/tasksStore';
 import { useTimerStore } from '../stores/timerStore';
 import { useUiStore } from '../stores/uiStore';
-import { useTaskOrderingClock } from '../hooks/useTaskOrderingClock';
-import {
-  buildTaskView,
-  getDisplayedTaskMode,
-  type TaskViewTimer,
-} from '../utils/taskView';
+import { useVacationStore } from '../stores/vacationStore';
 import { apiClient } from '../utils/apiClient';
-import { PaginationControls } from './PaginationControls';
-import { TaskModeToggle } from './TaskModeToggle';
-import { useI18n } from '../i18n';
 import {
-  TaskDescriptionButton,
-  TaskDescriptionModal,
-} from './tasks/TaskDescriptionModal';
-import { MobileSwipeActionRow } from './tasks/MobileSwipeActionRow';
-import { TaskArchiveConfirmationModal } from './tasks/TaskArchiveConfirmationModal';
-import { OverflowTaskTitle } from './tasks/OverflowTaskTitle';
-import { TaskInlineProperties } from './tasks/TaskInlineProperties';
-import { TaskFollowUpContext } from './tasks/TaskFollowUpContext';
-import { Button } from './ui/Button';
-import { CompactIconButton } from './ui/CompactIconButton';
-import { IntentionEmojiPair } from './ui/IntentionEmojiPair';
-import { KeyboardShortcut } from './ui/KeyboardShortcut';
+  requestListRefresh,
+  subscribeToListRefresh,
+} from '../utils/listRefresh';
+import { mixTaskAndListItems } from '../utils/mixedTaskItems';
+import { isMobile } from '../utils/osUtils';
 import {
   focusTaskOnTimer,
   getTaskIntentionEmojis,
@@ -54,20 +37,37 @@ import {
   isInlineTaskPropertyUpdate,
   isTaskOverdue,
 } from '../utils/taskUi';
-import { getSelectedTimerIntentions } from '../utils/timerIntentions';
-import { isMobile } from '../utils/osUtils';
-import { MOBILE_TASK_ROW_HEIGHT } from '../constants/mobileTaskLayout';
-import { submitUserMutation } from '../utils/userActionQueue';
 import {
-  requestListRefresh,
-  subscribeToListRefresh,
-} from '../utils/listRefresh';
-import { showToastFromStore } from './toast/ToastContext';
+  buildTaskView,
+  getDisplayedTaskMode,
+  type TaskViewTimer,
+} from '../utils/taskView';
+import { getSelectedTimerIntentions } from '../utils/timerIntentions';
+import { submitUserMutation } from '../utils/userActionQueue';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
-import { mixTaskAndListItems } from '../utils/mixedTaskItems';
+import { PaginationControls } from './PaginationControls';
+import { TaskModeToggle } from './TaskModeToggle';
+import { CompletionButton } from './tasks/CompletionButton';
+import { MobileSwipeActionRow } from './tasks/MobileSwipeActionRow';
+import { OverflowTaskTitle } from './tasks/OverflowTaskTitle';
+import { TaskArchiveConfirmationModal } from './tasks/TaskArchiveConfirmationModal';
+import {
+  TaskDescriptionButton,
+  TaskDescriptionModal,
+} from './tasks/TaskDescriptionModal';
+import { TaskFollowUpContext } from './tasks/TaskFollowUpContext';
+import { TaskFormModal } from './tasks/TaskFormModal';
+import { TaskInlineProperties } from './tasks/TaskInlineProperties';
+import { TaskQuickCreateRow } from './tasks/TaskQuickCreateRow';
+import { TaskTimerTypeBadge } from './tasks/TaskTimerTypeBadge';
+import { showToastFromStore } from './toast/ToastContext';
+import { Button } from './ui/Button';
+import { CompactIconButton } from './ui/CompactIconButton';
+import { IntentionEmojiPair } from './ui/IntentionEmojiPair';
+import { KeyboardShortcut } from './ui/KeyboardShortcut';
 
 const TASK_ACTION_BUTTON_BASE_CLASS =
-  'group/task-action relative flex items-center justify-center overflow-visible rounded-full border border-slate-700/60 bg-slate-950/40 p-0 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-50';
+  'group/task-action relative flex items-center justify-center overflow-visible rounded-full border border-slate-700/60 bg-slate-950/40 p-0 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800/60 hover:text-ink disabled:cursor-not-allowed disabled:opacity-50';
 const TASK_ACTION_ICON_SIZE = 13;
 const MOBILE_TASK_PEEK_HEIGHT = 28;
 const MOBILE_TASK_GESTURE_THRESHOLD = 36;
@@ -427,7 +427,7 @@ export function MinimizedTaskView({
   const openListItem = useCallback(
     (item: ListItem) => {
       setExpanded(true);
-      setActiveTab('tasks');
+      setActiveTab('timer');
       requestTaskItemReveal({
         kind: 'listItem',
         id: item.id,
@@ -752,7 +752,7 @@ export function MinimizedTaskView({
       setIsQuickCreateOpen(false);
       if (compact) {
         setExpanded(true);
-        setActiveTab('tasks');
+        setActiveTab('timer');
         requestTaskCreate(initialTitle);
         return;
       }
@@ -1190,10 +1190,6 @@ export function MinimizedTaskView({
                     isPinned &&
                       'border-indigo-400/70 bg-indigo-950/35 shadow-sm shadow-indigo-500/10 ring-1 ring-indigo-400/30',
                     !isPinned &&
-                      isOverdue &&
-                      'border-slate-800/70 bg-red-950/35',
-                    !isPinned &&
-                      !isOverdue &&
                       'border-slate-800/70 bg-slate-950/35 hover:border-slate-700/80 hover:bg-slate-900/55',
                     highlightedTaskId === task.id &&
                       'border-indigo-300/90 ring-2 ring-indigo-400/60'
@@ -1287,7 +1283,7 @@ export function MinimizedTaskView({
                         className={clsx(
                           taskActionButtonClassName,
                           isPinned &&
-                            '!border-indigo-300/80 !bg-indigo-500 !text-white shadow-sm shadow-indigo-500/30'
+                            '!border-indigo-300/80 !bg-indigo-500 !text-ink shadow-sm shadow-indigo-500/30'
                         )}
                         disabled={isPinning}
                         aria-pressed={isPinned}

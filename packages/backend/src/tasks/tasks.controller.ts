@@ -13,7 +13,6 @@ import {
 } from '../validation/ts-rest-zod4.adapter';
 import { AuthGuard } from '../auth/auth.guard';
 import { CreateTaskDto } from './dto/create-task.dto';
-import { ReorderTasksDto } from './dto/reorder-tasks.dto';
 import { TaskImportDto } from './dto/task-import.dto';
 import { TaskLogsQueryDto } from './dto/task-logs-query.dto';
 import { TaskStatisticsQueryDto } from './dto/task-statistics-query.dto';
@@ -234,24 +233,6 @@ export class TasksController {
       return {
         status: 200,
         body: this.formatTask(task),
-      };
-    });
-  }
-
-  @TsRestHandler(apiContract.tasks.reorder)
-  async reorderTasks(
-    @Request() req,
-    @Body() data: ReorderTasksDto
-  ): Promise<unknown> {
-    return tsRestHandler(apiContract.tasks.reorder, async () => {
-      const tasks = await this.tasksService.reorderTasks(
-        req.user.sub,
-        data.tasks
-      );
-
-      return {
-        status: 200,
-        body: tasks.map(task => this.formatTask(task)),
       };
     });
   }

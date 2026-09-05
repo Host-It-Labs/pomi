@@ -1,5 +1,4 @@
 import type { TimerTypes } from '@pomi/shared';
-import { TIMER_TYPES } from '@pomi/shared/src/constants';
 
 type TimerStagePanelInput = {
   isExpanded: boolean;
@@ -12,23 +11,14 @@ type ExpandedTaskViewInput = {
   isExpanded: boolean;
   tasksExtension: boolean | undefined;
   timerType: TimerTypes | undefined;
-  tasksDuringBreaks: boolean | undefined;
 };
 
 export function shouldShowExpandedTaskView({
   isExpanded,
   tasksExtension,
   timerType,
-  tasksDuringBreaks,
 }: ExpandedTaskViewInput) {
-  return (
-    isExpanded &&
-    tasksExtension === true &&
-    (timerType === TIMER_TYPES.WORK ||
-      ((timerType === TIMER_TYPES.BREAK ||
-        timerType === TIMER_TYPES.LONG_BREAK) &&
-        tasksDuringBreaks === true))
-  );
+  return isExpanded && tasksExtension === true && timerType !== undefined;
 }
 
 export function getTimerStagePanelReservation({

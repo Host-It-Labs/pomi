@@ -71,7 +71,7 @@ export type TaskImportUserActionRow = {
 
 export interface TasksUserAction {
   kind: 'tasks';
-  operation: 'create' | 'update' | 'reorder' | 'import' | 'complete' | 'revert';
+  operation: 'create' | 'update' | 'import' | 'complete' | 'revert';
   taskId?: string;
   eventId?: string;
   title?: string;
@@ -83,8 +83,6 @@ export interface TasksUserAction {
   customDuration?: number | null;
   pinned?: boolean;
   status?: TaskStatus;
-  manualOrder?: number | null;
-  manualOrderOverride?: boolean;
   intentionSlug?: string | null;
   subIntentionSlug?: string | null;
   recurrenceRule?: string | null;
@@ -97,11 +95,6 @@ export interface TasksUserAction {
   followUpDelayDays?: number | null;
   vacationEligible?: boolean;
   creationSource?: TaskCreationSource;
-  reorder?: Array<{
-    id: string;
-    manualOrder: number;
-    manualOrderOverride?: boolean;
-  }>;
   importSource?: TaskImportSource;
   rows?: TaskImportUserActionRow[];
 }

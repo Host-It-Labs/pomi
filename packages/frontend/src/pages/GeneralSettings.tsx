@@ -1,16 +1,20 @@
 import { Preferences } from '@pomi/shared';
-import type { ReactNode } from 'react';
-import { FaInfoCircle, FaLightbulb, FaSignOutAlt } from 'react-icons/fa';
+import {
+  FaInfoCircle,
+  FaLightbulb,
+  FaSignOutAlt,
+  FaRobot,
+} from 'react-icons/fa';
 import { ExtrasSection } from '../components/ExtrasSection';
+import { SettingsControlGroup } from '../components/settings/SettingsExperience';
 import { Button } from '../components/ui/Button';
 import { Separator } from '../components/ui/Separator';
 import { ToggleField } from '../components/ui/ToggleField';
-import { SettingsControlGroup } from '../components/settings/SettingsExperience';
+import { normalizeLanguage, SUPPORTED_LANGUAGES, useI18n } from '../i18n';
 import { useAuthStore } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
 import { canUseDebugPanel } from '../utils/debugAccess';
 import { isMobile } from '../utils/osUtils';
-import { normalizeLanguage, SUPPORTED_LANGUAGES, useI18n } from '../i18n';
 
 interface GeneralSettingsProps {
   preferences: Preferences;
@@ -19,7 +23,6 @@ interface GeneralSettingsProps {
     language: Preferences['language']
   ) => Promise<boolean>;
   reloadPreferences?: (options?: { syncTimeZone?: boolean }) => Promise<void>;
-  adminContent?: ReactNode;
 }
 
 export const GeneralSettings = ({
@@ -27,7 +30,6 @@ export const GeneralSettings = ({
   updatePreference,
   updateLanguagePreference,
   reloadPreferences,
-  adminContent,
 }: GeneralSettingsProps) => {
   const { language, setLanguage, t } = useI18n();
   const signOut = useAuthStore.use.signOut();
@@ -79,7 +81,7 @@ export const GeneralSettings = ({
           data-setting-id="general-account"
         >
           <div>
-            <h3 className="text-sm text-white font-medium">
+            <h3 className="text-sm text-ink font-medium">
               {t('settings.account')}
             </h3>
             <p className="text-xs text-slate-400 mt-1">{user?.username}</p>
@@ -104,7 +106,7 @@ export const GeneralSettings = ({
           <div>
             <label
               htmlFor="settings-language"
-              className="text-sm font-medium text-white"
+              className="text-sm font-medium text-ink"
             >
               {t('common.language')}
             </label>
@@ -164,6 +166,18 @@ export const GeneralSettings = ({
         )}
       </SettingsControlGroup>
 
+      {user?.isAdmin === true && (
+        <div data-setting-id="aiAdministration">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setActiveTab('ai-admin')}
+          >
+            <FaRobot aria-hidden="true" /> {t('workspace.aiAdministration')}
+          </Button>
+        </div>
+      )}
+
       <ExtrasSection sectionId="general">
         <div
           className="flex items-center justify-between gap-4 rounded-lg border border-slate-800/60 bg-slate-900/35 p-3"
@@ -173,7 +187,7 @@ export const GeneralSettings = ({
             <span className="grid size-7 place-items-center rounded-lg bg-amber-400/10 text-amber-300">
               <FaLightbulb size={12} />
             </span>
-            <h3 className="text-sm font-medium text-white">
+            <h3 className="text-sm font-medium text-ink">
               {t('settings.hiddenTips')}
             </h3>
             <button
@@ -196,19 +210,6 @@ export const GeneralSettings = ({
           </Button>
         </div>
       </ExtrasSection>
-
-      {adminContent ? (
-        <div data-setting-id="admin">
-          <SettingsControlGroup title={t('settings.admin')}>
-            <div className="space-y-4">
-              <h4 className="text-sm font-medium text-white">
-                {t('settings.aiInfrastructure')}
-              </h4>
-              {adminContent}
-            </div>
-          </SettingsControlGroup>
-        </div>
-      ) : null}
     </div>
   );
 };

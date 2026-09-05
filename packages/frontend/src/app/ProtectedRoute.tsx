@@ -1,5 +1,4 @@
 import { ReactNode, useEffect } from 'react';
-import { AndroidPermissionGate } from './AndroidPermissionGate';
 import { Button } from '../components/ui/Button';
 import { APP_COLORS } from '../config/colors';
 import { useI18n } from '../i18n';
@@ -7,6 +6,7 @@ import { Login } from '../pages/Login';
 import { useAuthStore } from '../stores/authStore';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { useUiStore } from '../stores/uiStore';
+import { AndroidPermissionGate } from './AndroidPermissionGate';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -63,7 +63,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     <AndroidPermissionGate>
       {children}
       {preferencesLoadError && !preferences ? (
-        <div className="fixed inset-x-3 bottom-3 z-50 flex items-center justify-between gap-3 rounded-lg bg-red-950 px-4 py-3 text-sm text-white shadow-lg">
+        <div className="fixed inset-x-3 bottom-3 z-50 flex items-center justify-between gap-3 rounded-lg bg-red-950 px-4 py-3 text-sm text-ink shadow-lg">
           <span>{preferencesLoadError}</span>
           <Button
             variant="danger"

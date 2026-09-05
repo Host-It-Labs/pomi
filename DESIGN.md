@@ -5,45 +5,40 @@
 - Read this file before any app development, including frontend, UI, UX, layout, Tauri window behavior, or user-facing interaction changes.
 - Apply these rules during planning, implementation, refactoring, screenshots, and review.
 
-## Desktop Window
+## Visual language
 
-- Desktop sizing is configured in `packages/frontend/src/constants/window.ts` via `WINDOW_WIDTH`, `COLLAPSED_HEIGHT`, and `EXPANDED_HEIGHT`.
-- Optimize all layouts and UI components for a compact, vertical desktop footprint, while keeping components responsive to runtime window size changes.
-- The expanded desktop window may be taller than the original timer-only layout so work timers can reserve space for the Minimized task view or its setup placeholder without crowding timer controls.
-- Task planning introduces an optional intermediate desktop state where the work timer remains minimized and the shared Minimized task view appears underneath when the minimized task setting is enabled; treat that as distinct from the full expanded view.
-- When task placeholders are dismissed or unavailable, timer layouts should reclaim that reserved space so the timer circle can be as large and centered as the viewport allows with only modest side margins.
-- Essential UI elements should fit above the fold whenever possible.
-- Avoid scrolling for primary workflows.
+Desktop and mobile use blue for Work, sage for Break, and dark teal-green for Long break across decorative accents, with task quick-create Add always blue. Use the accepted Midnight navy background palette, with distinct raised task surfaces. Preserve semantic status colors. Keep contrast clear without purple foundations, glow, or stark white chrome. Use subtle pressed, selection, paging, and sheet transitions; respect reduced motion. Wear OS and the public website keep their own visual systems.
 
-## Navigation And Layout
+## Desktop Window and workspace
 
-- If a view requires scrolling, consider a fixed toolbar or header for essential controls such as back, save, and primary actions.
-- Keep long content scrolling beneath fixed controls.
-- Preserve dense, scannable layouts suited to a compact desktop app.
-- `Mod+T` expands the app when needed, opens the Tasks view, and focuses and selects the quick-create input; when already in Tasks view it only focuses and selects that input.
-- In the expanded Timer while the Minimized task view is visible, `Mod+I` switches that Task surface to Intention mode. Elsewhere `Mod+I` keeps its Intention-picker behavior; `Mod+F` is not used for this Task-mode action.
-- The expanded Timer also opens the Tasks view through a top-navigation affordance on every device; the Tasks view returns through its back affordance.
-- If Tasks is off, Tasks view entry points should be hidden and should not open a disabled Tasks view; setup happens through placeholders or Settings.
-- Mobile Timer layout uses the same Minimized task view concept as desktop, adapted responsively rather than moved into a bottom sheet; Break and Long-break placement follows the “Tasks during breaks” setting.
-- The Minimized task view is shared between the expanded Timer view and the optional minimized Timer task state. It appears for Work and, when enabled, matching Break or Long-break Task Timer types.
-- The Minimized task view shows up to three visible Tasks on both mobile and desktop; extra matching Tasks use paginated controls like the Intentions picker without resizing the Timer. Pages are filled with Pinned Tasks first, followed by peer or general Tasks.
-- The minimized timer intentions picker may show four visible intentions when spacing allows, with pagination arrows close to the visible intention choices. This does not change the expanded timer intentions picker count.
-- Every intention picker, including Wear OS, drills into active Sub-intentions when a Parent has children; the Parent itself is not selectable until it has no active children. Timer, Task, log, Tile, and watch-face displays keep the selected Parent and Sub-intention visually paired.
-- Task surfaces use a compact Intention/General segmented toggle to switch the current timer's task mode.
-- Full Tasks view provides a compact filter-icon menu for All / Work / Break / Long break Task Timer types and shows the active choice. All is the default. Every mixed-type Task list, including archive and import review, shows a compact text-only type badge; a type-specific list hides that redundant badge.
-- The Tasks view Intention filter is Task-Timer-type-aware: All groups Intentions by Work, Break, and Long break; a specific type shows only matching Intentions. Switching type clears an incompatible selected Intention with a brief notice.
-- Task import review lets each row choose Work, Break, or Long break and limits its Intention choices to that type; missing legacy import values default to Work.
-- “Tasks during breaks” is off by default. When enabled, expanded Break and Long-break layouts mirror Work: Intention picker or skeleton at the top, Timer in the middle, and matching Task Timer type surface at the bottom.
-- Watch Tasks screen always shows Tasks for the current Timer type, Pinned first, with Work as fallback when no Timer exists; the desktop/mobile “Tasks during breaks” setting does not gate Watch.
-- Intention-filtered task surfaces can show a dimmed General preview with a clear switch action when broader tasks are hidden by the current task mode.
-- Task creation and editing from the expanded Timer use the same centered modal and complete field set as the full Tasks view, including RRULE-compatible recurrence editing.
-- List items use the same inline destination, due-date, and priority controls as Tasks. Their destination control shows the current List and can convert the item back to a Work Intention; completion remains the List-specific extra control.
-- Assistant confirmations name a single created Task or List item and expose the same View action for either destination.
-- Desktop scrolling over the Minimized task view and expanded intentions picker must not change pages; use the visible pagination controls instead. Mobile swipe paging remains available where the layout exposes it, and the minimized intentions picker keeps its existing behavior.
-- When statistics covers both timer/intentions and tasks, provide a clear mode switch between those statistic families.
-- Settings uses the same centered Back/title/action header as Statistics; Back, Feedback, and the page title scroll normally. A full-width compact search below it is the only sticky Settings navigation and filters individual controls while retaining their section headings. A match on any part of a compound control, including Work, Break, or Long-break badges, keeps the complete titled control visible. General, Timer, Notifications, and Shortcuts remain permanent sections; Sessions, Intentions, Tasks, and Assistant use the same compact activation header and visible Essentials and Personalize groups. Keep labels short, move implementation details into small hover/focus help controls, and use restrained icons to make optional settings easier to scan. Disabled features remain discoverable through their activation action while hiding configuration. Administrator controls live inside General and are rendered only for administrators; the user-facing Assistant feature remains separate.
-- Settings is the sole authority for Task due notifications. A checkable priority selection defaults to High and Urgent, may be empty to disable Task reminders, and applies immediately to every active Task; Tasks do not store reminder choices. A qualifying Task sends one normal Task reminder at its due instant, with a configurable before-due offset and 10:00 local fallback for date-only Tasks. Repeating overdue urgent reminders default to every 30 minutes, use the same ordinary Task-reminder path on every device, and stop when the Task is completed, archived, loses its due date, stops being Urgent, or Task/notification/repeat settings no longer allow them.
-- Prefer existing primitives from `packages/frontend/src/components/ui` for shared patterns.
+- Keep the expanded desktop window at 440 × 700. Navigation, six intentions, and the compact timer remain stationary. Give task rows at least half the usable main-page height.
+- The expanded intention picker has six stable 2 × 3 slots, emoji, concise names, selected states, and compact pagination. Preserve Parent/Sub-intention selection, multi-selection, keyboard shortcuts, and optional habit/count information. Habit summaries use compact icons and counts with accessible explanations.
+- Place the Work/Break/Long break label in a shallow row above the centered countdown. Align session ring, optional ETAs, previous-timer extension, countdown, and actions on the row beneath; place play/pause closest to the countdown, followed by a separator and timer actions. The previous eligible Work timer remains extendable throughout the following timer, including while it runs; extension reassigns elapsed time to the previous timer and restarts the following timer afterward. Expanded and minimized layouts share countdown and session progress components; only minimized mode includes its compact intention picker.
+- Session segments are directly selectable by pointer or keyboard, without a details popup. Preserve elapsed progress direction and extended/stacked duration weighting. Optional ETA timestamps sit beside the ring with accessible clock and finish labels; hide inline ETAs at constrained widths while retaining segment tooltips. ETAs are off by default.
+- Embed the full task workspace beneath the timer. Desktop shows five rows per page, each with a two-line title; Up/Down changes pages outside inputs and dialogs. Desktop clips task overflow without allowing scrolling; page changes fade without positional animation. Mobile scrolls task rows independently.
+- Keep quick creation and destination selection immediately available. Voice, full-editor, and Add actions sit inside the quick-create field. All/destination, Search, Sort, and Filter share one row. All and Search always have equal widths. Anchor the destination dropdown to the left edge of its trigger at 30 px wider than the trigger, capped to the viewport. Preserve backend usage ranking for Intentions followed by Lists; show Sub-intentions as wrapping emoji-only controls with accessible names. A thin All / Intention switch appears to the left of the precisely centered task pager beneath filters, with four favorite destination emoji shortcuts per page on the right immediately before reset; archive, import, and Vacation actions belong in overflow. List creation is available in the intention creation sheet.
+- Tasks remain available during Work, Break, and Long break whenever enabled. Start with All and preserve explicit destination filters across timer changes. Intention mode follows current Timer selections and shows only matching Tasks, including parent-only matches for selected Sub-intentions. Search narrows the chosen scope. Switching modes clears an explicit destination; choosing a destination exits Intention mode. There is no separate Tasks page or Tasks during breaks preference.
+- Preserve pinning, inline edits, recurrence, List views, contextual creation, confirmed saves, and completion undo. Minimized mode retains its compact task surface.
+- `Mod+T` expands the app and focuses quick creation. `Mod+N` also focuses quick creation; the full editor is opened through its explicit button. `Mod+Shift+F` clears search, filters, selected List, and sort back to the normal list. Shortcut actions must respect input focus and open editors.
+- Assistant View actions and notification reveals route to the embedded workspace and reveal the target page.
+
+## Editors
+
+Use shared content-sized bottom sheets for Tasks, Intentions, and Lists. Title, Close, and Save remain fixed while fields scroll inside. More options is centered with a subtly raised background among the fields above the action footer. Edit Intention uses a quiet Cancel, primary Save, and a header overflow for management actions. More options reveals extra fields and expands toward the available height without losing edits. Sheets use intrinsic content sizing and must never grow while idle. Extra fields always follow all essential fields instead of appearing between them. Account for the mobile keyboard and safe areas; expand the app before editing from minimized mode.
+
+Task essentials are Title, Description, destination/timer type, due date and time. Place timer type and destination on one row, and date and time on one row; priority belongs in More options. Recurrence, duration, follow-up, and Vacation Coverage are additional options. Intention essentials are name, emoji, timer type, and Parent/Sub-intention relationship; habit, duration, linked Tasks, and description are additional options. Preserve validation, dirty-close confirmation, focus restoration, and backend-confirmed saves. Creating an Intention leaves the background page in place and shows a success toast.
+
+## Statistics and Settings
+
+Keep the compact Statistics cards, charts, and mode switches. Completed activity always includes every completion, including undated occurrences; retain historical completion metadata.
+
+Settings keeps full-width sticky search that finds individual controls, including collapsed options and dismissed suggestions. Search reveals matching groups. Automatic actions, timer resets, long-break detection, and notifications remain prominent; passive customization belongs under collapsed More options.
+
+You might like shows up to two relevant disabled tools in stable order. Provide a feature-specific icon, benefit, enable/setup action, and Not interested. Confirm Not interested in a modal explaining that the setting remains available below and through Settings search. Dismissals persist per account across devices and export/import; they never disable a feature or remove its searchable control. AI infrastructure lives in a separate admin-only AI administration page linked from General; the link and its search entry are admin-only, with backend authorization preserved. Ordinary Assistant preferences remain separate.
+
+For new accounts, enable Tasks, Intentions, Sessions, Lists, custom intention durations, Sub-intentions, advanced skip, and timer extension. Keep optional display clutter, habits, multi-selection, minimized tasks, and Vacation tools off. Preserve existing users' choices and existing automatic-action, permission, notification, and Assistant defaults.
+
+Use the existing UI primitives. Keep all device-specific interactions accessible by keyboard, with visible focus, adequate touch targets, and no horizontal overflow. Keep local development's visible context slug current as required by AGENTS.md.
 
 ## Buttons, Tooltips, And Shortcut Hints
 
@@ -66,3 +61,9 @@ Wear uses the same lifecycle without local optimistic projection or persisted re
 - Keep text, labels, and tooltips brief.
 - Avoid filler words.
 - Prefer high-density labels that can be scanned instantly.
+
+Overdue Task rows keep their normal surface background while retaining red status text and icons. Minimized selected-intention emojis start at the countdown upper-right edge, with further emojis extending rightward.
+
+The destination trigger reflects the effective task scope: All, a single destination name, or selected timer intention emojis for multi-selection. Favorite shortcuts choose one destination and exit Intention mode without changing the timer. A selected destination leaves both mode buttons off; Mod+G toggles All/current Intentions and returns a destination-filtered view to All. Manual task reordering is removed across clients and the backend.
+
+Favorite shortcuts reserve four emoji slots and both paging arrows. Task page counts use a fixed width with tabular numerals; hover or keyboard focus replaces a non-first page count with a return-to-page-one action. The All/Intention switch shares one centered Mod+G hint. Task update toasts use the fixed Work blue; View selects the destination page before focusing its row.

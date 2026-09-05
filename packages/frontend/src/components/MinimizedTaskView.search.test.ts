@@ -20,8 +20,6 @@ function task(id: string, overrides: Partial<Task> = {}): Task {
     importSourceTaskId: null,
     dueDate: null,
     dueTime: null,
-    manualOrder: null,
-    manualOrderOverride: false,
     priority: 'normal',
     status: 'active',
     timerType: 'work',
