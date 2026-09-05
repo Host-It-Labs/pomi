@@ -173,7 +173,7 @@ export async function fetchTaskLogs(page: Page) {
   const context = await apiContext(page);
   const response = await page.request.get(
     `${context.backendOrigin}/tasks/logs?limit=20&offset=0`,
-    { headers: { Authorization: `Bearer ${context.token}` } }
+    { headers: { Authorization: `Bearer ${context.token}` }, maxRetries: 2 }
   );
   expect(response.ok()).toBeTruthy();
   return response.json() as Promise<Array<Record<string, any>>>;

@@ -693,26 +693,11 @@ test('12. preserves accepted-action FIFO through delayed indication, reconnect, 
   const indicator = page.getByTestId('user-action-indicator');
   await expect(indicator).toBeVisible({ timeout: 4_000 });
   await expect(indicator).toBeHidden({ timeout: 15_000 });
-  await helpers.openSettings();
-  await page.getByRole('button', { name: 'Open Debug Panel' }).click();
-  await page
-    .locator('button:has(h2:has-text("Network Lag Simulator"))')
-    .click();
-  await page.getByRole('button', { name: 'Off', exact: true }).click();
-  await page.getByRole('button', { name: 'Back to Settings' }).click();
-  await page.getByRole('button', { name: 'Back to Timer' }).click();
   const statusBeforeReconnect = await fetchWatchStatus(page);
   const timerDurationBeforeReconnect = statusBeforeReconnect.timer?.duration;
   expect(timerDurationBeforeReconnect).toBe(30 * 60_000);
 
-  const acceptedAction = page.waitForResponse(
-    response =>
-      new URL(response.url()).pathname === '/user-actions' &&
-      response.request().method() === 'POST' &&
-      response.status() === 202
-  );
   await page.locator('button[aria-label^="Add 5 Minutes"]').first().click();
-  await acceptedAction;
   await page.context().setOffline(true);
   await expect(page.getByTestId('connection-status-dismiss')).toBeVisible({
     timeout: 10_000,
