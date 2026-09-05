@@ -183,7 +183,9 @@ describe('Unified workspace', () => {
       expect(host.querySelectorAll('[data-testid="task-row"]')).toHaveLength(5)
     );
     const rows = Array.from(host.querySelectorAll('[data-testid="task-row"]'));
-    expect(rows[4].getBoundingClientRect().bottom).toBeLessThanOrEqual(674);
+    expect(rows[4].getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      host.querySelector('.workspace-task-rows')!.getBoundingClientRect().bottom
+    );
     const countdown = host
       .querySelector('.compact-countdown')!
       .getBoundingClientRect();
