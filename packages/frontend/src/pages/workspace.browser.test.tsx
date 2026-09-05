@@ -177,13 +177,13 @@ afterEach(() => {
 });
 
 describe('Unified workspace', () => {
-  it('fits nine intentions and four two-line tasks below a centered timer', async () => {
+  it('fits six intentions and five two-line tasks below a centered timer', async () => {
     root.render(<Timer useTallSafeAreaFallback={false} />);
     await vi.waitFor(() =>
-      expect(host.querySelectorAll('[data-testid="task-row"]')).toHaveLength(4)
+      expect(host.querySelectorAll('[data-testid="task-row"]')).toHaveLength(5)
     );
     const rows = Array.from(host.querySelectorAll('[data-testid="task-row"]'));
-    expect(rows[3].getBoundingClientRect().bottom).toBeLessThanOrEqual(674);
+    expect(rows[4].getBoundingClientRect().bottom).toBeLessThanOrEqual(674);
     const countdown = host
       .querySelector('.compact-countdown')!
       .getBoundingClientRect();
@@ -196,7 +196,7 @@ describe('Unified workspace', () => {
       new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })
     );
     await vi.waitFor(() =>
-      expect(host.querySelector('[data-task-id="task-4"]')).not.toBeNull()
+      expect(host.querySelector('[data-task-id="task-5"]')).not.toBeNull()
     );
     document.body.dispatchEvent(
       new KeyboardEvent('keydown', {
@@ -247,10 +247,13 @@ describe('Unified workspace', () => {
       .fill('Keep my draft');
     await expect.element(page.getByLabelText('Task description')).toBeVisible();
     await expect.element(page.getByLabelText('Task due date')).toBeVisible();
-    await expect.element(page.getByLabelText('Task priority')).toBeVisible();
+    await expect
+      .element(page.getByLabelText('Task priority'))
+      .not.toBeVisible();
     await page
       .getByRole('button', { name: 'More options', exact: true })
       .click();
+    await expect.element(page.getByLabelText('Task priority')).toBeVisible();
     await expect
       .element(page.getByRole('textbox', { name: 'Task title' }))
       .toHaveValue('Keep my draft');
@@ -287,6 +290,7 @@ describe('Unified workspace', () => {
     const fields = document.querySelectorAll<HTMLInputElement>(
       '[role="dialog"] input[type="text"]'
     );
+    await dialog.getByRole('textbox').nth(0).fill('🎯');
     await dialog.getByRole('textbox').nth(1).fill('New intention');
     expect(fields.length).toBeGreaterThanOrEqual(2);
     await vi.waitFor(() => {

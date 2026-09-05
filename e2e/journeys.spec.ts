@@ -85,8 +85,9 @@ test('2. enables Intentions, selects a Parent and Sub-intention, then records a 
     .filter({ hasText: /^New(?: Intention)?$/ })
     .first()
     .click();
-  await page.locator('input[type="text"]').first().fill('🧭');
-  await page.locator('input[type="text"]').nth(1).fill(parentTitle);
+  const parentDialog = page.getByRole('dialog', { name: 'New Intention' });
+  await parentDialog.locator('input[type="text"]').first().fill('🧭');
+  await parentDialog.locator('input[type="text"]').nth(1).fill(parentTitle);
   await page.getByRole('button', { name: 'Create', exact: true }).click();
   const editParent = page
     .getByRole('button', { name: `Edit ${parentTitle}`, exact: true })
