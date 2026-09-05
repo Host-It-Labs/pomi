@@ -1,5 +1,6 @@
 import { Timer, TimerSkipLogMode } from '@pomi/shared';
 import { useEffect, useRef } from 'react';
+import { useI18n } from '../i18n';
 import {
   getAdvancedSkipElapsedMs,
   getAdvancedSkipFullMs,
@@ -7,7 +8,6 @@ import {
 import { shouldIgnoreModalLocalShortcut } from '../utils/shortcutUtils';
 import { formatTimeWithUnit } from '../utils/timeUtils';
 import { KeyboardShortcut } from './ui/KeyboardShortcut';
-import { useI18n } from '../i18n';
 
 type AdvancedSkipInlineStripProps = {
   timer: Timer;
@@ -73,7 +73,7 @@ export function AdvancedSkipInlineStrip({
         <div className="text-[9px] font-medium uppercase tracking-wider text-slate-400">
           {t('timer.elapsed')}
         </div>
-        <div className="text-xs font-bold tabular-nums text-white">
+        <div className="text-xs font-bold tabular-nums text-ink">
           {formatTimeWithUnit(elapsedDuration)}
         </div>
         <KeyboardShortcut
@@ -91,7 +91,7 @@ export function AdvancedSkipInlineStrip({
         <div className="text-[9px] font-medium uppercase tracking-wider text-slate-400">
           {t('timer.full')}
         </div>
-        <div className="text-xs font-bold tabular-nums text-white">
+        <div className="text-xs font-bold tabular-nums text-ink">
           {formatTimeWithUnit(fullDuration)}
         </div>
         <KeyboardShortcut

@@ -60,7 +60,6 @@ export class ListsService {
       .andWhere(listId ? 'item.listId = :listId' : 'TRUE', { listId })
       .andWhere(status ? 'item.status = :status' : 'TRUE', { status })
       .orderBy('item.dueDate', 'ASC')
-      .addOrderBy('item.manualOrder', 'ASC')
       .addOrderBy('item.createdAt', 'ASC')
       .getMany();
   }
@@ -503,8 +502,6 @@ export class ListsService {
       importSourceTaskId: null,
       dueDate: input.dueDate ?? null,
       dueTime: null,
-      manualOrder: null,
-      manualOrderOverride: false,
       lastReminderKey: null,
       priority: input.priority ?? TASK_PRIORITIES.NORMAL,
       status: TASK_STATUSES.ACTIVE,
@@ -561,8 +558,6 @@ export class ListsService {
       followUpSourceTaskId: task.followUpSourceTaskId,
       lastReminderKey: task.lastReminderKey,
       recurrenceSequenceIndex: task.recurrenceSequenceIndex,
-      manualOrder: task.manualOrder,
-      manualOrderOverride: task.manualOrderOverride,
       itemKind: task.itemKind,
     };
     task.itemKind = 'listItem';
@@ -584,8 +579,6 @@ export class ListsService {
     task.followUpDelayDays = null;
     task.followUpSourceTaskId = null;
     task.lastReminderKey = null;
-    task.manualOrder = null;
-    task.manualOrderOverride = false;
   }
 
   private async requireList(userId: string, id: string) {

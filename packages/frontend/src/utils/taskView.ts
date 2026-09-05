@@ -1,9 +1,5 @@
 import type { Task, Timer } from '@pomi/shared';
-import {
-  TASK_MANUAL_ORDER_BOTTOM,
-  TASK_PRIORITIES,
-  TIMER_TYPES,
-} from '@pomi/shared/src/constants';
+import { TASK_PRIORITIES, TIMER_TYPES } from '@pomi/shared/src/constants';
 import type { TaskMode } from '../stores/uiStore';
 import { isTaskOverdue } from './taskUi';
 
@@ -147,10 +143,7 @@ export function buildTaskView({
         );
 
   return {
-    tasks:
-      sortMode === 'intention'
-        ? applyIntentionFamilyManualOrder(automaticallySortedTasks)
-        : automaticallySortedTasks,
+    tasks: automaticallySortedTasks,
     generalPreviewTasks: sortedGeneralPreviewTasks,
   };
 }
@@ -264,84 +257,6 @@ export function compareTasksByDueAndPriority(
   );
 }
 
-export function applyUndatedManualOverrides(tasks: Task[]) {
-  return applyManualOverridesWithinGroups(tasks, () => 0);
-}
-
-export function applyIntentionFamilyManualOrder(tasks: Task[]) {
-  const familyPositions = new Map<
-    string,
-    Array<{ task: Task; index: number }>
-  >();
-  tasks.forEach((task, index) => {
-    if (task.pinnedAt !== null || !task.intentionSlug) return;
-    const familyKey = `${task.timerType}:${task.intentionSlug}`;
-    const positions = familyPositions.get(familyKey) ?? [];
-    positions.push({ task, index });
-    familyPositions.set(familyKey, positions);
-  });
-
-  const next = [...tasks];
-  familyPositions.forEach(positions => {
-    const orderedFamily = applyManualOverridesWithinGroups(
-      positions.map(({ task }) => task),
-      () => 0
-    );
-    positions.forEach(({ index }, positionIndex) => {
-      next[index] = orderedFamily[positionIndex];
-    });
-  });
-  return next;
-}
-
-function applyManualOverridesWithinGroups(
-  tasks: Task[],
-  getGroup: (task: Task) => number
-) {
-  const positionsByGroup = new Map<
-    number,
-    Array<{ task: Task; index: number }>
-  >();
-  tasks.forEach((task, index) => {
-    const group = getGroup(task);
-    const positions = positionsByGroup.get(group) ?? [];
-    positions.push({ task, index });
-    positionsByGroup.set(group, positions);
-  });
-  if (positionsByGroup.size === 0) return tasks;
-
-  const next = [...tasks];
-  positionsByGroup.forEach(positions => {
-    const usesManualOrder = (task: Task) =>
-      task.pinnedAt === null && task.manualOrderOverride;
-    const automatic = positions
-      .map(({ task }) => task)
-      .filter(task => !usesManualOrder(task));
-    const overrides = positions
-      .map(({ task }) => task)
-      .filter(usesManualOrder)
-      .sort(
-        (a, b) =>
-          (a.manualOrder ?? TASK_MANUAL_ORDER_BOTTOM) -
-            (b.manualOrder ?? TASK_MANUAL_ORDER_BOTTOM) ||
-          a.createdAt.localeCompare(b.createdAt)
-      );
-    overrides.forEach(task => {
-      const index = Math.max(
-        0,
-        Math.min(task.manualOrder ?? automatic.length, automatic.length)
-      );
-      automatic.splice(index, 0, task);
-    });
-
-    positions.forEach(({ index }, positionIndex) => {
-      next[index] = automatic[positionIndex];
-    });
-  });
-
-  return next;
-}
-
 function compareDueTime(a: TaskOrderingItem, b: TaskOrderingItem) {
   const aDueTime = a.dueTime ?? '99:99';
   const bDueTime = b.dueTime ?? '99:99';
@@ -356,7 +271,7 @@ function comparePriority(a: TaskOrderingItem, b: TaskOrderingItem) {
   return PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
 }
 
-function isTaskLinkedToTimer(
+export function isTaskLinkedToTimer(
   task: Task,
   timer: TaskViewTimer | null | undefined
 ) {

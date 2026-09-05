@@ -277,7 +277,7 @@ describe('TaskQuickCreateRow assistant errors', () => {
     };
     viewAction.onClick();
     expect(mocks.setExpanded).toHaveBeenCalledWith(true);
-    expect(mocks.setActiveTab).toHaveBeenCalledWith('tasks');
+    expect(mocks.setActiveTab).toHaveBeenCalledWith('timer');
     expect(mocks.requestTaskItemReveal).toHaveBeenCalledWith({
       kind: 'listItem',
       id: 'item-1',
@@ -427,7 +427,7 @@ describe('TaskQuickCreateRow assistant errors', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('uses the create shortcut again to cancel an open quick-create draft', () => {
+  it('preserves the quick-create draft when the create shortcut is repeated', () => {
     const onCancel = vi.fn();
     render(<TaskQuickCreateRow listId="list-1" onCancel={onCancel} />);
 
@@ -435,8 +435,8 @@ describe('TaskQuickCreateRow assistant errors', () => {
     fireEvent.change(input, { target: { value: 'Milk' } });
     fireEvent.keyDown(input, { code: 'KeyN', key: 'n', metaKey: true });
 
-    expect(onCancel).toHaveBeenCalledOnce();
-    expect(input).toHaveValue('');
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(input).toHaveValue('Milk');
   });
 
   it('keeps direct task creation submission available without assistant capture', async () => {

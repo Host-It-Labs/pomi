@@ -1,4 +1,3 @@
-import { HabitSummary } from './intentions/HabitSummary';
 import { Intention, IntentionType, TimerTypes } from '@pomi/shared';
 import { TIMER_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
 import clsx from 'clsx';
@@ -13,11 +12,11 @@ import {
 } from 'react';
 import { FaCheck, FaPlus } from 'react-icons/fa';
 import { useTodayIntentionsCount } from '../hooks/useTodayIntentionsCount';
+import { useI18n } from '../i18n';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { useTimerStore } from '../stores/timerStore';
 import { useUiStore } from '../stores/uiStore';
 import { apiClient } from '../utils/apiClient';
-import { subscribeToIntentionRefresh } from '../utils/recoveryRefresh';
 import {
   getBreakIntentionQueryTypes,
   getMixedBreakButtonClasses,
@@ -30,17 +29,18 @@ import {
   getTypedCountKey,
   getTypedLeafCount,
 } from '../utils/intentionCounts';
-import { hasOpenModal } from '../utils/modalRegistry';
-import { isMac } from '../utils/osUtils';
-import { getSelectedTimerIntentions } from '../utils/timerIntentions';
 import {
   getCompactGridColumnClass,
   getCompactPickerMinWidth,
 } from '../utils/minimizedIntentionsLayout';
+import { hasOpenModal } from '../utils/modalRegistry';
+import { isMac } from '../utils/osUtils';
+import { subscribeToIntentionRefresh } from '../utils/recoveryRefresh';
+import { getSelectedTimerIntentions } from '../utils/timerIntentions';
+import { HabitSummary } from './intentions/HabitSummary';
+import { PaginationControls } from './PaginationControls';
 import { IntentionEmojiPair } from './ui/IntentionEmojiPair';
 import { KeyboardShortcut } from './ui/KeyboardShortcut';
-import { PaginationControls } from './PaginationControls';
-import { useI18n } from '../i18n';
 
 const MINIMIZED_INTENTIONS_PAGE_SIZE = 4;
 const COMPACT_TASKS_INTENTIONS_PAGE_SIZE = 3;
@@ -913,7 +913,7 @@ export function MinimizedIntentionsPicker({
     }
 
     return (
-      <span className="absolute bottom-0 right-0 flex h-2.5 min-w-2.5 items-center justify-center rounded-full bg-blue-500 px-0.5 text-[7px] font-bold leading-none text-white">
+      <span className="absolute bottom-0 right-0 flex h-2.5 min-w-2.5 items-center justify-center rounded-full bg-blue-500 px-0.5 text-[7px] font-bold leading-none text-ink">
         {count}
       </span>
     );
@@ -974,7 +974,7 @@ export function MinimizedIntentionsPicker({
         )}
         {habitDone && (
           <span
-            className="absolute left-0.5 top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 text-white"
+            className="absolute left-0.5 top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 text-ink"
             aria-label={getHabitAriaLabel(intention, 'done')}
           >
             <FaCheck size={7} />
@@ -1002,7 +1002,7 @@ export function MinimizedIntentionsPicker({
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.16, ease: 'easeOut' }}
             className={clsx(
-              'absolute text-[9px] font-bold bg-indigo-600 text-white rounded-full min-w-3.5 h-3.5 flex items-center justify-center px-0.5',
+              'absolute text-[9px] font-bold bg-indigo-600 text-ink rounded-full min-w-3.5 h-3.5 flex items-center justify-center px-0.5',
               selectedSubIntention
                 ? 'top-[1.35rem] -right-1'
                 : '-bottom-1 -right-1'
@@ -1056,7 +1056,7 @@ export function MinimizedIntentionsPicker({
         )}
         {habitDone && (
           <span
-            className="absolute left-0.5 top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 text-white"
+            className="absolute left-0.5 top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 text-ink"
             aria-label={getHabitAriaLabel(subIntention, 'done')}
           >
             <FaCheck size={7} />
@@ -1075,7 +1075,7 @@ export function MinimizedIntentionsPicker({
             initial={{ opacity: 0, scale: 0.85 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.16, ease: 'easeOut' }}
-            className="absolute top-[1.35rem] -right-1 text-[9px] font-bold bg-cyan-600 text-white rounded-full min-w-3.5 h-3.5 flex items-center justify-center px-0.5"
+            className="absolute top-[1.35rem] -right-1 text-[9px] font-bold bg-cyan-600 text-ink rounded-full min-w-3.5 h-3.5 flex items-center justify-center px-0.5"
           >
             {count}
           </motion.span>

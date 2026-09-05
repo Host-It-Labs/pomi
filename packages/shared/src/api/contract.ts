@@ -1,20 +1,21 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod/v4';
 import {
-  ASSISTANT_MAX_RECORDING_MINUTES,
   APP_LANGUAGE_VALUES,
+  ASSISTANT_MAX_RECORDING_MINUTES,
   CLIENT_NOTIFICATION_TYPES,
   FEEDBACK_MAX_TEXT_LENGTH,
   FEEDBACK_TRANSCRIPTION_MAX_ENCODED_BYTES,
-  TASK_DESCRIPTION_MAX_LENGTH,
+  SETTINGS_SUGGESTION_IDS,
   TASK_CREATION_SOURCES,
+  TASK_DESCRIPTION_MAX_LENGTH,
   TASK_FOLLOW_UP_DELAY_MAX_DAYS,
   TASK_IMPORT_MAX_ROWS,
   TASK_IMPORT_SOURCES,
   TASK_PRIORITIES,
   TASK_RECURRENCE_RULE_MAX_LENGTH,
-  TASK_SORT_MODES,
   TASK_SLUG_MAX_LENGTH,
+  TASK_SORT_MODES,
   TASK_STATUSES,
   TASK_TITLE_MAX_LENGTH,
   TIMER_TYPES,
@@ -202,7 +203,6 @@ const preferencesSchema = z.object({
   tasksShowSetupPrompts: z.boolean(),
   tasksShowInMinimizedTimer: z.boolean(),
   tasksAutoSwitchToIntentionMode: z.boolean(),
-  tasksDuringBreaks: z.boolean(),
   taskDefaultDueDateMode: z.enum(['off', 'tomorrow', 'week', 'custom']),
   taskDefaultDueDateDays: z.number().int().min(1).max(365),
   taskDefaultSortMode: z.enum([
@@ -211,6 +211,9 @@ const preferencesSchema = z.object({
     TASK_SORT_MODES.CREATED_ASC,
   ]),
   hiddenHelpTips: z.array(z.string()).default([]),
+  dismissedSettingSuggestions: z
+    .array(z.enum(SETTINGS_SUGGESTION_IDS))
+    .max(SETTINGS_SUGGESTION_IDS.length),
   taskReminderPriorities: z.array(taskPrioritySchema),
   taskBeforeDueReminderMinutes: z.number().int().min(0),
   taskUrgentReminderRepeatEnabled: z.boolean(),
@@ -434,8 +437,6 @@ const taskSchema = z.object({
   importSourceTaskId: z.string().nullable(),
   dueDate: z.string().nullable(),
   dueTime: taskDueTimeSchema.nullable(),
-  manualOrder: z.number().int().nullable(),
-  manualOrderOverride: z.boolean(),
   priority: taskPrioritySchema,
   status: taskStatusSchema,
   timerType: timerTypeSchema,
@@ -487,8 +488,6 @@ const listItemSchema = z.object({
   dueDate: z.string().nullable(),
   priority: taskPrioritySchema,
   status: taskStatusSchema,
-  manualOrder: z.number().int().nullable(),
-  manualOrderOverride: z.boolean(),
   itemKind: z.literal('listItem'),
   vacationEligible: z.boolean(),
   createdAt: z.string(),
@@ -601,8 +600,6 @@ const taskUpdateSchema = z.object({
     .optional(),
   dueDate: z.string().min(1).nullable().optional(),
   dueTime: taskDueTimeSchema.nullable().optional(),
-  manualOrder: z.number().int().min(0).nullable().optional(),
-  manualOrderOverride: z.boolean().optional(),
   priority: taskPrioritySchema.optional(),
   timerType: timerTypeSchema.optional(),
   customDuration: z.number().int().min(1).nullable().optional(),
@@ -631,25 +628,7 @@ const taskUpdateSchema = z.object({
   vacationEligible: z.boolean().optional(),
 });
 
-const taskReorderSchema = z.object({
-  tasks: z
-    .array(
-      z.object({
-        id: z.string(),
-        manualOrder: z.number().int().min(0),
-        manualOrderOverride: z.boolean().optional(),
-      })
-    )
-    .min(1),
-});
-
-const taskStatisticsFilterSchema = z.enum([
-  'created',
-  'completed',
-  'overdue',
-  'onTime',
-  'archived',
-]);
+const taskStatisticsFilterSchema = z.enum(['created', 'completed', 'archived']);
 
 const taskStatisticsSchema = z.object({
   overview: z.object({
@@ -1102,14 +1081,7 @@ const userActionSchema = z
     }),
     z.object({
       kind: z.literal('tasks'),
-      operation: z.enum([
-        'create',
-        'update',
-        'reorder',
-        'import',
-        'complete',
-        'revert',
-      ]),
+      operation: z.enum(['create', 'update', 'import', 'complete', 'revert']),
       taskId: z.string().min(1).max(128).optional(),
       eventId: z.string().min(1).max(128).optional(),
       title: z.string().min(1).max(TASK_TITLE_MAX_LENGTH).optional(),
@@ -1125,8 +1097,6 @@ const userActionSchema = z
       customDuration: z.number().int().min(1).nullable().optional(),
       pinned: z.boolean().optional(),
       status: taskStatusSchema.optional(),
-      manualOrder: z.number().int().min(0).nullable().optional(),
-      manualOrderOverride: z.boolean().optional(),
       intentionSlug: z.string().max(TASK_SLUG_MAX_LENGTH).nullable().optional(),
       subIntentionSlug: z
         .string()
@@ -1153,16 +1123,6 @@ const userActionSchema = z
         .optional(),
       vacationEligible: z.boolean().optional(),
       creationSource: taskCreationSourceSchema.optional(),
-      reorder: z
-        .array(
-          z.object({
-            id: z.string().min(1).max(128),
-            manualOrder: z.number().int().min(0),
-            manualOrderOverride: z.boolean().optional(),
-          })
-        )
-        .max(TASK_IMPORT_MAX_ROWS)
-        .optional(),
       importSource: z.string().min(1).max(128).optional(),
       rows: z.array(taskImportRowSchema).max(TASK_IMPORT_MAX_ROWS).optional(),
     }),
@@ -1379,13 +1339,6 @@ const userActionSchema = z
           code: z.ZodIssueCode.custom,
           path: ['eventId'],
           message: 'Event ID is required',
-        });
-      }
-      if (action.operation === 'reorder' && !action.reorder) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['reorder'],
-          message: 'Reorder payload is required',
         });
       }
       if (
@@ -1913,15 +1866,6 @@ export const apiContract = router({
         200: taskSchema,
         400: errorSchema,
         404: errorSchema,
-      },
-    },
-    reorder: {
-      method: 'POST',
-      path: '/tasks/reorder',
-      body: taskReorderSchema,
-      responses: {
-        200: z.array(taskSchema),
-        400: errorSchema,
       },
     },
     import: {

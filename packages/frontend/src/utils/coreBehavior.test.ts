@@ -22,8 +22,6 @@ import {
   isTaskOverdue,
 } from './taskUi';
 import {
-  applyIntentionFamilyManualOrder,
-  applyUndatedManualOverrides,
   buildTaskView,
   getDisplayedTaskMode,
   sortTasksForGeneralView,
@@ -64,8 +62,6 @@ function task(id: string, overrides: Partial<Task>): Task {
     importSourceTaskId: null,
     dueDate: null,
     dueTime: null,
-    manualOrder: null,
-    manualOrderOverride: false,
     priority: 'normal',
     status: 'active',
     timerType: 'work',
@@ -307,82 +303,6 @@ describe('Task ordering rules', () => {
     expect(getDisplayedTaskMode('intention', false)).toBe('general');
     expect(getDisplayedTaskMode('intention', true)).toBe('intention');
     expect(getDisplayedTaskMode('general', false)).toBe('general');
-  });
-
-  it('applies bounded manual positions while leaving pinned tasks automatic', () => {
-    const automaticA = task('automatic-a', {});
-    const automaticB = task('automatic-b', {});
-    const pinned = task('pinned', {
-      pinnedAt: '2026-07-26T00:00:00.000Z',
-      manualOrder: 0,
-      manualOrderOverride: true,
-    });
-    const beforeStart = task('before-start', {
-      manualOrder: -10,
-      manualOrderOverride: true,
-    });
-    const afterEnd = task('after-end', {
-      manualOrder: 99,
-      manualOrderOverride: true,
-    });
-
-    expect(
-      applyUndatedManualOverrides([
-        automaticA,
-        pinned,
-        automaticB,
-        afterEnd,
-        beforeStart,
-      ]).map(value => value.id)
-    ).toEqual([
-      'before-start',
-      'automatic-a',
-      'pinned',
-      'automatic-b',
-      'after-end',
-    ]);
-    expect(applyUndatedManualOverrides([])).toEqual([]);
-  });
-
-  it('reorders only unpinned members of the same Intention family', () => {
-    const familyA = task('family-a', {
-      intentionSlug: 'deep-work',
-      manualOrder: 1,
-      manualOrderOverride: true,
-    });
-    const otherType = task('break-family', {
-      timerType: 'break',
-      intentionSlug: 'deep-work',
-      manualOrder: 0,
-      manualOrderOverride: true,
-    });
-    const familyB = task('family-b', { intentionSlug: 'deep-work' });
-    const unlinked = task('unlinked', {
-      manualOrder: 0,
-      manualOrderOverride: true,
-    });
-    const pinned = task('pinned-family', {
-      intentionSlug: 'deep-work',
-      pinnedAt: '2026-07-26T00:00:00.000Z',
-      manualOrder: 0,
-      manualOrderOverride: true,
-    });
-
-    expect(
-      applyIntentionFamilyManualOrder([
-        familyA,
-        otherType,
-        familyB,
-        unlinked,
-        pinned,
-      ]).map(value => value.id)
-    ).toEqual([
-      'family-b',
-      'break-family',
-      'family-a',
-      'unlinked',
-      'pinned-family',
-    ]);
   });
 
   it('orders the general view by pin, overdue state, due date, time, and priority', () => {

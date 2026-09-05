@@ -1,5 +1,7 @@
-import clsx from 'clsx';
+import { AppTheme } from './components/AppTheme';
+import { IntentionsManager } from './pages/IntentionsManager';
 import { LogicalSize } from '@tauri-apps/api/window';
+import clsx from 'clsx';
 import {
   lazy,
   Suspense,
@@ -13,17 +15,17 @@ import { ConnectionStatus } from './app/ConnectionStatus';
 import { InAppNotification } from './app/InAppNotification';
 import { ProtectedRoute } from './app/ProtectedRoute';
 import { SystemTray } from './app/SystemTray';
-import { ToastProvider } from './components/toast/ToastContext';
-import { UserActionIndicator } from './components/UserActionIndicator';
 import { AssistantLauncher } from './components/assistant/AssistantLauncher';
 import { FeedbackRecorder } from './components/feedback/FeedbackRecorder';
+import { ToastProvider } from './components/toast/ToastContext';
 import { Spinner } from './components/ui/Spinner';
+import { UserActionIndicator } from './components/UserActionIndicator';
 import { environmentVariables } from './config/environmentVariables';
 import { getMinimizedWindowHeight, WINDOW_WIDTH } from './constants/window';
-import { TIMER_TYPES } from '@pomi/shared/src/constants';
 import { useApp } from './hooks/useApp';
 import { useDevAutoLogin } from './hooks/useDevAutoLogin';
 import { useMobileFeatures } from './hooks/useMobileFeatures';
+import { useI18n } from './i18n';
 import { MinimizedTimer } from './pages/MinimizedTimer';
 import { Timer } from './pages/Timer';
 import { useAuthStore } from './stores/authStore';
@@ -33,16 +35,16 @@ import { useTimerStore } from './stores/timerStore';
 import { useUiStore } from './stores/uiStore';
 import { canUseDebugPanel } from './utils/debugAccess';
 import { isDesktop } from './utils/osUtils';
-import { useI18n } from './i18n';
 
 const DebugPanel = lazy(() =>
   import('./pages/DebugPanel').then(module => ({
     default: module.DebugPanel,
   }))
 );
-const IntentionsManager = lazy(() =>
-  import('./pages/IntentionsManager').then(module => ({
-    default: module.IntentionsManager,
+
+const AiAdministration = lazy(() =>
+  import('./pages/AiAdministration').then(module => ({
+    default: module.AiAdministration,
   }))
 );
 const Settings = lazy(() =>
@@ -50,9 +52,6 @@ const Settings = lazy(() =>
 );
 const Statistics = lazy(() =>
   import('./pages/Statistics').then(module => ({ default: module.Statistics }))
-);
-const Tasks = lazy(() =>
-  import('./pages/Tasks').then(module => ({ default: module.Tasks }))
 );
 
 function PageLoadingSkeleton() {
@@ -111,10 +110,6 @@ function App() {
   const showMinimizedTaskView = Boolean(
     !expanded &&
     !timer?.isExtension &&
-    (timer?.type === TIMER_TYPES.WORK ||
-      ((timer?.type === TIMER_TYPES.BREAK ||
-        timer?.type === TIMER_TYPES.LONG_BREAK) &&
-        preferences?.tasksDuringBreaks)) &&
     Boolean(
       preferences?.tasksExtension && preferences.tasksShowInMinimizedTimer
     )
@@ -234,9 +229,7 @@ function App() {
               <Suspense fallback={<PageLoadingSkeleton />}>
                 {expanded && activeTab === 'statistics' && <Statistics />}
                 {expanded && activeTab === 'settings' && <Settings />}
-                {expanded &&
-                  activeTab === 'tasks' &&
-                  preferences?.tasksExtension && <Tasks />}
+                {expanded && activeTab === 'ai-admin' && <AiAdministration />}
                 {expanded && activeTab === 'debug' && showDebugPanel && (
                   <DebugPanel />
                 )}
@@ -246,6 +239,7 @@ function App() {
               </Suspense>
               {isAuthenticated && <AssistantLauncher />}
               {isAuthenticated && <FeedbackRecorder />}
+              <AppTheme />
               <ConnectionStatus />
               {isAuthenticated && <UserActionIndicator />}
             </main>

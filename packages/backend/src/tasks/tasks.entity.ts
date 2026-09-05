@@ -57,12 +57,6 @@ export class TaskEntity {
   @Column({ type: 'varchar', nullable: true })
   dueTime: string | null;
 
-  @Column({ type: 'integer', nullable: true })
-  manualOrder: number | null;
-
-  @Column({ default: false })
-  manualOrderOverride: boolean;
-
   @Column({ type: 'varchar', nullable: true })
   lastReminderKey: string | null;
 

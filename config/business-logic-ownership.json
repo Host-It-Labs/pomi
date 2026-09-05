@@ -133,11 +133,6 @@
       "journeys": [5, 6, 7, 8, 9],
       "rules": [
         {
-          "name": "manual ordering changes an entire Intention family",
-          "specification": "packages/backend/test/unit/tasks.service.test.ts",
-          "title": "manual ordering updates one complete Intention family"
-        },
-        {
           "name": "linked Intention changes are explicit confirmed Task updates",
           "specification": "packages/frontend/src/components/tasks/taskInlineProperties.test.tsx",
           "title": "makes linked intention selection an explicit confirmed Task update"
@@ -154,9 +149,9 @@
           "journey": 7
         },
         {
-          "name": "manual Task ordering survives refresh",
+          "name": "saved Task sort preference survives refresh",
           "specification": "e2e/journeys.spec.ts",
-          "title": "persists manual Task ordering across refresh",
+          "title": "applies the saved Task sort preference across refresh",
           "journey": 8
         }
       ]

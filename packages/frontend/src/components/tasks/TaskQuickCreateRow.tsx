@@ -6,7 +6,6 @@ import type {
 } from '@pomi/shared';
 import { ASSISTANT_MAX_RECORDING_MINUTES } from '@pomi/shared/src/constants';
 import clsx from 'clsx';
-import { v4 as uuid } from 'uuid';
 import {
   type FormEvent,
   type KeyboardEvent,
@@ -19,26 +18,27 @@ import {
 import {
   FaMicrophone,
   FaPlus,
-  FaSlidersH,
+  FaEdit,
   FaSpinner,
   FaStop,
   FaTimes,
 } from 'react-icons/fa';
+import { v4 as uuid } from 'uuid';
+import { useI18n } from '../../i18n';
 import { useAssistantStore } from '../../stores/assistantStore';
 import { useTasksStore } from '../../stores/tasksStore';
 import { useUiStore } from '../../stores/uiStore';
 import { apiClient } from '../../utils/apiClient';
-import { submitUserMutation } from '../../utils/userActionQueue';
-import { requestListRefresh } from '../../utils/listRefresh';
-import { blobToBase64 } from '../../utils/blobToBase64';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { blobToBase64 } from '../../utils/blobToBase64';
+import { requestListRefresh } from '../../utils/listRefresh';
+import { submitUserMutation } from '../../utils/userActionQueue';
 import { showToastFromStore } from '../toast/ToastContext';
 import { Alert } from '../ui/Alert';
 import { Button } from '../ui/Button';
-import { IconButton } from '../ui/IconButton';
 import { CompactIconButton } from '../ui/CompactIconButton';
+import { IconButton } from '../ui/IconButton';
 import { KeyboardShortcut } from '../ui/KeyboardShortcut';
-import { useI18n } from '../../i18n';
 
 type TaskQuickCreateDefaults = {
   description?: string | null;
@@ -512,7 +512,7 @@ export function TaskQuickCreateRow({
                 label: t('task.viewUpdated'),
                 onClick: () => {
                   setExpanded(true);
-                  setActiveTab('tasks');
+                  setActiveTab('timer');
                   requestTaskItemReveal(
                     createdTask
                       ? { kind: 'task', id: createdTask.id }
@@ -606,7 +606,12 @@ export function TaskQuickCreateRow({
       event.stopPropagation();
       return;
     }
-    if (event.key === 'Escape' || (onCancel && isCreateShortcut)) {
+    if (isCreateShortcut) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (event.key === 'Escape') {
       event.preventDefault();
       handleCancel();
     }
@@ -617,16 +622,11 @@ export function TaskQuickCreateRow({
       <form
         onSubmit={handleSubmit}
         className={clsx(
-          'grid gap-2',
-          onOpenAdvanced && onCancel
-            ? 'grid-cols-[minmax(0,1fr)_auto_auto_auto]'
-            : onOpenAdvanced || onCancel
-              ? 'grid-cols-[minmax(0,1fr)_auto_auto]'
-              : 'grid-cols-[minmax(0,1fr)_auto]',
-          compact && 'gap-1.5'
+          'quick-create-input',
+          compact && 'quick-create-compact'
         )}
       >
-        <div className="relative min-w-0">
+        <div className="relative min-w-0 flex-1">
           <label className="relative block min-w-0">
             <span className="sr-only">{t('task.add')}</span>
             <FaPlus
@@ -656,41 +656,12 @@ export function TaskQuickCreateRow({
               placeholder={t('task.add')}
               aria-label={t('task.add')}
               className={clsx(
-                'h-9 w-full rounded-md border border-slate-800 bg-slate-900/70 py-0 pl-7 text-xs text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-indigo-400/70',
-                canUseTaskSpeech ? 'pr-10' : 'pr-3',
+                'h-9 w-full border-0 bg-transparent py-0 pl-7 pr-2 text-xs text-slate-100 outline-none placeholder:text-slate-400',
                 isSaving &&
                   'cursor-not-allowed border-slate-700/60 bg-slate-950/70 text-slate-400 opacity-70 focus:border-slate-700/60'
               )}
             />
-            {canUseTaskSpeech && (
-              <button
-                type="button"
-                aria-label={
-                  isRecording ? t('task.stopDictation') : t('task.dictate')
-                }
-                title={
-                  isRecording ? t('task.stopDictation') : t('task.dictate')
-                }
-                onClick={toggleTaskSpeechRecording}
-                disabled={isTranscribing || (isSaving && !isRecording)}
-                className={clsx(
-                  'absolute right-1 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border text-[11px] transition',
-                  isRecording
-                    ? 'border-indigo-400/50 bg-indigo-600/60 text-indigo-50'
-                    : 'border-slate-700/50 bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white',
-                  (isTranscribing || (isSaving && !isRecording)) &&
-                    'cursor-not-allowed opacity-60'
-                )}
-              >
-                {isTranscribing ? (
-                  <FaSpinner className="animate-spin" />
-                ) : isRecording ? (
-                  <FaStop />
-                ) : (
-                  <FaMicrophone />
-                )}
-              </button>
-            )}
+            <KeyboardShortcut text="N" position="topRight" />
           </label>
           <span id={batchGuidanceId} className="sr-only">
             {isSaving
@@ -698,17 +669,45 @@ export function TaskQuickCreateRow({
               : t('task.batchCaptureHelp')}
           </span>
         </div>
+        {canUseTaskSpeech && (
+          <button
+            type="button"
+            aria-label={
+              isRecording ? t('task.stopDictation') : t('task.dictate')
+            }
+            title={isRecording ? t('task.stopDictation') : t('task.dictate')}
+            onClick={toggleTaskSpeechRecording}
+            disabled={isTranscribing || (isSaving && !isRecording)}
+            className={clsx(
+              'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] transition',
+              isRecording
+                ? 'border-indigo-400/50 bg-indigo-600/60 text-indigo-50'
+                : 'border-slate-700/50 bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-ink',
+              (isTranscribing || (isSaving && !isRecording)) &&
+                'cursor-not-allowed opacity-60'
+            )}
+          >
+            {isTranscribing ? (
+              <FaSpinner className="animate-spin" />
+            ) : isRecording ? (
+              <FaStop />
+            ) : (
+              <FaMicrophone />
+            )}
+          </button>
+        )}
         {onOpenAdvanced && (
           <IconButton
             type="button"
             label={t('task.create')}
-            title={t('task.advancedSettings')}
+            title={t('task.create')}
             size="sm"
             variant="secondary"
             onClick={() => onOpenAdvanced(text.trim())}
-            className="h-9 w-9 shrink-0 !p-0"
+            className="h-7 w-7 shrink-0 !p-0"
+            disabled={isSaving || isRecording || isTranscribing}
           >
-            <FaSlidersH size={10} />
+            <FaEdit size={10} />
           </IconButton>
         )}
         <Button
@@ -717,7 +716,7 @@ export function TaskQuickCreateRow({
           isLoading={isSaving}
           loadingText={t('task.adding')}
           disabled={!text.trim()}
-          className="h-9 gap-1.5"
+          className="task-quick-add h-7 shrink-0 gap-1.5"
         >
           <FaPlus size={10} />
           {t('common.add')}
@@ -732,7 +731,6 @@ export function TaskQuickCreateRow({
             className="h-9 w-9"
           >
             <FaTimes size={10} />
-            <KeyboardShortcut text="N" showModIcon position="topRight" />
           </CompactIconButton>
         )}
       </form>

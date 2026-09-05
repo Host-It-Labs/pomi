@@ -237,6 +237,24 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
   it('applies DTO validation and persists preferences through real services', async () => {
     const unauthorized = await request(app.getHttpServer()).get('/preferences');
     expect(unauthorized.status).toBe(401);
+    const initial = await request(app.getHttpServer())
+      .get('/preferences')
+      .set('authorization', `Bearer ${token}`);
+    expect(initial.body).toMatchObject({
+      tasksExtension: true,
+      intentionExtension: true,
+      sessionsExtension: true,
+      listsExtension: true,
+      intentionCustomDurations: true,
+      intentionSubIntentions: true,
+      advancedSkip: true,
+      timerExtension: true,
+      sessionShowEta: false,
+      intentionHabits: false,
+      intentionMultiSelect: false,
+      dismissedSettingSuggestions: [],
+    });
+    expect(initial.body).not.toHaveProperty('tasksDuringBreaks');
 
     const invalid = await request(app.getHttpServer())
       .put('/preferences')
@@ -247,7 +265,10 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
     const updated = await request(app.getHttpServer())
       .put('/preferences')
       .set('authorization', `Bearer ${token}`)
-      .send({ workTimerDuration: 17 });
+      .send({
+        workTimerDuration: 17,
+        dismissedSettingSuggestions: ['sessionShowEta'],
+      });
     expect(updated.status).toBe(200);
     expect(updated.body.workTimerDuration).toBe(17);
 
@@ -256,6 +277,14 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
       .set('authorization', `Bearer ${token}`);
     expect(persisted.status).toBe(200);
     expect(persisted.body.workTimerDuration).toBe(17);
+    expect(persisted.body.dismissedSettingSuggestions).toEqual([
+      'sessionShowEta',
+    ]);
+    const rejected = await request(app.getHttpServer())
+      .put('/preferences')
+      .set('authorization', `Bearer ${token}`)
+      .send({ dismissedSettingSuggestions: ['unknown-feature'] });
+    expect(rejected.status).toBe(400);
   });
 
   it('records successful Task imports and exposes import status', async () => {

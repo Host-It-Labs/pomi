@@ -13,10 +13,10 @@ import {
   it,
   vi,
 } from 'vitest';
+import { setLanguage } from '../i18n';
 import { AssistantSettings } from '../pages/AssistantSettings';
 import { GeneralSettings } from '../pages/GeneralSettings';
 import { TimerSettings } from '../pages/TimerSettings';
-import { setLanguage } from '../i18n';
 
 const mocks = vi.hoisted(() => ({
   user: null as User | null,
@@ -155,6 +155,7 @@ const preferences = (overrides: Partial<Preferences>) =>
     timerExtension: false,
     undoAlerts: true,
     hiddenHelpTips: [],
+    dismissedSettingSuggestions: [],
     ...overrides,
   }) as Preferences;
 

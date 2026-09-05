@@ -26,7 +26,7 @@ export const ToggleSwitch = ({
       ) : null}
       <label
         htmlFor={id}
-        className={`min-w-0 text-sm font-medium ${disabled ? 'text-gray-500' : 'text-white'}`}
+        className={`min-w-0 text-sm font-medium ${disabled ? 'text-gray-500' : 'text-ink'}`}
       >
         {label}
       </label>

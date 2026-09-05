@@ -66,6 +66,18 @@ export function SettingsSearchFilter({
     });
 
     root
+      .querySelectorAll<HTMLDetailsElement>('details[data-extras-section]')
+      .forEach(group => {
+        if (active && !group.hasAttribute('data-before-search'))
+          group.dataset.beforeSearch = String(group.open);
+        if (active) group.open = true;
+        else if (group.dataset.beforeSearch !== undefined) {
+          group.open = group.dataset.beforeSearch === 'true';
+          delete group.dataset.beforeSearch;
+        }
+      });
+
+    root
       .querySelectorAll<HTMLElement>(
         '[data-settings-control-group], [data-extras-section]'
       )
@@ -124,9 +136,7 @@ export function SettingsSectionFrame({
           >
             {icon}
           </span>
-          <h2 className="truncate text-base font-semibold text-white">
-            {title}
-          </h2>
+          <h2 className="truncate text-base font-semibold text-ink">{title}</h2>
         </div>
         {feature ? (
           <button

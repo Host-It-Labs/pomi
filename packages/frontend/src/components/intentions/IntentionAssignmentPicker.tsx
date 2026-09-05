@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import {
+  Fragment,
   useEffect,
   useId,
   useLayoutEffect,
@@ -7,13 +8,12 @@ import {
   useRef,
   useState,
   type ReactNode,
-  Fragment,
 } from 'react';
 import { FaCheck, FaChevronDown } from 'react-icons/fa';
+import { useI18n } from '../../i18n';
 import { isMobile } from '../../utils/osUtils';
 import { IntentionEmojiPair } from '../ui/IntentionEmojiPair';
 import { KeyboardShortcut } from '../ui/KeyboardShortcut';
-import { useI18n } from '../../i18n';
 
 export type IntentionAssignmentOption = {
   value: string;
@@ -45,6 +45,7 @@ export type IntentionAssignmentPickerActionContext = {
 };
 
 type IntentionAssignmentPickerProps = {
+  subIntentionDisplay?: 'emoji' | 'label';
   label: string;
   options: IntentionAssignmentOption[];
   subIntentionsByParent: Record<string, SubIntentionAssignmentOption[]>;
@@ -75,6 +76,7 @@ type IntentionAssignmentPickerProps = {
   searchPlaceholder?: string;
   direction?: 'up' | 'down';
   maxHeight?: number;
+  triggerContent?: ReactNode;
   triggerClassName?: string;
   dropdownClassName?: string;
   embedded?: boolean;
@@ -89,6 +91,7 @@ type IntentionAssignmentPickerProps = {
 };
 
 export function IntentionAssignmentPicker({
+  subIntentionDisplay,
   label,
   options,
   subIntentionsByParent,
@@ -116,6 +119,7 @@ export function IntentionAssignmentPicker({
   searchPlaceholder = 'Search intentions',
   direction = 'down',
   maxHeight = 240,
+  triggerContent,
   triggerClassName,
   dropdownClassName,
   embedded = false,
@@ -584,7 +588,7 @@ export function IntentionAssignmentPicker({
         data-testid={triggerTestId}
         {...(triggerDataAttribute ? { [triggerDataAttribute]: true } : {})}
       >
-        {selectedLabel}
+        {triggerContent ?? selectedLabel}
         <span className="flex shrink-0 items-center gap-2">
           {mode === 'multi' && selectedIntentions.length > 1 ? (
             <span className="rounded-full bg-indigo-500/20 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-100">
@@ -764,7 +768,7 @@ export function IntentionAssignmentPicker({
                                 <span
                                   className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[9px] ${
                                     isSelected
-                                      ? 'border-indigo-300 bg-indigo-500 text-white'
+                                      ? 'border-indigo-300 bg-indigo-500 text-ink'
                                       : 'border-slate-600 bg-slate-900'
                                   }`}
                                 >
@@ -827,6 +831,11 @@ export function IntentionAssignmentPicker({
                               {subIntentions.map(subIntention => (
                                 <button
                                   key={subIntention.slug}
+                                  aria-label={subIntention.title}
+                                  title={subIntention.title}
+                                  data-emoji-only={
+                                    subIntentionDisplay === 'emoji'
+                                  }
                                   type="button"
                                   onClick={() =>
                                     selectSubIntention(
@@ -855,7 +864,9 @@ export function IntentionAssignmentPicker({
                                   data-intention-picker-action
                                 >
                                   <span>{subIntention.emoji}</span>
-                                  <span>{subIntention.title}</span>
+                                  {subIntentionDisplay !== 'emoji' && (
+                                    <span>{subIntention.title}</span>
+                                  )}
                                 </button>
                               ))}
                             </div>

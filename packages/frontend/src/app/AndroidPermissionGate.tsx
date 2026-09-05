@@ -11,20 +11,20 @@ import { Button } from '../components/ui/Button';
 import { PageContainer } from '../components/ui/PageContainer';
 import { PageShell } from '../components/ui/PageShell';
 import { Spinner } from '../components/ui/Spinner';
+import { useI18n } from '../i18n';
 import { useAuthStore } from '../stores/authStore';
 import { usePreferencesStore } from '../stores/preferencesStore';
+import { reconcileAndroidForegroundSync } from '../utils/androidForegroundSync';
 import {
   checkBatteryOptimizationStatus,
   requestBatteryOptimizationExemption,
 } from '../utils/batteryOptimization';
-import { reconcileAndroidForegroundSync } from '../utils/androidForegroundSync';
 import { notificationService } from '../utils/notificationUtils';
 import {
   isAndroid,
   isDebugMobileSimulator,
   platformName,
 } from '../utils/osUtils';
-import { useI18n } from '../i18n';
 
 interface AndroidPermissionGateProps {
   children: ReactNode;
@@ -208,7 +208,7 @@ export function AndroidPermissionGate({
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-300">
               {t('permissions.androidSetup')}
             </p>
-            <h1 className="text-2xl font-semibold text-white">
+            <h1 className="text-2xl font-semibold text-ink">
               {t('permissions.keepPomiOnTime')}
             </h1>
             <p className="text-sm text-slate-400">
@@ -229,7 +229,7 @@ export function AndroidPermissionGate({
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="truncate text-sm font-medium text-white">
+                      <p className="truncate text-sm font-medium text-ink">
                         {row.label}
                       </p>
                       <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-400">

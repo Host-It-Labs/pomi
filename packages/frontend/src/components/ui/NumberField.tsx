@@ -24,7 +24,7 @@ export function NumberField({
     <div className="space-y-1">
       <div className="flex items-center justify-between">
         <div className="mr-3 flex min-w-0 flex-1 items-center gap-2">
-          <label htmlFor={id} className="text-sm font-medium text-white">
+          <label htmlFor={id} className="text-sm font-medium text-ink">
             {label}
           </label>
           {helperText ? (
@@ -44,7 +44,7 @@ export function NumberField({
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
-            className={`w-10 bg-transparent text-white text-right text-sm outline-none focus:ring-1 focus:ring-indigo-500 rounded ${className || ''}`}
+            className={`w-10 bg-transparent text-ink text-right text-sm outline-none focus:ring-1 focus:ring-indigo-500 rounded ${className || ''}`}
             {...inputProps}
           />
         </div>

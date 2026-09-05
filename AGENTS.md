@@ -113,6 +113,7 @@ Single-context repo: use root `CONTEXT.md` and root `docs/adr/`. See `docs/agent
 
 - `./scripts/start-project-frontend.sh` and `./scripts/start-worktree-environment.sh` are responsible for the local `copyme` fixture before opening the app.
 - `copyme` fixture auto-login is env-gated via `VITE_DEV_AUTO_LOGIN_USERNAME` and `VITE_DEV_AUTO_LOGIN_PASSWORD`; startup scripts derive the default password from the fixture username unless overridden.
+- Keep the visible development context slug current for every task. Before starting or refreshing the local frontend, set `POMI_CURRENT_WORK_SLUG` and `VITE_TEST_CONTEXT_SLUG` to a short description of the current work. An empty value must not hide the label in local development. Preserve this indicator when changing layouts; update the ignored root `.env.local` when using the shared checkout, and pass process overrides in worktrees.
 - Local dev context labeling is env-gated via `VITE_TEST_CONTEXT_SLUG`; startup scripts default it from `POMI_CURRENT_WORK_SLUG` unless a focused test or manual env override supplies a more specific slug.
 - When dev auto-login is enabled, the app replaces any persisted auth with a fresh `copyme` session and ignores stored self-host backend URLs so it uses the resolved local backend port.
 - `pnpm --filter @pomi/backend seed:copyme` preserves a healthy fixture. It reseeds only when the user, credentials, preferences, canonical intentions, statistics freshness, or statistics counts are missing or inconsistent.

@@ -78,7 +78,7 @@ export function DurationSlider({
       <div className="flex justify-between items-center">
         <label
           htmlFor={`${label.toLowerCase().replace(/\s+/g, '-')}`}
-          className="text-sm  text-white font-medium"
+          className="text-sm  text-ink font-medium"
         >
           {label}
         </label>

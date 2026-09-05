@@ -1,18 +1,18 @@
 import { Timer, TimerSkipLogMode } from '@pomi/shared';
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useI18n } from '../i18n';
+import { usePreferencesStore } from '../stores/preferencesStore';
 import {
   getAdvancedSkipElapsedMs,
   getAdvancedSkipFullMs,
 } from '../utils/advancedSkip';
-import { formatTimeWithUnit } from '../utils/timeUtils';
-import { usePreferencesStore } from '../stores/preferencesStore';
 import { isDesktop } from '../utils/osUtils';
 import { shouldIgnoreModalLocalShortcut } from '../utils/shortcutUtils';
 import { getSelectedTimerIntentions } from '../utils/timerIntentions';
+import { formatTimeWithUnit } from '../utils/timeUtils';
 import { IntentionEmojiPair } from './ui/IntentionEmojiPair';
 import { Modal } from './ui/Modal';
-import { useI18n } from '../i18n';
 
 type AdvancedSkipModalProps = {
   isOpen: boolean;
@@ -125,7 +125,7 @@ export function AdvancedSkipModal({
           <div className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
             {t('timer.elapsed')}
           </div>
-          <div className="mt-0.5 text-base font-bold tabular-nums text-white">
+          <div className="mt-0.5 text-base font-bold tabular-nums text-ink">
             {formatTimeWithUnit(elapsedDuration)}
           </div>
           {showKeyHints && (
@@ -142,7 +142,7 @@ export function AdvancedSkipModal({
           <div className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
             {t('timer.full')}
           </div>
-          <div className="mt-0.5 text-base font-bold tabular-nums text-white">
+          <div className="mt-0.5 text-base font-bold tabular-nums text-ink">
             {formatTimeWithUnit(fullDuration)}
           </div>
           {showKeyHints && (

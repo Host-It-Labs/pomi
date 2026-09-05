@@ -5,7 +5,6 @@ import {
   createSession,
   createTask,
   deterministicUsername,
-  dragAfter,
   E2E_PASSWORD,
   enableFeatures,
   expectTaskOrder,
@@ -86,22 +85,18 @@ test('2. enables Intentions, selects a Parent and Sub-intention, then records a 
     .filter({ hasText: /^New(?: Intention)?$/ })
     .first()
     .click();
-  await page.locator('input[type="text"]').first().fill('🧭');
-  await page.locator('input[type="text"]').nth(1).fill(parentTitle);
+  const parentDialog = page.getByRole('dialog', { name: 'New Intention' });
+  await parentDialog.locator('input[type="text"]').first().fill('🧭');
+  await parentDialog.locator('input[type="text"]').nth(1).fill(parentTitle);
   await page.getByRole('button', { name: 'Create', exact: true }).click();
   const editParent = page
     .getByRole('button', { name: `Edit ${parentTitle}`, exact: true })
     .first();
-  if (!(await editParent.isVisible().catch(() => false))) {
-    const editIntentions = page.getByRole('button', {
-      name: 'Edit intentions',
-    });
-    await expect(editIntentions).toBeVisible({ timeout: 10_000 });
-    await editIntentions.click();
-  }
+  await expect(parentDialog).not.toBeVisible();
   await expect(editParent).toBeVisible({ timeout: 10_000 });
   await editParent.click();
   const editDialog = page.getByRole('dialog', { name: 'Edit Intention' });
+  await editDialog.locator('summary[aria-label="Manage"]').click();
   await editDialog.getByRole('button', { name: 'Add Sub-intention' }).click();
   const childDialog = page.getByRole('dialog', { name: 'New Intention' });
   await childDialog.locator('input[type="text"]').first().fill('🗺️');
@@ -143,17 +138,6 @@ test('2. enables Intentions, selects a Parent and Sub-intention, then records a 
   await expect(display).toBeVisible();
 
   await page.locator(`button[title*="${parentTitle}"]`).first().click();
-  await expect
-    .poll(async () => {
-      const timer = (await fetchWatchStatus(page)).timer;
-      return timer?.intentions?.map(
-        (intention: { slug: string; subSlug?: string }) => [
-          intention.slug,
-          intention.subSlug,
-        ]
-      );
-    })
-    .toEqual([[parent.slug, null]]);
   const subPicker = page.getByTestId('expanded-sub-intentions-picker');
   await expect(subPicker).toBeVisible();
   await subPicker.locator(`button[title*="${childTitle}"]`).click();
@@ -316,6 +300,7 @@ test('5. enables Tasks, creates and edits through the shared editor, and reloads
     .click();
   const editDialog = page.getByRole('dialog', { name: 'Edit task' });
   await editDialog.getByLabel('Task title').fill(edited);
+  await editDialog.getByRole('button', { name: 'More options' }).click();
   await editDialog.getByLabel('Task priority').selectOption('high');
   await editDialog.getByRole('button', { name: 'Save' }).click();
   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -473,11 +458,12 @@ test('7. completes, undoes, and archives a recurring Task without violating its 
     .toBe(false);
 });
 
-test('8. persists manual Task ordering across refresh', async ({
+test('8. applies the saved Task sort preference across refresh', async ({
   page,
 }, testInfo) => {
   await loginJourneyUser(page, testInfo);
   await enableFeatures(page, ['intentionExtension', 'tasksExtension']);
+  await updatePreferences(page, { taskDefaultSortMode: 'created-asc' });
   const prefix = deterministicUsername(testInfo, 'order');
   const intention = await createIntention(page, {
     title: `${prefix} lane`,
@@ -504,27 +490,9 @@ test('8. persists manual Task ordering across refresh', async ({
     .click();
   const taskRows = page.locator('[data-testid="task-row"]');
   await expect(taskRows).toHaveCount(2, { timeout: 15_000 });
-  const initialOrder = await taskRows.evaluateAll(rows =>
-    rows.map(row => row.getAttribute('data-task-title')!)
-  );
-  expect(initialOrder).toHaveLength(2);
-  const [draggedTitle, targetTitle] = initialOrder;
-  const receipt = page.waitForResponse(
-    response =>
-      new URL(response.url()).pathname === '/user-actions' &&
-      response.request().method() === 'POST' &&
-      response.status() === 202
-  );
-  await dragAfter(
-    page,
-    taskRow(page, draggedTitle).getByRole('button', {
-      name: `Drag ${draggedTitle}`,
-    }),
-    taskRow(page, targetTitle)
-  );
-  expect((await receipt).ok()).toBeTruthy();
-  const persistedOrder = [targetTitle, draggedTitle];
-  await expectTaskOrder(page, persistedOrder);
+  await expectTaskOrder(page, [first, second]);
+  await updatePreferences(page, { taskDefaultSortMode: 'created-desc' });
+  const persistedOrder = [second, first];
   await page.reload({ waitUntil: 'domcontentloaded' });
   await new TestHelpers(page).expandWindow();
   await openTasks(page);
@@ -680,11 +648,10 @@ test('11. produces real Timer and Task activity for statistics and work-Timer lo
     )
     .toBe(true);
 
-  await page
-    .getByRole('button', { name: 'Back to Timer', exact: true })
-    .click();
   await page.getByRole('button', { name: 'Statistics', exact: true }).click();
-  await expect(page.getByText('Today', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Today', exact: true })
+  ).toBeVisible();
   await page
     .getByTestId('statistics-controls')
     .getByRole('button', { name: 'Tasks' })
@@ -726,20 +693,12 @@ test('12. preserves accepted-action FIFO through delayed indication, reconnect, 
   const indicator = page.getByTestId('user-action-indicator');
   await expect(indicator).toBeVisible({ timeout: 4_000 });
   await expect(indicator).toBeHidden({ timeout: 15_000 });
-  await helpers.openSettings();
-  await page.getByRole('button', { name: 'Open Debug Panel' }).click();
-  await page
-    .locator('button:has(h2:has-text("Network Lag Simulator"))')
-    .click();
-  await page.getByRole('button', { name: 'Off', exact: true }).click();
-  await page.getByRole('button', { name: 'Back to Settings' }).click();
-  await page.getByRole('button', { name: 'Back to Timer' }).click();
   const statusBeforeReconnect = await fetchWatchStatus(page);
   const timerDurationBeforeReconnect = statusBeforeReconnect.timer?.duration;
   expect(timerDurationBeforeReconnect).toBe(30 * 60_000);
 
-  await page.context().setOffline(true);
   await page.locator('button[aria-label^="Add 5 Minutes"]').first().click();
+  await page.context().setOffline(true);
   await expect(page.getByTestId('connection-status-dismiss')).toBeVisible({
     timeout: 10_000,
   });

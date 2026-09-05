@@ -5,9 +5,9 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DEFAULT_APP_LANGUAGE, AppLanguage } from '@pomi/shared';
-import { TimerService } from 'src/timer/timer.service';
+import { AppLanguage, DEFAULT_APP_LANGUAGE } from '@pomi/shared';
 import { Subject } from 'rxjs';
+import { TimerService } from 'src/timer/timer.service';
 import { Repository } from 'typeorm';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { Preferences } from './preferences.entity';
@@ -30,18 +30,18 @@ const DEFAULT_PREFERENCES = {
   timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
   globalShortcut: false,
   keyboardShortcuts: true,
-  intentionExtension: false,
+  intentionExtension: true,
   intentionRequireSelection: false,
   intentionShowDailyCount: false,
   intentionBreakIntentions: false,
   intentionMultiSelect: false,
   intentionShowBreakIntentionsInLongBreak: false,
-  intentionCustomDurations: false,
-  intentionSubIntentions: false,
+  intentionCustomDurations: true,
+  intentionSubIntentions: true,
   intentionHabits: false,
   intentionPrioritizeUnfinishedHabits: false,
   workTimerLogsExtension: true,
-  sessionsExtension: false,
+  sessionsExtension: true,
   sessionPomodorosCount: 3,
   sessionHasLongBreak: true,
   sessionLongBreakDuration: 15 * 60 * 1000,
@@ -54,21 +54,21 @@ const DEFAULT_PREFERENCES = {
   sessionAutoDetectLongBreak: false,
   keepScreenAwake: false,
   undoAlerts: false,
-  tasksExtension: false,
+  tasksExtension: true,
   tasksShowSetupPrompts: true,
   tasksShowInMinimizedTimer: false,
   tasksAutoSwitchToIntentionMode: true,
-  tasksDuringBreaks: false,
   taskDefaultDueDateMode: 'tomorrow',
   taskDefaultDueDateDays: 1,
   taskDefaultSortMode: 'default',
   hiddenHelpTips: [],
+  dismissedSettingSuggestions: [],
   taskReminderPriorities: ['high', 'urgent'],
   taskBeforeDueReminderMinutes: 0,
   taskUrgentReminderRepeatEnabled: true,
   taskUrgentReminderRepeatIntervalMinutes: 30,
-  advancedSkip: false,
-  timerExtension: false,
+  advancedSkip: true,
+  timerExtension: true,
   timerExtrasSeen: false,
   sessionsExtrasSeen: false,
   intentionsExtrasSeen: false,
@@ -76,7 +76,7 @@ const DEFAULT_PREFERENCES = {
   assistantTaskTranscriptsEnabled: false,
   assistantTaskTranscriptMinWords: 15,
   destinationDescriptionsEnabled: false,
-  listsExtension: false,
+  listsExtension: true,
   vacationExtension: false,
   vacationCoverageConfigured: false,
   tasksShowVacationCovered: false,

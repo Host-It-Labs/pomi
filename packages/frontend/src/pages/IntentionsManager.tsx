@@ -1,7 +1,9 @@
+import { requestListRefresh } from '../utils/listRefresh';
 import { HabitCadence, Intention, IntentionType, List } from '@pomi/shared';
-import { TIMER_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
+import { TIMER_TYPES } from '@pomi/shared/src/constants';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  FaEllipsisH,
   FaArchive,
   FaCaretDown,
   FaCaretRight,
@@ -12,13 +14,14 @@ import {
   FaTrash,
   FaUndo,
 } from 'react-icons/fa';
-import { showToastFromStore } from '../components/toast/ToastContext';
 import { BackButton } from '../components/BackButton';
+import { ManagerRowActions } from '../components/intentions/ManagerRowActions';
+import { showToastFromStore } from '../components/toast/ToastContext';
+import { BottomSheet, SheetOptions } from '../components/ui/BottomSheet';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { FormField } from '../components/ui/FormField';
 import { Input } from '../components/ui/Input';
-import { ManagerRowActions } from '../components/intentions/ManagerRowActions';
 import { KeyboardShortcut } from '../components/ui/KeyboardShortcut';
 import { Modal } from '../components/ui/Modal';
 import { PageContainer } from '../components/ui/PageContainer';
@@ -26,22 +29,22 @@ import { PageShell } from '../components/ui/PageShell';
 import { Spinner } from '../components/ui/Spinner';
 import { ToggleField } from '../components/ui/ToggleField';
 import { UnsavedChangesDialog } from '../components/ui/UnsavedChangesDialog';
-import { useI18n } from '../i18n';
 import {
   DEFAULT_BREAK_INTENTION_MINUTES,
   DEFAULT_LONG_BREAK_INTENTION_MINUTES,
   DEFAULT_WORK_INTENTION_MINUTES,
 } from '../constants/intentions';
 import { MILLISECONDS_PER_MINUTE } from '../constants/time';
+import { useI18n } from '../i18n';
 import { usePreferencesStore } from '../stores/preferencesStore';
 import { useTimerStore } from '../stores/timerStore';
 import { useUiStore } from '../stores/uiStore';
 import { apiClient } from '../utils/apiClient';
-import { subscribeToIntentionRefresh } from '../utils/recoveryRefresh';
+import { stableFavoriteFirst } from '../utils/favoriteFirst';
 import { hasOpenModal } from '../utils/modalRegistry';
 import { isDesktop } from '../utils/osUtils';
+import { subscribeToIntentionRefresh } from '../utils/recoveryRefresh';
 import { submitUserMutation } from '../utils/userActionQueue';
-import { stableFavoriteFirst } from '../utils/favoriteFirst';
 
 type TabType = 'work' | 'break' | 'longBreak' | 'lists';
 
@@ -95,7 +98,7 @@ export function IntentionConversionModal({
   );
 }
 
-export function IntentionsManager() {
+export function IntentionsManager({ editorOnly }: { editorOnly?: boolean }) {
   const { t } = useI18n();
   const [workIntentions, setWorkIntentions] = useState<Intention[]>([]);
   const [breakIntentions, setBreakIntentions] = useState<Intention[]>([]);
@@ -158,8 +161,6 @@ export function IntentionsManager() {
   const intentionCreateRequested = useUiStore.use.intentionCreateRequested();
   const clearIntentionCreateRequest =
     useUiStore.use.clearIntentionCreateRequest();
-  const createOrResumeTimer = useTimerStore.use.createOrResumeTimer();
-  const connectionStatus = useTimerStore.use.connectionStatus();
   const timer = useTimerStore.use.timer();
   const preferences = usePreferencesStore.use.preferences();
 
@@ -323,7 +324,7 @@ export function IntentionsManager() {
           }
           return;
         }
-        handleReturn();
+        if (!editorOnly) handleReturn();
       }
       if (e.key === '0' && (e.metaKey || e.ctrlKey) && !isFormModalOpen) {
         if (!(e.target instanceof HTMLElement)) return;
@@ -342,7 +343,12 @@ export function IntentionsManager() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFormModalOpen, intentionToRemove, openCreateIntentionModal]);
+  }, [
+    editorOnly,
+    isFormModalOpen,
+    intentionToRemove,
+    openCreateIntentionModal,
+  ]);
 
   useEffect(() => {
     if (!intentionCreateRequested) {
@@ -369,7 +375,6 @@ export function IntentionsManager() {
           ? newCustomDuration * MILLISECONDS_PER_MINUTE
           : undefined;
 
-      const createdParentIntentionId = newParentIntentionId;
       const body = {
         title: newTitle,
         emoji: newEmoji,
@@ -402,21 +407,11 @@ export function IntentionsManager() {
           ? (result as { status: number; body: Intention })
           : { status: 201, body: result as Intention };
 
-      const createdType = newType;
       resetForm();
-
-      if (
-        response.status === 201 &&
-        response.body.slug &&
-        connectionStatus.isConnected &&
-        !connectionStatus.isReconnecting &&
-        timer?.status !== TIMER_STATUSES.RUNNING &&
-        !createdParentIntentionId &&
-        createdType === TIMER_TYPES.WORK
-      ) {
-        createOrResumeTimer(TIMER_TYPES.WORK, response.body.slug);
-        handleReturn();
-      }
+      showToastFromStore(
+        t('intention.created', { title: response.body.title }),
+        'success'
+      );
     } catch (error) {
       console.error('Failed to create intention:', error);
     }
@@ -728,6 +723,7 @@ export function IntentionsManager() {
       reconcile: loadIntentions,
     });
     closeListForm();
+    requestListRefresh();
     await loadIntentions();
   };
 
@@ -743,6 +739,7 @@ export function IntentionsManager() {
       reconcile: loadIntentions,
     });
     closeListForm();
+    requestListRefresh();
     await loadIntentions();
   };
 
@@ -904,7 +901,7 @@ export function IntentionsManager() {
         <div className="space-y-4">
           <div className="flex items-center gap-3 rounded-lg bg-slate-800 p-3">
             <span className="text-2xl">{intentionToRemove.emoji}</span>
-            <span className="font-medium text-white">
+            <span className="font-medium text-ink">
               {intentionToRemove.title}
             </span>
           </div>
@@ -924,7 +921,7 @@ export function IntentionsManager() {
                   <FaArchive size={14} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-white">
+                  <p className="text-sm font-medium text-ink">
                     {t('common.archive')}
                   </p>
                   <p className="text-xs text-slate-400">
@@ -940,7 +937,7 @@ export function IntentionsManager() {
                   <FaTrash size={14} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-white">
+                  <p className="text-sm font-medium text-ink">
                     {t('common.deletePermanently')}
                   </p>
                   <p className="text-xs text-slate-400">
@@ -962,7 +959,7 @@ export function IntentionsManager() {
                     className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-700 text-indigo-500 focus:ring-indigo-500 accent-indigo-500"
                   />
                   <div>
-                    <p className="text-sm font-medium text-white">
+                    <p className="text-sm font-medium text-ink">
                       {t('intention.keepStatistics')}
                     </p>
                     <p className="text-xs text-slate-400">
@@ -1032,7 +1029,7 @@ export function IntentionsManager() {
           <div className="flex items-center gap-3 rounded-lg bg-slate-800 p-3">
             <span className="text-2xl">{intentionToReparent.emoji}</span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-white">
+              <p className="truncate text-sm font-medium text-ink">
                 {intentionToReparent.title}
               </p>
               <p className="text-xs text-slate-400">
@@ -1090,10 +1087,134 @@ export function IntentionsManager() {
 
     return (
       <>
-        <Modal
+        <BottomSheet
           isOpen={isFormModalOpen}
           onClose={cancelAction}
           title={isEdit ? t('intention.edit') : t('intention.new')}
+          headerActions={
+            isEdit &&
+            editingIntention && (
+              <details
+                className="intention-management"
+                onBlur={event => {
+                  if (
+                    !event.currentTarget.contains(
+                      event.relatedTarget as Node | null
+                    )
+                  )
+                    event.currentTarget.open = false;
+                }}
+                onKeyDown={event => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.currentTarget.open = false;
+                    event.currentTarget.querySelector('summary')?.focus();
+                  }
+                }}
+              >
+                <summary
+                  aria-label={t('settings.manage')}
+                  title={t('settings.manage')}
+                >
+                  <FaEllipsisH />
+                </summary>
+                <section className="intention-management-menu space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      {t('settings.manage')}
+                    </h3>
+                    {hasUnsavedFormChanges && (
+                      <span className="text-[10px] text-amber-300">
+                        {t('settings.saveChangesFirst')}
+                      </span>
+                    )}
+                  </div>
+                  {preferences?.intentionSubIntentions &&
+                    !editingIntention.parentIntentionId && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-full justify-start"
+                        disabled={hasUnsavedFormChanges}
+                        onClick={() => {
+                          const parent = editingIntention;
+                          resetForm();
+                          openCreateIntentionModal(parent);
+                        }}
+                      >
+                        <FaPlus size={11} /> {t('intention.addSub')}
+                      </Button>
+                    )}
+                  {preferences?.intentionSubIntentions &&
+                    (editingIntention.parentIntentionId ||
+                      getSubIntentionsForParent(editingIntention).length ===
+                        0) && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-full justify-start"
+                        disabled={hasUnsavedFormChanges}
+                        onClick={() => {
+                          const target = editingIntention;
+                          resetForm();
+                          promptReparentIntention(target);
+                        }}
+                      >
+                        <FaShare size={11} />
+                        {editingIntention.parentIntentionId
+                          ? t('intention.moveSub')
+                          : t('intention.makeSub')}
+                      </Button>
+                    )}
+                  {preferences?.listsExtension &&
+                    !editingIntention.parentIntentionId && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-full justify-start"
+                        disabled={hasUnsavedFormChanges}
+                        onClick={() => {
+                          const target = editingIntention;
+                          resetForm();
+                          setIntentionToConvert(target);
+                        }}
+                      >
+                        <FaListUl size={11} /> {t('intention.makeListAction')}
+                      </Button>
+                    )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={hasUnsavedFormChanges}
+                      onClick={() =>
+                        void handleArchiveIntention(
+                          editingIntention.slug,
+                          editingIntention.type
+                        )
+                      }
+                    >
+                      <FaArchive size={11} /> {t('common.archive')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      disabled={hasUnsavedFormChanges}
+                      onClick={() => {
+                        const target = editingIntention;
+                        resetForm();
+                        promptRemoveIntention(target);
+                        setRemoveMode('delete');
+                      }}
+                    >
+                      <FaTrash size={11} /> {t('common.delete')}
+                    </Button>
+                  </div>
+                </section>
+              </details>
+            )
+          }
           closeOnBackdropClick={true}
           closeOnEscape={true}
           className="max-h-[calc(100dvh-3rem)] overflow-visible p-0"
@@ -1112,6 +1233,22 @@ export function IntentionsManager() {
             }
           >
             <div className="space-y-4 overflow-y-auto p-5 pb-6">
+              {!isEdit && preferences?.listsExtension && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    openListForm();
+                    setListTitle(newTitle);
+                    setListEmoji(newEmoji);
+                    setListDescription(newDescription);
+                    setIsFormModalOpen(false);
+                  }}
+                >
+                  <FaListUl /> {t('intention.newList')}
+                </Button>
+              )}
               <div className="flex items-end gap-3">
                 <FormField label={t('common.emoji')} className="w-14">
                   <Input
@@ -1135,27 +1272,24 @@ export function IntentionsManager() {
                 </FormField>
               </div>
 
-              {preferences?.destinationDescriptionsEnabled && (
-                <details className="rounded-lg border border-slate-800 bg-slate-800/50">
-                  <summary className="cursor-pointer px-3 py-2 text-xs font-medium uppercase tracking-wider text-slate-400">
-                    {t('common.description')}
-                    <span className="ml-2 normal-case tracking-normal text-slate-600">
-                      {newDescription.trim()
-                        ? t('common.added')
-                        : t('common.optional')}
-                    </span>
-                  </summary>
-                  <div className="px-3 pb-3">
-                    <textarea
-                      value={newDescription}
-                      onChange={event => setNewDescription(event.target.value)}
-                      maxLength={1000}
-                      rows={3}
-                      placeholder={t('intention.whatBelongs')}
-                      className="w-full resize-y rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                </details>
+              {isEdit && editingIntention && (
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <span>
+                    {t(
+                      editingIntention.type === TIMER_TYPES.LONG_BREAK
+                        ? 'common.longBreak'
+                        : editingIntention.type === TIMER_TYPES.BREAK
+                          ? 'common.break'
+                          : 'common.work'
+                    )}
+                  </span>
+                  {!editingIntention.parentIntentionId && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>{t('common.topLevel')}</span>
+                    </>
+                  )}
+                </div>
               )}
 
               {!isEdit && hasBreakIntentions && (
@@ -1171,8 +1305,8 @@ export function IntentionsManager() {
                     aria-pressed={newType === TIMER_TYPES.WORK}
                     className={`flex-1 rounded px-3 py-1.5 text-sm transition-colors ${
                       newType === TIMER_TYPES.WORK
-                        ? 'bg-indigo-600 text-white'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-indigo-600 text-ink'
+                        : 'text-slate-400 hover:text-ink'
                     }`}
                   >
                     {t('common.work')}
@@ -1188,8 +1322,8 @@ export function IntentionsManager() {
                     aria-pressed={newType === TIMER_TYPES.BREAK}
                     className={`flex-1 rounded px-3 py-1.5 text-sm transition-colors ${
                       newType === TIMER_TYPES.BREAK
-                        ? 'bg-green-600 text-white'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-green-600 text-ink'
+                        : 'text-slate-400 hover:text-ink'
                     }`}
                   >
                     {t('common.break')}
@@ -1207,8 +1341,8 @@ export function IntentionsManager() {
                     aria-pressed={newType === TIMER_TYPES.LONG_BREAK}
                     className={`flex-1 rounded px-3 py-1.5 text-sm transition-colors ${
                       newType === TIMER_TYPES.LONG_BREAK
-                        ? 'bg-purple-600 text-white'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-purple-600 text-ink'
+                        : 'text-slate-400 hover:text-ink'
                     }`}
                   >
                     {t('common.longBreak')}
@@ -1243,7 +1377,30 @@ export function IntentionsManager() {
                   </div>
                 )}
 
-              <div className="space-y-2">
+              <SheetOptions />
+              {preferences?.destinationDescriptionsEnabled && (
+                <details className="sheet-extra rounded-lg border border-slate-800 bg-slate-800/50">
+                  <summary className="cursor-pointer px-3 py-2 text-xs font-medium uppercase tracking-wider text-slate-400">
+                    {t('common.description')}
+                    <span className="ml-2 normal-case tracking-normal text-slate-600">
+                      {newDescription.trim()
+                        ? t('common.added')
+                        : t('common.optional')}
+                    </span>
+                  </summary>
+                  <div className="px-3 pb-3">
+                    <textarea
+                      value={newDescription}
+                      onChange={event => setNewDescription(event.target.value)}
+                      maxLength={1000}
+                      rows={3}
+                      placeholder={t('intention.whatBelongs')}
+                      className="w-full resize-y rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-ink outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </details>
+              )}
+              <div className="sheet-extra space-y-2">
                 {preferences?.intentionHabits && (
                   <div className="rounded-lg border border-slate-800 bg-slate-800/50 px-3 py-2">
                     <label
@@ -1337,117 +1494,15 @@ export function IntentionsManager() {
                   </div>
                 )}
               </div>
-
-              {isEdit && editingIntention && (
-                <section className="space-y-2 border-t border-slate-800 pt-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      {t('settings.manage')}
-                    </h3>
-                    {hasUnsavedFormChanges && (
-                      <span className="text-[10px] text-amber-300">
-                        {t('settings.saveChangesFirst')}
-                      </span>
-                    )}
-                  </div>
-                  {preferences?.intentionSubIntentions &&
-                    !editingIntention.parentIntentionId && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="w-full justify-start"
-                        disabled={hasUnsavedFormChanges}
-                        onClick={() => {
-                          const parent = editingIntention;
-                          resetForm();
-                          openCreateIntentionModal(parent);
-                        }}
-                      >
-                        <FaPlus size={11} /> {t('intention.addSub')}
-                      </Button>
-                    )}
-                  {preferences?.intentionSubIntentions &&
-                    (editingIntention.parentIntentionId ||
-                      getSubIntentionsForParent(editingIntention).length ===
-                        0) && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="w-full justify-start"
-                        disabled={hasUnsavedFormChanges}
-                        onClick={() => {
-                          const target = editingIntention;
-                          resetForm();
-                          promptReparentIntention(target);
-                        }}
-                      >
-                        <FaShare size={11} />
-                        {editingIntention.parentIntentionId
-                          ? t('intention.moveSub')
-                          : t('intention.makeSub')}
-                      </Button>
-                    )}
-                  {preferences?.listsExtension &&
-                    !editingIntention.parentIntentionId && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="w-full justify-start"
-                        disabled={hasUnsavedFormChanges}
-                        onClick={() => {
-                          const target = editingIntention;
-                          resetForm();
-                          setIntentionToConvert(target);
-                        }}
-                      >
-                        <FaListUl size={11} /> {t('intention.makeListAction')}
-                      </Button>
-                    )}
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={hasUnsavedFormChanges}
-                      onClick={() =>
-                        void handleArchiveIntention(
-                          editingIntention.slug,
-                          editingIntention.type
-                        )
-                      }
-                    >
-                      <FaArchive size={11} /> {t('common.archive')}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="danger"
-                      disabled={hasUnsavedFormChanges}
-                      onClick={() => {
-                        const target = editingIntention;
-                        resetForm();
-                        promptRemoveIntention(target);
-                        setRemoveMode('delete');
-                      }}
-                    >
-                      <FaTrash size={11} /> {t('common.delete')}
-                    </Button>
-                  </div>
-                </section>
-              )}
             </div>
 
             <div className="shrink-0 flex items-center gap-3 border-t border-slate-800 bg-slate-900 p-4">
-              <div className="flex flex-1 gap-3">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="flex-1"
-                  onClick={cancelAction}
-                >
+              <div className="flex flex-1 justify-end gap-3">
+                <Button type="button" variant="ghost" onClick={cancelAction}>
                   {t('common.cancel')}
                 </Button>
                 <Button
                   type="submit"
-                  className="flex-1"
                   disabled={!newTitle.trim() || !newEmoji.trim()}
                 >
                   {isEdit ? t('common.save') : t('common.create')}
@@ -1455,7 +1510,7 @@ export function IntentionsManager() {
               </div>
             </div>
           </form>
-        </Modal>
+        </BottomSheet>
         <UnsavedChangesDialog
           isOpen={showDiscardConfirm}
           title={t('intention.discardChanges')}
@@ -1471,7 +1526,7 @@ export function IntentionsManager() {
 
   const renderListFormModal = () => (
     <>
-      <Modal
+      <BottomSheet
         isOpen={isListFormOpen}
         onClose={requestCloseListForm}
         title={editingList ? t('intention.editList') : t('intention.newList')}
@@ -1504,28 +1559,6 @@ export function IntentionsManager() {
                 />
               </FormField>
             </div>
-            {preferences?.destinationDescriptionsEnabled && (
-              <details className="rounded-lg border border-slate-800 bg-slate-800/50">
-                <summary className="cursor-pointer px-3 py-2 text-xs font-medium uppercase tracking-wider text-slate-400">
-                  {t('common.description')}
-                  <span className="ml-2 normal-case tracking-normal text-slate-600">
-                    {listDescription.trim()
-                      ? t('common.added')
-                      : t('common.optional')}
-                  </span>
-                </summary>
-                <div className="px-3 pb-3">
-                  <textarea
-                    value={listDescription}
-                    onChange={event => setListDescription(event.target.value)}
-                    rows={3}
-                    maxLength={1000}
-                    placeholder={t('intention.whatBelongsInList')}
-                    className="w-full resize-y rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
-                  />
-                </div>
-              </details>
-            )}
             {editingList && (
               <label className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-800/50 px-3 py-2 text-sm text-slate-200">
                 {t('intention.favorite')}
@@ -1537,6 +1570,7 @@ export function IntentionsManager() {
                 />
               </label>
             )}
+
             {editingList && (
               <section className="space-y-2 border-t border-slate-800 pt-4">
                 <div className="flex items-center justify-between">
@@ -1569,6 +1603,29 @@ export function IntentionsManager() {
                 </Button>
               </section>
             )}
+            <SheetOptions />
+            {preferences?.destinationDescriptionsEnabled && (
+              <details className="sheet-extra rounded-lg border border-slate-800 bg-slate-800/50">
+                <summary className="cursor-pointer px-3 py-2 text-xs font-medium uppercase tracking-wider text-slate-400">
+                  {t('common.description')}
+                  <span className="ml-2 normal-case tracking-normal text-slate-600">
+                    {listDescription.trim()
+                      ? t('common.added')
+                      : t('common.optional')}
+                  </span>
+                </summary>
+                <div className="px-3 pb-3">
+                  <textarea
+                    value={listDescription}
+                    onChange={event => setListDescription(event.target.value)}
+                    rows={3}
+                    maxLength={1000}
+                    placeholder={t('intention.whatBelongsInList')}
+                    className="w-full resize-y rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-ink outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </details>
+            )}
           </div>
           <div className="shrink-0 flex gap-3 border-t border-slate-800 bg-slate-900 p-4">
             <Button
@@ -1588,7 +1645,7 @@ export function IntentionsManager() {
             </Button>
           </div>
         </form>
-      </Modal>
+      </BottomSheet>
       <UnsavedChangesDialog
         isOpen={showListDiscardConfirm}
         title={t('intention.discardListChanges')}
@@ -1604,14 +1661,22 @@ export function IntentionsManager() {
     </>
   );
 
+  if (editorOnly)
+    return (
+      <>
+        {renderFormModal()}
+        {renderListFormModal()}
+      </>
+    );
+
   return (
     <PageShell className="min-h-0! h-full overflow-hidden">
-      <PageContainer className="text-white h-full flex flex-col">
+      <PageContainer className="text-ink h-full flex flex-col">
         <div className={`shrink-0 ${isDesktop ? 'pt-4' : 'pt-1'}`}>
           <div className="flex items-center justify-between mb-2">
             <BackButton
               targetTab="timer"
-              className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-ink transition-colors cursor-pointer"
               wrapperClassName="shrink-0"
             />
             <div className="flex items-center gap-2">
@@ -1699,7 +1764,7 @@ export function IntentionsManager() {
                     aria-label={t('task.editFor', { title: list.title })}
                   >
                     <span className="text-xl">{list.emoji ?? '📋'}</span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-white">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
                       {list.title}
                     </span>
                   </button>
@@ -1756,7 +1821,7 @@ export function IntentionsManager() {
                       <button
                         type="button"
                         onClick={() => toggleParentExpanded(intention.id)}
-                        className="rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-white"
+                        className="rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-ink"
                         aria-label={t(
                           isExpanded
                             ? 'intention.collapse'
@@ -1782,7 +1847,7 @@ export function IntentionsManager() {
                     <button
                       type="button"
                       onClick={() => startEditing(intention)}
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left outline-none transition hover:text-white focus-visible:ring-2 focus-visible:ring-indigo-400/70"
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left outline-none transition hover:text-ink focus-visible:ring-2 focus-visible:ring-indigo-400/70"
                       aria-label={t('task.editFor', {
                         title: intention.title,
                       })}
@@ -1792,7 +1857,7 @@ export function IntentionsManager() {
                       </span>
                       <span className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-sm font-medium text-white truncate min-w-0 shrink">
+                          <span className="text-sm font-medium text-ink truncate min-w-0 shrink">
                             {intention.title}
                           </span>
                           {renderBadges(intention)}
@@ -1827,7 +1892,7 @@ export function IntentionsManager() {
                           </span>
                           <span className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-sm font-medium text-white truncate min-w-0 shrink">
+                              <span className="text-sm font-medium text-ink truncate min-w-0 shrink">
                                 {subIntention.title}
                               </span>
                               {renderBadges(subIntention)}
@@ -1938,7 +2003,7 @@ export function IntentionsManager() {
                   <span className="text-xl shrink-0">{intention.emoji}</span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm font-medium text-white truncate min-w-0 shrink">
+                      <span className="text-sm font-medium text-ink truncate min-w-0 shrink">
                         {intention.title}
                       </span>
                       <span className="rounded-full bg-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400 shrink-0">
@@ -1975,7 +2040,7 @@ export function IntentionsManager() {
                   className="flex items-center gap-3 px-3 py-2.5 opacity-70"
                 >
                   <span className="text-xl">{list.emoji ?? '📋'}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-white">
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
                     {list.title}
                   </span>
                   <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">

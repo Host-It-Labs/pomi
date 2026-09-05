@@ -3,8 +3,8 @@ import { TASK_PRIORITIES } from '@pomi/shared/src/constants';
 import clsx from 'clsx';
 import { useState } from 'react';
 import { FaChevronDown, FaInfoCircle } from 'react-icons/fa';
-import { AnchoredPopover } from '../ui/AnchoredPopover';
 import { useI18n } from '../../i18n';
+import { AnchoredPopover } from '../ui/AnchoredPopover';
 
 const PRIORITY_OPTIONS: Array<{
   value: TaskPriority;
@@ -39,7 +39,7 @@ export function TaskPriorityMultiSelect({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <p className="text-sm font-medium text-white">{t('task.priorities')}</p>
+        <p className="text-sm font-medium text-ink">{t('task.priorities')}</p>
         <button
           type="button"
           aria-label={t('task.prioritiesAbout')}

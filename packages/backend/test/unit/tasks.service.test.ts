@@ -373,46 +373,6 @@ function dateOffset(days) {
   return date.toISOString().slice(0, 10);
 }
 
-function attachTaskRepository(service, tasks) {
-  const savedBatches = [];
-  const repository = {
-    findOne({ where }) {
-      return Promise.resolve(
-        tasks.find(
-          task =>
-            task.id === where.id &&
-            task.userId === where.userId &&
-            task.status === where.status &&
-            task.pinnedAt === null
-        ) ?? null
-      );
-    },
-    find({ where }) {
-      return Promise.resolve(
-        tasks.filter(
-          task =>
-            task.userId === where.userId &&
-            task.status === where.status &&
-            task.pinnedAt === null &&
-            task.timerType === where.timerType &&
-            task.intentionSlug === where.intentionSlug
-        )
-      );
-    },
-    save(entities) {
-      savedBatches.push(entities.map(entity => ({ ...entity })));
-      return Promise.resolve(entities);
-    },
-  };
-  repository.manager = {
-    transaction(callback) {
-      return callback({ getRepository: () => repository });
-    },
-  };
-  service.tasksRepository = repository;
-  return savedBatches;
-}
-
 test('direct Task creation preserves an absent due date and defaults to Work', async () => {
   const { service, savedTasks, savedEvents } = createService(null);
 
@@ -534,8 +494,6 @@ test('reverting the latest lifecycle event restores all recurrence snapshots', a
     recurrenceRule: 'FREQ=DAILY',
     recurrenceInterval: null,
     recurrenceAnchorMode: 'planned',
-    manualOrder: null,
-    manualOrderOverride: false,
   };
   const event = {
     id: 'event-revert',
@@ -583,8 +541,6 @@ test('reverting a source completion removes its generated follow-up transactiona
     recurrenceRule: null,
     recurrenceInterval: null,
     recurrenceAnchorMode: 'planned',
-    manualOrder: null,
-    manualOrderOverride: false,
   };
   const generatedFollowUp = {
     id: 'generated-revert',
@@ -671,145 +627,6 @@ test('task event logs bound latest-event lookup to the visible task IDs', async 
   );
 });
 
-test('manual ordering updates one complete Intention family', async () => {
-  const baseTask = {
-    userId: 'user-1',
-    status: TASK_STATUSES.ACTIVE,
-    pinnedAt: null,
-    timerType: 'work',
-    intentionSlug: 'project',
-    manualOrder: null,
-    manualOrderOverride: false,
-    createdAt: new Date('2026-07-01T10:00:00Z'),
-  };
-  const familyTasks = [
-    { ...baseTask, id: 'task-writing', subIntentionSlug: 'writing' },
-    { ...baseTask, id: 'task-review', subIntentionSlug: 'reviewing' },
-  ];
-  const unrelatedTask = {
-    ...baseTask,
-    id: 'task-other',
-    intentionSlug: 'health',
-  };
-  const { service } = createService(familyTasks[0]);
-  const savedBatches = attachTaskRepository(service, [
-    ...familyTasks,
-    unrelatedTask,
-  ]);
-
-  const result = await service.reorderTasks('user-1', [
-    { id: 'task-review', manualOrder: 0, manualOrderOverride: true },
-    { id: 'task-writing', manualOrder: 1, manualOrderOverride: true },
-  ]);
-
-  assert.deepEqual(
-    result.map(task => task.id),
-    ['task-review', 'task-writing']
-  );
-  assert.deepEqual(
-    savedBatches
-      .at(-1)
-      .map(task => task.id)
-      .sort(),
-    ['task-review', 'task-writing']
-  );
-  assert.equal(unrelatedTask.manualOrder, null);
-});
-
-test('manual ordering rejects an incomplete Intention family', async () => {
-  const tasks = ['task-one', 'task-two'].map(id => ({
-    id,
-    userId: 'user-1',
-    status: TASK_STATUSES.ACTIVE,
-    pinnedAt: null,
-    timerType: 'work',
-    intentionSlug: 'project',
-    subIntentionSlug: null,
-    manualOrder: null,
-    manualOrderOverride: false,
-    createdAt: new Date(),
-  }));
-  const { service } = createService(tasks[0]);
-  attachTaskRepository(service, tasks);
-
-  await assert.rejects(
-    () =>
-      service.reorderTasks('user-1', [
-        { id: 'task-one', manualOrder: 0, manualOrderOverride: true },
-      ]),
-    /every active unpinned Task in the Intention family/
-  );
-});
-
-test('assignment identity changes clear manual ordering anchors', async () => {
-  const task = {
-    id: 'task-anchor',
-    userId: 'user-1',
-    title: 'Anchored Task',
-    status: TASK_STATUSES.ACTIVE,
-    priority: 'normal',
-    timerType: 'work',
-    intentionSlug: 'project',
-    subIntentionSlug: 'writing',
-    dueDate: null,
-    dueTime: null,
-    recurrenceRule: null,
-    recurrenceInterval: null,
-    recurrenceAnchorMode: 'planned',
-    manualOrder: 1,
-    manualOrderOverride: true,
-    pinnedAt: null,
-  };
-  const { service, intentions, savedTasks } = createService(task);
-  const parent = {
-    id: 'parent-project',
-    userId: 'user-1',
-    title: 'Project',
-    emoji: '📁',
-    slug: 'project',
-    type: 'work',
-    isArchived: false,
-    parentIntentionId: null,
-  };
-  intentions.push(
-    parent,
-    {
-      id: 'sub-writing',
-      userId: 'user-1',
-      title: 'Writing',
-      emoji: '✍️',
-      slug: 'writing',
-      type: 'work',
-      isArchived: false,
-      parentIntentionId: parent.id,
-    },
-    {
-      id: 'sub-review',
-      userId: 'user-1',
-      title: 'Review',
-      emoji: '🔎',
-      slug: 'reviewing',
-      type: 'work',
-      isArchived: false,
-      parentIntentionId: parent.id,
-    }
-  );
-
-  await service.updateTask('user-1', task.id, {
-    intentionSlug: 'project',
-    subIntentionSlug: 'writing',
-  });
-  assert.equal(savedTasks.at(-1).manualOrderOverride, true);
-  assert.equal(savedTasks.at(-1).manualOrder, 1);
-
-  await service.updateTask('user-1', task.id, {
-    intentionSlug: 'project',
-    subIntentionSlug: 'reviewing',
-  });
-  assert.equal(savedTasks.at(-1).manualOrderOverride, false);
-  assert.equal(savedTasks.at(-1).manualOrder, null);
-});
-
 test('an unlinked Task can be pinned and completion clears its pin', async () => {
   const task = {
     id: 'task-pin',
@@ -834,7 +651,7 @@ test('an unlinked Task can be pinned and completion clears its pin', async () =>
   assert.equal(savedTasks.at(-1).pinnedAt, null);
 });
 
-test('a contextual follow-up cannot be pinned, reordered, or recurring', async () => {
+test('a contextual follow-up cannot be pinned or recurring', async () => {
   const task = {
     id: 'contextual-follow-up',
     userId: 'user-1',
@@ -847,14 +664,12 @@ test('a contextual follow-up cannot be pinned, reordered, or recurring', async (
 
   for (const updates of [
     { pinned: true },
-    { manualOrder: 0 },
-    { manualOrderOverride: true },
     { recurrenceRule: 'FREQ=DAILY' },
     { recurrenceInterval: 2 },
   ]) {
     await assert.rejects(
       () => service.updateTask('user-1', task.id, updates),
-      /cannot be pinned, reordered, or recurring/
+      /cannot be pinned or recurring/
     );
   }
 });
@@ -899,8 +714,6 @@ test('completion replaces an active follow-up and preserves source recurrence', 
     priority: 'normal',
     timerType: 'work',
     pinnedAt: null,
-    manualOrder: null,
-    manualOrderOverride: false,
     intentionSlug: null,
     subIntentionSlug: null,
     recurrenceRule: 'FREQ=DAILY',
@@ -1111,8 +924,6 @@ test('recurring completion advances successive occurrences and ignores a replay'
     priority: 'normal',
     timerType: 'work',
     pinnedAt: null,
-    manualOrder: null,
-    manualOrderOverride: false,
     intentionSlug: null,
     subIntentionSlug: null,
     recurrenceRule: 'FREQ=DAILY',

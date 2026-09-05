@@ -46,7 +46,6 @@ describe('expanded Timer Task surface', () => {
         isExpanded: true,
         tasksExtension: true,
         timerType: 'work',
-        tasksDuringBreaks: false,
       })
     ).toBe(true);
     expect(
@@ -54,7 +53,6 @@ describe('expanded Timer Task surface', () => {
         isExpanded: true,
         tasksExtension: true,
         timerType: 'break',
-        tasksDuringBreaks: true,
       })
     ).toBe(true);
     expect(
@@ -62,18 +60,16 @@ describe('expanded Timer Task surface', () => {
         isExpanded: true,
         tasksExtension: true,
         timerType: 'longBreak',
-        tasksDuringBreaks: true,
       })
     ).toBe(true);
   });
 
-  it('does not show Tasks when the feature or Break setting is disabled', () => {
+  it('shows enabled Tasks during breaks and hides the disabled feature', () => {
     expect(
       shouldShowExpandedTaskView({
         isExpanded: true,
         tasksExtension: false,
         timerType: 'work',
-        tasksDuringBreaks: true,
       })
     ).toBe(false);
     expect(
@@ -81,8 +77,7 @@ describe('expanded Timer Task surface', () => {
         isExpanded: true,
         tasksExtension: true,
         timerType: 'break',
-        tasksDuringBreaks: false,
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 });

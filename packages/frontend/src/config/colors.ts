@@ -1,5 +1,3 @@
-import { ACCENT_HEX_COLORS } from '@pomi/shared/src/constants';
-
 export type AccentColorType = 'indigo' | 'green' | 'purple' | 'default';
 
 interface ColorSet {
@@ -21,20 +19,20 @@ export const COLORS: Record<AccentColorType, ColorSet> = {
     border: 'border-indigo-500/25',
   },
   green: {
-    bg: 'bg-green-600/20',
-    text: 'text-green-400',
-    secondaryText: 'text-green-400',
-    accent: 'accent-green-500',
-    hover: 'hover:bg-green-600/30',
-    border: 'border-green-500/25',
+    bg: 'bg-indigo-600/20',
+    text: 'text-indigo-400',
+    secondaryText: 'text-indigo-400',
+    accent: 'accent-indigo-500',
+    hover: 'hover:bg-indigo-600/30',
+    border: 'border-indigo-500/25',
   },
   purple: {
-    bg: 'bg-purple-600/20',
-    text: 'text-purple-400',
-    secondaryText: 'text-purple-400',
-    accent: 'accent-purple-500',
-    hover: 'hover:bg-purple-600/30',
-    border: 'border-purple-500/25',
+    bg: 'bg-indigo-600/20',
+    text: 'text-indigo-400',
+    secondaryText: 'text-indigo-400',
+    accent: 'accent-indigo-500',
+    hover: 'hover:bg-indigo-600/30',
+    border: 'border-indigo-500/25',
   },
   default: {
     bg: 'bg-slate-700/30',
@@ -62,6 +60,8 @@ export const APP_COLORS = {
 };
 
 export const HEX_COLORS: Record<AccentColorType, string> = {
-  ...ACCENT_HEX_COLORS,
-  default: '#111827',
+  indigo: '#dba26d',
+  green: '#94ae72',
+  purple: '#9fb273',
+  default: '#303735',
 };

@@ -203,8 +203,7 @@ export function TimerActionButtons({
   const isTimerRunning = timer?.status === TIMER_STATUSES.RUNNING;
   const isExtensionTimer = !!timer?.isExtension;
   const showStartButton = !isTimerRunning;
-  const showMinimizedExtensionButton =
-    !expanded && !!extensionState && timer?.status === TIMER_STATUSES.PAUSED;
+  const showMinimizedExtensionButton = !expanded && !!extensionState;
   const showLeftButtons =
     !compactMinimizedControls &&
     (preferences?.intentionExtension === false
@@ -293,7 +292,7 @@ export function TimerActionButtons({
             <AnimatePresence mode="wait">
               {!expanded && showLeftButtons && !isExtensionTimer && (
                 <motion.div
-                  className="flex items-center space-x-3"
+                  className="flex items-center space-x-3 overflow-hidden"
                   initial={{ opacity: 0, width: 0, marginRight: 0 }}
                   animate={{
                     opacity: 1,
@@ -351,7 +350,7 @@ export function TimerActionButtons({
               )}
               {!expanded && showLeftButtons && isExtensionTimer && (
                 <motion.div
-                  className="flex items-center space-x-3"
+                  className="flex items-center space-x-3 overflow-hidden"
                   initial={{ opacity: 0, width: 0, marginRight: 0 }}
                   animate={{
                     opacity: 1,

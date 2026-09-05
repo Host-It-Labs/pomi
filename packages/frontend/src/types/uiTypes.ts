@@ -5,4 +5,4 @@ export type Tab =
   | 'debug'
   | 'login'
   | 'intentions'
-  | 'tasks';
+  | 'ai-admin';

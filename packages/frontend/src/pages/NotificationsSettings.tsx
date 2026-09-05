@@ -1,29 +1,29 @@
 import { Preferences } from '@pomi/shared';
 import { TASK_PRIORITIES } from '@pomi/shared/src/constants';
 import { useEffect, useState } from 'react';
+import { SettingsControlGroup } from '../components/settings/SettingsExperience';
+import { TaskPriorityMultiSelect } from '../components/settings/TaskPriorityMultiSelect';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { DurationSlider } from '../components/ui/DurationSlider';
+import { NumberField } from '../components/ui/NumberField';
 import { Separator } from '../components/ui/Separator';
 import { ToggleField } from '../components/ui/ToggleField';
 import { MILLISECONDS_PER_MINUTE } from '../constants/time';
+import { useI18n } from '../i18n';
+import { useTimerStore } from '../stores/timerStore';
+import { stopAndroidForegroundSync } from '../utils/androidForegroundSync';
 import {
   checkBatteryOptimizationStatus,
   requestBatteryOptimizationExemption,
 } from '../utils/batteryOptimization';
-import { stopAndroidForegroundSync } from '../utils/androidForegroundSync';
-import { notificationService } from '../utils/notificationUtils';
-import { isAndroid, isDesktop, isIos, isMac, isMobile } from '../utils/osUtils';
-import { CheckboxRow } from './notifications/CheckboxRow';
-import { TaskPriorityMultiSelect } from '../components/settings/TaskPriorityMultiSelect';
-import { NumberField } from '../components/ui/NumberField';
-import { SettingsControlGroup } from '../components/settings/SettingsExperience';
-import { useI18n } from '../i18n';
 import {
   getDeviceLiveTimerPreferences,
   setDeviceLiveTimerPreferences,
 } from '../utils/liveTimerSurface';
-import { useTimerStore } from '../stores/timerStore';
+import { notificationService } from '../utils/notificationUtils';
+import { isAndroid, isDesktop, isIos, isMac, isMobile } from '../utils/osUtils';
+import { CheckboxRow } from './notifications/CheckboxRow';
 
 export const NotificationsSettings = ({
   preferences,
@@ -373,7 +373,7 @@ export const NotificationsSettings = ({
                 <Separator />
 
                 <div data-setting-id="notificationMethod">
-                  <h3 className="text-sm text-white font-medium mb-3">
+                  <h3 className="text-sm text-ink font-medium mb-3">
                     {t('notifications.method')}
                   </h3>
 
@@ -408,7 +408,7 @@ export const NotificationsSettings = ({
       {notificationsEnabled && (
         <SettingsControlGroup title={t('notifications.personalize')}>
           <div data-setting-id="timerFinishedNotifications">
-            <h3 className="mb-3 text-sm font-medium text-white">
+            <h3 className="mb-3 text-sm font-medium text-ink">
               {t('notifications.timerFinished')}
             </h3>
             <CheckboxRow

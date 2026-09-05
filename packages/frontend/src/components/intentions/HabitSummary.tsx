@@ -1,3 +1,4 @@
+import { FaCalendarDay, FaRegCalendarAlt } from 'react-icons/fa';
 import type { HabitCadence } from '@pomi/shared';
 import clsx from 'clsx';
 import { useI18n } from '../../i18n';
@@ -28,14 +29,8 @@ export function HabitSummary({ habits, className }: HabitSummaryProps) {
     <div
       role="group"
       aria-label={t('intention.habitsRemaining')}
-      className={clsx(
-        'flex min-h-9 w-max flex-col justify-center gap-0.5 rounded-md border border-slate-600/60 bg-slate-800/80 px-2 py-1 shadow-sm shadow-slate-950/30',
-        className
-      )}
+      className={clsx('habit-summary', className)}
     >
-      <span className="text-[9px] font-medium leading-none text-slate-400">
-        {t('intention.habitsRemaining')}
-      </span>
       <div className="flex items-center gap-2 text-[10px] leading-tight text-slate-300">
         {[
           {
@@ -60,9 +55,13 @@ export function HabitSummary({ habits, className }: HabitSummaryProps) {
                 key={period.label}
                 aria-label={description}
                 title={description}
-                className="flex items-baseline gap-1 whitespace-nowrap"
+                className="flex items-center gap-1 whitespace-nowrap"
               >
-                {t(period.label)}
+                {period.label === 'common.today' ? (
+                  <FaCalendarDay aria-hidden="true" />
+                ) : (
+                  <FaRegCalendarAlt aria-hidden="true" />
+                )}
                 <strong className="font-semibold tabular-nums text-slate-100">
                   {count}
                 </strong>

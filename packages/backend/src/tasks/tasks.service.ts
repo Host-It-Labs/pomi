@@ -4,38 +4,31 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { isUUID } from 'class-validator';
 import {
+  Preferences,
   TASK_CREATION_SOURCES,
   TASK_FOLLOW_UP_DELAY_MAX_DAYS,
   TASK_PRIORITIES,
-  TASK_MANUAL_ORDER_BOTTOM,
   TASK_STATUSES,
-  TIMER_TYPE_VALUES,
-  TIMER_TYPES,
-  TaskImportSkippedTask,
+  TaskCreationSource,
   TaskEventLog,
   TaskFollowUpDefinition,
-  TaskCreationSource,
+  TaskImportSkippedTask,
   TaskImportSource,
-  TaskPriority,
   TaskLifecycleEventType,
+  TaskPriority,
   TaskRecurrenceAnchorMode,
   TaskStatisticsFilter,
   TaskStatisticsSummary,
   TaskStatus,
+  TIMER_TYPE_VALUES,
+  TIMER_TYPES,
   TimerTypes,
   TopIntentionsPeriod,
-  Preferences,
   WatchTaskMode,
 } from '@pomi/shared';
-import {
-  In,
-  IsNull,
-  QueryFailedError,
-  Repository,
-  SelectQueryBuilder,
-} from 'typeorm';
+import { isUUID } from 'class-validator';
+import { In, QueryFailedError, Repository, SelectQueryBuilder } from 'typeorm';
 import { IntentionsService } from '../intentions/intentions.service';
 import { PreferencesService } from '../preferences/preferences.service';
 import { RealtimeEvents } from '../realtime/realtime-events';
@@ -181,7 +174,6 @@ export class TasksService {
       },
       order: {
         dueDate: 'ASC',
-        manualOrder: 'ASC',
         createdAt: 'ASC',
       },
     });
@@ -236,42 +228,8 @@ export class TasksService {
   ): Promise<TaskEntity[]> {
     const automaticQuery = this.createWatchTaskBaseQuery(userId, options);
     this.addWatchTaskGroupFilter(automaticQuery, options, group);
-    if (group !== 'pinned') {
-      automaticQuery.andWhere('task.manualOrderOverride = false');
-    }
     this.addWatchTaskOrdering(automaticQuery, options, group);
-    const automatic = automaticQuery.take(options.limit).getMany();
-
-    if (group === 'pinned') return automatic;
-
-    const overrideQuery = this.createWatchTaskBaseQuery(userId, options);
-    this.addWatchTaskGroupFilter(overrideQuery, options, group);
-    overrideQuery
-      .andWhere('task.manualOrderOverride = true')
-      .orderBy('COALESCE(task.manualOrder, :watchManualOrderBottom)', 'ASC')
-      .addOrderBy('task.createdAt', 'DESC')
-      .addOrderBy('task.id', 'DESC')
-      .setParameter('watchManualOrderBottom', TASK_MANUAL_ORDER_BOTTOM);
-
-    const [automaticTasks, overrides] = await Promise.all([
-      automatic,
-      overrideQuery.take(options.limit).getMany(),
-    ]);
-    return this.applyWatchManualOverrides(
-      automaticTasks,
-      this.sortWatchManualOverridesForApplication(overrides),
-      options.limit
-    );
-  }
-
-  private sortWatchManualOverridesForApplication(overrides: TaskEntity[]) {
-    return [...overrides].sort(
-      (a, b) =>
-        (a.manualOrder ?? TASK_MANUAL_ORDER_BOTTOM) -
-          (b.manualOrder ?? TASK_MANUAL_ORDER_BOTTOM) ||
-        a.createdAt.getTime() - b.createdAt.getTime() ||
-        a.id.localeCompare(b.id)
-    );
+    return automaticQuery.take(options.limit).getMany();
   }
 
   private createWatchTaskBaseQuery(
@@ -423,22 +381,6 @@ export class TasksService {
         'ASC'
       )
       .addOrderBy('task.id', 'ASC');
-  }
-
-  private applyWatchManualOverrides(
-    automatic: TaskEntity[],
-    overrides: TaskEntity[],
-    limit: number
-  ) {
-    const tasks = [...automatic];
-    overrides.forEach(task => {
-      const position = Math.max(
-        0,
-        Math.min(task.manualOrder ?? TASK_MANUAL_ORDER_BOTTOM, tasks.length)
-      );
-      tasks.splice(position, 0, task);
-    });
-    return tasks.slice(0, limit);
   }
 
   async getTaskArchivePage(userId: string, limit: number, cursor?: string) {
@@ -803,8 +745,6 @@ export class TasksService {
         task.recurrenceRule = event.recurrenceRuleSnapshot;
         task.recurrenceInterval = event.recurrenceIntervalSnapshot;
         task.recurrenceAnchorMode = event.recurrenceAnchorModeSnapshot;
-        task.manualOrder = null;
-        task.manualOrderOverride = false;
         await this.seedPastDueReminderKeyIfNeeded(userId, task);
 
         const saved = await taskRepository.save(task);
@@ -863,21 +803,6 @@ export class TasksService {
         query.andWhere('event.eventType = :eventType', {
           eventType: TASK_STATUSES.ARCHIVED,
         });
-        break;
-      case 'overdue':
-        query
-          .andWhere('event.eventType = :eventType', {
-            eventType: TASK_STATUSES.COMPLETED,
-          })
-          .andWhere('event."isOverdue" = true');
-        break;
-      case 'onTime':
-        query
-          .andWhere('event.eventType = :eventType', {
-            eventType: TASK_STATUSES.COMPLETED,
-          })
-          .andWhere('event."dueDate" IS NOT NULL')
-          .andWhere('event."isOverdue" = false');
         break;
     }
 
@@ -1284,8 +1209,6 @@ export class TasksService {
       creationSource,
       dueDate: resolvedDueDate,
       dueTime: resolvedDueTime,
-      manualOrder: null,
-      manualOrderOverride: false,
       priority: resolvedPriority,
       status: TASK_STATUSES.ACTIVE,
       timerType: resolvedTimerType,
@@ -1844,103 +1767,6 @@ export class TasksService {
     return 'Task is invalid';
   }
 
-  async reorderTasks(
-    userId: string,
-    updates: Array<{
-      id: string;
-      manualOrder: number;
-      manualOrderOverride?: boolean;
-    }>
-  ) {
-    const ids = updates.map(update => update.id);
-    if (new Set(ids).size !== ids.length) {
-      throw new BadRequestException('Task reorder contains duplicate tasks');
-    }
-
-    const bottomAnchors = updates.filter(
-      update => update.manualOrder === TASK_MANUAL_ORDER_BOTTOM
-    );
-    if (bottomAnchors.length > 1) {
-      throw new BadRequestException(
-        'Task reorder can contain only one bottom manual order anchor'
-      );
-    }
-    const orderedManualOrders = updates
-      .map(update => update.manualOrder)
-      .filter(order => order !== TASK_MANUAL_ORDER_BOTTOM)
-      .sort((a, b) => a - b);
-    if (orderedManualOrders.some((order, index) => order !== index)) {
-      throw new BadRequestException(
-        'Task reorder must use contiguous manual order values'
-      );
-    }
-
-    const reordered = await this.tasksRepository.manager.transaction(
-      async manager => {
-        const tasksRepository = manager.getRepository(TaskEntity);
-        const firstTask = await tasksRepository.findOne({
-          where: {
-            id: ids[0],
-            userId,
-            status: TASK_STATUSES.ACTIVE,
-            pinnedAt: IsNull(),
-            itemKind: 'task',
-          },
-        });
-        if (!firstTask?.intentionSlug) {
-          throw new BadRequestException(
-            'Only tasks in an Intention family can be manually ordered'
-          );
-        }
-
-        const activeUnpinnedTasks = await tasksRepository.find({
-          where: {
-            userId,
-            status: TASK_STATUSES.ACTIVE,
-            pinnedAt: IsNull(),
-            timerType: firstTask.timerType,
-            intentionSlug: firstTask.intentionSlug,
-            itemKind: 'task',
-          },
-          order: {
-            manualOrder: 'ASC',
-            createdAt: 'ASC',
-            id: 'ASC',
-          },
-        });
-
-        if (activeUnpinnedTasks.length !== updates.length) {
-          throw new BadRequestException(
-            'Task reorder must include every active unpinned Task in the Intention family'
-          );
-        }
-
-        const tasksById = new Map(
-          activeUnpinnedTasks.map(task => [task.id, task])
-        );
-        if (updates.some(update => !tasksById.has(update.id))) {
-          throw new BadRequestException(
-            'Only active unpinned tasks can be manually ordered'
-          );
-        }
-
-        for (const update of updates) {
-          const task = tasksById.get(update.id)!;
-          task.manualOrder = update.manualOrder;
-          task.manualOrderOverride = update.manualOrderOverride ?? true;
-        }
-
-        await tasksRepository.save(activeUnpinnedTasks);
-
-        return [...activeUnpinnedTasks].sort(
-          (a, b) => (a.manualOrder ?? 0) - (b.manualOrder ?? 0)
-        );
-      }
-    );
-    this.realtimeEvents.emitTasksUpdate(userId);
-    return reordered;
-  }
-
   async updateTask(
     userId: string,
     id: string,
@@ -1949,8 +1775,6 @@ export class TasksService {
       description?: string | null;
       dueDate?: string | null;
       dueTime?: string | null;
-      manualOrder?: number | null;
-      manualOrderOverride?: boolean;
       priority?: TaskPriority;
       timerType?: TimerTypes;
       customDuration?: number | null;
@@ -2000,15 +1824,13 @@ export class TasksService {
     if (
       task.followUpSourceTaskId &&
       (updates.pinned === true ||
-        (updates.manualOrder !== undefined && updates.manualOrder !== null) ||
-        updates.manualOrderOverride === true ||
         (updates.recurrenceRule !== undefined &&
           updates.recurrenceRule !== null) ||
         (updates.recurrenceInterval !== undefined &&
           updates.recurrenceInterval !== null))
     ) {
       throw new BadRequestException(
-        'Contextual follow-up Tasks cannot be pinned, reordered, or recurring'
+        'Contextual follow-up Tasks cannot be pinned or recurring'
       );
     }
 
@@ -2016,8 +1838,6 @@ export class TasksService {
     const previousDueDate = task.dueDate;
     const previousRecurrenceRule = task.recurrenceRule;
     const previousTimerType = task.timerType;
-    const previousIntentionSlug = task.intentionSlug;
-    const previousSubIntentionSlug = task.subIntentionSlug;
 
     if (updates.title !== undefined) {
       task.title = this.requireTitle(updates.title);
@@ -2031,27 +1851,6 @@ export class TasksService {
     }
     if (updates.dueTime !== undefined) {
       task.dueTime = this.normalizeOptionalSlug(updates.dueTime);
-    }
-    if (updates.manualOrder !== undefined) {
-      const nextManualOrderStatus = updates.status ?? task.status;
-      if (
-        nextManualOrderStatus !== TASK_STATUSES.ACTIVE &&
-        updates.manualOrder !== null
-      ) {
-        throw new BadRequestException(
-          'Only active tasks can be manually ordered'
-        );
-      }
-      task.manualOrder =
-        nextManualOrderStatus !== TASK_STATUSES.ACTIVE
-          ? null
-          : updates.manualOrder;
-    }
-    if (updates.manualOrderOverride !== undefined) {
-      task.manualOrderOverride = updates.manualOrderOverride;
-      if (!updates.manualOrderOverride) {
-        task.manualOrder = null;
-      }
     }
     if (updates.priority !== undefined) {
       task.priority = updates.priority;
@@ -2142,8 +1941,6 @@ export class TasksService {
           new Date()
         );
         task.pinnedAt = null;
-        task.manualOrder = null;
-        task.manualOrderOverride = false;
       }
       if (
         updates.status === TASK_STATUSES.ACTIVE &&
@@ -2197,23 +1994,6 @@ export class TasksService {
       }
       task.intentionSlug = link.intentionSlug;
       task.subIntentionSlug = link.subIntentionSlug;
-    }
-
-    if (
-      previousTimerType !== task.timerType ||
-      previousIntentionSlug !== task.intentionSlug ||
-      previousSubIntentionSlug !== task.subIntentionSlug
-    ) {
-      task.manualOrder = null;
-      task.manualOrderOverride = false;
-    }
-
-    if (task.status !== TASK_STATUSES.ACTIVE) {
-      task.manualOrder = null;
-      task.manualOrderOverride = false;
-    } else if (previousStatus !== TASK_STATUSES.ACTIVE) {
-      task.manualOrder = null;
-      task.manualOrderOverride = false;
     }
 
     await this.seedPastDueReminderKeyIfNeeded(userId, task);
@@ -2286,8 +2066,6 @@ export class TasksService {
           task.status = TASK_STATUSES.COMPLETED;
         }
         task.pinnedAt = null;
-        task.manualOrder = null;
-        task.manualOrderOverride = false;
         const savedTask = await taskRepository.save(task);
 
         const activeGeneratedTasks = await taskRepository.find({
@@ -2309,8 +2087,6 @@ export class TasksService {
           );
           generatedTask.status = TASK_STATUSES.ARCHIVED;
           generatedTask.pinnedAt = null;
-          generatedTask.manualOrder = null;
-          generatedTask.manualOrderOverride = false;
           await taskRepository.save(generatedTask);
         }
 
@@ -2380,8 +2156,6 @@ export class TasksService {
         sourceTask.followUpDelayDays
       ),
       dueTime: definition.dueTime,
-      manualOrder: null,
-      manualOrderOverride: false,
       lastReminderKey: null,
       priority: definition.priority,
       status: TASK_STATUSES.ACTIVE,

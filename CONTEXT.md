@@ -29,7 +29,7 @@ An Intention that refines one Parent intention. A selected Sub-intention is reco
 _Avoid_: Subtask, child task
 
 **Favorite intention**:
-An intention the user marks as a shortcut for Tasks view filtering. Favorite intentions appear as badges in the Tasks view, and choosing one filters active tasks to that intention.
+An intention the user marks as a shortcut for Task workspace filtering. Favorite intentions appear first in the Task workspace destination dropdown; choosing one filters tasks to that intention.
 _Avoid_: Task favorite, default intention
 
 **Habit**:
@@ -57,7 +57,7 @@ The Work, Break, or Long break category assigned to a Task. Every Task has exact
 _Avoid_: Session type, task session, multi-type task
 
 **Active task**:
-A Task occurrence that has not been completed or archived. Active Tasks appear in the Tasks view and can appear in a matching Task Timer type surface.
+A Task occurrence that has not been completed or archived. Active Tasks appear in the Task workspace and can appear in a matching Task Timer type surface.
 _Avoid_: Open task, pending task
 
 **Task completion undo**:
@@ -108,17 +108,13 @@ _Avoid_: Urgent task alarm, timer notification
 An optional repeated notification for a selected urgent task after its due reminder. It continues while the task remains overdue and eligible, with one repeat setting and interval shared across devices.
 _Avoid_: Normal reminder, one-time notification
 
-**Tasks view**:
-The main app view for browsing, adding, editing, and reviewing Tasks. Active List items participate in the normal All, Work, and search results using Task due-date, priority, and creation ordering, with compact List identity metadata; they stay out of Break, Long break, and Intention-specific results. Selecting a List opens its dedicated active, completed, and archived view. When a Timer has Pinned Tasks, they appear above peer or general Tasks. New Tasks inherit the selected Intention or Sub-intention and selected Task Timer type filter; under All Timer types, a selected Intention supplies its type, while no Intention defaults to an unlinked Work Task.
-_Avoid_: Timer submode, separate task window
+**Task workspace**:
+The full Task and List surface embedded below the main Timer, available on Work, Break, and Long break. Desktop shows five two-line Tasks per page; mobile scrolls independently. All is the default, and explicit filters persist across Timer changes.
+_Avoid_: Separate Tasks page
 
 **Tasks**:
-The optional Pomi capability that enables the tasks view, minimized task view, task reminders, urgent reminder repeats, and task settings. Tasks are off by default for new users; disabling Tasks hides task UI and pauses task reminders while preserving task data, and when Tasks is not enabled Pomi can show a setup placeholder that starts first-task creation.
+The optional Pomi capability that enables the Task workspace, Minimized task view, task reminders, urgent reminder repeats, and task settings. Tasks are on by default for new users; disabling Tasks hides task UI and pauses task reminders while preserving task data, and when Tasks is not enabled Pomi can show a setup placeholder that starts first-task creation.
 _Avoid_: To-dos, checklist, hidden task mode
-
-**Tasks during breaks**:
-An optional Tasks setting, off by default, that shows Task surfaces inside desktop and mobile Break and Long-break Timers. Turning it off hides those timer surfaces while Break and Long-break Tasks remain available in the Tasks view; Watch continues to expose Tasks for its current Timer type.
-_Avoid_: Break mode, break-only Tasks, hidden break Tasks
 
 **AI Task capture**:
 The optional Pomi capability that turns typed or spoken natural language into one or more Tasks or List items, splitting distinct requested items when relevant. Typed capture, Task dictation, and Task requests inside Assistant voice use one shared interpretation policy: each meaningful source detail appears exactly once, with action wording in the title, recognized metadata in supported fields, and exact unresolved source fragments in the description; exact supplied List names route to that List, explicit unsupported List-item metadata returns actionable validation, explicit Task Timer type wording overrides creation context, and only existing confidently matched task-enabled Intentions of that type may be linked. AI Task capture is available to Tasks users when app-level AI setup exists, even if Assistant is not enabled.
@@ -137,7 +133,7 @@ A Task created through AI Task capture. AI-created Tasks remain normal Tasks wit
 _Avoid_: Assistant-created Task, imported task, generated intention, voice-only task
 
 **Voice-created Task**:
-A Task created directly from a spoken Assistant request after transcription and AI Task capture. Voice-created Tasks are distinct from Tasks created by typed AI Task capture or by dictating text into the Tasks view input.
+A Task created directly from a spoken Assistant request after transcription and AI Task capture. Voice-created Tasks are distinct from Tasks created by typed AI Task capture or by dictating text into the Task workspace input.
 _Avoid_: AI-created Task, dictated-input Task, imported task
 
 **AI usage budget**:
@@ -153,7 +149,7 @@ A compact, actionable Task surface available during Work Timers and, when enable
 _Avoid_: Task strip, task panel, focus queue, full task list
 
 **Task editor**:
-The shared modal for creating or editing a Task from the Tasks view or expanded Timer. Its Intention / List destination can create a lightweight List item or, after an explicit warning, atomically convert an existing unfocused Task while preserving a snapshot of Task-only state. The editor exposes Vacation Coverage directly and uses a fixed header, scrollable middle, and fixed action footer.
+The shared bottom sheet for creating or editing a Task from the Task workspace. Its Intention / List destination can create a lightweight List item or, after an explicit warning, atomically convert an existing unfocused Task while preserving a snapshot of Task-only state. The editor exposes Title, Description, destination, due date, and priority first; More options includes Vacation Coverage and uses a fixed header, scrollable middle, and fixed action footer.
 _Avoid_: Minimized task editor, separate edit page, timer-specific editor
 
 **Intention-to-List conversion**:
@@ -169,7 +165,7 @@ An absolute slot chosen for one active Unpinned Task inside the unpinned default
 _Avoid_: Pinned Task order, neighbor anchor, filtered-list order
 
 **Intention-filtered tasks**:
-The active Tasks linked to the current Timer Intention or selected Intention filter, followed by a dimmed preview of general Tasks after the matching Tasks have been shown. When a Sub-intention is selected, matching includes Tasks linked to that Sub-intention and Tasks linked only to its Parent Intention; when multiple Intentions are selected, the filter includes Tasks linked to any selected Intention or selected Sub-intention. Search is global across Work, Break, and Long break Tasks in every Task surface, with current-Intention matches ranked first and every other match afterward; within each relevance group, Pinned Tasks come first.
+The active Tasks linked to the current Timer Intention or selected Intention filter, followed by a dimmed preview of general Tasks after the matching Tasks have been shown. When a Sub-intention is selected, matching includes Tasks linked to that Sub-intention and Tasks linked only to its Parent Intention; when multiple Intentions are selected, the filter includes Tasks linked to any selected Intention or selected Sub-intention. In the expanded workspace, Intention mode shows strictly matching Tasks without general-task previews, and search narrows the selected scope. Minimized search retains its global matching behavior; within each relevance group, Pinned Tasks come first.
 _Avoid_: Hidden tasks, current task list
 
 **General task mode**:

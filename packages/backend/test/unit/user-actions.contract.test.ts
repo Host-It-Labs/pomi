@@ -41,16 +41,7 @@ describe('user action contract', () => {
     ).toBe(false);
   });
 
-  it('preserves manual-order reset and Assistant debug flag fields', () => {
-    expect(
-      userActionSchema.parse({
-        kind: 'tasks',
-        operation: 'update',
-        taskId: 'task-1',
-        manualOrder: null,
-        manualOrderOverride: false,
-      })
-    ).toMatchObject({ manualOrder: null, manualOrderOverride: false });
+  it('preserves Assistant debug flag fields', () => {
     expect(
       userActionSchema.safeParse({
         kind: 'assistant',
