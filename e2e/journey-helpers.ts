@@ -221,6 +221,7 @@ export async function fetchWatchStatus(page: Page) {
     `${context.backendOrigin}/watch/status`,
     {
       headers: { Authorization: `Bearer ${context.token}` },
+      maxRetries: 2,
     }
   );
   expect(response.ok()).toBeTruthy();
