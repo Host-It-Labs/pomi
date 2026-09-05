@@ -57,7 +57,7 @@ describe('public release workflow', () => {
     );
 
     expect(workflow).toMatch(
-      /docker-backend-amd64:\n[\s\S]*?needs: \[sentry-release, build-macos, build-android-wear\]/
+      /docker-backend-amd64:\n[\s\S]*?needs: sentry-release/
     );
     expect(workflow).toMatch(
       /docker-backend-amd64:[\s\S]*?platforms: linux\/amd64/

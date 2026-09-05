@@ -7,6 +7,7 @@ COPY package.json .
 COPY pnpm-lock.yaml .
 COPY pnpm-workspace.yaml .
 COPY patches ./patches
+COPY scripts/rewrite-backend-paths.mjs ./scripts/rewrite-backend-paths.mjs
 
 # Copy packages
 COPY packages/shared /app/packages/shared
