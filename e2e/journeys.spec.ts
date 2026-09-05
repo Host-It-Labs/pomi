@@ -92,16 +92,11 @@ test('2. enables Intentions, selects a Parent and Sub-intention, then records a 
   const editParent = page
     .getByRole('button', { name: `Edit ${parentTitle}`, exact: true })
     .first();
-  if (!(await editParent.isVisible().catch(() => false))) {
-    const editIntentions = page.getByRole('button', {
-      name: 'Edit intentions',
-    });
-    await expect(editIntentions).toBeVisible({ timeout: 10_000 });
-    await editIntentions.click();
-  }
+  await expect(parentDialog).not.toBeVisible();
   await expect(editParent).toBeVisible({ timeout: 10_000 });
   await editParent.click();
   const editDialog = page.getByRole('dialog', { name: 'Edit Intention' });
+  await editDialog.locator('summary[aria-label="Manage"]').click();
   await editDialog.getByRole('button', { name: 'Add Sub-intention' }).click();
   const childDialog = page.getByRole('dialog', { name: 'New Intention' });
   await childDialog.locator('input[type="text"]').first().fill('🗺️');
@@ -664,9 +659,6 @@ test('11. produces real Timer and Task activity for statistics and work-Timer lo
     )
     .toBe(true);
 
-  await page
-    .getByRole('button', { name: 'Back to Timer', exact: true })
-    .click();
   await page.getByRole('button', { name: 'Statistics', exact: true }).click();
   await expect(page.getByText('Today', { exact: true })).toBeVisible();
   await page

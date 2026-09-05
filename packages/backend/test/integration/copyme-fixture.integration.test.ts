@@ -121,7 +121,7 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
       [fixtureName]
     );
     assert.equal(marker.rows.length, 1);
-    assert.equal(marker.rows[0].seedVersion, 23);
+    assert.equal(marker.rows[0].seedVersion, 26);
     assert.equal(marker.rows[0].isAdmin, true);
     assert.match(marker.rows[0].credentialFingerprint, /^[a-f0-9]{64}$/);
     const firstUserId = trackRecoveryUser(marker.rows[0].id);
@@ -314,6 +314,24 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
           priority: 'normal',
           status: 'active',
           dueDate: null,
+        },
+        {
+          listTitle: 'Groceries',
+          emoji: '🛒',
+          isFavorite: true,
+          title: 'Choose meals for next week',
+          priority: 'normal',
+          status: 'active',
+          dueDate: format(addDays(new Date(), 2), 'yyyy-MM-dd'),
+        },
+        {
+          listTitle: 'Groceries',
+          emoji: '🛒',
+          isFavorite: true,
+          title: 'Restock coffee beans',
+          priority: 'high',
+          status: 'active',
+          dueDate: format(addDays(new Date(), -1), 'yyyy-MM-dd'),
         },
       ].sort((left, right) => left.title.localeCompare(right.title))
     );
