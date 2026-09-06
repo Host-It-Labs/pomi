@@ -164,6 +164,7 @@ const english: TranslationCatalog = {
   'task.clearPropertyFilters': 'Clear property filters',
   'task.updated': 'Task updated',
   'task.viewUpdated': 'View',
+  'task.availableDuring': 'This task is available during {{type}}.',
   'task.archivedTasks': 'Archived Tasks',
   'task.archiveListItem': 'Archive List item?',
   'task.resetList': 'Reset List?',
@@ -7321,6 +7322,7 @@ const auditedTranslationOverrides: Record<
   },
 };
 Object.assign(translations['zh-Hans'], {
+  'task.availableDuring': '此任务仅在{{type}}期间可见。',
   'task.propertyFilters': '任务属性筛选',
   'task.timerTypes': '任务计时器类型',
   'task.hasDueDate': '有截止日期',
@@ -7335,6 +7337,7 @@ Object.assign(translations['zh-Hans'], {
   'vacation.reconfigureCoverage': '选择受影响的任务',
 });
 Object.assign(translations.hi, {
+  'task.availableDuring': 'यह कार्य {{type}} के दौरान उपलब्ध है।',
   'task.propertyFilters': 'कार्य गुण फ़िल्टर',
   'task.timerTypes': 'कार्य टाइमर प्रकार',
   'task.hasDueDate': 'नियत तारीख है',
@@ -7349,6 +7352,7 @@ Object.assign(translations.hi, {
   'vacation.reconfigureCoverage': 'प्रभावित कार्य चुनें',
 });
 Object.assign(translations.es, {
+  'task.availableDuring': 'Esta tarea está disponible durante {{type}}.',
   'task.propertyFilters': 'Filtros de propiedades',
   'task.timerTypes': 'Tipos de temporizador',
   'task.hasDueDate': 'Con fecha límite',
@@ -7363,6 +7367,7 @@ Object.assign(translations.es, {
   'vacation.reconfigureCoverage': 'Elegir tareas afectadas',
 });
 Object.assign(translations.ar, {
+  'task.availableDuring': 'تتوفر هذه المهمة أثناء {{type}}.',
   'task.propertyFilters': 'مرشحات خصائص المهام',
   'task.timerTypes': 'أنواع مؤقت المهام',
   'task.hasDueDate': 'لها تاريخ استحقاق',
@@ -7377,6 +7382,7 @@ Object.assign(translations.ar, {
   'vacation.reconfigureCoverage': 'اختر المهام المتأثرة',
 });
 Object.assign(translations.fr, {
+  'task.availableDuring': 'Cette tâche est disponible pendant {{type}}.',
   'task.propertyFilters': 'Filtres de propriétés',
   'task.timerTypes': 'Types de minuteur',
   'task.hasDueDate': 'Avec échéance',
@@ -7391,6 +7397,7 @@ Object.assign(translations.fr, {
   'vacation.reconfigureCoverage': 'Choisir les tâches concernées',
 });
 Object.assign(translations.bn, {
+  'task.availableDuring': 'এই কাজটি {{type}} চলাকালীন পাওয়া যাবে।',
   'task.propertyFilters': 'কাজের বৈশিষ্ট্য ফিল্টার',
   'task.timerTypes': 'কাজের টাইমার ধরন',
   'task.hasDueDate': 'নির্ধারিত তারিখ আছে',
@@ -7405,6 +7412,7 @@ Object.assign(translations.bn, {
   'vacation.reconfigureCoverage': 'প্রভাবিত কাজ বেছে নিন',
 });
 Object.assign(translations['pt-BR'], {
+  'task.availableDuring': 'Esta tarefa está disponível durante {{type}}.',
   'task.propertyFilters': 'Filtros de propriedades',
   'task.timerTypes': 'Tipos de temporizador',
   'task.hasDueDate': 'Com vencimento',
@@ -7419,6 +7427,7 @@ Object.assign(translations['pt-BR'], {
   'vacation.reconfigureCoverage': 'Escolher tarefas afetadas',
 });
 Object.assign(translations.id, {
+  'task.availableDuring': 'Tugas ini tersedia selama {{type}}.',
   'task.propertyFilters': 'Filter properti tugas',
   'task.timerTypes': 'Jenis timer tugas',
   'task.hasDueDate': 'Memiliki tenggat',
@@ -7433,6 +7442,7 @@ Object.assign(translations.id, {
   'vacation.reconfigureCoverage': 'Pilih tugas yang terdampak',
 });
 Object.assign(translations.ur, {
+  'task.availableDuring': 'یہ کام {{type}} کے دوران دستیاب ہے۔',
   'task.propertyFilters': 'کام کی خصوصیات کے فلٹر',
   'task.timerTypes': 'کام کے ٹائمر کی اقسام',
   'task.hasDueDate': 'آخری تاریخ موجود',

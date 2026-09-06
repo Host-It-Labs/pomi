@@ -25,6 +25,7 @@ import { apiClient } from '../utils/apiClient';
 import { setLanguage } from '../i18n';
 import { AppTheme } from '../components/AppTheme';
 import { getTimerAccentColor } from '../config/colors';
+import { ToastProvider } from '../components/toast/ToastContext';
 
 vi.mock('../utils/userActionQueue', { spy: true });
 vi.mock('../utils/desktopNotificationHandler', () => ({
@@ -122,6 +123,7 @@ beforeEach(async () => {
     taskQuickCreateFocusRequest: 0,
     taskSearchFocusRequest: 0,
     intentionPickerOpenRequest: 0,
+    taskItemRevealRequest: null,
   });
   usePreferencesStore.setState({
     preferences,
@@ -194,6 +196,47 @@ function KeyboardWorkspace() {
 }
 
 describe('Unified workspace', () => {
+  it('explains an off-type View request without revealing the task or changing the timer', async () => {
+    useTasksStore.setState({
+      tasks: [
+        {
+          ...tasks[0],
+          id: 'break-task',
+          title: 'Hydrate during Break',
+          timerType: 'break',
+        },
+      ],
+    });
+    root.render(
+      <ToastProvider>
+        <Timer useTallSafeAreaFallback={false} />
+      </ToastProvider>
+    );
+    await vi.waitFor(() =>
+      expect(host.querySelector('.workspace-filter-summary')).not.toBeNull()
+    );
+    useUiStore
+      .getState()
+      .requestTaskItemReveal({ kind: 'task', id: 'break-task' });
+    await expect
+      .element(
+        page.getByText('This task is available during Break.', { exact: true })
+      )
+      .toBeVisible();
+    expect(host.querySelectorAll('[data-testid="task-row"]')).toHaveLength(0);
+    expect(useTimerStore.getState().timer?.type).toBe('work');
+    useTimerStore.setState({
+      timer: { ...useTimerStore.getState().timer!, type: 'break' },
+    });
+    useUiStore
+      .getState()
+      .requestTaskItemReveal({ kind: 'task', id: 'break-task' });
+    await vi.waitFor(() =>
+      expect(
+        host.querySelector('[data-testid="task-row"]')?.textContent
+      ).toContain('Hydrate during Break')
+    );
+  });
   it('repeats expansion, quick-create, search and destination shortcuts from focused inputs', async () => {
     useUiStore.setState({ taskQuickCreateFocusRequest: 1 });
     root.render(<KeyboardWorkspace />);

@@ -811,7 +811,29 @@ export function TaskWorkspace() {
     setSelectedListId(null);
     setPropertyFilters(EMPTY_TASK_PROPERTY_FILTERS);
   }, [setTaskMode]);
+  const canRevealTask = useCallback(
+    (taskId: string) => {
+      const task = useTasksStore
+        .getState()
+        .tasks.find(item => item.id === taskId);
+      const activeType =
+        useTimerStore.getState().timer?.type ?? TIMER_TYPES.WORK;
+      if (task && task.timerType !== activeType) {
+        showToastFromStore(
+          t('task.availableDuring', {
+            type: t(`common.${task.timerType}`),
+          }),
+          'info',
+          5000
+        );
+        return false;
+      }
+      return true;
+    },
+    [t]
+  );
   const revealUpdatedTask = useUpdatedTaskReveal({
+    canRevealTask,
     resetFilters: resetUpdatedTaskFilters,
     setDestinationTaskId: setUpdatedTaskDestinationId,
   });
