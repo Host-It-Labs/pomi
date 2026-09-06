@@ -292,6 +292,10 @@ describe('Unified workspace', () => {
     const filter = host.querySelector(
       '[data-testid="task-intention-filter-trigger"]'
     )!;
+    // Escape must work before an animation frame has a chance to move focus.
+    const animationFrame = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockReturnValue(0);
     for (const expanded of ['true', 'false', 'true']) {
       press('KeyI');
       await vi.waitFor(() =>
@@ -302,6 +306,7 @@ describe('Unified workspace', () => {
     await vi.waitFor(() =>
       expect(filter.getAttribute('aria-expanded')).toBe('false')
     );
+    animationFrame.mockRestore();
     usePreferencesStore.setState({
       preferences: { ...preferences, tasksShowInMinimizedTimer: true },
     });
