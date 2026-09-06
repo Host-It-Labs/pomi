@@ -498,6 +498,8 @@ const baseSeedTasks: SeedTask[] = [
   },
   {
     title: 'Take a hydration break',
+    description:
+      'Visible during Break timers; hidden during Work and Long break timers.',
     dueOffsetDays: 0,
     dueTime: null,
     priority: TASK_PRIORITIES.NORMAL,
@@ -523,6 +525,8 @@ const baseSeedTasks: SeedTask[] = [
   },
   {
     title: 'Prepare tomorrow’s lunch',
+    description:
+      'Visible during Long break timers; hidden during Work and Break timers.',
     dueOffsetDays: 4,
     dueTime: '18:30',
     priority: TASK_PRIORITIES.URGENT,

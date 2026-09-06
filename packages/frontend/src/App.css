@@ -718,7 +718,13 @@ html,
 
 /* Timer accents and background surfaces are independent. */
 :root {
-  --accent-hue: 245;
+  --work-accent-hue: 245;
+  --break-accent-hue: 140;
+  --long-break-accent-hue: 175;
+  --timer-work-color: oklch(77% 0.1 var(--work-accent-hue));
+  --timer-break-color: oklch(77% 0.1 var(--break-accent-hue));
+  --timer-longBreak-color: oklch(65% 0.1 var(--long-break-accent-hue));
+  --accent-hue: var(--work-accent-hue);
   --accent-lightness: 77%;
   --color-indigo-50: oklch(97% 0.02 var(--accent-hue));
   --color-indigo-100: oklch(93% 0.04 var(--accent-hue));
@@ -758,10 +764,10 @@ html,
   --stone-border: var(--color-slate-700);
 }
 :root[data-timer-accent='break'] {
-  --accent-hue: 140;
+  --accent-hue: var(--break-accent-hue);
 }
 :root[data-timer-accent='longBreak'] {
-  --accent-hue: 175;
+  --accent-hue: var(--long-break-accent-hue);
   --accent-lightness: 65%;
 }
 .task-quick-add {
@@ -1021,13 +1027,18 @@ html,
 }
 .favorite-destinations {
   display: grid;
-  grid-template-columns: 14px repeat(4, 24px) 14px;
-  width: 124px;
+  grid-template-columns: 14px minmax(0, 1fr) 14px;
+  width: 100%;
   height: 24px;
   align-items: center;
   flex: 1;
   min-width: 0;
   overflow: hidden;
+}
+.favorite-destination-items {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
 }
 .favorite-destinations button {
   flex-shrink: 0;
@@ -1057,13 +1068,13 @@ html,
 
 .workspace-filter-actions {
   grid-column: 3;
-  justify-self: end;
+  justify-self: stretch;
   display: flex;
   align-items: center;
   gap: 4px;
 }
 .workspace-filter-actions .favorite-destinations {
-  flex: 0 0 auto;
+  flex: 1;
 }
 .workspace-filter-actions > button {
   padding: 4px;
@@ -1088,7 +1099,7 @@ html,
 }
 
 .favorite-next-page {
-  grid-column: 6;
+  grid-column: 3;
 }
 .task-mode-shortcut {
   position: absolute;

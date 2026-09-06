@@ -1,3 +1,4 @@
+import { toggleInputFocus } from '../../utils/toggleInputFocus';
 import type {
   AssistantTaskCreationResult,
   TaskPriority,
@@ -135,15 +136,15 @@ export function TaskQuickCreateRow({
     void loadAssistantStatus();
   }, [loadAssistantStatus]);
 
+  const lastFocusRequestRef = useRef(focusRequest);
   useEffect(() => {
-    if (!autoFocus && focusRequest === 0) {
-      return;
-    }
-
-    requestAnimationFrame(() => {
+    const requested = lastFocusRequestRef.current !== focusRequest;
+    lastFocusRequestRef.current = focusRequest;
+    if (requested) toggleInputFocus(inputRef.current);
+    else if (autoFocus || focusRequest > 0) {
       inputRef.current?.focus();
       inputRef.current?.select();
-    });
+    }
   }, [autoFocus, focusRequest]);
 
   useEffect(() => {
@@ -596,24 +597,16 @@ export function TaskQuickCreateRow({
   }, [onCancel, reset, stopTaskSpeechRecording]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    const isCreateShortcut =
-      (event.metaKey || event.ctrlKey) &&
-      !event.altKey &&
-      !event.shiftKey &&
-      event.code === 'KeyN';
-    if (isSavingRef.current && (event.key === 'Enter' || isCreateShortcut)) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    if (isCreateShortcut) {
+    if (isSavingRef.current && event.key === 'Enter') {
       event.preventDefault();
       event.stopPropagation();
       return;
     }
     if (event.key === 'Escape') {
       event.preventDefault();
-      handleCancel();
+      event.stopPropagation();
+      if (isRecording || isTranscribing || isSaving) handleCancel();
+      event.currentTarget.blur();
     }
   };
 

@@ -264,10 +264,12 @@ export function useKeyboardShortcuts() {
         isMod(event) &&
         !event.altKey &&
         !event.shiftKey &&
-        (event.code === 'KeyI' ||
+        (event.code === 'KeyE' ||
+          event.code === 'KeyI' ||
           event.code === 'KeyK' ||
           event.code === 'KeyO' ||
-          event.code === 'KeyT');
+          event.code === 'KeyT' ||
+          event.code === 'KeyN');
       if (isTypingInField(event) && !isSurfaceNavigationShortcut) return;
       if (hasOpenModal()) return;
       if (advancedSkipModalOpen || timerExtensionModalOpen) return;

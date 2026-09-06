@@ -96,7 +96,12 @@ jobs:
         run: cp .env.example .env.local
 
       - name: Build
+        env:
+          NODE_ENV: production
         run: pnpm -r run build
+
+      - name: Verify production frontend startup
+        run: pnpm test:frontend-startup
 
       - name: Verify multilingual UI coverage
         run: pnpm test:i18n

@@ -36,21 +36,22 @@ export function FavoriteDestinationShortcuts({
       ) : (
         <span aria-hidden="true" />
       )}
-      {destinations
-        .slice(visiblePage * capacity, (visiblePage + 1) * capacity)
-        .map((destination, index) => (
-          <button
-            type="button"
-            key={destination.value}
-            style={{ gridColumn: index + 2 }}
-            title={destination.title}
-            aria-label={destination.title}
-            aria-pressed={selectedValue === destination.value}
-            onClick={() => onSelect(destination.value)}
-          >
-            {destination.emoji}
-          </button>
-        ))}
+      <div className="favorite-destination-items">
+        {destinations
+          .slice(visiblePage * capacity, (visiblePage + 1) * capacity)
+          .map(destination => (
+            <button
+              type="button"
+              key={destination.value}
+              title={destination.title}
+              aria-label={destination.title}
+              aria-pressed={selectedValue === destination.value}
+              onClick={() => onSelect(destination.value)}
+            >
+              {destination.emoji}
+            </button>
+          ))}
+      </div>
       {needsPaging ? (
         <button
           type="button"
