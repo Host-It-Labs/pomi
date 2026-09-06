@@ -94,10 +94,11 @@ describe('SessionService', () => {
     expect(service.readProtectedRefreshCookie(protectedCookie)).toBe(
       created.refreshToken
     );
-    const replacement = protectedCookie.endsWith('A') ? 'B' : 'A';
+    // Trailing Base64 padding bits can change without changing the decoded bytes.
+    const replacement = protectedCookie.startsWith('A') ? 'B' : 'A';
     expect(
       service.readProtectedRefreshCookie(
-        `${protectedCookie.slice(0, -1)}${replacement}`
+        `${replacement}${protectedCookie.slice(1)}`
       )
     ).toBeNull();
   });
