@@ -1,3 +1,4 @@
+import { toggleInputFocus } from '../utils/toggleInputFocus';
 import type { Intention, List, ListItem, Task } from '@pomi/shared';
 import {
   TASK_STATUSES,
@@ -207,7 +208,6 @@ export function MinimizedTaskView({
   const pinningTaskIdsRef = useRef(new Set<string>());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const taskScrollRef = useRef<HTMLDivElement | null>(null);
-  const taskSearchBlurredByEscapeRef = useRef(false);
   const taskSearchFocusPendingRef = useRef(false);
   const lastTaskSearchFocusRequestRef = useRef(taskSearchFocusRequest);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -705,26 +705,9 @@ export function MinimizedTaskView({
       return;
     }
     if (isTaskSearchOpen) {
-      if (taskSearchBlurredByEscapeRef.current) {
-        taskSearchBlurredByEscapeRef.current = false;
-        setTaskSearchQuery('');
-        setIsTaskSearchOpen(false);
-        requestAnimationFrame(() => searchInputRef.current?.blur());
-        return;
-      }
-      if (document.activeElement === searchInputRef.current) {
-        setTaskSearchQuery('');
-        setIsTaskSearchOpen(false);
-        requestAnimationFrame(() => searchInputRef.current?.blur());
-        return;
-      }
-      requestAnimationFrame(() => {
-        searchInputRef.current?.focus();
-        searchInputRef.current?.select();
-      });
+      toggleInputFocus(searchInputRef.current);
       return;
     }
-    taskSearchBlurredByEscapeRef.current = false;
     taskSearchFocusPendingRef.current = true;
     setIsTaskSearchOpen(true);
   }, [canUseTaskSearch, isTaskSearchOpen, taskSearchFocusRequest]);
@@ -816,10 +799,8 @@ export function MinimizedTaskView({
     setIsTaskSearchOpen(isOpen => {
       const nextOpen = !isOpen;
       if (nextOpen) {
-        taskSearchBlurredByEscapeRef.current = false;
         taskSearchFocusPendingRef.current = true;
       } else {
-        taskSearchBlurredByEscapeRef.current = false;
         taskSearchFocusPendingRef.current = false;
         setTaskSearchQuery('');
       }
@@ -980,14 +961,10 @@ export function MinimizedTaskView({
                   type="search"
                   value={taskSearchQuery}
                   onChange={event => setTaskSearchQuery(event.target.value)}
-                  onFocus={() => {
-                    taskSearchBlurredByEscapeRef.current = false;
-                  }}
                   onKeyDown={event => {
                     if (event.key === 'Escape') {
                       event.preventDefault();
                       event.stopPropagation();
-                      taskSearchBlurredByEscapeRef.current = true;
                       event.currentTarget.blur();
                     }
                   }}

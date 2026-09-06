@@ -1,3 +1,4 @@
+import { useDismissibleDropdown } from '../../hooks/useDismissibleDropdown';
 import type { ListItem, Task, TaskPriority, TimerTypes } from '@pomi/shared';
 import { TIMER_TYPES } from '@pomi/shared/src/constants';
 import clsx from 'clsx';
@@ -82,6 +83,7 @@ export function TaskPropertyFilterMenu({
   onChange: (filters: TaskPropertyFilters) => void;
 }) {
   const { t } = useI18n();
+  const dropdownRef = useDismissibleDropdown(isOpen, onOpenChange);
   const active = hasTaskPropertyFilters(filters);
   const activeCount =
     Number(filters.dueDate !== 'all') +
@@ -96,7 +98,7 @@ export function TaskPropertyFilterMenu({
   ) => onChange({ ...filters, [key]: value });
 
   return (
-    <div className="relative">
+    <div ref={dropdownRef} className="relative">
       <IconButton
         label={t('task.propertyFilters')}
         title={t('task.propertyFilters')}
