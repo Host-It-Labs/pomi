@@ -79,7 +79,7 @@
     "release:all": "./scripts/start-release-tmux-session.sh --attach",
     "release:all:parallel": "./scripts/run-parallel-releases.sh all",
     "release:apps": "./scripts/run-parallel-releases.sh apps",
-    "release:macos": "pnpm run build:macos",
+    "release:macos": "VITE_SENTRY_RELEASE=\"pomi-frontend@local-$(git rev-parse --short HEAD)\" POMI_UPLOAD_SENTRY_SOURCEMAPS=false pnpm run build:macos",
     "release:android": "pnpm run build:android && ./scripts/deploy-watch.sh",
     "release:wear": "./scripts/deploy-watch.sh",
     "release:linux": "pnpm run build:linux",
