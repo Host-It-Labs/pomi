@@ -94,9 +94,14 @@ client before that deadline, then remove the variable. Leave it blank for new
 deployments. Do not extend the window merely to preserve abandoned sessions;
 users can sign in again after it closes.
 
-Web and mobile-webview clients keep refresh credentials in Secure, HttpOnly
-cookies. Desktop clients use the operating-system keyring, and Wear OS uses
-Android Keystore. Access tokens remain short-lived and process-memory-only.
+Web and iOS WebView clients keep refresh credentials in Secure, HttpOnly
+cookies. Desktop clients use the operating-system keyring. Android and Wear OS
+use Android Keystore-encrypted app storage. Android refresh credentials are
+scoped to the backend origin and excluded from cloud backups and device transfers
+because the encryption key cannot move to another installation. After installing
+the Android secure-storage update, sign in once to establish the saved session;
+subsequent app restarts restore it. Access tokens remain short-lived and
+process-memory-only.
 Saved custom backend values that are not exact secure origins are quarantined
 before old authentication data can be reused; affected users must enter a valid
 HTTPS origin and sign in again.
