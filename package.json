@@ -43,6 +43,7 @@
     "test:integration": "pnpm test:build && ./scripts/run-with-dev-runtime-env.sh -- vitest run --project backend-integration",
     "test:browser": "vitest run --project frontend-browser",
     "test:native": "./scripts/run-native-tests.sh",
+    "test:android-session": "./scripts/test-android-session.sh",
     "test:inventory": "node ./scripts/test-inventory.mjs && node ./scripts/generate-e2e-ownership.mjs",
     "audit:public-source": "node ./scripts/audit-public-source.mjs",
     "snapshot:public-source": "node ./scripts/create-public-snapshot.mjs",

@@ -11,6 +11,7 @@ Pomi uses the cheapest deterministic layer that can prove a behavior. Playwright
 | Chromium component  | Geometry, overflow, responsive layout, drag and browser-only behavior                            | `pnpm test:browser`                            |
 | Backend integration | Nest production middleware, HTTP validation and migrated PostgreSQL/Redis behavior               | `pnpm test:integration`                        |
 | Native              | Wear JUnit/Kover plus Rust formatting, checks and tests                                          | `pnpm test:native`                             |
+| Android session     | Real Keystore persistence, rotation, deletion and restoration after process termination          | `pnpm test:android-session`                    |
 | Inventory           | Static counts by project plus active and transitional Playwright lines                           | `pnpm test:inventory`                          |
 | Business acceptance | Executable ownership specification, V8 report, non-regression ratchet and compact 100% contracts | `pnpm test:business`                           |
 | Coverage ratchet    | Same aggregate report with the replacement-phase non-regression floor                            | `pnpm test:coverage:ratchet`                   |
@@ -19,6 +20,14 @@ Pomi uses the cheapest deterministic layer that can prove a behavior. Playwright
 | E2E                 | Thirteen real-stack product journeys                                                             | `pnpm test:e2e`                                |
 | E2E stress          | Ten fully parallel repetitions                                                                   | `pnpm test:e2e:stress`                         |
 | E2E timing          | Ten separate parallel and three separate serial full-suite measurements                          | `pnpm test:e2e:timing`                         |
+
+Android session tests require one running emulator (or `ANDROID_SERIAL` selecting
+one) and a Tauri release library built for its ABI. Build with
+`pnpm --filter @pomi/frontend exec tauri android build --ci --target aarch64 --apk`
+for an ARM emulator, or use `x86_64` for an Intel emulator. The runner installs the
+test APKs, checks storage operations, writes a credential, force-stops the app,
+and verifies restoration in a fresh process. The Android PR job runs this on an
+x86_64 emulator automatically.
 
 Focused Playwright runs use the wrapper so database cleanup, ports and artifacts match CI:
 

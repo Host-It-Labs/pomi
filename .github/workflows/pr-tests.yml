@@ -233,7 +233,7 @@ jobs:
       - name: Install Rust and Android target
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android
+          targets: aarch64-linux-android,x86_64-linux-android
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
@@ -255,7 +255,21 @@ jobs:
 
       - name: Build unsigned Android release APK
         working-directory: packages/frontend
-        run: pnpm exec tauri android build --ci --target aarch64 --apk
+        run: pnpm exec tauri android build --ci --target aarch64 x86_64 --apk
+
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Verify Android session persistence across process restart
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          disable-animations: true
+          script: pnpm test:android-session
 
   tests:
     name: tests

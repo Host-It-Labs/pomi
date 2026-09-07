@@ -71,3 +71,5 @@ Favorite shortcuts keep room for up to four emojis and both paging arrows. Cente
 ## Session restoration
 
 - Keep users signed in across app restarts using the existing persistent refresh session. Temporary network or secure-storage failures retry restoration without clearing credentials or presenting the login form. Explicit logout and rejected or revoked refresh sessions still end access.
+
+- Android persists refresh sessions in Android Keystore-encrypted app storage, scoped to the backend origin. Login completes only after the credential is saved; the WebView cookie jar is not the Android session store.

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Keystore keys are device-bound and cannot decrypt restored credentials. -->
+    <exclude domain="sharedpref" path="pomi_android_secure.xml" />
+</full-backup-content>

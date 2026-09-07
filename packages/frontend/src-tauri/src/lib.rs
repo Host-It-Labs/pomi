@@ -1,3 +1,6 @@
+#[cfg(target_os = "android")]
+mod refresh_vault;
+
 #[cfg(target_os = "windows")]
 use tauri::Manager;
 
@@ -22,7 +25,19 @@ pub fn run() {
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[tauri::mobile_entry_point]
 pub fn mobile_main() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "android")]
+    let builder = builder
+        .plugin(refresh_vault::init())
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            refresh_vault::read_android_refresh_token,
+            refresh_vault::write_android_refresh_token,
+            refresh_vault::delete_android_refresh_token
+        ]);
+    #[cfg(target_os = "ios")]
+    let builder = builder.invoke_handler(tauri::generate_handler![greet]);
+    builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -30,7 +45,6 @@ pub fn mobile_main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_android_battery_optimization::init())
-        .invoke_handler(tauri::generate_handler![greet])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
