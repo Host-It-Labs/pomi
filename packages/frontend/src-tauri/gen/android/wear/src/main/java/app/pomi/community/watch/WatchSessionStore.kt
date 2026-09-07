@@ -66,7 +66,7 @@ class WatchSessionStore private constructor(
         get() = preferences.getString(KEY_USERNAME, null)
 
     val hasLegacyAccessToken: Boolean
-        get() = !token.isNullOrBlank() && refreshToken.isNullOrBlank()
+        get() = !token.isNullOrBlank() && !refreshTokenVault.contains()
 
     /** Canonical BCP-47 account language, falling back to the first system language. */
     val languageTag: String
@@ -76,7 +76,7 @@ class WatchSessionStore private constructor(
 
     val isReady: Boolean
         get() = !backendUrl.isNullOrBlank() &&
-            (!token.isNullOrBlank() || !refreshToken.isNullOrBlank())
+            (!token.isNullOrBlank() || refreshTokenVault.contains())
 
     val accountKey: String?
         get() {

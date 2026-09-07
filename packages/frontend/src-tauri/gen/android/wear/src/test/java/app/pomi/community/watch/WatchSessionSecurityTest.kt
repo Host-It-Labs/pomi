@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,6 +35,25 @@ class WatchSessionSecurityTest {
         store.clear()
         assertNull(store.token)
         assertNull(vault.read())
+    }
+
+    @Test
+    fun restoresAfterProcessTokenLossAndDoesNotDeleteTemporarilyUnreadableCredentials() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val vault = RecordingRefreshTokenVault()
+        val store = WatchSessionStore(context, vault, Unit)
+        store.saveSession("https://pomi.example", "person", "access", "refresh", "en")
+        store.clearAccessToken()
+        vault.unavailable = true
+        val restarted = WatchSessionStore(context, vault, Unit)
+        assertTrue(restarted.isReady)
+        assertFalse(restarted.hasLegacyAccessToken)
+        assertThrows(IllegalStateException::class.java) { restarted.refreshToken }
+        assertTrue(vault.contains())
+        vault.unavailable = false
+        assertEquals("refresh", restarted.refreshToken)
+        restarted.clear()
+        assertFalse(restarted.isReady)
     }
 
     @Test
@@ -68,8 +88,14 @@ class WatchSessionSecurityTest {
 
 private class RecordingRefreshTokenVault : RefreshTokenVault {
     private var value: String? = null
+    var unavailable = false
 
-    override fun read(): String? = value
+    override fun contains(): Boolean = value != null
+
+    override fun read(): String? {
+        check(!unavailable) { "Keystore temporarily unavailable" }
+        return value
+    }
 
     override fun write(value: String) {
         this.value = value

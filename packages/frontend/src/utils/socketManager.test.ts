@@ -165,12 +165,13 @@ describe('socket manager reconnect contracts', () => {
     expect(io).toHaveBeenCalledOnce();
   });
 
-  it('expires the session only for the server authentication event', async () => {
+  it('delegates session expiry to refresh and preserves transient failures', async () => {
     const { getOrCreateSocket } = await import('./socketManager');
 
     getOrCreateSocket();
     socketHarness.handlers.get(SOCKET_EVENTS.SESSION_EXPIRED)?.();
-    await vi.waitFor(() => expect(auth.expireSession).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(auth.refreshSession).toHaveBeenCalledOnce());
+    expect(auth.expireSession).not.toHaveBeenCalled();
     expect(auth.refreshSession).toHaveBeenCalledOnce();
 
     auth.expireSession.mockReset();

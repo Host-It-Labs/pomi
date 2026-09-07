@@ -259,6 +259,7 @@ export function useKeyboardShortcuts() {
     ];
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.getModifierState('AltGraph')) return;
       if (event.defaultPrevented || event.repeat) return; // avoid repeat spam
       const isSurfaceNavigationShortcut =
         isMod(event) &&

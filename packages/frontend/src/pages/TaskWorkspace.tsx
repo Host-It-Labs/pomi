@@ -1134,6 +1134,8 @@ export function TaskWorkspace() {
         event.ctrlKey ||
         event.altKey ||
         event.shiftKey ||
+        (target instanceof HTMLInputElement &&
+          !['text', 'search'].includes(target.type)) ||
         target.closest('select, [role="menu"], [role="listbox"]')
       )
         return;

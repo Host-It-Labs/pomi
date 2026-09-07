@@ -67,3 +67,7 @@ Overdue Task rows keep their normal surface background while retaining red statu
 The destination trigger reflects the effective task scope: All, a single destination name, or selected timer intention emojis for multi-selection. Favorite shortcuts choose one destination and exit Intention mode without changing the timer. A selected destination leaves both mode buttons off; Mod+G toggles All/current Intentions and returns a destination-filtered view to All. Manual task reordering is removed across clients and the backend.
 
 Favorite shortcuts keep room for up to four emojis and both paging arrows. Center the visible favorites between the task pager and Reset, including partially filled pages. Task page counts use a fixed width with tabular numerals; hover or keyboard focus replaces a non-first page count with a return-to-page-one action. The All/Intention switch shares one centered Mod+G hint. Task update toasts use the fixed Work blue; View selects the destination page before focusing its row.
+
+## Session restoration
+
+- Keep users signed in across app restarts using the existing persistent refresh session. Temporary network or secure-storage failures retry restoration without clearing credentials or presenting the login form. Explicit logout and rejected or revoked refresh sessions still end access.

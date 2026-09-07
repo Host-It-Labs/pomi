@@ -114,6 +114,8 @@ class WatchLanguageTest {
 private class InMemoryRefreshTokenVault : RefreshTokenVault {
     private var value: String? = null
 
+    override fun contains(): Boolean = value != null
+
     override fun read(): String? = value
 
     override fun write(value: String) {

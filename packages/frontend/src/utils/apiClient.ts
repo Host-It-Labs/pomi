@@ -155,7 +155,9 @@ const wrapClientWithPath = <T extends object>(
                 }
                 return retryResponse;
               }
-              useAuthStore.getState().expireSession();
+              if (useAuthStore.getState().isRecoveringSession) {
+                throw new TypeError('Session refresh temporarily unavailable');
+              }
             }
             return response;
           } finally {
