@@ -1,4 +1,4 @@
-import { toggleInputFocus } from '../utils/toggleInputFocus';
+import { focusInput } from '../utils/focusInput';
 import type { Intention, List, ListItem, Task } from '@pomi/shared';
 import {
   TASK_STATUSES,
@@ -705,7 +705,7 @@ export function MinimizedTaskView({
       return;
     }
     if (isTaskSearchOpen) {
-      toggleInputFocus(searchInputRef.current);
+      focusInput(searchInputRef.current);
       return;
     }
     taskSearchFocusPendingRef.current = true;

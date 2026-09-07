@@ -1,4 +1,4 @@
-import { toggleInputFocus } from '../../utils/toggleInputFocus';
+import { focusInput } from '../../utils/focusInput';
 import type {
   AssistantTaskCreationResult,
   TaskPriority,
@@ -140,7 +140,7 @@ export function TaskQuickCreateRow({
   useEffect(() => {
     const requested = lastFocusRequestRef.current !== focusRequest;
     lastFocusRequestRef.current = focusRequest;
-    if (requested) toggleInputFocus(inputRef.current);
+    if (requested) focusInput(inputRef.current);
     else if (autoFocus || focusRequest > 0) {
       inputRef.current?.focus();
       inputRef.current?.select();

@@ -66,7 +66,7 @@ class WatchSessionStore private constructor(
         get() = preferences.getString(KEY_USERNAME, null)
 
     val hasLegacyAccessToken: Boolean
-        get() = !token.isNullOrBlank() && refreshToken.isNullOrBlank()
+        get() = !token.isNullOrBlank() && !refreshTokenVault.contains()
 
     /** Canonical BCP-47 account language, falling back to the first system language. */
     val languageTag: String
@@ -76,7 +76,7 @@ class WatchSessionStore private constructor(
 
     val isReady: Boolean
         get() = !backendUrl.isNullOrBlank() &&
-            (!token.isNullOrBlank() || !refreshToken.isNullOrBlank())
+            (!token.isNullOrBlank() || refreshTokenVault.contains())
 
     val accountKey: String?
         get() {
@@ -101,16 +101,13 @@ class WatchSessionStore private constructor(
         backendUrl: String,
         username: String,
         token: String,
-        refreshToken: String?,
+        refreshToken: String,
         accountLanguage: String?
     ) {
         val nextLanguage = WatchLanguages.normalizeTag(accountLanguage ?: languageTag)
         val normalizedBackend = normalizeBackendUrl(backendUrl)
-        if (refreshToken.isNullOrBlank()) {
-            refreshTokenVault.delete()
-        } else {
-            refreshTokenVault.write(refreshToken)
-        }
+        require(refreshToken.isNotBlank()) { "Missing refresh session" }
+        refreshTokenVault.write(refreshToken)
         accessTokenInMemory = token
         preferences.edit()
             .putString(KEY_BACKEND_URL, normalizedBackend)

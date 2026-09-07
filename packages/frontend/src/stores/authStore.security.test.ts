@@ -21,11 +21,89 @@ describe('client session storage', () => {
       isAuthenticated: false,
       isLoading: true,
       hasExplicitlySignedOut: false,
+      isRecoveringSession: false,
     });
   });
 
   afterEach(() => {
+    useAuthStoreBase.getState().expireSession();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it('retries temporary startup failures without asking for another login', async () => {
+    vi.useFakeTimers();
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('offline'))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(sessionBody), { status: 200 })
+      );
+    vi.stubGlobal('fetch', request);
+    await useAuthStoreBase.getState().initializeSession();
+    expect(useAuthStoreBase.getState()).toMatchObject({
+      isLoading: true,
+      isRecoveringSession: true,
+    });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(useAuthStoreBase.getState()).toMatchObject({
+      isLoading: false,
+      isAuthenticated: true,
+      isRecoveringSession: false,
+    });
+  });
+
+  it('keeps an active session during a temporary refresh failure and expires a rejected credential', async () => {
+    vi.useFakeTimers();
+    await useAuthStoreBase.getState().acceptSession(sessionBody);
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(null, { status: 503 }))
+        .mockResolvedValueOnce(new Response(null, { status: 401 }))
+    );
+    expect(await useAuthStoreBase.getState().refreshSession()).toBe(false);
+    expect(useAuthStoreBase.getState()).toMatchObject({
+      isAuthenticated: true,
+      isRecoveringSession: true,
+    });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(useAuthStoreBase.getState()).toMatchObject({
+      isAuthenticated: false,
+      isRecoveringSession: false,
+    });
+  });
+
+  it('cancels scheduled recovery on explicit logout', async () => {
+    vi.useFakeTimers();
+    const request = vi.fn().mockRejectedValue(new TypeError('offline'));
+    vi.stubGlobal('fetch', request);
+    await useAuthStoreBase.getState().initializeSession();
+    await useAuthStoreBase.getState().signOut();
+    const calls = request.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(request).toHaveBeenCalledTimes(calls);
+    expect(useAuthStoreBase.getState().hasExplicitlySignedOut).toBe(true);
+  });
+
+  it('does not restore a session when an in-flight refresh finishes after logout', async () => {
+    let resolveRefresh!: (response: Response) => void;
+    const response = new Promise<Response>(resolve => {
+      resolveRefresh = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => response)
+    );
+    const refreshing = useAuthStoreBase.getState().refreshSession();
+    const signingOut = useAuthStoreBase.getState().signOut();
+    resolveRefresh(new Response(JSON.stringify(sessionBody), { status: 200 }));
+    await Promise.all([refreshing, signingOut]);
+    expect(useAuthStoreBase.getState()).toMatchObject({
+      isAuthenticated: false,
+      hasExplicitlySignedOut: true,
+    });
   });
 
   it('keeps access tokens and user state out of localStorage', () => {

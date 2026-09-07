@@ -26,6 +26,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   hasExplicitlySignedOut: boolean;
+  isRecoveringSession: boolean;
   setUser: (user: User | null) => void;
   setToken: (token: string | null) => void;
   acceptSession: (session: SessionData) => Promise<void>;
@@ -36,9 +37,11 @@ interface AuthState {
 }
 
 let isSigningOut = false;
+let sessionEpoch = 0;
 let refreshInFlight: Promise<boolean> | null = null;
 let initializationInFlight: Promise<void> | null = null;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+const SESSION_RECOVERY_DELAY_MS = 5_000;
 const EXPLICIT_SIGN_OUT_KEY = 'pomi-session-explicitly-signed-out';
 
 const readExplicitSignOut = (): boolean => {
@@ -138,6 +141,7 @@ const useAuthStoreBase = create<AuthState>()((set, get) => ({
   isAuthenticated: false,
   isLoading: true,
   hasExplicitlySignedOut: readExplicitSignOut(),
+  isRecoveringSession: false,
 
   setUser: user =>
     set(state => ({
@@ -153,8 +157,10 @@ const useAuthStoreBase = create<AuthState>()((set, get) => ({
   },
 
   acceptSession: async session => {
+    const epoch = sessionEpoch;
     const backendOrigin = getBackendOrigin();
     await writeNativeRefreshToken(backendOrigin, session.refreshToken);
+    if (epoch !== sessionEpoch) return;
     writeExplicitSignOut(false);
     set({
       user: session.user,
@@ -162,6 +168,7 @@ const useAuthStoreBase = create<AuthState>()((set, get) => ({
       isAuthenticated: true,
       isLoading: false,
       hasExplicitlySignedOut: false,
+      isRecoveringSession: false,
     });
     scheduleRefresh(session.token, get().refreshSession);
   },
@@ -192,7 +199,7 @@ const useAuthStoreBase = create<AuthState>()((set, get) => ({
       } catch (error) {
         console.warn('Session restoration failed:', error);
       } finally {
-        set({ isLoading: false });
+        set({ isLoading: get().isRecoveringSession });
         initializationInFlight = null;
       }
     })();
@@ -200,14 +207,19 @@ const useAuthStoreBase = create<AuthState>()((set, get) => ({
   },
 
   refreshSession: async () => {
+    if (isSigningOut || get().hasExplicitlySignedOut) return false;
     if (refreshInFlight) return refreshInFlight;
+    const epoch = sessionEpoch;
     refreshInFlight = (async () => {
       const backendOrigin = getBackendOrigin();
       try {
         const refreshToken = usesNativeRefreshVault
           ? await readNativeRefreshToken(backendOrigin)
           : null;
-        if (usesNativeRefreshVault && !refreshToken) return false;
+        if (usesNativeRefreshVault && !refreshToken) {
+          get().expireSession();
+          return false;
+        }
 
         const response = await sessionFetch(
           '/sessions/refresh',
@@ -218,6 +230,7 @@ const useAuthStoreBase = create<AuthState>()((set, get) => ({
           null
         );
         const session = await parseSession(response);
+        if (epoch !== sessionEpoch) return false;
         if (session) {
           await get().acceptSession(session);
           return true;
@@ -226,10 +239,21 @@ const useAuthStoreBase = create<AuthState>()((set, get) => ({
         if (response.status === 401) {
           await deleteNativeRefreshToken(backendOrigin).catch(() => undefined);
           get().expireSession();
+          return false;
         }
-        return false;
+        throw new Error(
+          `Session refresh temporarily unavailable (${response.status})`
+        );
       } catch (error) {
         console.warn('Session refresh failed:', error);
+        if (epoch === sessionEpoch && !get().hasExplicitlySignedOut) {
+          set({ isRecoveringSession: true, isLoading: !get().isAuthenticated });
+          if (refreshTimer) clearTimeout(refreshTimer);
+          refreshTimer = setTimeout(
+            () => void get().refreshSession(),
+            SESSION_RECOVERY_DELAY_MS
+          );
+        }
         return false;
       } finally {
         refreshInFlight = null;
@@ -239,13 +263,23 @@ const useAuthStoreBase = create<AuthState>()((set, get) => ({
   },
 
   expireSession: () => {
+    sessionEpoch += 1;
     if (refreshTimer) clearTimeout(refreshTimer);
-    set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+    set({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isLoading: false,
+      isRecoveringSession: false,
+    });
   },
 
   signOut: async () => {
     if (isSigningOut) return;
     isSigningOut = true;
+    sessionEpoch += 1;
+    writeExplicitSignOut(true);
+    set({ hasExplicitlySignedOut: true });
     const { token } = get();
     const backendOrigin = getBackendOrigin();
 
@@ -264,6 +298,7 @@ const useAuthStoreBase = create<AuthState>()((set, get) => ({
           console.error('Failed to notify server about logout:', error);
         }
       }
+      await refreshInFlight;
       await deleteNativeRefreshToken(backendOrigin).catch(() => undefined);
     } finally {
       if (refreshTimer) clearTimeout(refreshTimer);
@@ -274,6 +309,7 @@ const useAuthStoreBase = create<AuthState>()((set, get) => ({
         isAuthenticated: false,
         isLoading: false,
         hasExplicitlySignedOut: true,
+        isRecoveringSession: false,
       });
       isSigningOut = false;
     }

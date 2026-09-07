@@ -1,5 +1,6 @@
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { createRoot, type Root } from 'react-dom/client';
+import { createPortal } from 'react-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import type {
@@ -272,7 +273,7 @@ describe('Unified workspace', () => {
       )!;
       input.focus();
       press(code);
-      await vi.waitFor(() => expect(document.activeElement).not.toBe(input));
+      await vi.waitFor(() => expect(document.activeElement).toBe(input));
       press(code);
       await vi.waitFor(() => expect(document.activeElement).toBe(input));
       press('Escape');
@@ -284,7 +285,7 @@ describe('Unified workspace', () => {
     press('KeyK');
     await vi.waitFor(() => expect(document.activeElement).toBe(search));
     press('KeyK');
-    await vi.waitFor(() => expect(document.activeElement).not.toBe(search));
+    await vi.waitFor(() => expect(document.activeElement).toBe(search));
     press('KeyK');
     await vi.waitFor(() => expect(document.activeElement).toBe(search));
     press('Escape');
@@ -296,7 +297,7 @@ describe('Unified workspace', () => {
     const animationFrame = vi
       .spyOn(window, 'requestAnimationFrame')
       .mockReturnValue(0);
-    for (const expanded of ['true', 'false', 'true']) {
+    for (const expanded of ['true', 'true', 'true']) {
       press('KeyI');
       await vi.waitFor(() =>
         expect(filter.getAttribute('aria-expanded')).toBe(expanded)
@@ -317,7 +318,7 @@ describe('Unified workspace', () => {
     await expect.element(minimizedSearch).toHaveFocus();
     await minimizedSearch.fill('Read');
     press('KeyK');
-    await expect.element(minimizedSearch).not.toHaveFocus();
+    await expect.element(minimizedSearch).toHaveFocus();
     await expect.element(minimizedSearch).toHaveValue('Read');
     press('KeyK');
     await expect.element(minimizedSearch).toHaveFocus();
@@ -325,6 +326,121 @@ describe('Unified workspace', () => {
     await expect.element(minimizedSearch).not.toHaveFocus();
     press('KeyK');
     await expect.element(minimizedSearch).toHaveFocus();
+  });
+  it.each([
+    '.quick-create-input input',
+    '[data-testid="task-search-field"] input',
+  ])(
+    'allows shortcuts and paging from %s while preserving typing and modal isolation',
+    async selector => {
+      const resetTimer = vi.fn();
+      const toggleTimer = vi.fn();
+      useTimerStore.setState({ resetTimer, toggleTimer });
+      root.render(<KeyboardWorkspace />);
+      await vi.waitFor(() =>
+        expect(host.querySelector('.quick-create-input input')).not.toBeNull()
+      );
+      const input = host.querySelector<HTMLInputElement>(selector)!;
+      input.focus();
+      const press = (key: string, code: string, metaKey: boolean) => {
+        const event = new KeyboardEvent('keydown', {
+          key,
+          code,
+          metaKey,
+          bubbles: true,
+          cancelable: true,
+        });
+        (document.activeElement ?? document.body).dispatchEvent(event);
+        return event;
+      };
+      expect(press(' ', 'Space', false).defaultPrevented).toBe(false);
+      expect(toggleTimer).not.toHaveBeenCalled();
+      const altGraph = new KeyboardEvent('keydown', {
+        key: 'ń',
+        code: 'KeyN',
+        ctrlKey: true,
+        altKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(altGraph, 'getModifierState', {
+        value: (modifier: string) => modifier === 'AltGraph',
+      });
+      const focusRequests = useUiStore.getState().taskQuickCreateFocusRequest;
+      input.dispatchEvent(altGraph);
+      expect(altGraph.defaultPrevented).toBe(false);
+      expect(useUiStore.getState().taskQuickCreateFocusRequest).toBe(
+        focusRequests
+      );
+      press('r', 'KeyR', true);
+      expect(resetTimer).toHaveBeenCalledOnce();
+      press('ArrowDown', 'ArrowDown', false);
+      await vi.waitFor(() =>
+        expect(host.querySelectorAll('[data-testid="task-row"]')).toHaveLength(
+          3
+        )
+      );
+      expect(document.activeElement).toBe(input);
+      press('ArrowUp', 'ArrowUp', false);
+      await vi.waitFor(() =>
+        expect(host.querySelectorAll('[data-testid="task-row"]')).toHaveLength(
+          5
+        )
+      );
+      root.render(
+        <>
+          <KeyboardWorkspace />
+          <TaskFormModal
+            isOpen
+            task={null}
+            intentions={intentions}
+            lists={[]}
+            preferences={preferences}
+            timer={null}
+            taskMode="general"
+            onClose={vi.fn()}
+            onCreate={vi.fn()}
+            onUpdate={vi.fn()}
+            onArchive={vi.fn()}
+            onCreateListItem={vi.fn()}
+            onConvertToListItem={vi.fn()}
+          />
+        </>
+      );
+      await vi.waitFor(() =>
+        expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+      );
+      press('r', 'KeyR', true);
+      expect(resetTimer).toHaveBeenCalledOnce();
+    }
+  );
+  it('leaves portaled date-input arrows available to the date picker', async () => {
+    root.render(
+      <>
+        <KeyboardWorkspace />
+        {createPortal(
+          <input type="date" data-testid="date-editor" />,
+          document.body
+        )}
+      </>
+    );
+    await vi.waitFor(() =>
+      expect(host.querySelectorAll('[data-testid="task-row"]')).toHaveLength(5)
+    );
+    const date = document.querySelector<HTMLInputElement>(
+      '[data-testid="date-editor"]'
+    )!;
+    date.focus();
+    for (const key of ['ArrowDown', 'ArrowUp']) {
+      const event = new KeyboardEvent('keydown', {
+        key,
+        bubbles: true,
+        cancelable: true,
+      });
+      date.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(host.querySelectorAll('[data-testid="task-row"]')).toHaveLength(5);
+    }
   });
   it('shows only the current timer type even in All mode and search', async () => {
     useUiStore.setState({ taskMode: 'general' });

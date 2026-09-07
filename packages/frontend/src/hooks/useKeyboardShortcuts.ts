@@ -259,6 +259,7 @@ export function useKeyboardShortcuts() {
     ];
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.getModifierState('AltGraph')) return;
       if (event.defaultPrevented || event.repeat) return; // avoid repeat spam
       const isSurfaceNavigationShortcut =
         isMod(event) &&
@@ -270,7 +271,12 @@ export function useKeyboardShortcuts() {
           event.code === 'KeyO' ||
           event.code === 'KeyT' ||
           event.code === 'KeyN');
-      if (isTypingInField(event) && !isSurfaceNavigationShortcut) return;
+      if (
+        isTypingInField(event) &&
+        !(activeTab === 'timer' && isMod(event)) &&
+        !isSurfaceNavigationShortcut
+      )
+        return;
       if (hasOpenModal()) return;
       if (advancedSkipModalOpen || timerExtensionModalOpen) return;
       if (

@@ -11,6 +11,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 internal interface RefreshTokenVault {
+    fun contains(): Boolean
     fun read(): String?
     fun write(value: String)
     fun delete()
@@ -22,10 +23,12 @@ internal class AndroidKeystoreRefreshTokenVault(context: Context) : RefreshToken
         Context.MODE_PRIVATE
     )
 
+    override fun contains(): Boolean = preferences.contains(KEY_IV) && preferences.contains(KEY_CIPHERTEXT)
+
     override fun read(): String? {
         val encodedIv = preferences.getString(KEY_IV, null) ?: return null
         val encodedCiphertext = preferences.getString(KEY_CIPHERTEXT, null) ?: return null
-        return try {
+        return run {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(
                 Cipher.DECRYPT_MODE,
@@ -36,9 +39,6 @@ internal class AndroidKeystoreRefreshTokenVault(context: Context) : RefreshToken
                 cipher.doFinal(Base64.decode(encodedCiphertext, Base64.NO_WRAP)),
                 Charsets.UTF_8
             )
-        } catch (_: Exception) {
-            delete()
-            null
         }
     }
 
@@ -52,7 +52,7 @@ internal class AndroidKeystoreRefreshTokenVault(context: Context) : RefreshToken
                 KEY_CIPHERTEXT,
                 Base64.encodeToString(ciphertext, Base64.NO_WRAP)
             )
-            .apply()
+            .commit().also { check(it) { "Unable to persist refresh session" } }
     }
 
     override fun delete() {
