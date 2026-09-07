@@ -1,3 +1,5 @@
+import type { TimerTypes } from '@pomi/shared';
+
 export type AccentColorType = 'indigo' | 'green' | 'purple' | 'default';
 
 interface ColorSet {
@@ -59,9 +61,8 @@ export const APP_COLORS = {
   },
 };
 
-export const HEX_COLORS: Record<AccentColorType, string> = {
-  indigo: '#dba26d',
-  green: '#94ae72',
-  purple: '#9fb273',
-  default: '#303735',
-};
+export function getTimerAccentColor(timerType: TimerTypes): string {
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue(`--timer-${timerType}-color`)
+    .trim();
+}

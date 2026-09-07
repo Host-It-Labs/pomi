@@ -64,31 +64,6 @@ export default defineConfig(({ mode }) => {
     envPrefix: 'VITE_',
     build: {
       sourcemap: uploadSentrySourceMaps ? 'hidden' : false,
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (
-              id.includes('/node_modules/react/') ||
-              id.includes('/node_modules/react-dom/')
-            ) {
-              return 'react';
-            }
-            if (
-              [
-                'framer-motion',
-                'clsx',
-                'react-icons',
-                'zustand',
-                'socket.io-client',
-                'uuid',
-                '@sentry/react',
-              ].some(dependency => id.includes(`/node_modules/${dependency}/`))
-            ) {
-              return 'vendor';
-            }
-          },
-        },
-      },
     },
     resolve: {
       alias: {

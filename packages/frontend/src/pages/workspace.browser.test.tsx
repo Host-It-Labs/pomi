@@ -23,6 +23,9 @@ import { useAuthStore } from '../stores/authStore';
 import { useAssistantStore } from '../stores/assistantStore';
 import { apiClient } from '../utils/apiClient';
 import { setLanguage } from '../i18n';
+import { AppTheme } from '../components/AppTheme';
+import { getTimerAccentColor } from '../config/colors';
+import { ToastProvider } from '../components/toast/ToastContext';
 
 vi.mock('../utils/userActionQueue', { spy: true });
 vi.mock('../utils/desktopNotificationHandler', () => ({
@@ -116,6 +119,11 @@ beforeEach(async () => {
     expanded: true,
     activeTab: 'timer',
     taskCreateRequested: false,
+    taskMode: 'general',
+    taskQuickCreateFocusRequest: 0,
+    taskSearchFocusRequest: 0,
+    intentionPickerOpenRequest: 0,
+    taskItemRevealRequest: null,
   });
   usePreferencesStore.setState({
     preferences,
@@ -179,10 +187,247 @@ afterEach(() => {
 
 function KeyboardWorkspace() {
   useKeyboardShortcuts();
-  return <Timer useTallSafeAreaFallback={false} />;
+  const expanded = useUiStore.use.expanded();
+  return expanded ? (
+    <Timer useTallSafeAreaFallback={false} />
+  ) : (
+    <MinimizedTimer />
+  );
 }
 
 describe('Unified workspace', () => {
+  it('explains an off-type View request without revealing the task or changing the timer', async () => {
+    useTasksStore.setState({
+      tasks: [
+        {
+          ...tasks[0],
+          id: 'break-task',
+          title: 'Hydrate during Break',
+          timerType: 'break',
+        },
+      ],
+    });
+    root.render(
+      <ToastProvider>
+        <Timer useTallSafeAreaFallback={false} />
+      </ToastProvider>
+    );
+    await vi.waitFor(() =>
+      expect(host.querySelector('.workspace-filter-summary')).not.toBeNull()
+    );
+    useUiStore
+      .getState()
+      .requestTaskItemReveal({ kind: 'task', id: 'break-task' });
+    await expect
+      .element(
+        page.getByText('This task is available during Break.', { exact: true })
+      )
+      .toBeVisible();
+    expect(host.querySelectorAll('[data-testid="task-row"]')).toHaveLength(0);
+    expect(useTimerStore.getState().timer?.type).toBe('work');
+    useTimerStore.setState({
+      timer: { ...useTimerStore.getState().timer!, type: 'break' },
+    });
+    useUiStore
+      .getState()
+      .requestTaskItemReveal({ kind: 'task', id: 'break-task' });
+    await vi.waitFor(() =>
+      expect(
+        host.querySelector('[data-testid="task-row"]')?.textContent
+      ).toContain('Hydrate during Break')
+    );
+  });
+  it('repeats expansion, quick-create, search and destination shortcuts from focused inputs', async () => {
+    useUiStore.setState({ taskQuickCreateFocusRequest: 1 });
+    root.render(<KeyboardWorkspace />);
+    const press = (code: string) => {
+      (document.activeElement ?? document.body).dispatchEvent(
+        new KeyboardEvent('keydown', {
+          code,
+          key: code === 'Escape' ? 'Escape' : code.slice(3).toLowerCase(),
+          metaKey: code !== 'Escape',
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    };
+    await vi.waitFor(() =>
+      expect(host.querySelector('.quick-create-input input')).not.toBeNull()
+    );
+    for (const expanded of [false, true, false, true]) {
+      press('KeyE');
+      await vi.waitFor(() =>
+        expect(useUiStore.getState().expanded).toBe(expanded)
+      );
+      if (expanded)
+        await vi.waitFor(() =>
+          expect(document.activeElement).toBe(
+            host.querySelector('.quick-create-input input')
+          )
+        );
+    }
+    for (const code of ['KeyN', 'KeyT']) {
+      const input = host.querySelector<HTMLInputElement>(
+        '.quick-create-input input'
+      )!;
+      input.focus();
+      press(code);
+      await vi.waitFor(() => expect(document.activeElement).not.toBe(input));
+      press(code);
+      await vi.waitFor(() => expect(document.activeElement).toBe(input));
+      press('Escape');
+      expect(document.activeElement).not.toBe(input);
+    }
+    const search = host.querySelector<HTMLInputElement>(
+      '[data-testid="task-search-field"] input'
+    )!;
+    press('KeyK');
+    await vi.waitFor(() => expect(document.activeElement).toBe(search));
+    press('KeyK');
+    await vi.waitFor(() => expect(document.activeElement).not.toBe(search));
+    press('KeyK');
+    await vi.waitFor(() => expect(document.activeElement).toBe(search));
+    press('Escape');
+    expect(document.activeElement).not.toBe(search);
+    const filter = host.querySelector(
+      '[data-testid="task-intention-filter-trigger"]'
+    )!;
+    // Escape must work before an animation frame has a chance to move focus.
+    const animationFrame = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockReturnValue(0);
+    for (const expanded of ['true', 'false', 'true']) {
+      press('KeyI');
+      await vi.waitFor(() =>
+        expect(filter.getAttribute('aria-expanded')).toBe(expanded)
+      );
+    }
+    press('Escape');
+    await vi.waitFor(() =>
+      expect(filter.getAttribute('aria-expanded')).toBe('false')
+    );
+    animationFrame.mockRestore();
+    usePreferencesStore.setState({
+      preferences: { ...preferences, tasksShowInMinimizedTimer: true },
+    });
+    press('KeyE');
+    await vi.waitFor(() => expect(useUiStore.getState().expanded).toBe(false));
+    press('KeyK');
+    const minimizedSearch = page.getByRole('searchbox');
+    await expect.element(minimizedSearch).toHaveFocus();
+    await minimizedSearch.fill('Read');
+    press('KeyK');
+    await expect.element(minimizedSearch).not.toHaveFocus();
+    await expect.element(minimizedSearch).toHaveValue('Read');
+    press('KeyK');
+    await expect.element(minimizedSearch).toHaveFocus();
+    press('Escape');
+    await expect.element(minimizedSearch).not.toHaveFocus();
+    press('KeyK');
+    await expect.element(minimizedSearch).toHaveFocus();
+  });
+  it('shows only the current timer type even in All mode and search', async () => {
+    useUiStore.setState({ taskMode: 'general' });
+    useTasksStore.setState({
+      tasks: ['work', 'break', 'longBreak'].map(type => ({
+        ...tasks[0],
+        id: `type-${type}`,
+        title: `Only ${type}`,
+        timerType: type,
+      })) as Task[],
+    });
+    root.render(<KeyboardWorkspace />);
+    for (const type of ['work', 'break', 'longBreak', 'work'] as const) {
+      useTimerStore.setState({
+        timer: { ...useTimerStore.getState().timer!, type },
+      });
+      await vi.waitFor(() => {
+        const rows = host.querySelectorAll('[data-testid="task-row"]');
+        expect(rows).toHaveLength(1);
+        expect(rows[0].textContent).toContain(`Only ${type}`);
+      });
+      await page
+        .getByTestId('task-search-field')
+        .getByRole('textbox')
+        .fill('Only');
+      expect(host.querySelectorAll('[data-testid="task-row"]')).toHaveLength(1);
+    }
+  });
+  it('closes Sort and Filter with Escape and restores their trigger focus', async () => {
+    root.render(<Timer useTallSafeAreaFallback={false} />);
+    await vi.waitFor(() =>
+      expect(host.querySelector('.workspace-filter-summary')).not.toBeNull()
+    );
+    for (const label of ['Default task order', 'Task filters']) {
+      const trigger = page.getByRole('button', { name: label, exact: true });
+      await trigger.click();
+      await expect.element(trigger).toHaveAttribute('aria-expanded', 'true');
+      document.body.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Escape',
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      await expect.element(trigger).toHaveAttribute('aria-expanded', 'false');
+      await expect.element(trigger).toHaveFocus();
+    }
+  });
+  it.each(['work', 'break', 'longBreak'] as const)(
+    'uses the %s app accent for the tray',
+    async type => {
+      useTimerStore.setState({
+        timer: { ...useTimerStore.getState().timer!, type },
+      });
+      root.render(
+        <>
+          <AppTheme />
+          <span className="text-indigo-400">Accent</span>
+        </>
+      );
+      await vi.waitFor(() =>
+        expect(document.documentElement.dataset.timerAccent).toBe(type)
+      );
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = getTimerAccentColor(type);
+      const trayColor = context.fillStyle;
+      context.fillStyle = getComputedStyle(host.querySelector('span')!).color;
+      expect(context.fillStyle).toBe(trayColor);
+    }
+  );
+  it.each([1, 2, 3, 4])(
+    'centers %i favorite destinations between the pager and Reset',
+    async count => {
+      vi.spyOn(apiClient.intentions, 'list').mockResolvedValue({
+        status: 200,
+        body: intentions.map((item, index) => ({
+          ...item,
+          isFavorite: index < count,
+        })),
+      } as never);
+      root.render(<Timer useTallSafeAreaFallback={false} />);
+      await vi.waitFor(() =>
+        expect(
+          host.querySelectorAll('.favorite-destination-items button')
+        ).toHaveLength(count)
+      );
+      const buttons = host.querySelectorAll(
+        '.favorite-destination-items button'
+      );
+      const left = buttons[0].getBoundingClientRect().left;
+      const right = buttons[count - 1].getBoundingClientRect().right;
+      const pager = host
+        .querySelector('.workspace-pagination')!
+        .getBoundingClientRect();
+      const reset = host
+        .querySelector('.workspace-filter-actions > button')!
+        .getBoundingClientRect();
+      expect(
+        Math.abs((left + right) / 2 - (pager.right + reset.left) / 2)
+      ).toBeLessThan(2);
+    }
+  );
   it('fits six intentions and five two-line tasks below a centered timer', async () => {
     root.render(<Timer useTallSafeAreaFallback={false} />);
     await vi.waitFor(() =>
@@ -319,6 +564,11 @@ describe('Unified workspace', () => {
     await vi.waitFor(() =>
       expect(host.querySelector('#settings-search')).not.toBeNull()
     );
+    expect(
+      parseFloat(
+        getComputedStyle(host.querySelector('.max-w-5xl')!).paddingBottom
+      )
+    ).toBe(24);
     await page.screenshot({
       path: '.scratch/workspace-verification/settings-desktop.png',
     });

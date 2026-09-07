@@ -1,9 +1,9 @@
-import { TIMER_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
+import { TIMER_STATUSES } from '@pomi/shared/src/constants';
 import { Menu } from '@tauri-apps/api/menu';
 import { TrayIcon } from '@tauri-apps/api/tray';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useEffect, useRef, useState } from 'react';
-import { HEX_COLORS } from '../config/colors';
+import { getTimerAccentColor } from '../config/colors';
 import { useI18n } from '../i18n';
 import { useTimerStore } from '../stores/timerStore';
 import { generateMiniTimerIcon } from '../utils/generateMiniTimerIcon';
@@ -106,12 +106,7 @@ export function SystemTray() {
 
       const progress = remainingTime / timer.duration;
 
-      const color =
-        timer.type === TIMER_TYPES.WORK
-          ? HEX_COLORS.indigo
-          : timer.type === TIMER_TYPES.LONG_BREAK
-            ? HEX_COLORS.purple
-            : HEX_COLORS.green;
+      const color = getTimerAccentColor(timer.type);
 
       const iconData = generateMiniTimerIcon(
         progress,

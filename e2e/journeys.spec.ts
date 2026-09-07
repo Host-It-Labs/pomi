@@ -614,6 +614,7 @@ test('11. produces real Timer and Task activity for statistics and work-Timer lo
   });
   const task = await createTask(page, {
     title: `${deterministicUsername(testInfo, 'stats')} task`,
+    timerType: 'break',
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await new TestHelpers(page).expandWindow();

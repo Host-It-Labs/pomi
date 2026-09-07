@@ -190,13 +190,7 @@ export function IntentionAssignmentPicker({
 
     setSearchText('');
     if (!isMobile) {
-      requestAnimationFrame(() => {
-        if (searchInputRef.current) {
-          searchInputRef.current.focus();
-          return;
-        }
-        triggerRef.current?.focus();
-      });
+      (searchInputRef.current ?? triggerRef.current)?.focus();
     }
 
     const selectedIndex = Math.max(

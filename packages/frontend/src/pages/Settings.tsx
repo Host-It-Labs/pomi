@@ -887,7 +887,14 @@ function SettingsContent() {
 
   return (
     <PageShell>
-      <PageContainer size="lg" className={isDesktop ? 'pb-28 pt-6' : 'pb-28'}>
+      <PageContainer
+        size="lg"
+        className={
+          isDesktop
+            ? 'pb-6 pt-6'
+            : 'pb-[max(1.5rem,env(safe-area-inset-bottom))]'
+        }
+      >
         <div className="space-y-3">
           {isDesktop && (
             <div

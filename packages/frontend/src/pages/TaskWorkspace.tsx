@@ -1,3 +1,5 @@
+import { toggleInputFocus } from '../utils/toggleInputFocus';
+import { useDismissibleDropdown } from '../hooks/useDismissibleDropdown';
 import { getListWorkspacePages } from '../utils/listWorkspacePages';
 import { FavoriteDestinationShortcuts } from '../components/tasks/FavoriteDestinationShortcuts';
 import { getSelectedTimerIntentions } from '../utils/timerIntentions';
@@ -324,8 +326,7 @@ export function TaskWorkspace() {
     }
     lastTaskSearchFocusRequestRef.current = taskSearchFocusRequest;
     requestAnimationFrame(() => {
-      taskSearchInputRef.current?.focus();
-      taskSearchInputRef.current?.select();
+      toggleInputFocus(taskSearchInputRef.current);
     });
   }, [taskSearchFocusRequest]);
 
@@ -417,7 +418,7 @@ export function TaskWorkspace() {
   }, [selectedFilterOption, taskMode, timer]);
   const taskFormDefaultTimerType =
     selectedFilterOption?.intention.type ??
-    (taskMode === 'intention' ? timer?.type : undefined) ??
+    timer?.type ??
     propertyFilters.timerTypes[0] ??
     TIMER_TYPES.WORK;
 
@@ -795,12 +796,13 @@ export function TaskWorkspace() {
       buildTaskView({
         tasks,
         mode: 'general',
-        filterTimerType: false,
+        filterTimerType: true,
+        timer,
         hideVacationCovered,
         today: orderingClock.today,
         currentTime: orderingClock.currentTime,
       }),
-    [hideVacationCovered, orderingClock, tasks]
+    [hideVacationCovered, orderingClock, tasks, timer]
   );
   const resetUpdatedTaskFilters = useCallback(() => {
     setTaskSearchQuery('');
@@ -809,7 +811,29 @@ export function TaskWorkspace() {
     setSelectedListId(null);
     setPropertyFilters(EMPTY_TASK_PROPERTY_FILTERS);
   }, [setTaskMode]);
+  const canRevealTask = useCallback(
+    (taskId: string) => {
+      const task = useTasksStore
+        .getState()
+        .tasks.find(item => item.id === taskId);
+      const activeType =
+        useTimerStore.getState().timer?.type ?? TIMER_TYPES.WORK;
+      if (task && task.timerType !== activeType) {
+        showToastFromStore(
+          t('task.availableDuring', {
+            type: t(`common.${task.timerType}`),
+          }),
+          'info',
+          5000
+        );
+        return false;
+      }
+      return true;
+    },
+    [t]
+  );
   const revealUpdatedTask = useUpdatedTaskReveal({
+    canRevealTask,
     resetFilters: resetUpdatedTaskFilters,
     setDestinationTaskId: setUpdatedTaskDestinationId,
   });
@@ -1642,6 +1666,7 @@ function TaskSortDropdown({
   onChange: (mode: TaskSortMode) => void;
 }) {
   const { t } = useI18n();
+  const dropdownRef = useDismissibleDropdown(isOpen, onOpenChange);
   const options: Array<{ mode: TaskSortMode; label: string }> = [
     { mode: 'default', label: t('task.sortDefault') },
     { mode: 'created-desc', label: t('task.sortNewest') },
@@ -1655,7 +1680,7 @@ function TaskSortDropdown({
         : t('task.sortDefaultOrder');
 
   return (
-    <div className="relative">
+    <div ref={dropdownRef} className="relative">
       <IconButton
         variant={mode === 'default' ? 'secondary' : 'primary'}
         size="sm"
@@ -1768,7 +1793,7 @@ export function TaskIntentionFilterDropdown({
       return;
     }
     lastOpenRequestRef.current = openRequest;
-    setIsOpen(true);
+    setIsOpen(open => !open);
   }, [openRequest]);
 
   const handlePickerChange = (change: IntentionAssignmentPickerChange) => {
