@@ -8,7 +8,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.io.File
-import java.util.Locale
 
 data class WatchActionLifecycle(
     val id: String,
@@ -23,7 +22,7 @@ data class WatchActionLifecycle(
 
 data class WatchLoginResult(
     val token: String,
-    val refreshToken: String?,
+    val refreshToken: String,
     val language: String?
 )
 
@@ -33,32 +32,14 @@ class WatchApiClient(private val sessionStore: WatchSessionStore) {
 
     fun login(backendUrl: String, username: String, password: String): WatchLoginResult {
         val baseUrl = sessionStore.normalizeBackendUrl(backendUrl)
-        val response = try {
-            request(
-                baseUrl = baseUrl,
-                path = "/sessions",
-                method = "POST",
-                token = null,
-                body = loginBody(username, password)
-            )
-        } catch (error: WatchApiException) {
-            if (!shouldRetryLoginWithoutLanguage(error)) throw error
-            // Older self-hosted servers reject unknown request properties with
-            // a 400. Retry once without language to preserve their login flow.
-            request(
-                baseUrl = baseUrl,
-                path = "/sessions",
-                method = "POST",
-                token = null,
-                body = legacyLoginBody(username, password)
-            )
-        }
-        val result = JSONObject(response)
-        return WatchLoginResult(
-            token = result.getString("token"),
-            refreshToken = result.optString("refreshToken").ifBlank { null },
-            language = result.optString("language").ifBlank { null }
+        val response = request(
+            baseUrl = baseUrl,
+            path = "/sessions",
+            method = "POST",
+            token = null,
+            body = loginBody(username, password)
         )
+        return parseWatchLoginResponse(JSONObject(response))
     }
 
     private fun loginBody(username: String, password: String): String = JSONObject()
@@ -68,11 +49,6 @@ class WatchApiClient(private val sessionStore: WatchSessionStore) {
         // The backend uses this only for new accounts; existing accounts
         // return their authoritative preference in the response.
         .put("language", sessionStore.languageTag)
-        .toString()
-
-    private fun legacyLoginBody(username: String, password: String): String = JSONObject()
-        .put("username", username)
-        .put("password", password)
         .toString()
 
     fun getStatus(
@@ -399,20 +375,11 @@ class WatchApiClient(private val sessionStore: WatchSessionStore) {
 
 class WatchApiException(val code: Int, message: String) : Exception(message)
 
-internal fun shouldRetryLoginWithoutLanguage(error: WatchApiException): Boolean {
-    if (error.code != 400) return false
-    val message = error.message?.lowercase(Locale.ROOT) ?: return false
-    if (!message.contains("language")) return false
-    return listOf(
-        "unknown",
-        "unrecognized",
-        "unrecognised",
-        "unexpected",
-        "should not exist",
-        "not allowed",
-        "extraneous",
-        "additional property"
-    ).any(message::contains)
+internal fun parseWatchLoginResponse(result: JSONObject): WatchLoginResult {
+    val token = result.getString("token")
+    val refreshToken = result.getString("refreshToken")
+    require(token.isNotBlank() && refreshToken.isNotBlank()) { "Missing session credentials" }
+    return WatchLoginResult(token, refreshToken, result.optString("language").ifBlank { null })
 }
 
 internal fun PendingWatchAction.toGatewayRequest(): JSONObject {

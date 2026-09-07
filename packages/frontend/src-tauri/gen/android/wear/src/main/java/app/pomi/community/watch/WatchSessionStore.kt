@@ -101,16 +101,13 @@ class WatchSessionStore private constructor(
         backendUrl: String,
         username: String,
         token: String,
-        refreshToken: String?,
+        refreshToken: String,
         accountLanguage: String?
     ) {
         val nextLanguage = WatchLanguages.normalizeTag(accountLanguage ?: languageTag)
         val normalizedBackend = normalizeBackendUrl(backendUrl)
-        if (refreshToken.isNullOrBlank()) {
-            refreshTokenVault.delete()
-        } else {
-            refreshTokenVault.write(refreshToken)
-        }
+        require(refreshToken.isNotBlank()) { "Missing refresh session" }
+        refreshTokenVault.write(refreshToken)
         accessTokenInMemory = token
         preferences.edit()
             .putString(KEY_BACKEND_URL, normalizedBackend)
