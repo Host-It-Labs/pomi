@@ -5,6 +5,8 @@ if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = `postgres://user:password@localhost:${dbPort}/pomodoro`;
 }
 
+// Android uses the persistent Keystore vault for this fixture too. Disable
+// dev auto-login after signing in as copyme to exercise cold-start restoration.
 const username = process.env.POMI_COPYME_USERNAME || 'copyme';
 const password = process.env.POMI_COPYME_PASSWORD || username;
 const fixtureName = process.env.POMI_COPYME_FIXTURE_NAME || 'copyme';
