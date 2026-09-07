@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { FaCheck, FaChevronDown } from 'react-icons/fa';
 import { useI18n } from '../../i18n';
+import { hasOpenModal } from '../../utils/modalRegistry';
 import { isMobile } from '../../utils/osUtils';
 import { IntentionEmojiPair } from '../ui/IntentionEmojiPair';
 import { KeyboardShortcut } from '../ui/KeyboardShortcut';
@@ -312,9 +313,25 @@ export function IntentionAssignmentPicker({
   const closePicker = () => {
     onOpenChange(false);
     if (returnFocusOnClose) {
-      requestAnimationFrame(() => triggerRef.current?.focus());
+      triggerRef.current?.focus();
     }
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (hasOpenModal() && !rootRef.current?.contains(event.target as Node))
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      searchInputRef.current?.blur();
+      onOpenChange(false);
+      if (returnFocusOnClose) triggerRef.current?.focus();
+    };
+    window.addEventListener('keydown', handleEscape, true);
+    return () => window.removeEventListener('keydown', handleEscape, true);
+  }, [isOpen, onOpenChange, returnFocusOnClose]);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (!isOpen) {

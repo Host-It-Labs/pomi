@@ -272,7 +272,7 @@ describe('Unified workspace', () => {
       )!;
       input.focus();
       press(code);
-      await vi.waitFor(() => expect(document.activeElement).not.toBe(input));
+      await vi.waitFor(() => expect(document.activeElement).toBe(input));
       press(code);
       await vi.waitFor(() => expect(document.activeElement).toBe(input));
       press('Escape');
@@ -284,7 +284,7 @@ describe('Unified workspace', () => {
     press('KeyK');
     await vi.waitFor(() => expect(document.activeElement).toBe(search));
     press('KeyK');
-    await vi.waitFor(() => expect(document.activeElement).not.toBe(search));
+    await vi.waitFor(() => expect(document.activeElement).toBe(search));
     press('KeyK');
     await vi.waitFor(() => expect(document.activeElement).toBe(search));
     press('Escape');
@@ -296,7 +296,7 @@ describe('Unified workspace', () => {
     const animationFrame = vi
       .spyOn(window, 'requestAnimationFrame')
       .mockReturnValue(0);
-    for (const expanded of ['true', 'false', 'true']) {
+    for (const expanded of ['true', 'true', 'true']) {
       press('KeyI');
       await vi.waitFor(() =>
         expect(filter.getAttribute('aria-expanded')).toBe(expanded)
@@ -317,7 +317,7 @@ describe('Unified workspace', () => {
     await expect.element(minimizedSearch).toHaveFocus();
     await minimizedSearch.fill('Read');
     press('KeyK');
-    await expect.element(minimizedSearch).not.toHaveFocus();
+    await expect.element(minimizedSearch).toHaveFocus();
     await expect.element(minimizedSearch).toHaveValue('Read');
     press('KeyK');
     await expect.element(minimizedSearch).toHaveFocus();
@@ -325,6 +325,68 @@ describe('Unified workspace', () => {
     await expect.element(minimizedSearch).not.toHaveFocus();
     press('KeyK');
     await expect.element(minimizedSearch).toHaveFocus();
+  });
+  it('allows modified shortcuts and task paging from inputs while preserving typing and modal isolation', async () => {
+    const resetTimer = vi.fn();
+    const toggleTimer = vi.fn();
+    useTimerStore.setState({ resetTimer, toggleTimer });
+    root.render(<KeyboardWorkspace />);
+    await vi.waitFor(() =>
+      expect(host.querySelector('.quick-create-input input')).not.toBeNull()
+    );
+    const input = host.querySelector<HTMLInputElement>(
+      '.quick-create-input input'
+    )!;
+    input.focus();
+    const press = (key: string, code: string, metaKey: boolean) => {
+      const event = new KeyboardEvent('keydown', {
+        key,
+        code,
+        metaKey,
+        bubbles: true,
+        cancelable: true,
+      });
+      (document.activeElement ?? document.body).dispatchEvent(event);
+      return event;
+    };
+    expect(press(' ', 'Space', false).defaultPrevented).toBe(false);
+    expect(toggleTimer).not.toHaveBeenCalled();
+    press('r', 'KeyR', true);
+    expect(resetTimer).toHaveBeenCalledOnce();
+    press('ArrowDown', 'ArrowDown', false);
+    await vi.waitFor(() =>
+      expect(host.querySelectorAll('[data-testid="task-row"]')).toHaveLength(3)
+    );
+    expect(document.activeElement).toBe(input);
+    press('ArrowUp', 'ArrowUp', false);
+    await vi.waitFor(() =>
+      expect(host.querySelectorAll('[data-testid="task-row"]')).toHaveLength(5)
+    );
+    root.render(
+      <>
+        <KeyboardWorkspace />
+        <TaskFormModal
+          isOpen
+          task={null}
+          intentions={intentions}
+          lists={[]}
+          preferences={preferences}
+          timer={null}
+          taskMode="general"
+          onClose={vi.fn()}
+          onCreate={vi.fn()}
+          onUpdate={vi.fn()}
+          onArchive={vi.fn()}
+          onCreateListItem={vi.fn()}
+          onConvertToListItem={vi.fn()}
+        />
+      </>
+    );
+    await vi.waitFor(() =>
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+    );
+    press('r', 'KeyR', true);
+    expect(resetTimer).toHaveBeenCalledOnce();
   });
   it('shows only the current timer type even in All mode and search', async () => {
     useUiStore.setState({ taskMode: 'general' });

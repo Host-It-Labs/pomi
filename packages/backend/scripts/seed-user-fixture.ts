@@ -554,6 +554,10 @@ const SEED_TASK_CATALOG: Array<{
     intentionTitle: 'Social',
     subIntentionTitle: 'Family',
   },
+  {
+    title: 'Try task shortcuts while drafting a new task',
+    intentionTitle: 'Code',
+  },
   { title: 'Schedule the dentist appointment', intentionTitle: 'Calls' },
   { title: 'Return the library books', intentionTitle: 'Errands' },
   { title: 'Reconcile the monthly budget', intentionTitle: 'Budget' },

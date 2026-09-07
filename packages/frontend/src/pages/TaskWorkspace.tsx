@@ -1,4 +1,4 @@
-import { toggleInputFocus } from '../utils/toggleInputFocus';
+import { focusInput } from '../utils/focusInput';
 import { useDismissibleDropdown } from '../hooks/useDismissibleDropdown';
 import { getListWorkspacePages } from '../utils/listWorkspacePages';
 import { FavoriteDestinationShortcuts } from '../components/tasks/FavoriteDestinationShortcuts';
@@ -326,7 +326,7 @@ export function TaskWorkspace() {
     }
     lastTaskSearchFocusRequestRef.current = taskSearchFocusRequest;
     requestAnimationFrame(() => {
-      toggleInputFocus(taskSearchInputRef.current);
+      focusInput(taskSearchInputRef.current);
     });
   }, [taskSearchFocusRequest]);
 
@@ -1134,9 +1134,7 @@ export function TaskWorkspace() {
         event.ctrlKey ||
         event.altKey ||
         event.shiftKey ||
-        target.closest(
-          'input, textarea, select, [contenteditable="true"], [role="menu"], [role="listbox"]'
-        )
+        target.closest('select, [role="menu"], [role="listbox"]')
       )
         return;
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -1793,7 +1791,7 @@ export function TaskIntentionFilterDropdown({
       return;
     }
     lastOpenRequestRef.current = openRequest;
-    setIsOpen(open => !open);
+    setIsOpen(true);
   }, [openRequest]);
 
   const handlePickerChange = (change: IntentionAssignmentPickerChange) => {

@@ -270,7 +270,12 @@ export function useKeyboardShortcuts() {
           event.code === 'KeyO' ||
           event.code === 'KeyT' ||
           event.code === 'KeyN');
-      if (isTypingInField(event) && !isSurfaceNavigationShortcut) return;
+      if (
+        isTypingInField(event) &&
+        !(activeTab === 'timer' && isMod(event)) &&
+        !isSurfaceNavigationShortcut
+      )
+        return;
       if (hasOpenModal()) return;
       if (advancedSkipModalOpen || timerExtensionModalOpen) return;
       if (

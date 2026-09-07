@@ -573,7 +573,10 @@ export function AssistantLauncher() {
 
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) {
+      if (
+        activeTab !== 'timer' &&
+        (tag === 'input' || tag === 'textarea' || target?.isContentEditable)
+      ) {
         return;
       }
 
@@ -586,6 +589,7 @@ export function AssistantLauncher() {
   }, [
     preferences?.keyboardShortcuts,
     status?.assistantEnabled,
+    activeTab,
     toggleAssistantRecording,
   ]);
 
