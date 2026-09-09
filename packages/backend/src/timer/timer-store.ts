@@ -780,6 +780,7 @@ export interface TimerHistoryEntry {
   label: string;
   logEffect?: 'added' | 'removed' | 'restored' | 'updated';
   statistics?: TimerHistoryStatisticSnapshot[];
+  completionTimerId?: string;
 }
 
 export interface TimerUserDataSnapshot {

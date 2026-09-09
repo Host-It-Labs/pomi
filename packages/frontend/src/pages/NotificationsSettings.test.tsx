@@ -55,6 +55,23 @@ describe('macOS notification settings', () => {
     notification.openMacNotificationSettings.mockResolvedValue(true);
   });
 
+  it('persists the in-app speech preference independently', async () => {
+    const user = userEvent.setup();
+    const updatePreference = vi.fn();
+    render(
+      <NotificationsSettings
+        preferences={{ ...preferences, speakToastMessages: true }}
+        updatePreference={updatePreference}
+      />
+    );
+
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Speak in-app messages' })
+    );
+
+    expect(updatePreference).toHaveBeenCalledWith('speakToastMessages', false);
+  });
+
   it('offers a native settings link when macOS notifications are not granted', async () => {
     const user = userEvent.setup();
     render(

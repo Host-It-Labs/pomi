@@ -152,6 +152,7 @@ const preferencesSchema = z.object({
   autoStartWork: z.boolean().optional(),
   autoStartLongBreak: z.boolean().optional(),
   notifications: z.boolean(),
+  speakToastMessages: z.boolean().default(true),
   notifyOnWorkComplete: z.boolean(),
   notifyOnBreakComplete: z.boolean(),
   notifyBeforeWorkComplete: z.boolean(),

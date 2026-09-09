@@ -35,6 +35,12 @@ export interface TimerContinuationPlanV1 extends TimerContinuationPlanBase {
 }
 
 export interface TimerContinuationPlanV2 extends TimerContinuationPlanBase {
+  completionHistoryBefore: {
+    sessionState: TimerSessionState | null;
+    lastCompletionTimestamp: number | null;
+    idleDetected: boolean;
+    extensionState: TimerExtensionState | null;
+  } | null;
   idleDetection: {
     detectionId: string;
     checkAt: number;
@@ -152,6 +158,7 @@ export function buildTimerContinuationPlan(
     lastCompletionTimestamp,
     clearIdleDetected: shouldRecordCompletion,
     clearHistory: true,
+    completionHistoryBefore: null,
     idleDetection:
       shouldRecordCompletion &&
       transition.type !== TIMER_TYPES.LONG_BREAK &&
@@ -197,7 +204,11 @@ export function parseTimerContinuationPlan(
 ): TimerContinuationPlanV2 {
   if (version === 1) {
     const legacy = parseTimerContinuationPlanV1(value);
-    return { ...legacy, idleDetection: null };
+    return {
+      ...legacy,
+      completionHistoryBefore: null,
+      idleDetection: null,
+    };
   }
   if (version !== TIMER_CONTINUATION_PLAN_VERSION) {
     throw new UnprocessableEntityException(
@@ -215,6 +226,7 @@ export function parseTimerContinuationPlanV1(
   }
   const normalized = parseTimerContinuationPlanV2({
     ...value,
+    completionHistoryBefore: null,
     idleDetection: null,
   });
   return { ...normalized, idleDetection: value.idleDetection };
@@ -225,7 +237,9 @@ export function upgradeTimerContinuationPlanV1(
   preferences: Preferences,
   identities: TimerContinuationIdleIdentities
 ): TimerContinuationPlanV2 {
-  if (plan.idleDetection === null) return { ...plan, idleDetection: null };
+  if (plan.idleDetection === null) {
+    return { ...plan, completionHistoryBefore: null, idleDetection: null };
+  }
   if (
     plan.lastCompletionTimestamp.kind !== 'set' ||
     !plan.nextTimer.userId ||
@@ -301,6 +315,7 @@ function parseTimerContinuationPlanV2(value: unknown): TimerContinuationPlanV2 {
       typeof nextTimer.isAutoStarted !== 'boolean') ||
     (nextTimer.hasConsumedFirstIntentionReset !== undefined &&
       typeof nextTimer.hasConsumedFirstIntentionReset !== 'boolean') ||
+    !isCompletionHistoryBefore(value.completionHistoryBefore ?? null) ||
     !isExtensionCandidate(nextTimer.extensionCandidate) ||
     typeof value.clearIdleDetected !== 'boolean' ||
     value.clearHistory !== true ||
@@ -350,8 +365,28 @@ function parseTimerContinuationPlanV2(value: unknown): TimerContinuationPlanV2 {
     extensionExpirationAt: value.extensionExpirationAt,
     clearIdleDetected: value.clearIdleDetected,
     clearHistory: true,
+    completionHistoryBefore: (value.completionHistoryBefore ??
+      null) as NonNullable<
+      TimerContinuationPlanV2['completionHistoryBefore']
+    > | null,
     idleDetection: value.idleDetection,
   };
+}
+
+function isCompletionHistoryBefore(
+  value: unknown
+): value is NonNullable<
+  TimerContinuationPlanV2['completionHistoryBefore']
+> | null {
+  return (
+    value === null ||
+    (isRecord(value) &&
+      (value.sessionState === null || isSessionState(value.sessionState)) &&
+      (value.lastCompletionTimestamp === null ||
+        isSafeNonNegativeInteger(value.lastCompletionTimestamp)) &&
+      typeof value.idleDetected === 'boolean' &&
+      (value.extensionState === null || isExtensionState(value.extensionState)))
+  );
 }
 
 function parseMutation<T>(

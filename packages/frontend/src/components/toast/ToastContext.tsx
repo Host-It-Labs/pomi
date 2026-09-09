@@ -3,10 +3,14 @@ import {
   ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { usePreferencesStore } from '../../stores/preferencesStore';
+import { createToastSpeechAdapter } from '../../utils/toastSpeech';
 import { ToastContainer, ToastType } from './Toast';
 
 interface Toast {
@@ -56,6 +60,36 @@ export function showToastFromStore(
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<Toast | null>(null);
+  const preferences = usePreferencesStore.use.preferences();
+  const speech = useRef(createToastSpeechAdapter());
+
+  useEffect(() => {
+    if (
+      !toast ||
+      preferences?.speakToastMessages === false ||
+      document.visibilityState !== 'visible'
+    ) {
+      speech.current.cancel();
+      return;
+    }
+
+    speech.current.speak(
+      toast.message,
+      preferences?.language || document.documentElement.lang || 'en'
+    );
+    return () => speech.current.cancel();
+  }, [preferences?.language, preferences?.speakToastMessages, toast]);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') speech.current.cancel();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      speech.current.cancel();
+    };
+  }, []);
 
   const showToast = useCallback(
     (

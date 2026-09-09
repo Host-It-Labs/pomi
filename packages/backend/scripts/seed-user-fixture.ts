@@ -200,6 +200,7 @@ function buildFixturePreferences(userId: string) {
     autoStartWork: true,
     autoStartLongBreak: false,
     notifications: false,
+    speakToastMessages: true,
     notifyOnWorkComplete: true,
     notifyOnBreakComplete: true,
     notifyBeforeWorkComplete: true,

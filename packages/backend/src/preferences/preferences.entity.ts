@@ -55,6 +55,9 @@ export class Preferences {
   notifications: boolean;
 
   @Column({ default: true })
+  speakToastMessages: boolean;
+
+  @Column({ default: true })
   notifyOnWorkComplete: boolean;
 
   @Column({ default: true })

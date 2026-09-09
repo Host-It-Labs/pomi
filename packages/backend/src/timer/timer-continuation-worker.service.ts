@@ -182,6 +182,12 @@ export class TimerContinuationWorkerService
           current.scheduleRevision === plan.nextTimer.scheduleRevision
         ) {
           await this.timerService.activateTimerContinuation(plan);
+          if (payload.timer.isAutoStarted) {
+            await this.timerService.recordDurableAutoStartCompletionHistory(
+              payload.timer,
+              plan.completionHistoryBefore
+            );
+          }
         }
       }
       if (ownershipLost || !(await this.renewOwnership(job, userLockToken))) {
@@ -293,6 +299,12 @@ export class TimerContinuationWorkerService
       randomUUID(),
       randomUUID()
     );
+    if (payload.timer.isAutoStarted) {
+      plan.completionHistoryBefore =
+        await this.timerService.captureAutoStartCompletionHistoryBefore(
+          payload.timer
+        );
+    }
     const stored = await this.outbox.storeClaimedTimerContinuationPlan(
       job.timerId,
       job.claimToken,

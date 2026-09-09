@@ -238,6 +238,15 @@ export const NotificationsSettings = ({
   if (!isDesktop && !isIos && !hasGivenPermission) {
     return (
       <>
+        <SettingsControlGroup title={t('intention.essentials')}>
+          <ToggleField
+            id="speakToastMessages"
+            checked={preferences.speakToastMessages ?? true}
+            onChange={value => updatePreference('speakToastMessages', value)}
+            label={t('notifications.speakMessages')}
+            description={t('notifications.speakMessagesDescription')}
+          />
+        </SettingsControlGroup>
         <Alert variant="warning">{t('notifications.permissionRequired')}</Alert>
         <div className="flex justify-center">
           <Button
@@ -327,6 +336,14 @@ export const NotificationsSettings = ({
         </button>
       )}
       <SettingsControlGroup title={t('intention.essentials')}>
+        <ToggleField
+          id="speakToastMessages"
+          checked={preferences.speakToastMessages ?? true}
+          onChange={value => updatePreference('speakToastMessages', value)}
+          label={t('notifications.speakMessages')}
+          description={t('notifications.speakMessagesDescription')}
+        />
+        <Separator />
         {isMobile && (
           <>
             <ToggleField
