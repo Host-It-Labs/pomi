@@ -19,6 +19,11 @@ interface Toast {
   type: ToastType;
   duration?: number;
   action?: ToastAction;
+  speak: boolean;
+}
+
+interface ToastOptions {
+  speak?: boolean;
 }
 
 export interface ToastAction {
@@ -31,7 +36,8 @@ interface ToastContextType {
     message: string,
     type: ToastType,
     duration?: number,
-    action?: ToastAction
+    action?: ToastAction,
+    options?: ToastOptions
   ) => void;
   hideToast: () => void;
 }
@@ -43,7 +49,8 @@ let globalShowToast:
       message: string,
       type: ToastType,
       duration?: number,
-      action?: ToastAction
+      action?: ToastAction,
+      options?: ToastOptions
     ) => void)
   | null = null;
 
@@ -51,10 +58,11 @@ export function showToastFromStore(
   message: string,
   type: ToastType,
   duration?: number,
-  action?: ToastAction
+  action?: ToastAction,
+  options?: ToastOptions
 ) {
   if (globalShowToast) {
-    globalShowToast(message, type, duration, action);
+    globalShowToast(message, type, duration, action, options);
   }
 }
 
@@ -66,7 +74,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (
       !toast ||
-      preferences?.speakToastMessages === false ||
+      preferences?.speakToastMessages !== true ||
+      !toast.speak ||
       document.visibilityState !== 'visible'
     ) {
       speech.current.cancel();
@@ -96,7 +105,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       message: string,
       type: ToastType,
       duration?: number,
-      action?: ToastAction
+      action?: ToastAction,
+      options?: ToastOptions
     ) => {
       const newToast = {
         id: uuidv4(),
@@ -104,6 +114,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         type,
         duration: duration ?? 2000,
         action,
+        speak: options?.speak !== false,
       };
       setToast(newToast);
     },

@@ -157,9 +157,13 @@ describe('Timer completion claim', () => {
     expect(
       pendingAutoStartCompletionHistory.get('user-1')?.before.timer
     ).toMatchObject({
-      id: 'timer-1',
       status: TIMER_STATUSES.RUNNING,
       remainingTime: 60_000,
+      hasNotifiedBeforeTimeNotification: false,
+      hasNotifiedPausedTimerReminder: false,
     });
+    expect(
+      pendingAutoStartCompletionHistory.get('user-1')?.before.timer.id
+    ).not.toBe('timer-1');
   });
 });

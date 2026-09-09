@@ -2352,6 +2352,17 @@ export class TimerStore {
       .exec();
   }
 
+  async pushUndoHistoryPreservingRuntimeRevision(
+    userId: string,
+    entry: TimerHistoryEntry
+  ): Promise<void> {
+    await this.redis
+      .multi()
+      .rpush(this.undoHistoryKey(userId), JSON.stringify(entry))
+      .del(this.redoHistoryKey(userId))
+      .exec();
+  }
+
   async peekUndoHistoryCandidate(
     userId: string
   ): Promise<TimerHistoryCandidate | null> {
