@@ -219,7 +219,7 @@ describe('StatisticsService work-timer log cursor pagination', () => {
       { userId: 'user-2' }
     );
     expect(next.queryBuilder.andWhere).toHaveBeenCalledWith(
-      '(statistic.completedAt < :completedAt OR (statistic.completedAt = :completedAt AND statistic.id < :id))',
+      '(statistic.completedAt, statistic.id) < (:completedAt, :id)',
       {
         completedAt: '90071992547409930',
         id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
@@ -229,10 +229,24 @@ describe('StatisticsService work-timer log cursor pagination', () => {
 
   it('rejects malformed cursors before running the page query', async () => {
     const { queryBuilder, service } = createPageService([]);
+    const malformed = [
+      'bm90LWpzb24',
+      Buffer.from(
+        JSON.stringify({ completedAt: '1', id: 'not-a-uuid' })
+      ).toString('base64url'),
+      Buffer.from(
+        JSON.stringify({
+          completedAt: '9223372036854775808',
+          id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+        })
+      ).toString('base64url'),
+    ];
 
-    await expect(
-      service.getWorkTimerLogs('user-1', 20, 'bm90LWpzb24')
-    ).rejects.toThrow('Invalid work timer log cursor');
+    for (const cursor of malformed) {
+      await expect(
+        service.getWorkTimerLogs('user-1', 20, cursor)
+      ).rejects.toThrow('Invalid work timer log cursor');
+    }
     expect(queryBuilder.getMany).not.toHaveBeenCalled();
   });
 });

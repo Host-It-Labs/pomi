@@ -54,6 +54,10 @@ type WorkTimerLogsCursor = {
   id: string;
 };
 
+const POSTGRES_BIGINT_MAX = BigInt('9223372036854775807');
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export type WorkTimerLogsPage = {
   items: WorkTimerLog[];
   nextCursor: string | null;
@@ -71,8 +75,9 @@ function decodeWorkTimerLogsCursor(value: string): WorkTimerLogsCursor {
     if (
       typeof parsed.completedAt !== 'string' ||
       !/^\d+$/.test(parsed.completedAt) ||
+      BigInt(parsed.completedAt) > POSTGRES_BIGINT_MAX ||
       typeof parsed.id !== 'string' ||
-      parsed.id.length === 0
+      !UUID_PATTERN.test(parsed.id)
     ) {
       throw new Error('Invalid cursor payload');
     }
@@ -1180,7 +1185,7 @@ export class StatisticsService {
     if (cursor) {
       const boundary = decodeWorkTimerLogsCursor(cursor);
       query.andWhere(
-        '(statistic.completedAt < :completedAt OR (statistic.completedAt = :completedAt AND statistic.id < :id))',
+        '(statistic.completedAt, statistic.id) < (:completedAt, :id)',
         boundary
       );
     }

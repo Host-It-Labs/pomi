@@ -269,4 +269,26 @@ describe('statistics work-log behavior migrated from legacy Playwright documenta
     expect(screen.queryByText('Stale log')).not.toBeInTheDocument();
     expect(screen.getByText('Fresh log')).toBeInTheDocument();
   });
+
+  it('preserves visible history when a reopen refresh fails', async () => {
+    const { rerender } = render(
+      <WorkTimerLogsModal isOpen onClose={vi.fn()} />
+    );
+    await screen.findByText('Deep work');
+
+    server.use(
+      http.get('http://localhost:3000/work-timer-logs', () =>
+        HttpResponse.json({ message: 'Unavailable' }, { status: 500 })
+      )
+    );
+    rerender(<WorkTimerLogsModal isOpen={false} onClose={vi.fn()} />);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('heading', { name: 'Logs' })
+      ).not.toBeInTheDocument()
+    );
+    rerender(<WorkTimerLogsModal isOpen onClose={vi.fn()} />);
+
+    expect(await screen.findByText('Deep work')).toBeInTheDocument();
+  });
 });

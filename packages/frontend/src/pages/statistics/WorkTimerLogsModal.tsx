@@ -185,8 +185,6 @@ export function WorkTimerLogsModal({
     const generation = requestGenerationRef.current + 1;
     requestGenerationRef.current = generation;
     activeRequestRef.current = null;
-    setWorkTimerLogs([]);
-    setNextCursor(null);
     await fetchWorkTimerLogs(undefined, 'replace', generation);
   }, [fetchWorkTimerLogs]);
 
@@ -622,6 +620,10 @@ export function WorkTimerLogsModal({
           : { status: 200, body: result as WorkTimerLog };
 
       if (response.status === 200) {
+        setWorkTimerLogs(logs =>
+          logs.map(log => (log.id === selectedLog.id ? response.body : log))
+        );
+        setNextCursor(null);
         await refreshWorkTimerLogs();
         closeLogEditor();
         clearTimerHistory();
@@ -654,6 +656,8 @@ export function WorkTimerLogsModal({
           : { status: 204 };
 
       if (response.status === 204) {
+        setWorkTimerLogs(logs => logs.filter(log => log.id !== selectedLog.id));
+        setNextCursor(null);
         await refreshWorkTimerLogs();
         closeLogEditor();
         clearTimerHistory();
