@@ -48,6 +48,12 @@ export class AddTaskListChangeFeed1788997300000 implements MigrationInterface {
             entity_type := 'listItem';
           END IF;
         END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM "users" WHERE "id" = changed_row."userId"
+        ) THEN
+          RETURN changed_row;
+        END IF;
         IF TG_ARGV[0] = 'task' AND TG_OP = 'UPDATE' THEN
           old_domain := to_jsonb(OLD) - ARRAY[
             'updatedAt', 'lastReminderKey', 'nextReminderAt',

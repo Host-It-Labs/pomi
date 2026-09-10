@@ -20,7 +20,7 @@ it.runIf(Boolean(process.env.DATABASE_URL))(
       await runner.query(`
         CREATE TABLE "tasks" (
           "id" uuid PRIMARY KEY,
-          "userId" uuid NOT NULL REFERENCES "users"("id"),
+          "userId" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
           "title" varchar NOT NULL,
           "status" varchar NOT NULL,
           "itemKind" varchar NOT NULL,
@@ -35,7 +35,7 @@ it.runIf(Boolean(process.env.DATABASE_URL))(
       await runner.query(`
         CREATE TABLE "lists" (
           "id" uuid PRIMARY KEY,
-          "userId" uuid NOT NULL REFERENCES "users"("id"),
+          "userId" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
           "title" varchar NOT NULL,
           "isArchived" boolean NOT NULL DEFAULT false,
           "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -99,6 +99,13 @@ it.runIf(Boolean(process.env.DATABASE_URL))(
         { revision: '1', entityType: 'task', operation: 'upsert' },
         { revision: '2', entityType: 'list', operation: 'upsert' },
       ]);
+
+      await expect(
+        runner.query(`
+          DELETE FROM "users"
+          WHERE "id" = '00000000-0000-4000-8000-000000000001'
+        `)
+      ).resolves.toEqual([[], 1]);
     } finally {
       await runner.rollbackTransaction();
       await runner.release();

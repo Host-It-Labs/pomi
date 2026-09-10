@@ -69,6 +69,7 @@ describe('TaskListChangeFeedService', () => {
         {
           id: 'task-1',
           itemKind: 'followUp',
+          dueDate: new Date(2026, 8, 11),
           createdAt: new Date('2026-09-09T00:00:00.000Z'),
           updatedAt: new Date('2026-09-09T01:00:00.000Z'),
         },
@@ -94,6 +95,7 @@ describe('TaskListChangeFeedService', () => {
           id: 'task-1',
           itemKind: 'task',
           followUpTaskId: null,
+          dueDate: '2026-09-11',
           createdAt: '2026-09-09T00:00:00.000Z',
         },
       ],

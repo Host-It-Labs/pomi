@@ -184,8 +184,19 @@ export class TaskListChangeFeedService {
     return Object.fromEntries(
       Object.entries(row).map(([key, value]) => [
         key,
-        value instanceof Date ? value.toISOString() : value,
+        value instanceof Date
+          ? key === 'dueDate'
+            ? this.formatLocalDate(value)
+            : value.toISOString()
+          : value,
       ])
     );
+  }
+
+  private formatLocalDate(value: Date): string {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 }
