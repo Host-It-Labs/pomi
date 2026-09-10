@@ -85,7 +85,7 @@ const intention: Intention = {
 
 const server = setupServer(
   http.get('http://localhost:3000/work-timer-logs', () =>
-    HttpResponse.json(logs)
+    HttpResponse.json({ items: logs, nextCursor: null })
   ),
   http.get('http://localhost:3000/intentions', () =>
     HttpResponse.json([intention])
@@ -178,5 +178,95 @@ describe('statistics work-log behavior migrated from legacy Playwright documenta
     );
     expect(mocks.clearTimerHistory).toHaveBeenCalledOnce();
     expect(mocks.onLogsMutated).toHaveBeenCalledOnce();
+  });
+
+  it('appends cursor pages without duplicating an overlapping log', async () => {
+    const secondLog = {
+      ...log,
+      id: 'work-log-2',
+      intentionTitle: 'Second log',
+      intentions: [
+        { slug: 'second', title: 'Second log', emoji: '✌️', type: 'work' },
+      ],
+    };
+    server.use(
+      http.get('http://localhost:3000/work-timer-logs', ({ request }) => {
+        const cursor = new URL(request.url).searchParams.get('cursor');
+        return HttpResponse.json(
+          cursor
+            ? { items: [log, secondLog], nextCursor: null }
+            : { items: [log], nextCursor: 'next-page' }
+        );
+      })
+    );
+    render(<WorkTimerLogsModal isOpen onClose={vi.fn()} />);
+
+    await screen.findByText('Deep work');
+    const scroll = screen.getByTestId('work-timer-logs-scroll');
+    Object.defineProperties(scroll, {
+      scrollHeight: { configurable: true, value: 100 },
+      scrollTop: { configurable: true, value: 80 },
+      clientHeight: { configurable: true, value: 20 },
+    });
+    fireEvent.scroll(scroll);
+
+    await screen.findByText('Second log');
+    expect(screen.getAllByTestId('work-timer-log-row')).toHaveLength(2);
+  });
+
+  it('ignores an obsolete response after the modal is closed and reopened', async () => {
+    let resolveFirst: ((response: Response) => void) | undefined;
+    let requestCount = 0;
+    server.use(
+      http.get('http://localhost:3000/work-timer-logs', async () => {
+        requestCount += 1;
+        if (requestCount === 1) {
+          return new Promise<Response>(resolve => {
+            resolveFirst = resolve;
+          });
+        }
+        return HttpResponse.json({
+          items: [
+            {
+              ...log,
+              id: 'fresh-log',
+              intentionTitle: 'Fresh log',
+              intentions: [{ slug: 'fresh', title: 'Fresh log', type: 'work' }],
+            },
+          ],
+          nextCursor: null,
+        });
+      })
+    );
+    const { rerender } = render(
+      <WorkTimerLogsModal isOpen onClose={vi.fn()} />
+    );
+
+    await waitFor(() => expect(requestCount).toBe(1));
+    rerender(<WorkTimerLogsModal isOpen={false} onClose={vi.fn()} />);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('heading', { name: 'Logs' })
+      ).not.toBeInTheDocument()
+    );
+    rerender(<WorkTimerLogsModal isOpen onClose={vi.fn()} />);
+    await screen.findByText('Fresh log');
+
+    resolveFirst?.(
+      HttpResponse.json({
+        items: [
+          {
+            ...log,
+            id: 'stale-log',
+            intentionTitle: 'Stale log',
+            intentions: [{ slug: 'stale', title: 'Stale log', type: 'work' }],
+          },
+        ],
+        nextCursor: null,
+      })
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(screen.queryByText('Stale log')).not.toBeInTheDocument();
+    expect(screen.getByText('Fresh log')).toBeInTheDocument();
   });
 });

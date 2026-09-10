@@ -1,12 +1,18 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class WorkTimerLogsQueryDto {
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  offset?: number;
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]+$/)
+  cursor?: string;
 
   @IsOptional()
   @Type(() => Number)

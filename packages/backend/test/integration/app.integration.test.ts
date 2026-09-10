@@ -350,6 +350,67 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
     expect(secondPage.body.items.map(item => item.id)).toEqual([olderId]);
   });
 
+  it('seeks deterministically through equal-timestamp Work Timer logs', async () => {
+    const [{ id: userId }] = await dataSource.query(
+      'SELECT id FROM users WHERE username = $1',
+      [usernames[0]]
+    );
+    const [{ id: otherUserId }] = await dataSource.query(
+      'SELECT id FROM users WHERE username = $1',
+      [usernames[1]]
+    );
+    await dataSource.query('DELETE FROM statistics WHERE "userId" = $1', [
+      userId,
+    ]);
+    const ids = Array.from({ length: 1_001 }, () => randomUUID());
+    await dataSource.query(
+      `INSERT INTO statistics (id, "userId", type, date, duration, "completedAt", "createdAt", "updatedAt")
+       SELECT source.id::uuid, $1, 'work', '2026-09-10', 1500000, 1789038000000, now(), now()
+       FROM unnest($2::text[]) AS source(id)`,
+      [userId, ids]
+    );
+    const otherLogId = randomUUID();
+    await dataSource.query(
+      `INSERT INTO statistics (id, "userId", type, date, duration, "completedAt", "createdAt", "updatedAt")
+       VALUES ($1, $2, 'work', '2026-09-10', 1500000, 1789050000000, now(), now())`,
+      [otherLogId, otherUserId]
+    );
+    const seen = new Set<string>();
+    const firstPage = await request(app.getHttpServer())
+      .get('/work-timer-logs?limit=100')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    for (const item of firstPage.body.items) seen.add(item.id);
+    let cursor: string | null = firstPage.body.nextCursor;
+
+    const newerLogId = randomUUID();
+    await dataSource.query(
+      `INSERT INTO statistics (id, "userId", type, date, duration, "completedAt", "createdAt", "updatedAt")
+       VALUES ($1, $2, 'work', '2026-09-10', 1500000, 1789040000000, now(), now())`,
+      [newerLogId, userId]
+    );
+
+    while (cursor) {
+      const page = await request(app.getHttpServer())
+        .get(`/work-timer-logs?limit=100&cursor=${encodeURIComponent(cursor)}`)
+        .set('authorization', `Bearer ${token}`)
+        .expect(200);
+      for (const item of page.body.items) {
+        expect(seen.has(item.id)).toBe(false);
+        seen.add(item.id);
+      }
+      cursor = page.body.nextCursor;
+    }
+
+    expect(seen).toEqual(new Set(ids));
+    expect(seen.has(newerLogId)).toBe(false);
+    expect(seen.has(otherLogId)).toBe(false);
+    await request(app.getHttpServer())
+      .get('/work-timer-logs?cursor=bm90LWpzb24')
+      .set('authorization', `Bearer ${token}`)
+      .expect(400);
+  });
+
   it('logs out through the authenticated production contract', async () => {
     await request(app.getHttpServer())
       .delete('/sessions/current?platform=web')
