@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_LANGUAGE,
@@ -7,7 +7,7 @@ import {
   normalizeLanguage,
   SUPPORTED_LANGUAGES,
 } from './languages';
-import { sourceTranslationCatalogs } from './resources';
+import { sourceTranslationCatalogs } from './catalog-source';
 import { I18nProvider, setLanguage, useI18n } from './runtime';
 
 function LanguageProbe() {
@@ -183,7 +183,7 @@ describe('language catalog and detection', () => {
 });
 
 describe('I18nProvider', () => {
-  it('updates document language and direction when the locale changes', () => {
+  it('updates document language and direction after the locale loads', async () => {
     setLanguage('ur', { persist: false });
     render(
       <I18nProvider>
@@ -191,9 +191,11 @@ describe('I18nProvider', () => {
       </I18nProvider>
     );
 
-    expect(screen.getByTestId('probe')).toHaveAttribute(
-      'data-direction',
-      'rtl'
+    await waitFor(() =>
+      expect(screen.getByTestId('probe')).toHaveAttribute(
+        'data-direction',
+        'rtl'
+      )
     );
     expect(document.documentElement.lang).toBe(
       getLanguageDefinition('ur').locale

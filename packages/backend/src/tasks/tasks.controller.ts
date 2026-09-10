@@ -23,11 +23,23 @@ import { TasksQueryDto } from './dto/tasks-query.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { TaskEntity } from './tasks.entity';
 import { TasksService } from './tasks.service';
+import { TaskListChangeFeedService } from '../realtime/task-list-change-feed.service';
 
 @Controller()
 @UseGuards(AuthGuard)
 export class TasksController {
-  constructor(private tasksService: TasksService) {}
+  constructor(
+    private tasksService: TasksService,
+    private taskListChangeFeed: TaskListChangeFeedService
+  ) {}
+
+  @TsRestHandler(apiContract.tasks.snapshot)
+  async snapshot(@Request() req): Promise<unknown> {
+    return tsRestHandler(apiContract.tasks.snapshot, async () => ({
+      status: 200,
+      body: await this.taskListChangeFeed.readSnapshot(req.user.sub),
+    }));
+  }
 
   private formatTask(task: TaskEntity) {
     const { recurrenceSequenceIndex, followUpTaskId, ...publicTask } = task;

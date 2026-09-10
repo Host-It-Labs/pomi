@@ -38,7 +38,7 @@
     "db:reset:fixtures": "./scripts/reset-dev-db.sh",
     "test:frontend-startup": "node scripts/verify-frontend-startup.mjs",
     "test:unit": "vitest run --project shared-unit --project backend-unit --project frontend-unit",
-    "test:i18n": "node --test ./scripts/xml-resource-text.test.mjs && node ./scripts/verify-i18n.mjs && vitest run --project frontend-unit packages/frontend/src/i18n/runtime.test.tsx",
+    "test:i18n": "node --experimental-strip-types packages/frontend/scripts/generate-i18n-catalogs.mjs --check && node --test ./scripts/xml-resource-text.test.mjs && node ./scripts/verify-i18n.mjs && vitest run --project frontend-unit packages/frontend/src/i18n/runtime.test.tsx",
     "test:build": "pnpm --filter @pomi/shared build && pnpm --filter @pomi/backend build",
     "test:integration": "pnpm test:build && ./scripts/run-with-dev-runtime-env.sh -- vitest run --project backend-integration",
     "test:browser": "vitest run --project frontend-browser",

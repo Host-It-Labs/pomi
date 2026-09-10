@@ -96,6 +96,8 @@ import { VacationControl } from '../components/vacation/VacationControl';
 import { isMobile } from '../utils/osUtils';
 import {
   requestListRefresh,
+  reduceRealtimeListItems,
+  reduceRealtimeLists,
   subscribeToListRefresh,
 } from '../utils/listRefresh';
 import { subscribeToIntentionRefresh } from '../utils/recoveryRefresh';
@@ -307,7 +309,16 @@ export function TaskWorkspace() {
       return;
     }
     void loadLists();
-    return subscribeToListRefresh(() => void loadLists());
+    return subscribeToListRefresh(update => {
+      if (!update) return void loadLists();
+      if (!Array.isArray(update)) {
+        setLists(update.snapshot.lists);
+        setListItems(update.snapshot.listItems);
+        return;
+      }
+      setLists(current => reduceRealtimeLists(current, update));
+      setListItems(current => reduceRealtimeListItems(current, update));
+    });
   }, [loadLists, preferences?.listsExtension]);
 
   useEffect(() => {

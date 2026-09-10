@@ -235,7 +235,7 @@ describe('Settings and admin behavior replacements', () => {
     await user.selectOptions(screen.getByLabelText('Language'), 'ar');
 
     expect(updatePreference).toHaveBeenCalledWith('language', 'ar');
-    expect(document.documentElement.dir).toBe('rtl');
+    await waitFor(() => expect(document.documentElement.dir).toBe('rtl'));
   });
 
   it('rolls back the language and persisted locale when saving fails', async () => {

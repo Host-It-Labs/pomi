@@ -59,6 +59,15 @@ function createGateway(currentTimer: object | null = { id: 'timer-1' }) {
     {
       onTasksUpdate: tasksUpdate.source,
       onUserActionUpdate: actionUpdate.source,
+    } as never,
+    {
+      prime: async () => 0,
+      readNextEnvelope: async () => ({
+        fromRevision: 0,
+        revision: 1,
+        resetRequired: false,
+        changes: [],
+      }),
     } as never
   );
   return {
@@ -130,8 +139,13 @@ describe('TimerGateway multi-instance fanout', () => {
     expect(legacyHasPushToken).not.toHaveBeenCalled();
 
     tasksUpdate.next({ userId: 'user-1' });
-    expect(to).toHaveBeenCalledWith('user:user-1');
-    expect(emit).toHaveBeenCalledWith(SOCKET_EVENTS.TASKS_UPDATE);
+    await vi.waitFor(() => {
+      expect(to).toHaveBeenCalledWith('user:user-1');
+      expect(emit).toHaveBeenCalledWith(
+        SOCKET_EVENTS.TASKS_UPDATE,
+        expect.objectContaining({ revision: 1 })
+      );
+    });
   });
 
   it('uses the created Timer directly instead of reading it again', async () => {
@@ -273,11 +287,16 @@ describe('TimerGateway multi-instance fanout', () => {
     gateway.handleDisconnect(client as never);
     tasksUpdate.next({ userId: 'user-1' });
 
-    expect(to).toHaveBeenCalledWith('user:user-1');
-    expect(emit).toHaveBeenCalledWith(SOCKET_EVENTS.TASKS_UPDATE);
+    await vi.waitFor(() => {
+      expect(to).toHaveBeenCalledWith('user:user-1');
+      expect(emit).toHaveBeenCalledWith(
+        SOCKET_EVENTS.TASKS_UPDATE,
+        expect.objectContaining({ revision: 1 })
+      );
+    });
   });
 
-  it('broadcasts domain updates through Redis-compatible user rooms', () => {
+  it('broadcasts domain updates through Redis-compatible user rooms', async () => {
     const {
       actionUpdate,
       gateway,
@@ -306,11 +325,13 @@ describe('TimerGateway multi-instance fanout', () => {
       status: { actionId: 'action-1', status: 'succeeded' },
     });
 
+    await vi.waitFor(() => expect(emissions).toHaveLength(4));
+
     expect(emissions.map(({ room, event }) => ({ room, event }))).toEqual([
       { room: 'user:user-1', event: SOCKET_EVENTS.TIMER_UPDATE },
       { room: 'user:user-1', event: SOCKET_EVENTS.PREFERENCES_UPDATE },
-      { room: 'user:user-1', event: SOCKET_EVENTS.TASKS_UPDATE },
       { room: 'user:user-1', event: SOCKET_EVENTS.USER_ACTION_UPDATE },
+      { room: 'user:user-1', event: SOCKET_EVENTS.TASKS_UPDATE },
     ]);
   });
 });

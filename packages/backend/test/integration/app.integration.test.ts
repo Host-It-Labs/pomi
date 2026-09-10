@@ -101,6 +101,20 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
     });
   });
 
+  it('returns one revisioned Task and List snapshot', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/tasks/snapshot')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(response.body).toEqual({
+      revision: expect.any(Number),
+      tasks: expect.any(Array),
+      lists: expect.any(Array),
+      listItems: expect.any(Array),
+    });
+  });
+
   it('rejects oversized ordinary JSON bodies before controller dispatch', async () => {
     const response = await request(app.getHttpServer())
       .post('/sessions')

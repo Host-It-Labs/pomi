@@ -147,7 +147,7 @@ describe('authentication behavior migrated from legacy Playwright documentation'
 
     await user.selectOptions(screen.getByLabelText('Language'), 'fr');
     expect(
-      screen.getByRole('heading', { name: 'Bienvenue sur Pomi' })
+      await screen.findByRole('heading', { name: 'Bienvenue sur Pomi' })
     ).toBeVisible();
     await user.type(screen.getByLabelText("Nom d'utilisateur"), 'fr-user');
     await user.type(screen.getByLabelText('Mot de passe'), 'safe-password');
