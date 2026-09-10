@@ -274,11 +274,14 @@ export async function postWatchTimerAction(
 export async function fetchWorkTimerLogs(page: Page) {
   const context = await apiContext(page);
   const response = await page.request.get(
-    `${context.backendOrigin}/work-timer-logs?limit=20&offset=0`,
+    `${context.backendOrigin}/work-timer-logs?limit=20`,
     { headers: { Authorization: `Bearer ${context.token}` } }
   );
   expect(response.ok()).toBeTruthy();
-  return response.json() as Promise<Array<Record<string, any>>>;
+  const pageResponse = (await response.json()) as {
+    items: Array<Record<string, any>>;
+  };
+  return pageResponse.items;
 }
 
 export async function createSession(

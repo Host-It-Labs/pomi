@@ -55,8 +55,8 @@
   "playwright": {
     "retainedJourneys": 13,
     "retainedSpecLines": 793,
-    "retainedHelperLines": 339,
-    "retainedActiveSourceLines": 1132,
+    "retainedHelperLines": 342,
+    "retainedActiveSourceLines": 1135,
     "legacyTests": 0,
     "legacySpecFiles": 0,
     "legacySourceLines": 0
