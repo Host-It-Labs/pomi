@@ -33,6 +33,7 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
   private pollInterval: NodeJS.Timeout | null = null;
   private reconcileInterval: NodeJS.Timeout | null = null;
   private readonly subscriptions: Subscription[] = [];
+  private readonly scheduleRebuilds = new Map<string, Promise<void>>();
 
   constructor(
     @InjectRepository(TaskEntity)
@@ -115,26 +116,30 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (claimedRows.length === 0) return;
-    const tasks = await this.tasksRepository.findBy({
-      id: In(claimedRows.map(row => row.id)),
-    });
-    const tasksByUser = new Map<string, TaskEntity[]>();
-    for (const task of tasks) {
-      const userTasks = tasksByUser.get(task.userId) ?? [];
-      userTasks.push(task);
-      tasksByUser.set(task.userId, userTasks);
-    }
+    try {
+      const tasks = await this.tasksRepository.findBy({
+        id: In(claimedRows.map(row => row.id)),
+      });
+      const tasksByUser = new Map<string, TaskEntity[]>();
+      for (const task of tasks) {
+        const userTasks = tasksByUser.get(task.userId) ?? [];
+        userTasks.push(task);
+        tasksByUser.set(task.userId, userTasks);
+      }
 
-    await Promise.all(
-      [...tasksByUser].map(async ([userId, userTasks]) => {
-        await this.processUserReminderTasks(userId, userTasks, now);
-        await Promise.all(
-          userTasks.map(task =>
-            this.rescheduleClaimedTask(task.id, claimToken, now)
-          )
-        );
-      })
-    );
+      await Promise.all(
+        [...tasksByUser].map(async ([userId, userTasks]) => {
+          await this.processUserReminderTasks(userId, userTasks, now);
+          await Promise.all(
+            userTasks.map(task =>
+              this.rescheduleClaimedTask(task.id, claimToken, now)
+            )
+          );
+        })
+      );
+    } catch {
+      this.logger.warn('Task reminder post-claim processing unavailable');
+    }
   }
 
   async rebuildAllSchedules(): Promise<void> {
@@ -150,6 +155,21 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
   }
 
   async rebuildUserSchedule(userId: string): Promise<void> {
+    const previous = this.scheduleRebuilds.get(userId) ?? Promise.resolve();
+    const rebuild = previous
+      .catch(() => undefined)
+      .then(() => this.performUserScheduleRebuild(userId));
+    this.scheduleRebuilds.set(userId, rebuild);
+    try {
+      await rebuild;
+    } finally {
+      if (this.scheduleRebuilds.get(userId) === rebuild) {
+        this.scheduleRebuilds.delete(userId);
+      }
+    }
+  }
+
+  private async performUserScheduleRebuild(userId: string): Promise<void> {
     try {
       const [tasks, preferences] = await Promise.all([
         this.tasksRepository.find({
@@ -195,16 +215,20 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
         }
       );
     } catch {
-      await this.tasksRepository.update(
-        { id: taskId, reminderClaimToken: claimToken },
-        {
-          nextReminderAt: new Date(
-            now.getTime() + TASK_REMINDER_POLL_INTERVAL_MS
-          ),
-          reminderClaimToken: null,
-          reminderClaimedUntil: null,
-        }
-      );
+      try {
+        await this.tasksRepository.update(
+          { id: taskId, reminderClaimToken: claimToken },
+          {
+            nextReminderAt: new Date(
+              now.getTime() + TASK_REMINDER_POLL_INTERVAL_MS
+            ),
+            reminderClaimToken: null,
+            reminderClaimedUntil: null,
+          }
+        );
+      } catch {
+        this.logger.warn('Failed release Task reminder claim');
+      }
     }
   }
 

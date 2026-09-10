@@ -72,10 +72,9 @@ export class TaskListChangeFeedService {
         lists: lists.map((list: Record<string, unknown>) =>
           this.withIsoDates(list)
         ),
-        listItems: listItems.map((item: Record<string, unknown>) => ({
-          ...this.withIsoDates(item),
-          itemKind: 'listItem',
-        })),
+        listItems: listItems.map((item: Record<string, unknown>) =>
+          this.toPublicListItem(item)
+        ),
       };
     });
   }
@@ -136,6 +135,24 @@ export class TaskListChangeFeedService {
       return { fromRevision, revision, resetRequired: true, changes: [] };
     }
 
+    const followUpParentIds = [
+      ...new Set(
+        rows
+          .filter(row => row.entityType === 'task' && row.payload)
+          .map(row => row.payload?.followUpSourceTaskId)
+          .filter((id): id is string => typeof id === 'string')
+      ),
+    ];
+    const followUpParents = followUpParentIds.length
+      ? ((await this.dataSource.query(
+          `SELECT "id", "title" FROM "tasks" WHERE "userId" = $1 AND "id" = ANY($2::uuid[])`,
+          [userId, followUpParentIds]
+        )) as Array<{ id: string; title: string }>)
+      : [];
+    const followUpParentsById = new Map(
+      followUpParents.map(parent => [parent.id, parent])
+    );
+
     return {
       fromRevision,
       revision,
@@ -145,7 +162,20 @@ export class TaskListChangeFeedService {
         entityType: row.entityType,
         entityId: row.entityId,
         operation: row.operation,
-        payload: row.payload,
+        payload:
+          row.payload === null
+            ? null
+            : row.entityType === 'task'
+              ? this.toPublicTask({
+                  ...row.payload,
+                  followUpParent:
+                    followUpParentsById.get(
+                      String(row.payload.followUpSourceTaskId ?? '')
+                    ) ?? null,
+                })
+              : row.entityType === 'listItem'
+                ? this.toPublicListItem(row.payload)
+                : this.withIsoDates(row.payload),
       })) as TaskListChange[],
     };
   }
@@ -178,6 +208,22 @@ export class TaskListChangeFeedService {
       followUpParent: task.followUpParent ?? null,
       itemKind: 'task',
     };
+  }
+
+  private toPublicListItem(item: Record<string, unknown>) {
+    return this.withIsoDates({
+      id: item.id,
+      userId: item.userId,
+      listId: item.listId,
+      title: item.title,
+      dueDate: item.dueDate,
+      priority: item.priority,
+      status: item.status,
+      itemKind: 'listItem',
+      vacationEligible: item.vacationEligible,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+    });
   }
 
   private withIsoDates(row: Record<string, unknown>) {

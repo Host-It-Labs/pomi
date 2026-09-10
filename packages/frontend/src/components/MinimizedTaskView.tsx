@@ -279,6 +279,11 @@ export function MinimizedTaskView({
   useEffect(() => {
     void loadLists();
     return subscribeToListRefresh(update => {
+      if (!preferences?.listsExtension) {
+        setLists([]);
+        setListItems([]);
+        return;
+      }
       if (!update) return void loadLists();
       if (!Array.isArray(update)) {
         setLists(update.snapshot.lists);
@@ -288,7 +293,7 @@ export function MinimizedTaskView({
       setLists(current => reduceRealtimeLists(current, update));
       setListItems(current => reduceRealtimeListItems(current, update));
     });
-  }, [loadLists]);
+  }, [loadLists, preferences?.listsExtension]);
 
   const createListItemFromEditor = useCallback(
     async (

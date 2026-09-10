@@ -31,10 +31,10 @@ export class ScheduleTaskRemindersByDeadline1788997200000 implements MigrationIn
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       CREATE INDEX "IDX_tasks_active_due_notification_scan"
-      ON "tasks" ("status", "dueDate")
+      ON "tasks" ("dueDate", "dueTime")
       WHERE "status" = 'active'
         AND "dueDate" IS NOT NULL
-        AND "itemKind" = 'task'
+      AND "itemKind" IN ('task', 'followUp')
     `);
     await queryRunner.query(`DROP INDEX "IDX_tasks_due_reminder_schedule"`);
     await queryRunner.query(

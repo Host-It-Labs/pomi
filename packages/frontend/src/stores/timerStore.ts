@@ -54,6 +54,7 @@ import {
   clearLiveTimerProjection,
   publishLiveTimerProjection,
 } from '../utils/liveTimerSurface';
+import { createSerializedSnapshotRecovery } from '../utils/serializedSnapshotRecovery';
 import { type HistoryActionId, useUiStore } from './uiStore';
 
 let localTimerInterval: NodeJS.Timeout | null = null;
@@ -61,6 +62,23 @@ let lastSyncTime = 0;
 let isInitialized = false;
 const pendingTimerHistoryActionIds: HistoryActionId[] = [];
 let taskListRevision: number | null = null;
+const requestTaskListSnapshot = createSerializedSnapshotRecovery({
+  load: async () => {
+    const response = await apiClient.tasks.snapshot();
+    if (response.status !== 200) throw new Error('Task snapshot failed');
+    return response.body;
+  },
+  apply: snapshot => {
+    useTasksStore.getState().replaceTasks(snapshot.tasks);
+    applyListSnapshot(snapshot.lists, snapshot.listItems);
+    taskListRevision = snapshot.revision;
+  },
+  onFailure: () => {
+    void useTasksStore.getState().refreshTasks();
+    requestListRefresh();
+    taskListRevision = null;
+  },
+});
 
 interface TimerState {
   timer: Timer | null;
@@ -288,17 +306,9 @@ const useTimerStoreBase = create<TimerState>((set, get) => ({
         taskListRevision === null ||
         envelope.fromRevision !== taskListRevision
       ) {
-        void apiClient.tasks.snapshot().then(response => {
-          if (response.status !== 200) {
-            void useTasksStore.getState().refreshTasks();
-            requestListRefresh();
-            taskListRevision = null;
-            return;
-          }
-          useTasksStore.getState().replaceTasks(response.body.tasks);
-          applyListSnapshot(response.body.lists, response.body.listItems);
-          taskListRevision = response.body.revision;
-        });
+        requestTaskListSnapshot(
+          typeof envelope?.revision === 'number' ? envelope.revision : 0
+        );
         return;
       }
 

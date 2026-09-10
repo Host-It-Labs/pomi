@@ -100,6 +100,43 @@ it.runIf(Boolean(process.env.DATABASE_URL))(
         { revision: '2', entityType: 'list', operation: 'upsert' },
       ]);
 
+      await runner.query(`
+        UPDATE "tasks"
+        SET "itemKind" = 'listItem'
+        WHERE "id" = '10000000-0000-4000-8000-000000000001'
+      `);
+      expect(
+        await runner.query(`
+          SELECT "revision", "entityType", "operation"
+          FROM "task_list_changes"
+          WHERE "userId" = '00000000-0000-4000-8000-000000000001'
+            AND "revision" > 2
+          ORDER BY "revision"
+        `)
+      ).toEqual([
+        { revision: '3', entityType: 'task', operation: 'delete' },
+        { revision: '4', entityType: 'listItem', operation: 'upsert' },
+      ]);
+
+      await runner.query(`
+        DO $$
+        BEGIN
+          FOR revision_index IN 1..2005 LOOP
+            UPDATE "tasks"
+            SET "title" = 'task-' || revision_index
+            WHERE "id" = '10000000-0000-4000-8000-000000000001';
+          END LOOP;
+        END $$
+      `);
+      await expect(
+        runner.query(`
+          SELECT count(*)::integer AS "count",
+                 max("revision") - min("revision") AS "range"
+          FROM "task_list_changes"
+          WHERE "userId" = '00000000-0000-4000-8000-000000000001'
+        `)
+      ).resolves.toEqual([{ count: 2000, range: '1999' }]);
+
       await expect(
         runner.query(`
           DELETE FROM "users"

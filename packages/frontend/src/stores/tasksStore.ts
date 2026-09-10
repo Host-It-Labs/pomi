@@ -253,11 +253,23 @@ const useTasksStoreBase = create<TasksStore>((set, get) => ({
             return tasks.filter(task => task.id !== change.entityId);
           }
           const task = change.payload as Task;
-          recordTaskResponse(task, task.id);
           if (task.status !== 'active') {
+            if (state.completingTaskIds.includes(task.id)) return tasks;
+            recordTaskResponse(null, task.id);
             return tasks.filter(current => current.id !== task.id);
           }
-          return upsertTask(tasks, task);
+          recordTaskResponse(task, task.id);
+          return upsertTask(
+            tasks.map(current =>
+              current.followUpParent?.id === task.id
+                ? {
+                    ...current,
+                    followUpParent: { id: task.id, title: task.title },
+                  }
+                : current
+            ),
+            task
+          );
         }, state.tasks),
         getTaskOrderingClock(new Date())
       ),

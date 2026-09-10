@@ -31,10 +31,12 @@ export class AddTaskListChangeFeed1788997300000 implements MigrationInterface {
       DECLARE
         changed_row record;
         next_revision bigint;
+        old_revision bigint;
         change_payload jsonb;
         old_domain jsonb;
         new_domain jsonb;
         entity_type varchar;
+        old_entity_type varchar;
         changed_item_kind varchar;
       BEGIN
         changed_row := CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
@@ -65,6 +67,23 @@ export class AddTaskListChangeFeed1788997300000 implements MigrationInterface {
           ];
           IF old_domain = new_domain THEN
             RETURN changed_row;
+          END IF;
+          IF OLD."itemKind" IS DISTINCT FROM NEW."itemKind" THEN
+            old_entity_type := CASE
+              WHEN OLD."itemKind" = 'listItem' THEN 'listItem'
+              ELSE 'task'
+            END;
+            INSERT INTO "task_list_revision_counters" ("userId", "revision")
+            VALUES (changed_row."userId", 1)
+            ON CONFLICT ("userId") DO UPDATE
+            SET "revision" = "task_list_revision_counters"."revision" + 1
+            RETURNING "revision" INTO old_revision;
+            INSERT INTO "task_list_changes" (
+              "userId", "revision", "entityType", "entityId", "operation", "payload"
+            ) VALUES (
+              changed_row."userId", old_revision, old_entity_type,
+              OLD."id", 'delete', NULL
+            );
           END IF;
         END IF;
         INSERT INTO "task_list_revision_counters" ("userId", "revision")
@@ -104,6 +123,9 @@ export class AddTaskListChangeFeed1788997300000 implements MigrationInterface {
           CASE WHEN TG_OP = 'DELETE' THEN 'delete' ELSE 'upsert' END,
           change_payload
         );
+        DELETE FROM "task_list_changes"
+        WHERE "userId" = changed_row."userId"
+          AND "revision" <= next_revision - 2000;
         RETURN changed_row;
       END;
       $$ LANGUAGE plpgsql

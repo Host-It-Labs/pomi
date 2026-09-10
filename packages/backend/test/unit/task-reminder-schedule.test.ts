@@ -85,4 +85,65 @@ describe('durable Task reminder schedule', () => {
     expect(row.nextReminderAt).toBeNull();
     expect(row.reminderClaimToken).toBeNull();
   });
+
+  it('contains storage failures after claiming reminder rows', async () => {
+    const service = createService({
+      query: async () => [{ id: task.id }],
+      findBy: async () => {
+        throw new Error('database unavailable');
+      },
+    });
+
+    await expect(
+      service.scanDueSchedules(new Date('2026-09-10T09:00:00.000Z'))
+    ).resolves.toBeUndefined();
+  });
+
+  it('contains failures while releasing a claimed reminder row', async () => {
+    const service = createService({
+      findOneBy: async () => {
+        throw new Error('database unavailable');
+      },
+      update: async () => {
+        throw new Error('database unavailable');
+      },
+    }) as unknown as {
+      rescheduleClaimedTask: (
+        taskId: string,
+        claimToken: string,
+        now: Date
+      ) => Promise<void>;
+    };
+
+    await expect(
+      service.rescheduleClaimedTask(
+        task.id,
+        '00000000-0000-4000-8000-000000000003',
+        new Date('2026-09-10T09:00:00.000Z')
+      )
+    ).resolves.toBeUndefined();
+  });
+
+  it('serializes reminder schedule rebuilds for one user', async () => {
+    let finishFirstUpdate: (() => void) | undefined;
+    const firstUpdate = new Promise<void>(resolve => {
+      finishFirstUpdate = resolve;
+    });
+    const find = vi.fn(async () => [task]);
+    const update = vi
+      .fn()
+      .mockImplementationOnce(async () => firstUpdate)
+      .mockResolvedValue(undefined);
+    const service = createService({ find, update });
+
+    const first = service.rebuildUserSchedule(task.userId);
+    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    const second = service.rebuildUserSchedule(task.userId);
+    await Promise.resolve();
+    expect(find).toHaveBeenCalledTimes(1);
+
+    finishFirstUpdate?.();
+    await Promise.all([first, second]);
+    expect(find).toHaveBeenCalledTimes(2);
+  });
 });
