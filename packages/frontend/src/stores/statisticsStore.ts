@@ -77,8 +77,9 @@ const resetHeatmapState = {
 
 let requestGeneration = 0;
 let requestSequence = 0;
-const summaryRequests = new Map<string, Promise<void>>();
-const topIntentionRequests = new Map<string, Promise<void>>();
+type CoordinatedRequest = { owner: string; promise: Promise<void> };
+const summaryRequests = new Map<string, CoordinatedRequest>();
+const topIntentionRequests = new Map<string, CoordinatedRequest>();
 
 const advanceRequestGeneration = () => {
   requestGeneration += 1;
@@ -126,8 +127,11 @@ const useStatisticsStoreBase = create<StatisticsState>()(
         const generation = requestGeneration;
         const requestKey = `${requestAccountKey()}:${generation}:${sessionTypeToUse}:${intentionToUse || '__all__'}:${subIntentionToUse || '__all__'}`;
         const existingRequest = summaryRequests.get(requestKey);
-        if (existingRequest) {
-          return existingRequest;
+        if (
+          existingRequest &&
+          get().activeSummaryRequestKey === existingRequest.owner
+        ) {
+          return existingRequest.promise;
         }
 
         const owner = `summary:${++requestSequence}`;
@@ -240,11 +244,11 @@ const useStatisticsStoreBase = create<StatisticsState>()(
             });
           }
         })();
-        summaryRequests.set(requestKey, request);
+        summaryRequests.set(requestKey, { owner, promise: request });
         try {
           await request;
         } finally {
-          if (summaryRequests.get(requestKey) === request) {
+          if (summaryRequests.get(requestKey)?.promise === request) {
             summaryRequests.delete(requestKey);
           }
         }
@@ -326,8 +330,11 @@ const useStatisticsStoreBase = create<StatisticsState>()(
         const generation = requestGeneration;
         const requestKey = `${requestAccountKey()}:${generation}:${sessionType}:${periodToUse}:${parentIntention || '__global__'}:${metricMode}`;
         const existingRequest = topIntentionRequests.get(requestKey);
-        if (existingRequest) {
-          return existingRequest;
+        if (
+          existingRequest &&
+          get().activeTopIntentionsRequestKey === existingRequest.owner
+        ) {
+          return existingRequest.promise;
         }
 
         const owner = `top-intentions:${++requestSequence}`;
@@ -381,11 +388,11 @@ const useStatisticsStoreBase = create<StatisticsState>()(
             });
           }
         })();
-        topIntentionRequests.set(requestKey, request);
+        topIntentionRequests.set(requestKey, { owner, promise: request });
         try {
           await request;
         } finally {
-          if (topIntentionRequests.get(requestKey) === request) {
+          if (topIntentionRequests.get(requestKey)?.promise === request) {
             topIntentionRequests.delete(requestKey);
           }
         }
@@ -468,6 +475,16 @@ useAuthStoreBase.subscribe((state, previousState) => {
   }
 
   advanceRequestGeneration();
+  if (state.user?.id === previousState.user?.id) {
+    useStatisticsStoreBase.setState({
+      isLoading: false,
+      isLoadingTopIntentions: false,
+      activeSummaryRequestKey: null,
+      activeTopIntentionsRequestKey: null,
+    });
+    return;
+  }
+
   useStatisticsStoreBase.setState({
     statistics: null,
     isLoading: false,

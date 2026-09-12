@@ -8,7 +8,7 @@
     "sourceLines": "physical lines"
   },
   "vitest": {
-    "total": 1073,
+    "total": 1074,
     "projects": {
       "shared-unit": {
         "tests": 28,
@@ -23,10 +23,10 @@
         "declaredTests": 567
       },
       "frontend-unit": {
-        "tests": 361,
+        "tests": 362,
         "files": 84,
-        "staticCollectedTests": 361,
-        "declaredTests": 360
+        "staticCollectedTests": 362,
+        "declaredTests": 361
       },
       "backend-integration": {
         "tests": 68,
@@ -62,7 +62,7 @@
     "legacySourceLines": 0
   },
   "totals": {
-    "nonE2eTests": 1122,
-    "activeTests": 1135
+    "nonE2eTests": 1123,
+    "activeTests": 1136
   }
 }

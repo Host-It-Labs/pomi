@@ -118,7 +118,7 @@ describe('Statistics store request coordination', () => {
     });
   });
 
-  it('keeps A-B-A response ownership distinct', async () => {
+  it('starts a new A request when returning from B before the original A settles', async () => {
     const firstA = deferred<{
       status: 200;
       body: typeof summaryBody & { marker: string };
@@ -143,11 +143,11 @@ describe('Statistics store request coordination', () => {
     const requestB = useStatisticsStoreBase
       .getState()
       .fetchStatistics('b', 'work', '');
-    useStatisticsStoreBase.getState().invalidateStatisticsRequests();
     const freshRequestA = useStatisticsStoreBase
       .getState()
       .fetchStatistics('a', 'work', '');
 
+    expect(mocks.summary).toHaveBeenCalledTimes(3);
     secondA.resolve({
       status: 200,
       body: { ...summaryBody, marker: 'fresh-a' },
@@ -179,6 +179,25 @@ describe('Statistics store request coordination', () => {
     expect(mocks.summary).toHaveBeenCalledTimes(2);
     older.resolve({ status: 200, body: summaryBody });
     await oldRequest;
+  });
+
+  it('preserves settled statistics during a same-account token refresh', async () => {
+    const { useStatisticsStoreBase } = await import('./statisticsStore');
+    useStatisticsStoreBase.setState({
+      statistics: { ...summaryBody, marker: 'settled' } as never,
+      topIntentions: [{ intention: 'focus' }] as never,
+    });
+
+    const previous = { ...mocks.auth };
+    mocks.auth = { token: 'session-refreshed', user: { id: 'account-a' } };
+    mocks.authListener?.(mocks.auth, previous);
+
+    expect(useStatisticsStoreBase.getState().statistics).toMatchObject({
+      marker: 'settled',
+    });
+    expect(useStatisticsStoreBase.getState().topIntentions).toEqual([
+      { intention: 'focus' },
+    ]);
   });
 
   it('removes failed requests so the same key can be retried', async () => {
