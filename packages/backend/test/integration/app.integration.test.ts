@@ -25,10 +25,12 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
   let dataSource: DataSource;
   let redis: Redis;
   let token: string;
+  let nonAdminToken: string;
   const usernames = [
     'testuser_vitest_http_contract',
     'testuser_vitest_http_contract_secondary',
     'testuser_vitest_http_rate_limit',
+    'testuser_vitest_http_contract_created',
   ];
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -48,6 +50,14 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
       bootstrapToken: ADMIN_BOOTSTRAP_TOKEN,
     });
     token = session.body.token;
+    const nonAdminSession = await request(app.getHttpServer())
+      .post('/sessions')
+      .send({
+        username: usernames[1],
+        password: 'vitest-password',
+        bootstrapToken: ADMIN_BOOTSTRAP_TOKEN,
+      });
+    nonAdminToken = nonAdminSession.body.token;
   });
 
   afterAll(async () => {
@@ -112,14 +122,44 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
 
   it('creates an authenticated database-backed session', async () => {
     const response = await request(app.getHttpServer()).post('/sessions').send({
-      username: usernames[1],
+      username: usernames[3],
       password: 'vitest-password',
       bootstrapToken: ADMIN_BOOTSTRAP_TOKEN,
     });
 
     expect(response.status).toBe(200);
-    expect(response.body.user.username).toBe(usernames[1]);
+    expect(response.body.user.username).toBe(usernames[3]);
     expect(response.body.token).toEqual(expect.any(String));
+  });
+
+  it('denies every capture-log operation to non-admins in the test environment', async () => {
+    const authorization = `Bearer ${nonAdminToken}`;
+    await request(app.getHttpServer())
+      .get('/assistant/debug')
+      .set('authorization', authorization)
+      .expect(403);
+    await request(app.getHttpServer())
+      .patch('/assistant/debug')
+      .set('authorization', authorization)
+      .send({ enabled: true })
+      .expect(403);
+    await request(app.getHttpServer())
+      .get('/assistant/debug/logs')
+      .set('authorization', authorization)
+      .expect(403);
+    await request(app.getHttpServer())
+      .patch(`/assistant/debug/logs/${randomUUID()}`)
+      .set('authorization', authorization)
+      .send({ flagged: true })
+      .expect(403);
+    await request(app.getHttpServer())
+      .get('/assistant/debug/logs/export')
+      .set('authorization', authorization)
+      .expect(403);
+    await request(app.getHttpServer())
+      .delete('/assistant/debug/logs')
+      .set('authorization', authorization)
+      .expect(403);
   });
 
   it('rotates the HttpOnly refresh cookie and renews access', async () => {

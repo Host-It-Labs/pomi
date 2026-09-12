@@ -78,7 +78,10 @@ function createVoiceService(language: 'en' | 'fr') {
   const intentionsService = {
     getActiveIntentionsForAssistant: vi.fn(async () => []),
   };
-  const debugService = { recordLog: vi.fn(async () => null) };
+  const debugService = {
+    beginCapture: vi.fn(async () => null),
+    recordLog: vi.fn(async () => null),
+  };
   const preparationStore = {
     registerVoiceChunkManifest: vi.fn(async (_userId, _id, manifest) => {
       voiceChunkManifest = manifest;

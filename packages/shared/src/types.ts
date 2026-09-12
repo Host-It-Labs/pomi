@@ -608,6 +608,7 @@ export interface AssistantDebugLogEntry {
   timings: AssistantDebugTimings;
   modelCalls: AssistantDebugModelCall[];
   flagged: boolean;
+  contentTruncated: boolean;
   error: string | null;
   createdAt: string;
 }

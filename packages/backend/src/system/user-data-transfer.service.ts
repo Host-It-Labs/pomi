@@ -228,7 +228,10 @@ export class UserDataTransferService {
       await this.insertRows(
         manager,
         AssistantDebugSettingEntity,
-        this.remapNullableRow(payload.data.assistantDebugSetting, userId)
+        this.remapAssistantDebugSetting(
+          payload.data.assistantDebugSetting,
+          userId
+        )
       );
       await this.insertRows(
         manager,
@@ -591,6 +594,7 @@ export class UserDataTransferService {
       next.timings = this.isTransferRecord(row.timings) ? row.timings : {};
       next.modelCalls = [];
       next.flagged = row.flagged === true;
+      next.contentTruncated = row.contentTruncated === true;
       next.error = null;
       delete next.audioBase64;
       delete next.audioMimeType;
@@ -598,6 +602,20 @@ export class UserDataTransferService {
       delete next.parserOutput;
       return next;
     });
+  }
+
+  private remapAssistantDebugSetting(
+    row: UserDataTransferRow | null | undefined,
+    userId: string
+  ): UserDataTransferRow[] {
+    const remapped = this.remapNullableRow(row ?? null, userId);
+    return remapped.map(setting => ({
+      ...setting,
+      enabled: false,
+      consentVersion: null,
+      generation:
+        typeof setting.generation === 'number' ? setting.generation + 1 : 1,
+    }));
   }
 
   private isTransferRecord(value: unknown): value is UserDataTransferRow {
