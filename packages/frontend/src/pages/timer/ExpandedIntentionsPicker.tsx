@@ -926,6 +926,17 @@ export function ExpandedIntentionsPicker({
     (subCurrentPage + 1) * EXPANDED_SUB_INTENTIONS_PAGE_SIZE,
     currentSubPickerIntentions.length
   );
+  const slotGeometryClass = `w-[31%] max-w-40 ${
+    isTopPlacement
+      ? isMobile
+        ? 'h-9'
+        : 'h-8'
+      : compressPicker
+        ? 'h-9'
+        : isMobile
+          ? 'h-12'
+          : 'h-11'
+  }`;
 
   const renderIntentionButton = (
     intention: PickerIntention,
@@ -959,19 +970,16 @@ export function ExpandedIntentionsPicker({
     return (
       <button
         key={intention.slug}
+        data-slot-state="filled"
         onClick={() => handleIntentionClick(intention)}
         aria-pressed={isSelected}
         className={`flex items-center rounded-md transition-all relative
-          w-[31%] max-w-40 overflow-hidden select-none ${
-            isTopPlacement
-              ? isMobile
-                ? 'h-9 p-1.5'
-                : 'h-8 p-1.5'
-              : compressPicker
-                ? 'h-9 p-1.5'
-                : isMobile
-                  ? 'h-12 p-2.5'
-                  : 'h-11 p-2'
+          ${slotGeometryClass} overflow-hidden select-none ${
+            isTopPlacement || compressPicker
+              ? 'p-1.5'
+              : isMobile
+                ? 'p-2.5'
+                : 'p-2'
           } ${previewClasses.buttonClass}`}
         title={displayTooltip}
       >
@@ -1063,22 +1071,13 @@ export function ExpandedIntentionsPicker({
           Array.from({ length: itemsPerRow - row.length }).map((_, index) => (
             <div
               key={`${emptyRowKey}-${index}`}
+              data-slot-state={isLoadingIntentions ? 'loading' : 'empty'}
               data-testid={
                 isLoadingIntentions
                   ? 'intention-loading-placeholder'
                   : undefined
               }
-              className={`w-[30%] max-w-40 ${
-                isTopPlacement
-                  ? isMobile
-                    ? 'h-10'
-                    : 'h-8'
-                  : compressPicker
-                    ? 'h-9'
-                    : isMobile
-                      ? 'h-12'
-                      : 'h-11'
-              } rounded-md ${
+              className={`${slotGeometryClass} rounded-md ${
                 isLoadingIntentions ? 'animate-pulse bg-slate-800/30' : ''
               }`}
             />

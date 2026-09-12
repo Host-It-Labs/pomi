@@ -83,7 +83,6 @@ export function Login() {
   const acceptSession = useAuthStore.use.acceptSession();
   const isAuthenticated = useAuthStore.use.isAuthenticated();
   const setActiveTab = useUiStore.use.setActiveTab();
-  const setHasLoggedIn = useUiStore.use.setHasLoggedIn();
   const loadSystemInfo = useSystemStore.use.loadSystemInfo();
   const systemInfo = useSystemStore.use.systemInfo();
   const { showToast } = useToast();
@@ -187,7 +186,6 @@ export function Login() {
         } else if (data.isNewUser) {
           setLanguage(language, { persist: true });
         }
-        setHasLoggedIn(true);
         await acceptSession(data);
         setActiveTab('timer');
         void loadSystemInfo();

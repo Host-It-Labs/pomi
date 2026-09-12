@@ -521,7 +521,7 @@ function getDefaultTaskDueDate() {
 export const useTasksStore = createSelectors(useTasksStoreBase);
 
 useAuthStoreBase.subscribe((state, prevState) => {
-  if (state.token === prevState.token) {
+  if (state.user?.id === prevState.user?.id) {
     return;
   }
 

@@ -1843,6 +1843,7 @@ export function TaskIntentionFilterDropdown({
       clearLabel={t('common.all')}
       emptyLabel={t('common.all')}
       noSelectionLabel={t('common.all')}
+      returnFocusOnEscape={false}
       shortcut="I"
       shortcutShowModIcon
       shortcutPosition="topRight"

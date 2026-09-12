@@ -126,12 +126,12 @@ beforeEach(async () => {
     intentionPickerOpenRequest: 0,
     taskItemRevealRequest: null,
   });
+  useAuthStore.setState({
+    user: { id: 'user', username: 'copyme', isAdmin: true } as never,
+  });
   usePreferencesStore.setState({
     preferences,
     loadPreferences: vi.fn().mockResolvedValue(undefined),
-  });
-  useAuthStore.setState({
-    user: { id: 'user', username: 'copyme', isAdmin: true } as never,
   });
   useAssistantStore.setState({
     status: null,
@@ -307,6 +307,7 @@ describe('Unified workspace', () => {
     await vi.waitFor(() =>
       expect(filter.getAttribute('aria-expanded')).toBe('false')
     );
+    expect(document.activeElement).not.toBe(filter);
     animationFrame.mockRestore();
     usePreferencesStore.setState({
       preferences: { ...preferences, tasksShowInMinimizedTimer: true },
@@ -774,5 +775,29 @@ describe('Unified workspace', () => {
     await dialog.getByRole('button', { name: 'Create', exact: true }).click();
     await expect.element(dialog).not.toBeInTheDocument();
     expect(useUiStore.getState().activeTab).toBe('timer');
+  });
+
+  it('keeps filled and empty expanded Intention slots at equal height', async () => {
+    vi.spyOn(apiClient.intentions, 'list').mockResolvedValue({
+      status: 200,
+      body: intentions.slice(0, 4),
+    } as never);
+    root.render(<Timer useTallSafeAreaFallback={false} />);
+
+    await vi.waitFor(() =>
+      expect(host.querySelectorAll('[data-slot-state]')).toHaveLength(6)
+    );
+    const slots = Array.from(
+      host.querySelectorAll<HTMLElement>('[data-slot-state]')
+    );
+    const filledHeight = slots.find(
+      slot => slot.dataset.slotState === 'filled'
+    )!.offsetHeight;
+    const emptyHeights = slots
+      .filter(slot => slot.dataset.slotState === 'empty')
+      .map(slot => slot.offsetHeight);
+
+    expect(filledHeight).toBeGreaterThan(0);
+    expect(emptyHeights).toEqual([filledHeight, filledHeight]);
   });
 });

@@ -1279,6 +1279,7 @@ export class TimerService implements OnModuleInit {
       subIntentions: {},
       isResetOrSkip: true,
       preserveSessionState: true,
+      isAutoStarted: current.isAutoStarted === true,
       expectedVersion: timerVersion(current),
     });
     const entry = await this.buildHistoryEntry(

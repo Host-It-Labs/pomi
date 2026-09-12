@@ -44,7 +44,7 @@ afterEach(() => {
     isAuthenticated: false,
     hasExplicitlySignedOut: false,
   });
-  useUiStore.setState({ activeTab: 'timer', hasLoggedIn: false });
+  useUiStore.setState({ activeTab: 'timer' });
   setLanguage('en', { persist: false });
 });
 afterAll(() => server.close());
@@ -118,10 +118,7 @@ describe('authentication behavior migrated from legacy Playwright documentation'
         platform: 'web',
       },
     ]);
-    expect(useUiStore.getState()).toMatchObject({
-      activeTab: 'timer',
-      hasLoggedIn: true,
-    });
+    expect(useUiStore.getState().activeTab).toBe('timer');
   });
 
   it('uses the selected first-run language when creating an account', async () => {

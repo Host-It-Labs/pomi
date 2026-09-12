@@ -69,6 +69,7 @@ type IntentionAssignmentPickerProps = {
   emptyLabel?: string;
   noSelectionLabel?: string | null;
   returnFocusOnClose?: boolean;
+  returnFocusOnEscape?: boolean;
   shortcut?: string;
   shortcutAlwaysShow?: boolean;
   shortcutShowModIcon?: boolean;
@@ -112,6 +113,7 @@ export function IntentionAssignmentPicker({
   emptyLabel = 'No intention',
   noSelectionLabel = 'No intention selected',
   returnFocusOnClose = true,
+  returnFocusOnEscape,
   shortcut,
   shortcutAlwaysShow = true,
   shortcutShowModIcon = false,
@@ -134,6 +136,7 @@ export function IntentionAssignmentPicker({
   clearTestId,
 }: IntentionAssignmentPickerProps) {
   const { t } = useI18n();
+  const shouldReturnFocusOnEscape = returnFocusOnEscape ?? returnFocusOnClose;
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [highlightedSubIntention, setHighlightedSubIntention] = useState<{
     parentSlug: string;
@@ -327,11 +330,11 @@ export function IntentionAssignmentPicker({
       event.stopPropagation();
       searchInputRef.current?.blur();
       onOpenChange(false);
-      if (returnFocusOnClose) triggerRef.current?.focus();
+      if (shouldReturnFocusOnEscape) triggerRef.current?.focus();
     };
     window.addEventListener('keydown', handleEscape, true);
     return () => window.removeEventListener('keydown', handleEscape, true);
-  }, [isOpen, onOpenChange, returnFocusOnClose]);
+  }, [isOpen, onOpenChange, shouldReturnFocusOnEscape]);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (!isOpen) {
@@ -350,7 +353,9 @@ export function IntentionAssignmentPicker({
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
-      closePicker();
+      searchInputRef.current?.blur();
+      onOpenChange(false);
+      if (shouldReturnFocusOnEscape) triggerRef.current?.focus();
       return;
     }
 
