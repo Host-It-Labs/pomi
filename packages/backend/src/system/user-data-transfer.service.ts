@@ -172,6 +172,16 @@ export class UserDataTransferService {
         userId,
         idMaps.preferences
       );
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [`assistant-capture-logs:${userId}`]
+      );
+      const currentCaptureSettings = await manager.findOne(
+        AssistantDebugSettingEntity,
+        { where: { userId } }
+      );
+      const importedCaptureGeneration =
+        (currentCaptureSettings?.generation ?? 0) + 1;
       await this.deleteCurrentUserData(manager, userId);
       await this.insertRows(manager, Preferences, importedPreferences);
       await this.insertRows(
@@ -230,7 +240,8 @@ export class UserDataTransferService {
         AssistantDebugSettingEntity,
         this.remapAssistantDebugSetting(
           payload.data.assistantDebugSetting,
-          userId
+          userId,
+          importedCaptureGeneration
         )
       );
       await this.insertRows(
@@ -606,16 +617,19 @@ export class UserDataTransferService {
 
   private remapAssistantDebugSetting(
     row: UserDataTransferRow | null | undefined,
-    userId: string
+    userId: string,
+    generation: number
   ): UserDataTransferRow[] {
-    const remapped = this.remapNullableRow(row ?? null, userId);
-    return remapped.map(setting => ({
-      ...setting,
-      enabled: false,
-      consentVersion: null,
-      generation:
-        typeof setting.generation === 'number' ? setting.generation + 1 : 1,
-    }));
+    const [remapped] = this.remapNullableRow(row ?? null, userId);
+    return [
+      {
+        ...(remapped ?? { userId }),
+        userId,
+        enabled: false,
+        consentVersion: null,
+        generation,
+      },
+    ];
   }
 
   private isTransferRecord(value: unknown): value is UserDataTransferRow {

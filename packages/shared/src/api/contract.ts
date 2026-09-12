@@ -811,7 +811,11 @@ const assistantDebugStatusSchema = z.object({
 });
 
 const assistantDebugProcessedOutputSchema = z.object({
-  tasks: z.array(taskCreateSchema),
+  tasks: z.array(
+    taskCreateSchema.extend({
+      listId: z.string().uuid().nullable().optional(),
+    })
+  ),
   timerCommand: z
     .object({
       action: z.enum(['startTimer', 'pauseTimer', 'addFiveMinutes', 'none']),

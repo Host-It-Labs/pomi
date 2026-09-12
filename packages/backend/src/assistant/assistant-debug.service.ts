@@ -201,6 +201,7 @@ export class AssistantDebugService {
     if (input.captureGeneration === null) return null;
     if (
       input.kind === 'voiceCommand' &&
+      input.status === 'succeeded' &&
       (input.processedOutput?.tasks.length ?? 0) === 0
     ) {
       return null;

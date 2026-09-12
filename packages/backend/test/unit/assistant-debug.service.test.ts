@@ -279,3 +279,21 @@ test('does not retain Assistant voice commands without Task output', async () =>
   assert.equal(id, null);
   assert.equal(logs.length, 0);
 });
+
+test('retains failed Assistant voice captures before Task output exists', async () => {
+  const { service, logs } = createService();
+  const id = await service.recordLog('user-1', {
+    kind: 'voiceCommand',
+    source: 'assistantVoice',
+    status: 'failed',
+    userPrompt: 'Create a Task to submit the release notes',
+    timings: { transcriptionMs: 80, totalMs: 120 },
+    error: 'AssistantInterpretationError',
+    captureGeneration: 1,
+  });
+  assert.equal(id, 'log-1');
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].status, 'failed');
+  assert.equal(logs[0].userPrompt, 'Create a Task to submit the release notes');
+  assert.equal(logs[0].error, 'AssistantInterpretationError');
+});

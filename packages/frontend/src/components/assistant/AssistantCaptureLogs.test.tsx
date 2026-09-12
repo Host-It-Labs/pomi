@@ -84,4 +84,39 @@ describe('AssistantCaptureLogs', () => {
       })
     );
   });
+
+  it('restores the visible row position after refresh', async () => {
+    const initialResponse = (await apiClient.assistant.debugLogs()) as {
+      status: 200;
+      body: Array<Record<string, unknown>>;
+    };
+    vi.spyOn(apiClient.assistant, 'debugLogs')
+      .mockResolvedValueOnce(initialResponse as never)
+      .mockResolvedValueOnce({
+        ...initialResponse,
+        body: [...initialResponse.body],
+      } as never);
+    const scrollBy = vi.spyOn(window, 'scrollBy').mockImplementation(() => {});
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: 120,
+      bottom: 160,
+      left: 0,
+      right: 400,
+      width: 400,
+      height: 40,
+      x: 0,
+      y: 120,
+      toJSON: () => ({}),
+    });
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <AssistantCaptureLogs />
+      </ToastProvider>
+    );
+
+    await screen.findByRole('button', { name: /Typed/ });
+    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(scrollBy).toHaveBeenCalledWith({ top: 0 }));
+  });
 });

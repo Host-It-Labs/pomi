@@ -1,6 +1,12 @@
 import type { AssistantDebugLogEntry } from '@pomi/shared';
 import clsx from 'clsx';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { FaChevronDown, FaChevronUp, FaFlag } from 'react-icons/fa';
 import { useToast } from '../toast/ToastContext';
 import { Button } from '../ui/Button';
@@ -32,11 +38,47 @@ export function AssistantCaptureLogs() {
   } | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const requestGeneration = useRef(0);
+  const logsRef = useRef<AssistantDebugLogEntry[]>([]);
+  const expandedIdRef = useRef<string | null>(null);
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const pendingAnchorRef = useRef<{ id: string; top: number } | null>(null);
+
+  useEffect(() => {
+    logsRef.current = logs;
+  }, [logs]);
+
+  useEffect(() => {
+    expandedIdRef.current = expandedId;
+  }, [expandedId]);
+
+  useLayoutEffect(() => {
+    const anchor = pendingAnchorRef.current;
+    if (!anchor) return;
+    pendingAnchorRef.current = null;
+    const row = rowRefs.current.get(anchor.id);
+    if (!row) return;
+    window.scrollBy({ top: row.getBoundingClientRect().top - anchor.top });
+  }, [logs]);
+
+  const rememberAnchor = useCallback(() => {
+    const expanded = expandedIdRef.current;
+    const visible = logsRef.current.find(log => {
+      const bounds = rowRefs.current.get(log.id)?.getBoundingClientRect();
+      return bounds
+        ? bounds.bottom > 0 && bounds.top < window.innerHeight
+        : false;
+    })?.id;
+    const id = expanded ?? visible;
+    const row = id ? rowRefs.current.get(id) : null;
+    return id && row ? { id, top: row.getBoundingClientRect().top } : null;
+  }, []);
 
   const load = useCallback(
     async (mode: 'initial' | 'refresh') => {
       const generation = requestGeneration.current + 1;
       requestGeneration.current = generation;
+      const previousLogs = logsRef.current;
+      const anchor = mode === 'refresh' ? rememberAnchor() : null;
       if (mode === 'initial') setInitialLoading(true);
       else setRefreshing(true);
       setLoadError(null);
@@ -50,12 +92,28 @@ export function AssistantCaptureLogs() {
         }
         if (requestGeneration.current !== generation) return;
         setEnabled(statusResponse.body.enabled);
-        setLogs(logsResponse.body);
-        setExpandedId(current =>
-          current && logsResponse.body.some(log => log.id === current)
-            ? current
-            : null
-        );
+        const nextLogs = logsResponse.body;
+        const currentExpanded = expandedIdRef.current;
+        let nextAnchor = anchor;
+        if (
+          currentExpanded &&
+          !nextLogs.some(log => log.id === currentExpanded)
+        ) {
+          setExpandedId(null);
+        }
+        if (nextAnchor) {
+          const missingAnchorId = nextAnchor.id;
+          if (!nextLogs.some(log => log.id === missingAnchorId)) {
+            const oldIndex = previousLogs.findIndex(
+              log => log.id === missingAnchorId
+            );
+            const nearest =
+              nextLogs[Math.min(Math.max(oldIndex, 0), nextLogs.length - 1)];
+            nextAnchor = nearest ? { ...nextAnchor, id: nearest.id } : null;
+          }
+        }
+        pendingAnchorRef.current = nextAnchor;
+        setLogs(nextLogs);
       } catch (error) {
         if (requestGeneration.current !== generation) return;
         const message =
@@ -69,7 +127,7 @@ export function AssistantCaptureLogs() {
         }
       }
     },
-    [showToast, t]
+    [rememberAnchor, showToast, t]
   );
 
   useEffect(() => {
@@ -295,6 +353,10 @@ export function AssistantCaptureLogs() {
                     )
                   }
                   onFlag={() => void toggleFlag(log)}
+                  rowRef={element => {
+                    if (element) rowRefs.current.set(log.id, element);
+                    else rowRefs.current.delete(log.id);
+                  }}
                   t={t}
                 />
               ))}
@@ -312,6 +374,7 @@ function CaptureLogRow({
   updating,
   onExpand,
   onFlag,
+  rowRef,
   t,
 }: {
   log: AssistantDebugLogEntry;
@@ -319,10 +382,14 @@ function CaptureLogRow({
   updating: boolean;
   onExpand: () => void;
   onFlag: () => void;
+  rowRef: (element: HTMLDivElement | null) => void;
   t: TranslateFunction;
 }) {
   return (
-    <div className="overflow-hidden rounded-md border border-slate-800/70 bg-slate-950/35">
+    <div
+      ref={rowRef}
+      className="overflow-hidden rounded-md border border-slate-800/70 bg-slate-950/35"
+    >
       <div className="flex items-center gap-1">
         <button
           type="button"
