@@ -508,6 +508,7 @@ export function Statistics() {
                         clearLabel={t('intention.all')}
                         parentSelectionLabel={t('intention.allSubIntentions')}
                         noSelectionLabel={t('intention.all')}
+                        returnFocusOnEscape
                         showLabel={false}
                         searchPlaceholder={t('intention.search')}
                         triggerClassName="h-8 text-xs"
