@@ -8,7 +8,7 @@
     "sourceLines": "physical lines"
   },
   "vitest": {
-    "total": 1020,
+    "total": 1073,
     "projects": {
       "shared-unit": {
         "tests": 28,
@@ -17,16 +17,16 @@
         "declaredTests": 28
       },
       "backend-unit": {
-        "tests": 581,
-        "files": 91,
-        "staticCollectedTests": 581,
+        "tests": 582,
+        "files": 93,
+        "staticCollectedTests": 582,
         "declaredTests": 567
       },
       "frontend-unit": {
-        "tests": 324,
-        "files": 75,
-        "staticCollectedTests": 324,
-        "declaredTests": 323
+        "tests": 361,
+        "files": 84,
+        "staticCollectedTests": 361,
+        "declaredTests": 360
       },
       "backend-integration": {
         "tests": 68,
@@ -35,10 +35,10 @@
         "declaredTests": 68
       },
       "frontend-browser": {
-        "tests": 19,
-        "files": 9,
-        "staticCollectedTests": 19,
-        "declaredTests": 19
+        "tests": 34,
+        "files": 11,
+        "staticCollectedTests": 34,
+        "declaredTests": 31
       }
     }
   },
@@ -47,22 +47,22 @@
     "files": 0
   },
   "native": {
-    "wearTests": 45,
+    "wearTests": 46,
     "wearFiles": 10,
     "rustTests": 3,
-    "rustFiles": 2
+    "rustFiles": 3
   },
   "playwright": {
     "retainedJourneys": 13,
-    "retainedSpecLines": 833,
-    "retainedHelperLines": 406,
-    "retainedActiveSourceLines": 1239,
+    "retainedSpecLines": 793,
+    "retainedHelperLines": 339,
+    "retainedActiveSourceLines": 1132,
     "legacyTests": 0,
     "legacySpecFiles": 0,
     "legacySourceLines": 0
   },
   "totals": {
-    "nonE2eTests": 1068,
-    "activeTests": 1081
+    "nonE2eTests": 1122,
+    "activeTests": 1135
   }
 }

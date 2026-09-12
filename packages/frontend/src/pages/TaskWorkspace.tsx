@@ -16,7 +16,6 @@ import {
 } from '@pomi/shared';
 import { TASK_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
 import clsx from 'clsx';
-import { AnimatePresence, motion } from 'framer-motion';
 import {
   useCallback,
   useEffect,
@@ -24,6 +23,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
   type Ref,
 } from 'react';
 import {
@@ -42,6 +42,7 @@ import {
   FaTimes,
   FaUndo,
 } from 'react-icons/fa';
+import { useNativePresenceList } from '../components/ui/useNativePresence';
 import {
   IntentionAssignmentPicker,
   type IntentionAssignmentPickerChange,
@@ -2471,6 +2472,51 @@ function ListItemEditModal({
   );
 }
 
+function NativeTaskListRow({
+  phase,
+  className,
+  children,
+}: {
+  phase: 'entering' | 'entered' | 'exiting';
+  className: string;
+  children: ReactNode;
+}) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const lastLayout = useRef<{ top: number; height: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (phase !== 'exiting' && rowRef.current) {
+      lastLayout.current = {
+        top: rowRef.current.offsetTop,
+        height: rowRef.current.offsetHeight,
+      };
+    }
+  }, [phase]);
+
+  const exitLayout = phase === 'exiting' ? lastLayout.current : null;
+  return (
+    <div
+      ref={rowRef}
+      data-presence={phase}
+      aria-hidden={phase === 'exiting' || undefined}
+      inert={phase === 'exiting' || undefined}
+      style={
+        exitLayout
+          ? {
+              position: 'absolute',
+              insetInline: 0,
+              top: exitLayout.top,
+              height: exitLayout.height,
+            }
+          : undefined
+      }
+      className={className}
+    >
+      {children}
+    </div>
+  );
+}
+
 function MixedTaskList({
   entries,
   completingTaskIds,
@@ -2537,69 +2583,73 @@ function MixedTaskList({
   showTypeBadge: boolean;
   highlightedTaskId: string | null;
 }) {
+  const renderedEntries = useNativePresenceList(
+    entries,
+    entry =>
+      entry.kind === 'listItem'
+        ? `list-item:${entry.item.id}`
+        : `task:${entry.task.id}`,
+    70
+  );
+
   return (
     <section
       data-testid="task-list"
       className="relative overflow-visible rounded-xl border border-slate-800/75 bg-slate-900/30 shadow-sm shadow-black/15"
     >
-      <AnimatePresence initial={false} mode="popLayout">
-        {entries.map(entry => {
-          if (entry.kind === 'listItem') {
-            const isCompleting = completingListItemIds.includes(entry.item.id);
-            return (
-              <motion.div
-                key={`list-item:${entry.item.id}`}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: isCompleting ? 0.5 : 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.07 }}
-                className="border-b border-slate-800/65 last:border-b-0"
-              >
-                <ListItemTaskRow
-                  item={entry.item}
-                  list={entry.list}
-                  intentions={intentions}
-                  isCompleting={isCompleting}
-                  onEdit={onEditListItem}
-                  onComplete={onCompleteListItem}
-                  onArchive={onArchiveListItem}
-                  onUpdate={onUpdateListItem}
-                  onConvertToTask={onConvertListItemToTask}
-                />
-              </motion.div>
-            );
-          }
-          const task = entry.task;
-          const isCompleting = completingTaskIds.includes(task.id);
+      {renderedEntries.map(({ key, value: entry, phase }) => {
+        if (entry.kind === 'listItem') {
+          const isCompleting = completingListItemIds.includes(entry.item.id);
           return (
-            <motion.div
-              key={task.id}
-              initial={{ opacity: 0 }}
-              animate={
-                task.status === TASK_STATUSES.COMPLETED || isCompleting
-                  ? { opacity: 0.5 }
-                  : { opacity: 1 }
-              }
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.07 }}
-              className="border-b border-slate-800/65 last:border-b-0"
+            <NativeTaskListRow
+              key={key}
+              phase={phase}
+              className={clsx(
+                'native-list-row border-b border-slate-800/65 last:border-b-0',
+                isCompleting && 'opacity-50'
+              )}
             >
-              <TaskRow
-                task={task}
-                isCompleting={isCompleting}
+              <ListItemTaskRow
+                item={entry.item}
+                list={entry.list}
                 intentions={intentions}
-                lists={lists}
-                onEdit={onEdit}
-                onOpenDescription={onOpenDescription}
-                onUpdate={onUpdate}
-                onConvertToListItem={onConvertToListItem}
-                showTypeBadge={showTypeBadge}
-                isHighlighted={highlightedTaskId === task.id}
+                isCompleting={isCompleting}
+                onEdit={onEditListItem}
+                onComplete={onCompleteListItem}
+                onArchive={onArchiveListItem}
+                onUpdate={onUpdateListItem}
+                onConvertToTask={onConvertListItemToTask}
               />
-            </motion.div>
+            </NativeTaskListRow>
           );
-        })}
-      </AnimatePresence>
+        }
+        const task = entry.task;
+        const isCompleting = completingTaskIds.includes(task.id);
+        return (
+          <NativeTaskListRow
+            key={key}
+            phase={phase}
+            className={clsx(
+              'native-list-row border-b border-slate-800/65 last:border-b-0',
+              (task.status === TASK_STATUSES.COMPLETED || isCompleting) &&
+                'opacity-50'
+            )}
+          >
+            <TaskRow
+              task={task}
+              isCompleting={isCompleting}
+              intentions={intentions}
+              lists={lists}
+              onEdit={onEdit}
+              onOpenDescription={onOpenDescription}
+              onUpdate={onUpdate}
+              onConvertToListItem={onConvertToListItem}
+              showTypeBadge={showTypeBadge}
+              isHighlighted={highlightedTaskId === task.id}
+            />
+          </NativeTaskListRow>
+        );
+      })}
     </section>
   );
 }

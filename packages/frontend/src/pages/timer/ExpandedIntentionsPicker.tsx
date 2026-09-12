@@ -1,7 +1,7 @@
 import { Intention, IntentionType } from '@pomi/shared';
 import { TIMER_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
-import { motion } from 'framer-motion';
 import {
+  type CSSProperties,
   type TouchEvent,
   useCallback,
   useEffect,
@@ -1010,17 +1010,14 @@ export function ExpandedIntentionsPicker({
             </span>
           )}
           {!isCountLoading && showDailyCounts && displayCount > 0 && (
-            <motion.span
+            <span
               data-testid="intention-count-badge"
-              initial={{ opacity: 0, scale: 0.85 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.16, ease: 'easeOut' }}
-              className={`absolute text-[9px] font-bold bg-indigo-600 text-ink rounded-full min-w-3.5 h-3.5 flex items-center justify-center px-0.5 ${
+              className={`native-badge-enter absolute text-[9px] font-bold bg-indigo-600 text-ink rounded-full min-w-3.5 h-3.5 flex items-center justify-center px-0.5 ${
                 selectedSubIntention ? 'top-5 -right-1' : '-top-1 -right-1'
               }`}
             >
               {displayCount}
-            </motion.span>
+            </span>
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -1136,15 +1133,12 @@ export function ExpandedIntentionsPicker({
           />
         )}
         {!isCountLoading && showDailyCounts && count > 0 && (
-          <motion.span
+          <span
             data-testid="intention-count-badge"
-            initial={{ opacity: 0, scale: 0.85 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.16, ease: 'easeOut' }}
-            className="absolute top-5 -right-1 text-[9px] font-bold bg-cyan-600 text-ink rounded-full min-w-3.5 h-3.5 flex items-center justify-center px-0.5"
+            className="native-badge-enter absolute top-5 -right-1 text-[9px] font-bold bg-cyan-600 text-ink rounded-full min-w-3.5 h-3.5 flex items-center justify-center px-0.5"
           >
             {count}
-          </motion.span>
+          </span>
         )}
       </button>
     );
@@ -1318,9 +1312,9 @@ export function ExpandedIntentionsPicker({
   );
 
   return (
-    <motion.div
+    <div
       data-testid="expanded-intentions-picker"
-      className={`w-full px-3 ${
+      className={`native-picker-enter w-full px-3 ${
         isTopPlacement
           ? 'bg-linear-to-b from-slate-950/45 via-slate-950/20 to-transparent'
           : isIos
@@ -1329,12 +1323,12 @@ export function ExpandedIntentionsPicker({
       } ${isTopPlacement || compressPicker ? (isMobile ? 'pt-1' : 'pt-1.5') : 'pt-4'} ${
         isDisconnected ? 'opacity-50' : ''
       }`}
-      style={{
-        paddingBottom: isTopPlacement ? '4px' : safeAreaPaddingBottom,
-      }}
-      initial={{ opacity: 0, y: isTopPlacement ? -16 : 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
+      style={
+        {
+          paddingBottom: isTopPlacement ? '4px' : safeAreaPaddingBottom,
+          '--native-picker-y': isTopPlacement ? '-16px' : '20px',
+        } as CSSProperties
+      }
       onTouchStart={isMobile ? handlePickerTouchStart : undefined}
       onTouchEnd={isMobile ? handlePickerTouchEnd : undefined}
     >
@@ -1360,6 +1354,6 @@ export function ExpandedIntentionsPicker({
           {subPickerState ? renderSubIntentionsBand() : controls}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
