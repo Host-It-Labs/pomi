@@ -54,14 +54,16 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
       })
     );
     this.pollInterval = setInterval(
-      () => void this.scanDueSchedules(),
+      () => void this.scanDueSchedules(new Date()),
       TASK_REMINDER_POLL_INTERVAL_MS
     );
     this.reconcileInterval = setInterval(
       () => void this.rebuildAllSchedules(),
       TASK_REMINDER_RECONCILE_INTERVAL_MS
     );
-    void this.rebuildAllSchedules().then(() => this.scanDueSchedules());
+    void this.rebuildAllSchedules().then(() =>
+      this.scanDueSchedules(new Date())
+    );
   }
 
   onModuleDestroy(): void {
@@ -74,7 +76,7 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
       .forEach(subscription => subscription.unsubscribe());
   }
 
-  async scanDueSchedules(now = new Date()): Promise<void> {
+  async scanDueSchedules(now: Date): Promise<void> {
     const claimToken = randomUUID();
     const claimedUntil = new Date(now.getTime() + TASK_REMINDER_CLAIM_LEASE_MS);
     let claimedRows: Array<{ id: string }>;
@@ -171,6 +173,7 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
 
   private async performUserScheduleRebuild(userId: string): Promise<void> {
     try {
+      const now = new Date();
       const [tasks, preferences] = await Promise.all([
         this.tasksRepository.find({
           where: {
@@ -181,15 +184,27 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
         }),
         this.preferencesService.getPreferences(userId),
       ]);
-      await Promise.all(
-        tasks.map(task =>
-          this.tasksRepository.update(task.id, {
-            nextReminderAt: this.getNextReminderAt(task, preferences),
-            reminderClaimToken: null,
-            reminderClaimedUntil: null,
-          })
-        )
+      const candidates = tasks.filter(
+        task => task.dueDate || task.nextReminderAt
       );
+      for (let offset = 0; offset < candidates.length; offset += 25) {
+        await Promise.all(
+          candidates.slice(offset, offset + 25).map(task =>
+            this.tasksRepository.query(
+              `UPDATE "tasks"
+               SET "nextReminderAt" = $2,
+                   "reminderClaimToken" = NULL,
+                   "reminderClaimedUntil" = NULL
+               WHERE "id" = $1
+                 AND (
+                   "reminderClaimedUntil" IS NULL
+                   OR "reminderClaimedUntil" <= $3
+                 )`,
+              [task.id, this.getNextReminderAt(task, preferences, now), now]
+            )
+          )
+        );
+      }
     } catch {
       this.logger.warn('Failed to rebuild a task reminder schedule');
     }
@@ -232,7 +247,7 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async scanDueTasks(now = new Date()): Promise<void> {
+  async scanDueTasks(now: Date): Promise<void> {
     let tasks: TaskEntity[];
     try {
       tasks = await this.getReminderCandidates();
@@ -467,7 +482,7 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
   private getNextReminderAt(
     task: TaskEntity,
     preferences: Awaited<ReturnType<PreferencesService['getPreferences']>>,
-    now = new Date()
+    now: Date
   ): Date | null {
     if (
       task.status !== TASK_STATUSES.ACTIVE ||

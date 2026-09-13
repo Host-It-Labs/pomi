@@ -193,7 +193,7 @@ describe('TaskNotificationService', () => {
       logger: { warn: (message: string) => warnings.push(message) },
     });
 
-    await expect(service.scanDueTasks()).resolves.toBeUndefined();
+    await expect(service.scanDueTasks(new Date())).resolves.toBeUndefined();
     expect(warnings).toEqual([
       'Task reminder scan skipped while storage is unavailable',
     ]);

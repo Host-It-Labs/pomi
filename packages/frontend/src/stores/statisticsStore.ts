@@ -476,12 +476,26 @@ useAuthStoreBase.subscribe((state, previousState) => {
 
   advanceRequestGeneration();
   if (state.user?.id === previousState.user?.id) {
+    const statisticsState = useStatisticsStoreBase.getState();
     useStatisticsStoreBase.setState({
       isLoading: false,
       isLoadingTopIntentions: false,
       activeSummaryRequestKey: null,
       activeTopIntentionsRequestKey: null,
     });
+    if (state.user?.id && state.token) {
+      queueMicrotask(() => {
+        const current = useStatisticsStoreBase.getState();
+        void current.fetchStatistics(
+          statisticsState.currentIntention,
+          statisticsState.currentSessionType,
+          statisticsState.currentSubIntention
+        );
+        void current.fetchTopIntentions(
+          statisticsState.currentIntention || undefined
+        );
+      });
+    }
     return;
   }
 

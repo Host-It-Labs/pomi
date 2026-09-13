@@ -483,7 +483,7 @@ export class StatisticsService {
         nextIntentions,
         previousSubs,
         nextSubs,
-        before,
+        current ? this.toHistorySnapshot(current) : null,
         after
       );
     });
@@ -496,7 +496,7 @@ export class StatisticsService {
     nextIntentions: string[],
     previousSubs: Record<string, string>,
     nextSubs: Record<string, string>,
-    before: StatisticHistorySnapshot | null,
+    current: StatisticHistorySnapshot | null,
     after: StatisticHistorySnapshot | null
   ): Promise<void> {
     const previous = [...previousIntentions, ...Object.values(previousSubs)];
@@ -504,13 +504,13 @@ export class StatisticsService {
     const removed = this.getSlugDifference(previous, next);
     const added = this.getSlugDifference(next, previous);
     if (
-      before &&
+      current &&
       after &&
-      before.duration !== after.duration &&
+      current.duration !== after.duration &&
       removed.length === 0 &&
       added.length === 0
     ) {
-      (after.duration > before.duration ? added : removed).push(...next);
+      (after.duration > current.duration ? added : removed).push(...next);
     }
     await this.updateUsageCounts(manager, userId, removed, -1);
     await this.updateUsageCounts(manager, userId, added, 1);

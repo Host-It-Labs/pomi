@@ -182,6 +182,8 @@ describe('Statistics store request coordination', () => {
   });
 
   it('preserves settled statistics during a same-account token refresh', async () => {
+    mocks.summary.mockResolvedValue({ status: 200, body: summaryBody });
+    mocks.topIntentions.mockResolvedValue({ status: 200, body: [] });
     const { useStatisticsStoreBase } = await import('./statisticsStore');
     useStatisticsStoreBase.setState({
       statistics: { ...summaryBody, marker: 'settled' } as never,
@@ -198,6 +200,10 @@ describe('Statistics store request coordination', () => {
     expect(useStatisticsStoreBase.getState().topIntentions).toEqual([
       { intention: 'focus' },
     ]);
+    await vi.waitFor(() => {
+      expect(mocks.summary).toHaveBeenCalledOnce();
+      expect(mocks.topIntentions).toHaveBeenCalledOnce();
+    });
   });
 
   it('removes failed requests so the same key can be retried', async () => {

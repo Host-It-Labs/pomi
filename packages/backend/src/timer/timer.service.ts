@@ -170,7 +170,7 @@ export class TimerService implements OnModuleInit {
     userId: string,
     type: TimerTypes
   ): Promise<void> {
-    this.clearAutoAdvance(userId);
+    this.clearAutoAdvance(userId, true);
     this.timerIdleService.cancelPausedTimerReminder(userId);
     if (type === TIMER_TYPES.WORK) {
       this.timerEvents.emitExtensionStateUpdate(
@@ -1603,7 +1603,7 @@ export class TimerService implements OnModuleInit {
       });
     }
 
-    this.clearAutoAdvance(userId);
+    this.clearAutoAdvance(userId, true);
     this.timerCountdownService.stopCountdown(userId);
     this.timerIdleService.cancelIdleDetectionCheck(userId);
     this.timerIdleService.cancelPausedTimerReminder(userId);
@@ -1876,7 +1876,7 @@ export class TimerService implements OnModuleInit {
     };
 
     await this.commitCurrentTimer(userId, expected, timer);
-    this.clearAutoAdvance(userId);
+    this.clearAutoAdvance(userId, true);
     this.timerCountdownService.stopCountdown(userId);
     await this.timerCountdownService.startCountdown(
       timer,
@@ -2404,7 +2404,7 @@ export class TimerService implements OnModuleInit {
     }
     if (!(await this.isContinuationTimerCurrent(userId, plan))) return;
 
-    this.clearAutoAdvance(userId);
+    this.clearAutoAdvance(userId, true);
     this.timerCountdownService.stopCountdown(userId, plan.source);
     this.timerIdleService.cancelPausedTimerReminder(userId);
     if (plan.nextTimer.type === TIMER_TYPES.LONG_BREAK) {
@@ -2898,16 +2898,21 @@ export class TimerService implements OnModuleInit {
     delayMs: number,
     run: () => void | Promise<unknown>
   ): void {
-    this.clearAutoAdvance(userId);
+    this.clearAutoAdvance(userId, false);
     const completionHistory =
       this.pendingAutoStartCompletionHistory.get(userId);
-    this.pendingAutoStartCompletionHistory.delete(userId);
 
     const timeout = setTimeout(() => {
       this.autoAdvanceTimeouts.delete(userId);
       void Promise.resolve(run())
         .then(async () => {
           if (completionHistory) {
+            if (
+              this.pendingAutoStartCompletionHistory.get(userId) ===
+              completionHistory
+            ) {
+              this.pendingAutoStartCompletionHistory.delete(userId);
+            }
             await this.recordAutoStartCompletionHistory(
               userId,
               completionHistory.timer,
@@ -2925,7 +2930,10 @@ export class TimerService implements OnModuleInit {
     this.autoAdvanceTimeouts.set(userId, timeout);
   }
 
-  private clearAutoAdvance(userId: string): void {
+  private clearAutoAdvance(
+    userId: string,
+    reconcileCompletionHistory: boolean
+  ): void {
     const timeout = this.autoAdvanceTimeouts.get(userId);
     if (!timeout) {
       return;
@@ -2933,6 +2941,24 @@ export class TimerService implements OnModuleInit {
 
     clearTimeout(timeout);
     this.autoAdvanceTimeouts.delete(userId);
+    if (reconcileCompletionHistory) {
+      const completionHistory =
+        this.pendingAutoStartCompletionHistory.get(userId);
+      if (completionHistory) {
+        this.pendingAutoStartCompletionHistory.delete(userId);
+        void this.recordAutoStartCompletionHistory(
+          userId,
+          completionHistory.timer,
+          completionHistory.before,
+          false
+        ).catch(error => {
+          this.logger.error(
+            'Failed to retain interrupted auto-start completion history',
+            error
+          );
+        });
+      }
+    }
   }
 
   async captureAutoStartCompletionHistoryBefore(

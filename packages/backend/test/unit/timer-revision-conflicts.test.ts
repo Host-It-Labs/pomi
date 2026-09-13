@@ -1437,4 +1437,35 @@ describe('logging extension time', () => {
       }
     }
   );
+
+  it('records pending completion history when another transition cancels auto-advance', async () => {
+    const timer = currentTimer();
+    const before = { timer, statistics: [] };
+    const recordAutoStartCompletionHistory = vi.fn(async () => undefined);
+    const service = Object.assign(Object.create(TimerService.prototype), {
+      autoAdvanceTimeouts: new Map([
+        ['user-1', setTimeout(() => undefined, 60_000)],
+      ]),
+      pendingAutoStartCompletionHistory: new Map([
+        ['user-1', { timer, before }],
+      ]),
+      recordAutoStartCompletionHistory,
+      logger: { error: vi.fn() },
+    }) as TimerService;
+
+    (
+      service as unknown as {
+        clearAutoAdvance(userId: string, reconcile: boolean): void;
+      }
+    ).clearAutoAdvance('user-1', true);
+
+    await vi.waitFor(() => {
+      expect(recordAutoStartCompletionHistory).toHaveBeenCalledWith(
+        'user-1',
+        timer,
+        before,
+        false
+      );
+    });
+  });
 });

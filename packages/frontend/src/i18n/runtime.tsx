@@ -14,6 +14,7 @@ import {
   isRightToLeft,
   LANGUAGE_STORAGE_KEY,
   normalizeLanguage,
+  SUPPORTED_LANGUAGES,
   type AppLanguage,
 } from './languages';
 import {
@@ -75,6 +76,16 @@ export async function initializeI18n() {
     requestedLanguage = DEFAULT_LANGUAGE;
   }
   applyDocumentLanguage(currentLanguage);
+  const preload = () => {
+    void Promise.allSettled(
+      SUPPORTED_LANGUAGES.map(({ code }) => loadTranslationCatalog(code))
+    );
+  };
+  if (typeof navigator === 'undefined' || navigator.onLine) {
+    preload();
+  } else if (typeof window !== 'undefined') {
+    window.addEventListener('online', preload, { once: true });
+  }
 }
 
 function commitLanguage(language: AppLanguage) {
