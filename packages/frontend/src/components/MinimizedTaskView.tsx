@@ -27,6 +27,8 @@ import { useVacationStore } from '../stores/vacationStore';
 import { apiClient } from '../utils/apiClient';
 import {
   requestListRefresh,
+  reduceRealtimeListItems,
+  reduceRealtimeLists,
   subscribeToListRefresh,
 } from '../utils/listRefresh';
 import { mixTaskAndListItems } from '../utils/mixedTaskItems';
@@ -276,8 +278,22 @@ export function MinimizedTaskView({
 
   useEffect(() => {
     void loadLists();
-    return subscribeToListRefresh(() => void loadLists());
-  }, [loadLists]);
+    return subscribeToListRefresh(update => {
+      if (!preferences?.listsExtension) {
+        setLists([]);
+        setListItems([]);
+        return;
+      }
+      if (!update) return void loadLists();
+      if (!Array.isArray(update)) {
+        setLists(update.snapshot.lists);
+        setListItems(update.snapshot.listItems);
+        return;
+      }
+      setLists(current => reduceRealtimeLists(current, update));
+      setListItems(current => reduceRealtimeListItems(current, update));
+    });
+  }, [loadLists, preferences?.listsExtension]);
 
   const createListItemFromEditor = useCallback(
     async (

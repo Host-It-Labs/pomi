@@ -75,6 +75,15 @@ describe('stale-user authentication', () => {
       {
         onTasksUpdate: createEventSource(),
         onUserActionUpdate: createEventSource(),
+      } as never,
+      {
+        prime: async () => 0,
+        readNextEnvelope: async () => ({
+          fromRevision: 0,
+          revision: 0,
+          resetRequired: false,
+          changes: [],
+        }),
       } as never
     );
     const client = {
@@ -128,6 +137,15 @@ describe('stale-user authentication', () => {
       {
         onTasksUpdate: createEventSource(),
         onUserActionUpdate: createEventSource(),
+      } as never,
+      {
+        prime: async () => 0,
+        readNextEnvelope: async () => ({
+          fromRevision: 0,
+          revision: 0,
+          resetRequired: false,
+          changes: [],
+        }),
       } as never
     );
     const client = {
@@ -189,6 +207,15 @@ describe('stale-user authentication', () => {
       {
         onTasksUpdate: createEventSource(),
         onUserActionUpdate: createEventSource(),
+      } as never,
+      {
+        prime: async () => 0,
+        readNextEnvelope: async () => ({
+          fromRevision: 0,
+          revision: 0,
+          resetRequired: false,
+          changes: [],
+        }),
       } as never
     );
     const emittedEvents: unknown[][] = [];
@@ -258,6 +285,15 @@ describe('stale-user authentication', () => {
         {
           onTasksUpdate: createEventSource(),
           onUserActionUpdate: createEventSource(),
+        } as never,
+        {
+          prime: async () => 0,
+          readNextEnvelope: async () => ({
+            fromRevision: 0,
+            revision: 0,
+            resetRequired: false,
+            changes: [],
+          }),
         } as never
       );
       const client = {

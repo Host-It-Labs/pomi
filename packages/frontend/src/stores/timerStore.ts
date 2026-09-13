@@ -5,6 +5,7 @@ import {
   TimerSkipLogMode,
   TimerTypes,
   Preferences,
+  type TaskListChangeEnvelope,
 } from '@pomi/shared';
 import {
   SOCKET_EVENTS,
@@ -17,6 +18,7 @@ import { create } from 'zustand';
 
 import { showToastFromStore } from '../components/toast/ToastContext';
 import { translateCurrent } from '../i18n';
+import { apiClient } from '../utils/apiClient';
 import {
   DesktopNotificationEvent,
   desktopNotificationHandler,
@@ -43,17 +45,40 @@ import { useAuthStoreBase } from './authStore';
 import { createSelectors } from './createSelectors';
 import { usePreferencesStore } from './preferencesStore';
 import { useTasksStore } from './tasksStore';
-import { requestListRefresh } from '../utils/listRefresh';
+import {
+  applyListRealtimeChanges,
+  applyListSnapshot,
+  requestListRefresh,
+} from '../utils/listRefresh';
 import {
   clearLiveTimerProjection,
   publishLiveTimerProjection,
 } from '../utils/liveTimerSurface';
+import { createSerializedSnapshotRecovery } from '../utils/serializedSnapshotRecovery';
 import { type HistoryActionId, useUiStore } from './uiStore';
 
 let localTimerInterval: NodeJS.Timeout | null = null;
 let lastSyncTime = 0;
 let isInitialized = false;
 const pendingTimerHistoryActionIds: HistoryActionId[] = [];
+let taskListRevision: number | null = null;
+const requestTaskListSnapshot = createSerializedSnapshotRecovery({
+  load: async () => {
+    const response = await apiClient.tasks.snapshot();
+    if (response.status !== 200) throw new Error('Task snapshot failed');
+    return response.body;
+  },
+  apply: snapshot => {
+    useTasksStore.getState().replaceTasks(snapshot.tasks);
+    applyListSnapshot(snapshot.lists, snapshot.listItems);
+    taskListRevision = snapshot.revision;
+  },
+  onFailure: () => {
+    void useTasksStore.getState().refreshTasks();
+    requestListRefresh();
+    taskListRevision = null;
+  },
+});
 
 interface TimerState {
   timer: Timer | null;
@@ -272,9 +297,29 @@ const useTimerStoreBase = create<TimerState>((set, get) => ({
       }
     );
 
-    registerSocketEventHandler(SOCKET_EVENTS.TASKS_UPDATE, () => {
-      void useTasksStore.getState().refreshTasks();
-      requestListRefresh();
+    registerSocketEventHandler(SOCKET_EVENTS.TASKS_UPDATE, (data: unknown) => {
+      const envelope = data as TaskListChangeEnvelope;
+      if (
+        !envelope ||
+        typeof envelope.revision !== 'number' ||
+        envelope.resetRequired ||
+        taskListRevision === null ||
+        envelope.fromRevision !== taskListRevision
+      ) {
+        requestTaskListSnapshot(
+          typeof envelope?.revision === 'number' ? envelope.revision : 0
+        );
+        return;
+      }
+
+      useTasksStore.getState().applyRealtimeChanges(envelope.changes);
+      applyListRealtimeChanges(
+        envelope.changes.filter(
+          change =>
+            change.entityType === 'list' || change.entityType === 'listItem'
+        )
+      );
+      taskListRevision = envelope.revision;
     });
 
     getOrCreateSocket();

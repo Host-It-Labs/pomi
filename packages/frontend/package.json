@@ -12,6 +12,7 @@
   "type": "module",
   "scripts": {
     "dev": "node ../../scripts/vite-dev.mjs",
+    "generate:i18n-catalogs": "node --experimental-strip-types scripts/generate-i18n-catalogs.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"

@@ -2,7 +2,7 @@ import * as Sentry from '@sentry/react';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import { I18nProvider, useI18n } from './i18n';
+import { I18nProvider, initializeI18n, useI18n } from './i18n';
 import { isWindows } from './utils/osUtils';
 import { initFrontendSentryLogging } from './utils/sentry';
 
@@ -32,12 +32,14 @@ if (isWindows) {
   document.documentElement.classList.add('windows-platform');
 }
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>
-    <I18nProvider>
-      <Sentry.ErrorBoundary fallback={<SentryFallback />}>
-        <App />
-      </Sentry.ErrorBoundary>
-    </I18nProvider>
-  </React.StrictMode>
-);
+void initializeI18n().then(() => {
+  ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+    <React.StrictMode>
+      <I18nProvider>
+        <Sentry.ErrorBoundary fallback={<SentryFallback />}>
+          <App />
+        </Sentry.ErrorBoundary>
+      </I18nProvider>
+    </React.StrictMode>
+  );
+});

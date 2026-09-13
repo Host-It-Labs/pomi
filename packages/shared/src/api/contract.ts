@@ -495,6 +495,13 @@ const listItemSchema = z.object({
   updatedAt: z.string(),
 });
 
+const taskListSnapshotSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  tasks: z.array(taskSchema),
+  lists: z.array(listSchema),
+  listItems: z.array(listItemSchema),
+});
+
 const vacationStateSchema = z.object({
   active: z.boolean(),
   runId: z.string().nullable(),
@@ -1783,6 +1790,13 @@ export const apiContract = router({
     },
   }),
   tasks: router({
+    snapshot: {
+      method: 'GET',
+      path: '/tasks/snapshot',
+      responses: {
+        200: taskListSnapshotSchema,
+      },
+    },
     importStatus: {
       method: 'GET',
       path: '/tasks/import-status',

@@ -4,6 +4,7 @@ import {
   TaskFollowUpDefinition,
   TaskRecurrenceAnchorMode,
   TaskStatus,
+  type TaskListChange,
   TimerTypes,
 } from '@pomi/shared';
 import { create } from 'zustand';
@@ -81,6 +82,8 @@ type TasksStore = {
   loadTasks: () => Promise<void>;
   refreshTasks: () => Promise<void>;
   mergeTasks: (tasks: Task[]) => void;
+  replaceTasks: (tasks: Task[]) => void;
+  applyRealtimeChanges: (changes: TaskListChange[]) => void;
   createTask: (task: TaskCreateInput) => Promise<boolean>;
   updateTask: (task: TaskUpdateInput) => Promise<boolean>;
   undoTaskAction: () => Promise<boolean>;
@@ -226,6 +229,48 @@ const useTasksStoreBase = create<TasksStore>((set, get) => ({
           (currentTasks, task) => upsertTask(currentTasks, task),
           state.tasks
         ),
+        getTaskOrderingClock(new Date())
+      ),
+      error: null,
+    }));
+  },
+  replaceTasks: tasks => {
+    taskResponseOverlays.clear();
+    tasks.forEach(task => recordTaskResponse(task, task.id));
+    set({
+      tasks: sortTasks(tasks, getTaskOrderingClock(new Date())),
+      isLoading: false,
+      error: null,
+    });
+  },
+  applyRealtimeChanges: changes => {
+    const taskChanges = changes.filter(change => change.entityType === 'task');
+    if (taskChanges.length === 0) return;
+    set(state => ({
+      tasks: sortTasks(
+        taskChanges.reduce((tasks, change) => {
+          if (change.operation === 'delete' || !change.payload) {
+            return tasks.filter(task => task.id !== change.entityId);
+          }
+          const task = change.payload as Task;
+          if (task.status !== 'active') {
+            if (state.completingTaskIds.includes(task.id)) return tasks;
+            recordTaskResponse(null, task.id);
+            return tasks.filter(current => current.id !== task.id);
+          }
+          recordTaskResponse(task, task.id);
+          return upsertTask(
+            tasks.map(current =>
+              current.followUpParent?.id === task.id
+                ? {
+                    ...current,
+                    followUpParent: { id: task.id, title: task.title },
+                  }
+                : current
+            ),
+            task
+          );
+        }, state.tasks),
         getTaskOrderingClock(new Date())
       ),
       error: null,
