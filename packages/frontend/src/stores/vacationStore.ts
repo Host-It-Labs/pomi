@@ -46,7 +46,7 @@ const useVacationStoreBase = create<VacationStore>(set => ({
 export const useVacationStore = createSelectors(useVacationStoreBase);
 
 useAuthStoreBase.subscribe((state, previousState) => {
-  if (state.token === previousState.token) return;
+  if (state.user?.id === previousState.user?.id) return;
   authGeneration += 1;
   loadStatusPromise = null;
   useVacationStoreBase.setState({ status: initialStatus });

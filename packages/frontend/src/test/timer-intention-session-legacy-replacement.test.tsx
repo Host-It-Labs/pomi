@@ -164,6 +164,7 @@ describe('Legacy Intention expectations moved below Playwright', () => {
         onOpenChange={onOpenChange}
         onChange={onChange}
         parentSelectionLabel={undefined}
+        returnFocusOnEscape
       />
     );
 

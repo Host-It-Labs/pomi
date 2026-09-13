@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   COLLAPSED_HEIGHT,
+  EXPANDED_HEIGHT,
   getMinimizedWindowHeight,
   MINIMIZED_TASKS_CONTENT_HEIGHT,
   MINIMIZED_TASKS_HEIGHT,
@@ -19,4 +21,20 @@ describe('minimized window geometry', () => {
     );
     expect(getMinimizedWindowHeight(true)).toBe(MINIMIZED_TASKS_HEIGHT);
   });
+});
+
+describe('desktop startup geometry', () => {
+  it.each(['tauri.conf.json', 'tauri.dev.conf.json'])(
+    'boots %s at the expanded size',
+    fileName => {
+      const config = JSON.parse(
+        readFileSync(`packages/frontend/src-tauri/${fileName}`, 'utf8')
+      ) as { app: { windows: Array<{ width: number; height: number }> } };
+
+      expect(config.app.windows[0]).toMatchObject({
+        width: 440,
+        height: EXPANDED_HEIGHT,
+      });
+    }
+  );
 });

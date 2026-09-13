@@ -7,8 +7,8 @@ const mocks = vi.hoisted(() => ({
   authListener: undefined as
     | undefined
     | ((
-        state: { token: string | null },
-        previous: { token: string | null }
+        state: { token: string | null; user?: { id: string } | null },
+        previous: { token: string | null; user?: { id: string } | null }
       ) => void),
 }));
 
@@ -105,12 +105,35 @@ describe('Tasks store network loading', () => {
 
     const initialLoad = useTasksStore.getState().loadTasks();
     const realtimeRefresh = useTasksStore.getState().refreshTasks();
-    mocks.authListener?.({ token: null }, { token: 'old-token' });
+    mocks.authListener?.(
+      { token: null, user: null },
+      { token: 'old-token', user: { id: 'user-1' } }
+    );
     resolveInitial({ status: 200, body: [] });
     await Promise.all([initialLoad, realtimeRefresh]);
 
     expect(mocks.list).toHaveBeenCalledOnce();
     expect(useTasksStore.getState().error).toBeNull();
+  });
+
+  it('preserves visible Tasks when the same account rotates its token', async () => {
+    const visibleTask = {
+      id: 'task-visible-during-refresh',
+      title: 'Keep my current page stable',
+      status: 'active',
+      priority: 'normal',
+      timerType: 'work',
+      createdAt: '2026-09-12T05:00:00.000Z',
+    };
+    const { useTasksStore } = await import('./tasksStore');
+    useTasksStore.getState().mergeTasks([visibleTask as never]);
+
+    mocks.authListener?.(
+      { token: 'rotated-token', user: { id: 'user-1' } },
+      { token: 'old-token', user: { id: 'user-1' } }
+    );
+
+    expect(useTasksStore.getState().tasks).toContainEqual(visibleTask);
   });
 
   it('preserves authoritative created Tasks across an older list response', async () => {

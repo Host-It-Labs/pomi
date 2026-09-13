@@ -144,6 +144,8 @@ export default defineConfig({
         test: {
           name: 'frontend-browser',
           include: ['src/**/*.browser.test.tsx'],
+          fileParallelism: false,
+          maxWorkers: 1,
           browser: {
             enabled: true,
             headless: true,

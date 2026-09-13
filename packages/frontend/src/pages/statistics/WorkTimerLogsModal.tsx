@@ -734,6 +734,7 @@ export function WorkTimerLogsModal({
       isOpen={isIntentionDropdownOpen}
       onOpenChange={setIsIntentionDropdownOpen}
       onChange={handleLogIntentionPickerChange}
+      returnFocusOnEscape
       disabled={isLoadingIntentions || isSavingLog || isDeletingLog}
       listTestId="work-timer-log-intention-list"
       clearTestId="work-timer-log-intention-none"

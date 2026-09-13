@@ -23,7 +23,6 @@ export function useDevAutoLogin() {
   const setUser = useAuthStore.use.setUser();
   const setToken = useAuthStore.use.setToken();
   const setActiveTab = useUiStore.use.setActiveTab();
-  const setHasLoggedIn = useUiStore.use.setHasLoggedIn();
   const attemptedForUserRef = useRef<string | null>(null);
   const successfulTokenRef = useRef<string | null>(null);
   const shouldSkipDevAutoLogin = isMobileSimulatorFrame();
@@ -65,7 +64,6 @@ export function useDevAutoLogin() {
     setIsPending(true);
     setToken(null);
     setUser(null);
-    setHasLoggedIn(false);
 
     apiClient.sessions
       .create({
@@ -90,7 +88,6 @@ export function useDevAutoLogin() {
         successfulTokenRef.current = data.token;
         attemptedForUserRef.current = null;
         await acceptSession(data);
-        setHasLoggedIn(true);
         setActiveTab('timer');
       })
       .catch(error => {
@@ -108,7 +105,6 @@ export function useDevAutoLogin() {
     hasExplicitlySignedOut,
     password,
     setActiveTab,
-    setHasLoggedIn,
     setToken,
     setUser,
     token,

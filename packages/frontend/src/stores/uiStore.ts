@@ -66,8 +66,6 @@ interface UiState {
   setAdvancedSkipStartPending: (advancedSkipStartPending: boolean) => void;
   appWindow: Window | null;
   setAppWindow: (appWindow: Window | null) => void;
-  hasLoggedIn: boolean;
-  setHasLoggedIn: (hasLoggedIn: boolean) => void;
 }
 
 let historyMarkerCounter = 0;
@@ -214,8 +212,6 @@ const useUiStoreBase = create<UiState>((set, state) => ({
     set({ advancedSkipStartPending }),
   appWindow: null,
   setAppWindow: (appWindow: Window | null) => set({ appWindow }),
-  hasLoggedIn: false,
-  setHasLoggedIn: (hasLoggedIn: boolean) => set({ hasLoggedIn }),
 }));
 
 export const useUiStore = createSelectors(useUiStoreBase);

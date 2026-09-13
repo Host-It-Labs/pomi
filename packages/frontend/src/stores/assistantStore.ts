@@ -48,7 +48,7 @@ const useAssistantStoreBase = create<AssistantStore>((set, get) => ({
 export const useAssistantStore = createSelectors(useAssistantStoreBase);
 
 useAuthStoreBase.subscribe((state, prevState) => {
-  if (state.token === prevState.token) {
+  if (state.user?.id === prevState.user?.id) {
     return;
   }
 

@@ -6,8 +6,8 @@ const mocks = vi.hoisted(() => ({
   authListener: undefined as
     | undefined
     | ((
-        state: { token: string | null },
-        previous: { token: string | null }
+        state: { token: string | null; user?: { id: string } | null },
+        previous: { token: string | null; user?: { id: string } | null }
       ) => void),
 }));
 
@@ -75,7 +75,10 @@ describe('Vacation store network loading', () => {
       .mockResolvedValueOnce({ status: 200, body: activeState });
 
     const previousLoad = useVacationStore.getState().loadStatus();
-    mocks.authListener?.({ token: 'new-token' }, { token: 'old-token' });
+    mocks.authListener?.(
+      { token: 'new-token', user: { id: 'user-2' } },
+      { token: 'old-token', user: { id: 'user-1' } }
+    );
     const currentLoad = useVacationStore.getState().loadStatus();
 
     resolvePrevious({
@@ -84,6 +87,17 @@ describe('Vacation store network loading', () => {
     });
     await currentLoad;
     await previousLoad;
+
+    expect(useVacationStore.getState().status).toEqual(activeState);
+  });
+
+  it('preserves status when the same account rotates its token', () => {
+    useVacationStore.setState({ status: activeState });
+
+    mocks.authListener?.(
+      { token: 'new-token', user: { id: 'user-1' } },
+      { token: 'old-token', user: { id: 'user-1' } }
+    );
 
     expect(useVacationStore.getState().status).toEqual(activeState);
   });
