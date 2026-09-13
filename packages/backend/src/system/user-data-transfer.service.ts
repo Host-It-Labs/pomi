@@ -335,6 +335,7 @@ export class UserDataTransferService {
     }
 
     const next = this.remapRowWithFreshId(row, userId, ids);
+    next.speakToastMessages = row.speakToastMessages !== false;
     if (typeof row.sessionLongBreakAutoStart === 'boolean') {
       next.autoStartBreak =
         next.autoStartBreak === true || row.sessionLongBreakAutoStart;

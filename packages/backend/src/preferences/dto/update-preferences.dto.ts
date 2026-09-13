@@ -56,6 +56,10 @@ export class UpdatePreferencesDto {
 
   @IsOptional()
   @IsBoolean()
+  speakToastMessages?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   notifyOnWorkComplete?: boolean;
 
   @IsOptional()

@@ -16,7 +16,7 @@ import {
 } from '@pomi/shared';
 import { format, startOfDay, subDays } from 'date-fns';
 import { IntentionsService } from 'src/intentions/intentions.service';
-import { Repository, SelectQueryBuilder } from 'typeorm';
+import { EntityManager, Repository, SelectQueryBuilder } from 'typeorm';
 import { Statistic } from './statistics.entity';
 
 type WorkTimerLogUpdateInput = {
@@ -417,42 +417,78 @@ export class StatisticsService {
     before: StatisticHistorySnapshot | null,
     after: StatisticHistorySnapshot | null
   ): Promise<void> {
-    const id = after?.id ?? before?.id;
-    if (!id) {
-      return;
-    }
+    await this.statisticsRepository.manager.transaction(async manager => {
+      const id = after?.id ?? before?.id;
+      if (!id) return;
+      const repository = manager.getRepository(Statistic);
+      const current = await repository.findOne({ where: { userId, id } });
+      const previousIntentions = current
+        ? this.getStatisticIntentions(current)
+        : [];
+      const previousSubs = current
+        ? this.getStatisticSubIntentions(current)
+        : {};
+      const nextIntentions = after ? this.getStatisticIntentions(after) : [];
+      const nextSubs = after ? this.getStatisticSubIntentions(after) : {};
 
-    const current = await this.findStatisticById(userId, id);
-    const currentIntentions = current
-      ? this.getStatisticIntentions(current)
-      : [];
-    const currentSubIntentions = current
-      ? this.getStatisticSubIntentions(current)
-      : {};
-    const nextIntentions = after ? this.getStatisticIntentions(after) : [];
-    const nextSubIntentions = after
-      ? this.getStatisticSubIntentions(after)
-      : {};
+      if (after) {
+        await repository.save(repository.create({ ...after, userId }));
+      } else if (current) {
+        await repository.delete({ userId, id });
+      }
 
-    if (after) {
-      await this.statisticsRepository.save(
-        this.statisticsRepository.create({
-          ...after,
-          userId,
-        })
+      await this.adjustHistoryUsage(
+        manager,
+        userId,
+        previousIntentions,
+        nextIntentions,
+        previousSubs,
+        nextSubs,
+        before,
+        after
       );
-    } else if (current) {
-      await this.statisticsRepository.delete({ userId, id });
-    }
+    });
+  }
 
-    await this.syncStatisticIntentionUsage(
-      userId,
-      currentIntentions,
-      nextIntentions,
-      currentSubIntentions,
-      nextSubIntentions
+  private async adjustHistoryUsage(
+    manager: EntityManager,
+    userId: string,
+    previousIntentions: string[],
+    nextIntentions: string[],
+    previousSubs: Record<string, string>,
+    nextSubs: Record<string, string>,
+    before: StatisticHistorySnapshot | null,
+    after: StatisticHistorySnapshot | null
+  ): Promise<void> {
+    const previous = [...previousIntentions, ...Object.values(previousSubs)];
+    const next = [...nextIntentions, ...Object.values(nextSubs)];
+    const removed = this.getSlugDifference(previous, next);
+    const added = this.getSlugDifference(next, previous);
+    if (
+      before &&
+      after &&
+      before.duration !== after.duration &&
+      removed.length === 0 &&
+      added.length === 0
+    ) {
+      (after.duration > before.duration ? added : removed).push(...next);
+    }
+    await this.updateUsageCounts(manager, userId, removed, -1);
+    await this.updateUsageCounts(manager, userId, added, 1);
+  }
+
+  private async updateUsageCounts(
+    manager: EntityManager,
+    userId: string,
+    slugs: string[],
+    delta: -1 | 1
+  ): Promise<void> {
+    const unique = Array.from(new Set(slugs.filter(Boolean)));
+    if (unique.length === 0) return;
+    await manager.query(
+      `UPDATE "intentions" SET "usageCount" = ${delta > 0 ? '"usageCount" + 1' : 'GREATEST(0, "usageCount" - 1)'}, "updatedAt" = now() WHERE "userId" = $1 AND "slug" = ANY($2::text[])`,
+      [userId, unique]
     );
-    await this.syncDurationOnlyUsageChange(userId, before, after);
   }
 
   private toHistorySnapshot(statistic: Statistic): StatisticHistorySnapshot {

@@ -392,6 +392,9 @@ const english: TranslationCatalog = {
     'If the button does not open System Settings, go to Notifications > Pomi and allow notifications.',
   'notifications.openMacSettings': 'Open Notification Settings',
   'notifications.notifications': 'Notifications',
+  'notifications.speakMessages': 'Speak in-app messages',
+  'notifications.speakMessagesDescription':
+    'Read visible messages aloud using this device.',
   'notifications.backgroundUsage': 'Enable background usage',
   'notifications.backgroundUsageDescription':
     'Tap to allow notifications without delay',

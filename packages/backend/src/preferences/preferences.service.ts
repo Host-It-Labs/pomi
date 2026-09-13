@@ -21,6 +21,7 @@ const DEFAULT_PREFERENCES = {
   autoStartWork: false,
   autoStartLongBreak: false,
   notifications: true,
+  speakToastMessages: true,
   notifyOnWorkComplete: true,
   notifyOnBreakComplete: true,
   notifyBeforeWorkComplete: true,

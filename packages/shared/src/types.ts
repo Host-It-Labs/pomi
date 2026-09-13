@@ -173,6 +173,7 @@ export interface Preferences {
   autoStartWork?: boolean;
   autoStartLongBreak?: boolean;
   notifications: boolean;
+  speakToastMessages?: boolean;
   notifyOnWorkComplete: boolean;
   notifyOnBreakComplete: boolean;
   notifyBeforeWorkComplete: boolean;

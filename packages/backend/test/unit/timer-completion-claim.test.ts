@@ -110,4 +110,60 @@ describe('Timer completion claim', () => {
     expect(clearTimerHistory).toHaveBeenCalledWith('user-1');
     expect(completeTimer).toHaveBeenCalledWith(completedTimer);
   });
+
+  it('captures a full-duration undo snapshot for an auto-started timer', async () => {
+    const timer = {
+      id: 'timer-1',
+      userId: 'user-1',
+      startTime: 123,
+      duration: 60_000,
+      remainingTime: 0,
+      type: TIMER_TYPES.WORK,
+      status: TIMER_STATUSES.RUNNING,
+      isAutoStarted: true,
+    };
+    const completedTimer = {
+      ...timer,
+      status: TIMER_STATUSES.COMPLETED,
+    };
+    const snapshotRuntime = vi.fn(async () => ({
+      timer,
+      sessionState: null,
+      lastCompletionTimestamp: null,
+      idleDetected: false,
+      extensionState: null,
+    }));
+    const pendingAutoStartCompletionHistory = new Map();
+    const service = Object.assign(Object.create(TimerService.prototype), {
+      timerStore: {
+        claimRunningTimerCompletionByMode: vi.fn(async () => ({
+          timer: completedTimer,
+          mode: 'legacy' as const,
+        })),
+      },
+      completingTimerIds: new Set<string>(),
+      pendingAutoStartCompletionHistory,
+      snapshotRuntime,
+      clearTimerHistory: vi.fn(),
+      completeTimer: vi.fn(),
+    }) as TimerService;
+
+    await (
+      service as unknown as {
+        handleTimerCompletion(value: typeof timer): Promise<void>;
+      }
+    ).handleTimerCompletion(timer);
+
+    expect(
+      pendingAutoStartCompletionHistory.get('user-1')?.before.timer
+    ).toMatchObject({
+      status: TIMER_STATUSES.RUNNING,
+      remainingTime: 60_000,
+      hasNotifiedBeforeTimeNotification: false,
+      hasNotifiedPausedTimerReminder: false,
+    });
+    expect(
+      pendingAutoStartCompletionHistory.get('user-1')?.before.timer.id
+    ).not.toBe('timer-1');
+  });
 });
