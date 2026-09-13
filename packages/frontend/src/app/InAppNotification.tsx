@@ -1,11 +1,11 @@
 import clsx from 'clsx';
-import { AnimatePresence, motion } from 'framer-motion';
-import { useEffect } from 'react';
+import { type CSSProperties, useEffect } from 'react';
 import {
   IN_APP_NOTIFICATION_TYPES,
   InAppNotificationType,
 } from '../constants/notifications';
 import { useI18n } from '../i18n';
+import { useNativePresence } from '../components/ui/useNativePresence';
 
 export interface InAppNotificationData {
   id: string;
@@ -36,10 +36,13 @@ export function InAppNotification({
     return () => clearTimeout(timer);
   }, [notification?.id, onClose]);
 
-  const getNotificationStyles = () => {
-    if (!notification) return '';
+  const presence = useNativePresence(notification, 260);
+  const displayedNotification = presence.value;
 
-    switch (notification.type) {
+  const getNotificationStyles = () => {
+    if (!displayedNotification) return '';
+
+    switch (displayedNotification.type) {
       case IN_APP_NOTIFICATION_TYPES.WORK:
         return 'bg-green-900/95 border-green-500';
       case IN_APP_NOTIFICATION_TYPES.LONG_BREAK:
@@ -54,9 +57,9 @@ export function InAppNotification({
   };
 
   const getIcon = () => {
-    if (!notification) return null;
+    if (!displayedNotification) return null;
 
-    switch (notification.type) {
+    switch (displayedNotification.type) {
       case IN_APP_NOTIFICATION_TYPES.WORK:
         return (
           <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
@@ -135,16 +138,22 @@ export function InAppNotification({
   };
 
   return (
-    <AnimatePresence>
-      {notification && (
-        <motion.div
+    <>
+      {presence.shouldRender && displayedNotification && (
+        <div
           data-testid="in-app-notification"
-          initial={{ opacity: 0, y: isMinimized ? -16 : -100, scale: 0.9 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: isMinimized ? -10 : -50, scale: 0.95 }}
-          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+          data-presence={presence.phase}
+          onAnimationEnd={presence.finish}
+          aria-hidden={presence.isExiting || undefined}
+          inert={presence.isExiting || undefined}
+          style={
+            {
+              '--native-notification-y': isMinimized ? '-16px' : '-100px',
+              '--native-notification-exit-y': isMinimized ? '-10px' : '-50px',
+            } as CSSProperties
+          }
           className={clsx(
-            'fixed z-[100] border shadow-2xl backdrop-blur-sm',
+            'native-notification fixed z-[100] border shadow-2xl backdrop-blur-sm',
             isMinimized
               ? 'top-[10%] bottom-[10%] left-[128px] right-[132px] mx-0 mt-0 rounded-lg'
               : 'top-0 left-0 right-0 mx-4 mt-12 rounded-2xl border-2',
@@ -167,7 +176,7 @@ export function InAppNotification({
                     : 'truncate text-base'
                 )}
               >
-                {notification.title}
+                {displayedNotification.title}
               </h3>
               <p
                 className={clsx(
@@ -177,7 +186,7 @@ export function InAppNotification({
                     : 'mt-0.5 line-clamp-2 text-sm'
                 )}
               >
-                {notification.body}
+                {displayedNotification.body}
               </p>
             </div>
             <button
@@ -207,8 +216,8 @@ export function InAppNotification({
               </svg>
             </button>
           </div>
-        </motion.div>
+        </div>
       )}
-    </AnimatePresence>
+    </>
   );
 }

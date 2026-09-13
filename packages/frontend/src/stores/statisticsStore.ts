@@ -8,7 +8,9 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { apiClient } from '../utils/apiClient';
 import { translateCurrent } from '../i18n';
+import { getBackendOrigin } from '../utils/backendUrl';
 import { createSelectors } from './createSelectors';
+import { useAuthStoreBase } from './authStore';
 
 interface IntentionOption {
   value: string;
@@ -58,6 +60,7 @@ interface StatisticsState {
   setTopIntentionsPeriod: (period: TopIntentionsPeriod) => void;
   fetchHeatmapYear: (year: number) => Promise<void>;
   invalidateHeatmapYears: () => void;
+  invalidateStatisticsRequests: () => void;
 }
 
 type SessionType =
@@ -70,6 +73,23 @@ const resetHeatmapState = {
   loadedHeatmapYears: [],
   isLoadingHeatmapYear: false,
   activeHeatmapRequestKey: null,
+};
+
+let requestGeneration = 0;
+let requestSequence = 0;
+type CoordinatedRequest = { owner: string; promise: Promise<void> };
+const summaryRequests = new Map<string, CoordinatedRequest>();
+const topIntentionRequests = new Map<string, CoordinatedRequest>();
+
+const advanceRequestGeneration = () => {
+  requestGeneration += 1;
+  summaryRequests.clear();
+  topIntentionRequests.clear();
+};
+
+const requestAccountKey = () => {
+  const auth = useAuthStoreBase.getState();
+  return `${getBackendOrigin()}:${auth.user?.id ?? 'anonymous'}:${auth.token ?? 'no-session'}`;
 };
 
 const useStatisticsStoreBase = create<StatisticsState>()(
@@ -104,105 +124,138 @@ const useStatisticsStoreBase = create<StatisticsState>()(
           sessionType !== undefined ? sessionType : get().currentSessionType;
         const subIntentionToUse =
           subIntention !== undefined ? subIntention : get().currentSubIntention;
-        const requestKey = `${sessionTypeToUse}:${intentionToUse || '__all__'}:${subIntentionToUse || '__all__'}`;
+        const generation = requestGeneration;
+        const requestKey = `${requestAccountKey()}:${generation}:${sessionTypeToUse}:${intentionToUse || '__all__'}:${subIntentionToUse || '__all__'}`;
+        const existingRequest = summaryRequests.get(requestKey);
+        if (
+          existingRequest &&
+          get().activeSummaryRequestKey === existingRequest.owner
+        ) {
+          return existingRequest.promise;
+        }
+
+        const owner = `summary:${++requestSequence}`;
         set({
           isLoading: true,
           error: null,
-          activeSummaryRequestKey: requestKey,
+          activeSummaryRequestKey: owner,
         });
 
-        try {
-          const response = await apiClient.statistics.summary({
-            query: {
-              intention: intentionToUse,
-              subIntention: subIntentionToUse || undefined,
-              type: sessionTypeToUse,
-            },
-          });
+        const request = (async () => {
+          try {
+            const response = await apiClient.statistics.summary({
+              query: {
+                intention: intentionToUse,
+                subIntention: subIntentionToUse || undefined,
+                type: sessionTypeToUse,
+              },
+            });
 
-          if (response.status === 204) {
-            if (get().activeSummaryRequestKey === requestKey) {
-              set({
-                statistics: null,
-                isLoading: false,
-                error: null,
-                activeSummaryRequestKey: null,
-              });
-            }
-            return;
-          }
-
-          if (response.status !== 200) {
-            if (get().activeSummaryRequestKey !== requestKey) {
+            if (response.status === 204) {
+              if (
+                requestGeneration === generation &&
+                get().activeSummaryRequestKey === owner
+              ) {
+                set({
+                  statistics: null,
+                  isLoading: false,
+                  error: null,
+                  activeSummaryRequestKey: null,
+                });
+              }
               return;
             }
 
-            const errorBody = response.body as { message?: string } | null;
-            const errorMessage =
-              errorBody?.message || translateCurrent('statistics.loadFailed');
+            if (response.status !== 200) {
+              if (
+                requestGeneration !== generation ||
+                get().activeSummaryRequestKey !== owner
+              ) {
+                return;
+              }
+
+              const errorBody = response.body as { message?: string } | null;
+              const errorMessage =
+                errorBody?.message || translateCurrent('statistics.loadFailed');
+              set({
+                error: errorMessage,
+                isLoading: false,
+                statistics: null,
+                activeSummaryRequestKey: null,
+              });
+              return;
+            }
+
+            if (
+              requestGeneration !== generation ||
+              get().activeSummaryRequestKey !== owner
+            ) {
+              return;
+            }
+
+            const summary = response.body as StatisticsSummary | null;
+            if (!summary) {
+              set({
+                statistics: null,
+                isLoading: false,
+                activeSummaryRequestKey: null,
+              });
+              return;
+            }
+
+            const { allAvailableIntentions } = get();
+            let updatedIntentions = allAvailableIntentions;
+
+            if (
+              (!intentionToUse || allAvailableIntentions.length === 0) &&
+              summary.availableIntentions?.length
+            ) {
+              updatedIntentions = summary.availableIntentions;
+            }
+
             set({
-              error: errorMessage,
+              statistics: {
+                ...summary,
+                availableIntentions: updatedIntentions,
+              },
+              allAvailableIntentions: updatedIntentions,
               isLoading: false,
-              statistics: null,
+              currentIntention: intentionToUse,
+              currentSubIntention: subIntentionToUse,
+              currentSessionType: sessionTypeToUse,
               activeSummaryRequestKey: null,
             });
-            return;
-          }
+          } catch (err) {
+            if (
+              requestGeneration !== generation ||
+              get().activeSummaryRequestKey !== owner
+            ) {
+              return;
+            }
 
-          if (get().activeSummaryRequestKey !== requestKey) {
-            return;
-          }
-
-          const summary = response.body as StatisticsSummary | null;
-          if (!summary) {
+            console.error('Failed to fetch statistics:', err);
             set({
-              statistics: null,
+              error:
+                err instanceof Error
+                  ? err.message
+                  : translateCurrent('statistics.loadFailed'),
               isLoading: false,
               activeSummaryRequestKey: null,
             });
-            return;
           }
-
-          const { allAvailableIntentions } = get();
-          let updatedIntentions = allAvailableIntentions;
-
-          if (
-            (!intentionToUse || allAvailableIntentions.length === 0) &&
-            summary.availableIntentions?.length
-          ) {
-            updatedIntentions = summary.availableIntentions;
+        })();
+        summaryRequests.set(requestKey, { owner, promise: request });
+        try {
+          await request;
+        } finally {
+          if (summaryRequests.get(requestKey)?.promise === request) {
+            summaryRequests.delete(requestKey);
           }
-
-          set({
-            statistics: {
-              ...summary,
-              availableIntentions: updatedIntentions,
-            },
-            allAvailableIntentions: updatedIntentions,
-            isLoading: false,
-            currentIntention: intentionToUse,
-            currentSubIntention: subIntentionToUse,
-            currentSessionType: sessionTypeToUse,
-            activeSummaryRequestKey: null,
-          });
-        } catch (err) {
-          if (get().activeSummaryRequestKey !== requestKey) {
-            return;
-          }
-
-          console.error('Failed to fetch statistics:', err);
-          set({
-            error:
-              err instanceof Error
-                ? err.message
-                : translateCurrent('statistics.loadFailed'),
-            isLoading: false,
-            activeSummaryRequestKey: null,
-          });
         }
       },
 
       resetViewFilters: () => {
+        advanceRequestGeneration();
         set({
           currentIntention: '',
           currentSubIntention: '',
@@ -260,52 +313,88 @@ const useStatisticsStoreBase = create<StatisticsState>()(
         set({ ...resetHeatmapState });
       },
 
+      invalidateStatisticsRequests: () => {
+        advanceRequestGeneration();
+        set({
+          activeSummaryRequestKey: null,
+          activeTopIntentionsRequestKey: null,
+          isLoading: false,
+          isLoadingTopIntentions: false,
+        });
+      },
+
       fetchTopIntentions: async (parentIntention?: string) => {
         const periodToUse = get().topIntentionsPeriod;
         const sessionType = get().currentSessionType;
         const metricMode = get().metricMode;
-        const requestKey = `${sessionType}:${periodToUse}:${parentIntention || '__global__'}:${metricMode}`;
+        const generation = requestGeneration;
+        const requestKey = `${requestAccountKey()}:${generation}:${sessionType}:${periodToUse}:${parentIntention || '__global__'}:${metricMode}`;
+        const existingRequest = topIntentionRequests.get(requestKey);
+        if (
+          existingRequest &&
+          get().activeTopIntentionsRequestKey === existingRequest.owner
+        ) {
+          return existingRequest.promise;
+        }
+
+        const owner = `top-intentions:${++requestSequence}`;
         set({
           isLoadingTopIntentions: true,
-          activeTopIntentionsRequestKey: requestKey,
+          activeTopIntentionsRequestKey: owner,
         });
 
+        const request = (async () => {
+          try {
+            const response = await apiClient.statistics.topIntentions({
+              query: {
+                period: periodToUse,
+                type: sessionType,
+                parentIntention,
+                metric: metricMode,
+              },
+            });
+
+            if (
+              requestGeneration !== generation ||
+              get().activeTopIntentionsRequestKey !== owner
+            ) {
+              return;
+            }
+
+            if (response.status === 200) {
+              set({
+                topIntentions: response.body as TopIntentionStat[],
+                topIntentionsPeriod: periodToUse,
+                isLoadingTopIntentions: false,
+                activeTopIntentionsRequestKey: null,
+              });
+            } else {
+              set({
+                isLoadingTopIntentions: false,
+                activeTopIntentionsRequestKey: null,
+              });
+            }
+          } catch (err) {
+            if (
+              requestGeneration !== generation ||
+              get().activeTopIntentionsRequestKey !== owner
+            ) {
+              return;
+            }
+            console.error('Failed to fetch top intentions:', err);
+            set({
+              isLoadingTopIntentions: false,
+              activeTopIntentionsRequestKey: null,
+            });
+          }
+        })();
+        topIntentionRequests.set(requestKey, { owner, promise: request });
         try {
-          const response = await apiClient.statistics.topIntentions({
-            query: {
-              period: periodToUse,
-              type: sessionType,
-              parentIntention,
-              metric: metricMode,
-            },
-          });
-
-          if (get().activeTopIntentionsRequestKey !== requestKey) {
-            return;
+          await request;
+        } finally {
+          if (topIntentionRequests.get(requestKey)?.promise === request) {
+            topIntentionRequests.delete(requestKey);
           }
-
-          if (response.status === 200) {
-            set({
-              topIntentions: response.body as TopIntentionStat[],
-              topIntentionsPeriod: periodToUse,
-              isLoadingTopIntentions: false,
-              activeTopIntentionsRequestKey: null,
-            });
-          } else {
-            set({
-              isLoadingTopIntentions: false,
-              activeTopIntentionsRequestKey: null,
-            });
-          }
-        } catch (err) {
-          if (get().activeTopIntentionsRequestKey !== requestKey) {
-            return;
-          }
-          console.error('Failed to fetch top intentions:', err);
-          set({
-            isLoadingTopIntentions: false,
-            activeTopIntentionsRequestKey: null,
-          });
         }
       },
 
@@ -375,3 +464,36 @@ const useStatisticsStoreBase = create<StatisticsState>()(
 );
 
 export const useStatisticsStore = createSelectors(useStatisticsStoreBase);
+export { useStatisticsStoreBase };
+
+useAuthStoreBase.subscribe((state, previousState) => {
+  if (
+    state.token === previousState.token &&
+    state.user?.id === previousState.user?.id
+  ) {
+    return;
+  }
+
+  advanceRequestGeneration();
+  if (state.user?.id === previousState.user?.id) {
+    useStatisticsStoreBase.setState({
+      isLoading: false,
+      isLoadingTopIntentions: false,
+      activeSummaryRequestKey: null,
+      activeTopIntentionsRequestKey: null,
+    });
+    return;
+  }
+
+  useStatisticsStoreBase.setState({
+    statistics: null,
+    isLoading: false,
+    error: null,
+    allAvailableIntentions: [],
+    topIntentions: [],
+    isLoadingTopIntentions: false,
+    activeSummaryRequestKey: null,
+    activeTopIntentionsRequestKey: null,
+    ...resetHeatmapState,
+  });
+});

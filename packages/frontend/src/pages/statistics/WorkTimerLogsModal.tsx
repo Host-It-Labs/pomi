@@ -1,6 +1,5 @@
 import { Intention, Preferences, WorkTimerLog } from '@pomi/shared';
 import { TIMER_TYPES } from '@pomi/shared/src/constants';
-import { motion } from 'framer-motion';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FaTimes, FaTrash } from 'react-icons/fa';
 import { IntentionAssignmentPicker } from '../../components/intentions/IntentionAssignmentPicker';
@@ -14,6 +13,7 @@ import { subscribeToWorkTimerLogRefresh } from '../../utils/recoveryRefresh';
 import { submitUserMutation } from '../../utils/userActionQueue';
 import { useOpenModalRegistration } from '../../utils/modalRegistry';
 import { useI18n } from '../../i18n';
+import { useNativePresence } from '../../components/ui/useNativePresence';
 
 interface WorkTimerLogsModalProps {
   isOpen: boolean;
@@ -817,19 +817,21 @@ export function WorkTimerLogsModal({
     );
   };
 
-  if (!isOpen) return null;
+  const modalPresence = useNativePresence(isOpen ? true : null, 200);
+
+  if (!modalPresence.shouldRender) return null;
 
   return (
     <div
       className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        transition={{ duration: 0.2 }}
-        className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
+      <div
+        data-presence={modalPresence.phase}
+        onAnimationEnd={modalPresence.finish}
+        aria-hidden={modalPresence.isExiting || undefined}
+        inert={modalPresence.isExiting || undefined}
+        className="native-fade-scale bg-slate-900 border border-slate-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
@@ -894,7 +896,7 @@ export function WorkTimerLogsModal({
             </div>
           )}
         </div>
-      </motion.div>
+      </div>
       {selectedLog && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-2"

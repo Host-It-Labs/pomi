@@ -1,7 +1,7 @@
-import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
 import { ActionQueueDetails } from '../components/UserActionIndicator';
 import { Spinner } from '../components/ui/Spinner';
+import { useNativePresence } from '../components/ui/useNativePresence';
 import { useI18n } from '../i18n';
 import { useAuthStore } from '../stores/authStore';
 import { useConnectionStatusUi } from '../stores/connectionStatusUiStore';
@@ -145,7 +145,12 @@ export function ConnectionStatus() {
     );
   }, [isInitialConnection, isOffline, setTone, showStatus]);
 
-  if (!showStatus) {
+  const statusPresence = useNativePresence(
+    showStatus && !isCollapsed ? true : null,
+    300
+  );
+
+  if (!showStatus && !statusPresence.shouldRender) {
     return null;
   }
 
@@ -163,7 +168,7 @@ export function ConnectionStatus() {
     dismiss(statusTone);
   };
 
-  if (isCollapsed) {
+  if (isCollapsed && showStatus) {
     return (
       <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 z-[65] flex flex-col items-end gap-2">
         <div className="pointer-events-auto relative">
@@ -199,101 +204,103 @@ export function ConnectionStatus() {
   }
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 20 }}
-        transition={{ duration: 0.3 }}
-        className="pointer-events-none fixed bottom-0 left-0 right-0 z-50 flex items-center justify-center px-3"
-      >
+    <>
+      {statusPresence.shouldRender && (
         <div
-          className={`pointer-events-auto relative mb-4 rounded-lg px-4 py-2 pr-9 shadow-lg ${statusClasses}`}
+          data-presence={statusPresence.phase}
+          onAnimationEnd={statusPresence.finish}
+          aria-hidden={statusPresence.isExiting || undefined}
+          inert={statusPresence.isExiting || undefined}
+          className="native-fade-up pointer-events-none fixed bottom-0 left-0 right-0 z-50 flex items-center justify-center px-3"
         >
-          <button
-            type="button"
-            aria-label={t('connection.dismiss')}
-            data-testid="connection-status-dismiss"
-            title={t('common.dismiss')}
-            onClick={event => {
-              event.stopPropagation();
-              dismissToast();
-            }}
-            className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded text-base leading-none text-ink/75 transition hover:bg-black/10 hover:text-ink focus:outline-none focus:ring-2 focus:ring-white/80"
+          <div
+            className={`pointer-events-auto relative mb-4 rounded-lg px-4 py-2 pr-9 shadow-lg ${statusClasses}`}
           >
-            <span aria-hidden="true">×</span>
-          </button>
-          <button
-            type="button"
-            aria-label={
-              actions.length > 0
-                ? `${statusMessage} ${t('actionQueue.show')}`
-                : statusMessage
-            }
-            aria-expanded={detailsOpen}
-            onClick={() => {
-              if (actions.length > 0) setDetailsOpen(open => !open);
-            }}
-            onMouseEnter={() => {
-              if (actions.length > 0) setDetailsOpen(true);
-            }}
-            onFocus={() => {
-              if (actions.length > 0) setDetailsOpen(true);
-            }}
-            className="flex items-center gap-2 text-left focus:outline-none focus:ring-2 focus:ring-white/80"
-          >
-            {statusTone === 'warning' ? (
-              <Spinner size="sm" />
-            ) : (
-              <span
-                aria-hidden="true"
-                className="h-4 w-4 rounded-full border border-current opacity-90"
-              />
-            )}
-            <span className="text-sm font-medium">
-              {statusMessage}
-              {connectionStatus.reconnectAttempts > 0 &&
-                statusTone === 'warning' && (
-                  <span className="ml-1 text-xs opacity-80">
-                    (
-                    {t('connection.attempt', {
-                      count: connectionStatus.reconnectAttempts,
-                    })}
-                    )
-                  </span>
-                )}
-            </span>
-            {actions.length > 1 && (
-              <span
-                data-testid="connection-action-count"
-                className="flex h-5 min-w-5 items-center justify-center rounded-full bg-black/20 px-1 text-[10px] font-bold"
-              >
-                {actions.length}
-              </span>
-            )}
-          </button>
-          {detailsOpen && actions.length > 0 && (
-            <div className="absolute bottom-full left-1/2 mb-2 -translate-x-1/2">
-              <ActionQueueDetails
-                actions={actions}
-                canRetryConnection={canRetryConnection}
-              />
-            </div>
-          )}
-          {canRetryConnection && actions.length === 0 && (
             <button
               type="button"
-              onClick={() => {
-                retry();
-                requestBackendConnectionRecovery();
+              aria-label={t('connection.dismiss')}
+              data-testid="connection-status-dismiss"
+              title={t('common.dismiss')}
+              onClick={event => {
+                event.stopPropagation();
+                dismissToast();
               }}
-              className="mt-2 block w-full rounded bg-black/20 px-2 py-1 text-xs font-medium hover:bg-black/30 focus:outline-none focus:ring-2 focus:ring-white/80"
+              className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded text-base leading-none text-ink/75 transition hover:bg-black/10 hover:text-ink focus:outline-none focus:ring-2 focus:ring-white/80"
             >
-              {t('connection.retry')}
+              <span aria-hidden="true">×</span>
             </button>
-          )}
+            <button
+              type="button"
+              aria-label={
+                actions.length > 0
+                  ? `${statusMessage} ${t('actionQueue.show')}`
+                  : statusMessage
+              }
+              aria-expanded={detailsOpen}
+              onClick={() => {
+                if (actions.length > 0) setDetailsOpen(open => !open);
+              }}
+              onMouseEnter={() => {
+                if (actions.length > 0) setDetailsOpen(true);
+              }}
+              onFocus={() => {
+                if (actions.length > 0) setDetailsOpen(true);
+              }}
+              className="flex items-center gap-2 text-left focus:outline-none focus:ring-2 focus:ring-white/80"
+            >
+              {statusTone === 'warning' ? (
+                <Spinner size="sm" />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className="h-4 w-4 rounded-full border border-current opacity-90"
+                />
+              )}
+              <span className="text-sm font-medium">
+                {statusMessage}
+                {connectionStatus.reconnectAttempts > 0 &&
+                  statusTone === 'warning' && (
+                    <span className="ml-1 text-xs opacity-80">
+                      (
+                      {t('connection.attempt', {
+                        count: connectionStatus.reconnectAttempts,
+                      })}
+                      )
+                    </span>
+                  )}
+              </span>
+              {actions.length > 1 && (
+                <span
+                  data-testid="connection-action-count"
+                  className="flex h-5 min-w-5 items-center justify-center rounded-full bg-black/20 px-1 text-[10px] font-bold"
+                >
+                  {actions.length}
+                </span>
+              )}
+            </button>
+            {detailsOpen && actions.length > 0 && (
+              <div className="absolute bottom-full left-1/2 mb-2 -translate-x-1/2">
+                <ActionQueueDetails
+                  actions={actions}
+                  canRetryConnection={canRetryConnection}
+                />
+              </div>
+            )}
+            {canRetryConnection && actions.length === 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  retry();
+                  requestBackendConnectionRecovery();
+                }}
+                className="mt-2 block w-full rounded bg-black/20 px-2 py-1 text-xs font-medium hover:bg-black/30 focus:outline-none focus:ring-2 focus:ring-white/80"
+              >
+                {t('connection.retry')}
+              </button>
+            )}
+          </div>
         </div>
-      </motion.div>
-    </AnimatePresence>
+      )}
+    </>
   );
 }
