@@ -809,9 +809,14 @@ describe('Unified workspace', () => {
     } as never);
     root.render(<Timer useTallSafeAreaFallback={false} />);
 
-    await vi.waitFor(() =>
-      expect(host.querySelectorAll('[data-slot-state]')).toHaveLength(6)
-    );
+    await vi.waitFor(() => {
+      expect(host.querySelectorAll('[data-slot-state="filled"]')).toHaveLength(
+        4
+      );
+      expect(host.querySelectorAll('[data-slot-state="empty"]')).toHaveLength(
+        2
+      );
+    });
     const slots = Array.from(
       host.querySelectorAll<HTMLElement>('[data-slot-state]')
     );
