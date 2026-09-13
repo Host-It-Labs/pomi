@@ -743,6 +743,30 @@ describe('accepted-action schemas', () => {
     ).toBe(true);
   });
 
+  it('preserves the allowlisted List destination in capture-log responses', () => {
+    const listId = '550e8400-e29b-41d4-a716-446655440000';
+    const responseSchema = apiContract.assistant.debugLogs.responses[200];
+    const [log] = responseSchema.parse([
+      {
+        id: 'capture-1',
+        kind: 'taskCapture',
+        source: 'typed',
+        status: 'succeeded',
+        userPrompt: 'Add milk to Groceries',
+        processedOutput: { tasks: [{ title: 'Milk', listId }] },
+        invalidParserOutput: null,
+        resolutionNotes: [],
+        timings: {},
+        modelCalls: [],
+        flagged: false,
+        contentTruncated: false,
+        error: null,
+        createdAt: '2026-09-12T10:00:00.000Z',
+      },
+    ]);
+    expect(log.processedOutput?.tasks[0].listId).toBe(listId);
+  });
+
   it('validates standard and Live Activity push-token updates', () => {
     const pushTokenBody = apiContract.users.updatePushToken.body;
 

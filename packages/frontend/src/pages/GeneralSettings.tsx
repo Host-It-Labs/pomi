@@ -1,10 +1,5 @@
 import { Preferences } from '@pomi/shared';
-import {
-  FaInfoCircle,
-  FaLightbulb,
-  FaSignOutAlt,
-  FaRobot,
-} from 'react-icons/fa';
+import { FaCog, FaInfoCircle, FaLightbulb, FaSignOutAlt } from 'react-icons/fa';
 import { ExtrasSection } from '../components/ExtrasSection';
 import { SettingsControlGroup } from '../components/settings/SettingsExperience';
 import { Button } from '../components/ui/Button';
@@ -173,7 +168,7 @@ export const GeneralSettings = ({
             variant="secondary"
             onClick={() => setActiveTab('ai-admin')}
           >
-            <FaRobot aria-hidden="true" /> {t('workspace.aiAdministration')}
+            <FaCog aria-hidden="true" /> {t('settings.admin')}
           </Button>
         </div>
       )}

@@ -172,6 +172,16 @@ export class UserDataTransferService {
         userId,
         idMaps.preferences
       );
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [`assistant-capture-logs:${userId}`]
+      );
+      const currentCaptureSettings = await manager.findOne(
+        AssistantDebugSettingEntity,
+        { where: { userId } }
+      );
+      const importedCaptureGeneration =
+        (currentCaptureSettings?.generation ?? 0) + 1;
       await this.deleteCurrentUserData(manager, userId);
       await this.insertRows(manager, Preferences, importedPreferences);
       await this.insertRows(
@@ -228,7 +238,11 @@ export class UserDataTransferService {
       await this.insertRows(
         manager,
         AssistantDebugSettingEntity,
-        this.remapNullableRow(payload.data.assistantDebugSetting, userId)
+        this.remapAssistantDebugSetting(
+          payload.data.assistantDebugSetting,
+          userId,
+          importedCaptureGeneration
+        )
       );
       await this.insertRows(
         manager,
@@ -592,6 +606,7 @@ export class UserDataTransferService {
       next.timings = this.isTransferRecord(row.timings) ? row.timings : {};
       next.modelCalls = [];
       next.flagged = row.flagged === true;
+      next.contentTruncated = row.contentTruncated === true;
       next.error = null;
       delete next.audioBase64;
       delete next.audioMimeType;
@@ -599,6 +614,23 @@ export class UserDataTransferService {
       delete next.parserOutput;
       return next;
     });
+  }
+
+  private remapAssistantDebugSetting(
+    row: UserDataTransferRow | null | undefined,
+    userId: string,
+    generation: number
+  ): UserDataTransferRow[] {
+    const [remapped] = this.remapNullableRow(row ?? null, userId);
+    return [
+      {
+        ...(remapped ?? { userId }),
+        userId,
+        enabled: false,
+        consentVersion: null,
+        generation,
+      },
+    ];
   }
 
   private isTransferRecord(value: unknown): value is UserDataTransferRow {

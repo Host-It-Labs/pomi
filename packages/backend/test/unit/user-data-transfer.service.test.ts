@@ -6,9 +6,16 @@ describe('UserDataTransferService', () => {
     const inserted = new Map<string, Record<string, unknown>[]>();
     let importedRuntime: Record<string, unknown> | null = null;
     const invalidatedUsers: string[] = [];
+    const lockQueries: Array<{ sql: string; parameters: unknown[] }> = [];
     const targetUserId = 'target-user';
     const manager = {
-      findOne: async () => ({ id: targetUserId }),
+      findOne: async (target: { name: string }) =>
+        target.name === 'AssistantDebugSettingEntity'
+          ? { userId: targetUserId, generation: 5 }
+          : { id: targetUserId },
+      query: async (sql: string, parameters: unknown[]) => {
+        lockQueries.push({ sql, parameters });
+      },
       getRepository: (target: { name: string }) => ({
         delete: async () => undefined,
         insert: async (rows: Record<string, unknown>[]) => {
@@ -114,7 +121,11 @@ describe('UserDataTransferService', () => {
             skippedCount: 0,
           },
         ],
-        assistantDebugSetting: { userId: 'source-user', enabled: true },
+        assistantDebugSetting: {
+          userId: 'source-user',
+          enabled: true,
+          generation: 3,
+        },
         assistantDebugLogs: [
           {
             id: 'source-debug-log',
@@ -215,7 +226,16 @@ describe('UserDataTransferService', () => {
     expect(taskImportRun.id).not.toBe('source-import-run');
     expect(inserted.get('AssistantDebugSettingEntity')?.[0]).toMatchObject({
       userId: targetUserId,
+      enabled: false,
+      consentVersion: null,
+      generation: 6,
     });
+    expect(lockQueries).toEqual([
+      {
+        sql: 'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        parameters: ['assistant-capture-logs:target-user'],
+      },
+    ]);
     const debugLog = inserted.get('AssistantDebugLogEntity')?.[0];
     expect(debugLog).toMatchObject({
       kind: 'taskCapture',

@@ -819,7 +819,11 @@ const assistantDebugStatusSchema = z.object({
 });
 
 const assistantDebugProcessedOutputSchema = z.object({
-  tasks: z.array(taskCreateSchema),
+  tasks: z.array(
+    taskCreateSchema.extend({
+      listId: z.string().uuid().nullable().optional(),
+    })
+  ),
   timerCommand: z
     .object({
       action: z.enum(['startTimer', 'pauseTimer', 'addFiveMinutes', 'none']),
@@ -873,6 +877,7 @@ const assistantDebugLogSchema = z.object({
   }),
   modelCalls: z.array(assistantDebugModelCallSchema),
   flagged: z.boolean(),
+  contentTruncated: z.boolean(),
   error: z.string().nullable(),
   createdAt: z.string(),
 });
@@ -2197,6 +2202,7 @@ export const apiContract = router({
       body: z.object({ flagged: z.boolean() }),
       responses: {
         200: assistantDebugLogSchema,
+        400: errorSchema,
         403: errorSchema,
         404: errorSchema,
       },

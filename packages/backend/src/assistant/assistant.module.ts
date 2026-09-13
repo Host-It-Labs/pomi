@@ -1,7 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminGuard } from '../auth/admin.guard';
-import { DebugGuard } from '../auth/debug.guard';
 import { IntentionsModule } from '../intentions/intentions.module';
 import { ListsModule } from '../lists/lists.module';
 import { PreferencesModule } from '../preferences/preferences.module';
@@ -48,7 +47,6 @@ import { AssistantVoiceReadbackService } from './assistant-voice-readback.servic
     AssistantDebugService,
     AssistantPreparationStore,
     AdminGuard,
-    DebugGuard,
   ],
   exports: [AssistantService, AssistantCaptureService, AssistantDebugService],
 })

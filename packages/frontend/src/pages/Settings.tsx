@@ -343,7 +343,11 @@ function SettingsContent() {
           ...(user?.isAdmin === true
             ? [
                 settingsSearchEntry(
-                  t('workspace.aiAdministration'),
+                  [
+                    t('settings.admin'),
+                    t('workspace.aiAdministration'),
+                    t('debug.captureLogs'),
+                  ],
                   'aiAdministration'
                 ),
               ]

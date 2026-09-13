@@ -27,6 +27,7 @@ import { setLanguage } from '../i18n';
 import { AppTheme } from '../components/AppTheme';
 import { getTimerAccentColor } from '../config/colors';
 import { ToastProvider } from '../components/toast/ToastContext';
+import { AssistantCaptureLogs } from '../components/assistant/AssistantCaptureLogs';
 
 vi.mock('../utils/userActionQueue', { spy: true });
 vi.mock('../utils/desktopNotificationHandler', () => ({
@@ -744,6 +745,30 @@ describe('Unified workspace', () => {
     useAuthStore.setState({ user: { id: 'user', isAdmin: false } as never });
     root.render(<AiAdministration />);
     await expect.element(page.getByRole('alert')).toBeVisible();
+  });
+  it('keeps administrator Capture logs usable at 440 by 700', async () => {
+    vi.spyOn(apiClient.assistant, 'debugStatus').mockResolvedValue({
+      status: 200,
+      body: { enabled: false },
+    } as never);
+    vi.spyOn(apiClient.assistant, 'debugLogs').mockResolvedValue({
+      status: 200,
+      body: [],
+    } as never);
+    root.render(
+      <ToastProvider>
+        <div className="h-[700px] overflow-y-auto p-4">
+          <AssistantCaptureLogs />
+        </div>
+      </ToastProvider>
+    );
+    await expect
+      .element(page.getByRole('button', { name: 'Turn on logging' }))
+      .toBeVisible();
+    await expect
+      .element(page.getByRole('button', { name: 'Refresh' }))
+      .toBeVisible();
+    expect(host.scrollWidth).toBeLessThanOrEqual(440);
   });
   it('opens a content-sized intention sheet without changing the workspace behind it', async () => {
     root.render(<Timer useTallSafeAreaFallback={false} />);
