@@ -75,14 +75,13 @@ export class StatisticsController {
     @Query() query: WorkTimerLogsQueryDto
   ): Promise<unknown> {
     return tsRestHandler(apiContract.workTimerLogs.list, async () => {
-      const offset = query.offset ?? 0;
       const limit = query.limit ?? 20;
-      const logs = await this.statisticsService.getWorkTimerLogs(
+      const page = await this.statisticsService.getWorkTimerLogs(
         userId,
         limit,
-        offset
+        query.cursor
       );
-      const formattedLogs = logs.map(log => ({
+      const items = page.items.map(log => ({
         ...log,
         type: log.type as TimerTypes,
         intention: log.intention ?? undefined,
@@ -92,7 +91,7 @@ export class StatisticsController {
       }));
       return {
         status: 200,
-        body: formattedLogs,
+        body: { items, nextCursor: page.nextCursor },
       };
     });
   }

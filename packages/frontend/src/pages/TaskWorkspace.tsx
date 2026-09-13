@@ -109,6 +109,11 @@ import { useI18n } from '../i18n';
 import { useDefaultTaskSort } from './taskDefaultSort';
 import { useUpdatedTaskReveal } from './taskUpdatedReveal';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
+import {
+  buildWorkspaceTaskSearchIndex,
+  matchesWorkspaceTaskSearch,
+  normalizeWorkspaceTaskSearch,
+} from '../utils/taskSearchIndex';
 
 type TaskIntentionFilterValue = string | null;
 type TaskIntentionFilterOption = {
@@ -123,7 +128,7 @@ type TaskIntentionFilterOption = {
 const TASKS_PER_PAGE = 5;
 
 export function TaskWorkspace() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const tasks = useTasksStore.use.tasks();
   const completingTaskIds = useTasksStore.use.completingTaskIds();
   const isLoading = useTasksStore.use.isLoading();
@@ -928,14 +933,28 @@ export function TaskWorkspace() {
       updateTask,
     ]
   );
-  const isTaskSearchActive = normalizeSearchText(taskSearchQuery).length > 0;
+  const taskSearchIndex = useMemo(
+    () => buildWorkspaceTaskSearchIndex(taskView.tasks, intentions, locale),
+    [intentions, locale, taskView.tasks]
+  );
+  const normalizedTaskSearchQuery = normalizeWorkspaceTaskSearch(
+    taskSearchQuery,
+    locale
+  );
+  const isTaskSearchActive = normalizedTaskSearchQuery.length > 0;
   const visibleTasks = useMemo(() => {
     const filteredTasks = taskView.tasks
       .filter(
         task => taskMode !== 'intention' || isTaskLinkedToTimer(task, timer)
       )
       .filter(task => doesTaskMatchIntentionFilter(task, selectedFilterOption))
-      .filter(task => doesTaskMatchSearch(task, taskSearchQuery, intentions))
+      .filter(task =>
+        matchesWorkspaceTaskSearch(
+          taskSearchIndex,
+          task.id,
+          normalizedTaskSearchQuery
+        )
+      )
       .filter(task => matchesTaskPropertyFilters(task, propertyFilters));
     const sorted = sortTasksForMode(filteredTasks, taskSortMode);
     const ranked = rankTasksForSearch(
@@ -945,12 +964,12 @@ export function TaskWorkspace() {
     );
     return ranked;
   }, [
-    intentions,
     isTaskSearchActive,
+    normalizedTaskSearchQuery,
     propertyFilters,
     selectedFilterOption,
     taskSortMode,
-    taskSearchQuery,
+    taskSearchIndex,
     taskView.tasks,
     taskMode,
     timer,
@@ -2938,43 +2957,4 @@ function doesTaskMatchIntentionFilter(
   }
 
   return task.subIntentionSlug === option.subIntention.slug;
-}
-
-function doesTaskMatchSearch(
-  task: Task,
-  query: string,
-  intentions: Intention[]
-) {
-  const normalizedQuery = normalizeSearchText(query);
-  if (!normalizedQuery) {
-    return true;
-  }
-
-  const parentIntention = intentions.find(
-    intention =>
-      intention.type === task.timerType &&
-      !intention.parentIntentionId &&
-      intention.slug === task.intentionSlug
-  );
-  const subIntention = intentions.find(
-    intention =>
-      intention.type === task.timerType &&
-      intention.parentIntentionId &&
-      intention.slug === task.subIntentionSlug
-  );
-  const candidates = [
-    task.title,
-    task.description ?? '',
-    task.priority,
-    task.dueDate ?? '',
-    task.dueTime ?? '',
-    parentIntention?.title ?? '',
-    parentIntention?.emoji ?? '',
-    subIntention?.title ?? '',
-    subIntention?.emoji ?? '',
-  ];
-
-  return candidates.some(candidate =>
-    candidate.toLocaleLowerCase().includes(normalizedQuery)
-  );
 }

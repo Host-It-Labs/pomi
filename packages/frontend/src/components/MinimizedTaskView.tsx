@@ -64,6 +64,11 @@ import { TaskInlineProperties } from './tasks/TaskInlineProperties';
 import { TaskQuickCreateRow } from './tasks/TaskQuickCreateRow';
 import { TaskTimerTypeBadge } from './tasks/TaskTimerTypeBadge';
 import { showToastFromStore } from './toast/ToastContext';
+import {
+  buildMinimizedTaskSearchIndex,
+  searchMinimizedTaskIndex,
+  type TaskSearchIndex,
+} from '../utils/taskSearchIndex';
 import { Button } from './ui/Button';
 import { CompactIconButton } from './ui/CompactIconButton';
 import { IntentionEmojiPair } from './ui/IntentionEmojiPair';
@@ -131,7 +136,7 @@ export function MinimizedTaskView({
   compact = false,
   visibleRowLimit,
 }: MinimizedTaskViewProps) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const tasks = useTasksStore.use.tasks();
   const completingTaskIds = useTasksStore.use.completingTaskIds();
   const preferences = usePreferencesStore.use.preferences();
@@ -225,6 +230,10 @@ export function MinimizedTaskView({
   );
   const canUseTaskSearch = preferences?.tasksExtension === true;
   const effectiveTaskSearchQuery = canUseTaskSearch ? taskSearchQuery : '';
+  const minimizedTaskSearchIndex = useMemo(
+    () => buildMinimizedTaskSearchIndex(tasks, intentions, locale),
+    [intentions, locale, tasks]
+  );
   const quickCreateDefaults = useMemo(
     () => buildMinimizedQuickCreateDefaults(taskViewTimer, displayedTaskMode),
     [displayedTaskMode, taskViewTimer]
@@ -566,20 +575,20 @@ export function MinimizedTaskView({
     if (!query) {
       return taskView.tasks;
     }
-    return searchMinimizedTasks(
-      tasks,
+    return searchMinimizedTasksWithIndex(
+      minimizedTaskSearchIndex,
       query,
       taskViewTimer,
       hideVacationCovered,
-      intentions
+      locale
     );
   }, [
     effectiveTaskSearchQuery,
     hideVacationCovered,
     taskView.tasks,
     taskViewTimer,
-    tasks,
-    intentions,
+    locale,
+    minimizedTaskSearchIndex,
   ]);
   const displayListItems = useMemo(() => {
     const query = effectiveTaskSearchQuery.trim();
@@ -611,12 +620,7 @@ export function MinimizedTaskView({
     [displayListItems, displayTasks]
   );
   const generalPreviewTasks = useMemo(
-    () =>
-      effectiveTaskSearchQuery.trim()
-        ? []
-        : taskView.generalPreviewTasks.filter(task =>
-            doesTaskMatchMiniSearch(task, effectiveTaskSearchQuery)
-          ),
+    () => (effectiveTaskSearchQuery.trim() ? [] : taskView.generalPreviewTasks),
     [effectiveTaskSearchQuery, taskView.generalPreviewTasks]
   );
   const pageCount = Math.max(
@@ -1574,9 +1578,24 @@ export function searchMinimizedTasks(
   hideVacationCovered: boolean,
   intentions: Intention[] = []
 ) {
-  return tasks
+  return searchMinimizedTasksWithIndex(
+    buildMinimizedTaskSearchIndex(tasks, intentions, 'en'),
+    query,
+    timer,
+    hideVacationCovered,
+    'en'
+  );
+}
+
+export function searchMinimizedTasksWithIndex(
+  index: TaskSearchIndex,
+  query: string,
+  timer: TaskViewTimer | null | undefined,
+  hideVacationCovered: boolean,
+  locale: string
+) {
+  return searchMinimizedTaskIndex(index, query, locale)
     .filter(task => !hideVacationCovered || !task.vacationEligible)
-    .filter(task => doesTaskMatchMiniSearch(task, query, intentions))
     .sort(
       (a, b) =>
         Number(doesTaskMatchCurrentTimer(b, timer)) -
@@ -1609,40 +1628,6 @@ export function searchMinimizedListItems(
         ? [{ item, list }]
         : [];
     });
-}
-
-function doesTaskMatchMiniSearch(
-  task: Task,
-  query: string,
-  intentions: Intention[] = []
-) {
-  const normalizedQuery = normalizeMiniSearchText(query);
-  if (!normalizedQuery) {
-    return true;
-  }
-
-  const linkedIntentions = intentions.filter(
-    intention =>
-      intention.type === task.timerType &&
-      (intention.slug === task.intentionSlug ||
-        intention.slug === task.subIntentionSlug)
-  );
-  const searchableText = [
-    task.title,
-    task.description ?? '',
-    task.sourceTranscript ?? '',
-    task.priority,
-    task.timerType,
-    ...linkedIntentions.flatMap(intention => [
-      intention.title,
-      intention.emoji,
-    ]),
-  ]
-    .map(normalizeMiniSearchText)
-    .join(' ');
-  return normalizedQuery
-    .split(' ')
-    .every(token => searchableText.includes(token));
 }
 
 function normalizeMiniSearchText(value: string) {

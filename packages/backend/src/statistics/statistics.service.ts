@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   forwardRef,
   Inject,
   Injectable,
@@ -47,6 +48,44 @@ type TodayIntentionCountRow = {
   intention: string | null;
   count: string | number;
 };
+
+type WorkTimerLogsCursor = {
+  completedAt: string;
+  id: string;
+};
+
+const POSTGRES_BIGINT_MAX = BigInt('9223372036854775807');
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type WorkTimerLogsPage = {
+  items: WorkTimerLog[];
+  nextCursor: string | null;
+};
+
+function encodeWorkTimerLogsCursor(cursor: WorkTimerLogsCursor) {
+  return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+}
+
+function decodeWorkTimerLogsCursor(value: string): WorkTimerLogsCursor {
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(value, 'base64url').toString('utf8')
+    ) as Partial<WorkTimerLogsCursor>;
+    if (
+      typeof parsed.completedAt !== 'string' ||
+      !/^\d+$/.test(parsed.completedAt) ||
+      BigInt(parsed.completedAt) > POSTGRES_BIGINT_MAX ||
+      typeof parsed.id !== 'string' ||
+      !UUID_PATTERN.test(parsed.id)
+    ) {
+      throw new Error('Invalid cursor payload');
+    }
+    return { completedAt: parsed.completedAt, id: parsed.id };
+  } catch {
+    throw new BadRequestException('Invalid work timer log cursor');
+  }
+}
 
 export type TodayIntentionCounts = {
   count: number;
@@ -1170,17 +1209,38 @@ export class StatisticsService {
   async getWorkTimerLogs(
     userId: string,
     limit: number,
-    offset: number
-  ): Promise<WorkTimerLog[]> {
-    const workTimerLogs = await this.statisticsRepository
+    cursor: string | undefined
+  ): Promise<WorkTimerLogsPage> {
+    const query = this.statisticsRepository
       .createQueryBuilder('statistic')
       .where('statistic.userId = :userId', { userId })
       .orderBy('statistic.completedAt', 'DESC')
-      .limit(limit)
-      .offset(offset)
-      .getMany();
+      .addOrderBy('statistic.id', 'DESC')
+      .take(limit + 1);
 
-    return this.formatWorkTimerLogs(userId, workTimerLogs);
+    if (cursor) {
+      const boundary = decodeWorkTimerLogsCursor(cursor);
+      query.andWhere(
+        '(statistic.completedAt, statistic.id) < (:completedAt, :id)',
+        boundary
+      );
+    }
+
+    const page = await query.getMany();
+    const hasMore = page.length > limit;
+    const items = page.slice(0, limit);
+    const last = items[items.length - 1];
+
+    return {
+      items: await this.formatWorkTimerLogs(userId, items),
+      nextCursor:
+        hasMore && last
+          ? encodeWorkTimerLogsCursor({
+              completedAt: String(last.completedAt),
+              id: last.id,
+            })
+          : null,
+    };
   }
 
   private async formatWorkTimerLogs(

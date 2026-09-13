@@ -142,6 +142,115 @@ describe('StatisticsService work-timer log rules', () => {
   });
 });
 
+describe('StatisticsService work-timer log cursor pagination', () => {
+  function createPageService(records: StatisticRecord[]) {
+    const queryBuilder = {
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      addOrderBy: vi.fn().mockReturnThis(),
+      take: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn(async () => records),
+    };
+    const repository = {
+      createQueryBuilder: vi.fn(() => queryBuilder),
+    };
+    const intentions = {
+      getIntentionsBySlug: vi.fn(async () => ({})),
+    };
+    return {
+      queryBuilder,
+      service: new StatisticsService(repository as never, intentions as never),
+    };
+  }
+
+  const pageRecord = (
+    id: string,
+    completedAt: number | string
+  ): StatisticRecord =>
+    ({
+      id,
+      userId: 'user-1',
+      type: 'work',
+      date: '2026-09-10',
+      duration: 1_500_000,
+      completedAt,
+      intention: null,
+      intentions: null,
+      subIntentions: null,
+    }) as StatisticRecord;
+
+  it('uses deterministic tie ordering and carries bigint cursor values without numeric conversion', async () => {
+    const { queryBuilder, service } = createPageService([
+      pageRecord('ffffffff-ffff-ffff-ffff-ffffffffffff', '90071992547409930'),
+      pageRecord('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', '90071992547409930'),
+      pageRecord('dddddddd-dddd-dddd-dddd-dddddddddddd', '90071992547409929'),
+    ]);
+
+    const firstPage = await service.getWorkTimerLogs('user-1', 2, undefined);
+
+    expect(firstPage.items.map(item => item.id)).toEqual([
+      'ffffffff-ffff-ffff-ffff-ffffffffffff',
+      'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+    ]);
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+    expect(queryBuilder.where).toHaveBeenCalledWith(
+      'statistic.userId = :userId',
+      { userId: 'user-1' }
+    );
+    expect(queryBuilder.orderBy).toHaveBeenCalledWith(
+      'statistic.completedAt',
+      'DESC'
+    );
+    expect(queryBuilder.addOrderBy).toHaveBeenCalledWith(
+      'statistic.id',
+      'DESC'
+    );
+    expect(queryBuilder.take).toHaveBeenCalledWith(3);
+
+    const next = createPageService([]);
+    await next.service.getWorkTimerLogs(
+      'user-2',
+      2,
+      firstPage.nextCursor ?? undefined
+    );
+    expect(next.queryBuilder.where).toHaveBeenCalledWith(
+      'statistic.userId = :userId',
+      { userId: 'user-2' }
+    );
+    expect(next.queryBuilder.andWhere).toHaveBeenCalledWith(
+      '(statistic.completedAt, statistic.id) < (:completedAt, :id)',
+      {
+        completedAt: '90071992547409930',
+        id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+      }
+    );
+  });
+
+  it('rejects malformed cursors before running the page query', async () => {
+    const { queryBuilder, service } = createPageService([]);
+    const malformed = [
+      'bm90LWpzb24',
+      Buffer.from(
+        JSON.stringify({ completedAt: '1', id: 'not-a-uuid' })
+      ).toString('base64url'),
+      Buffer.from(
+        JSON.stringify({
+          completedAt: '9223372036854775808',
+          id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+        })
+      ).toString('base64url'),
+    ];
+
+    for (const cursor of malformed) {
+      await expect(
+        service.getWorkTimerLogs('user-1', 20, cursor)
+      ).rejects.toThrow('Invalid work timer log cursor');
+    }
+    expect(queryBuilder.getMany).not.toHaveBeenCalled();
+  });
+});
+
 describe('StatisticsService period aggregates', () => {
   it('returns daily intention totals and maps from one query', async () => {
     const query = vi.fn(async () => [

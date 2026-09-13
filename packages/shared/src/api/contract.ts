@@ -1009,6 +1009,15 @@ const statisticsQuerySchema = z.object({
 });
 
 const workTimerLogsQuerySchema = z.object({
+  cursor: z
+    .string()
+    .min(1)
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+const taskEventLogsQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
@@ -1818,7 +1827,7 @@ export const apiContract = router({
     logs: {
       method: 'GET',
       path: '/tasks/logs',
-      query: workTimerLogsQuerySchema,
+      query: taskEventLogsQuerySchema,
       responses: {
         200: z.array(taskEventLogSchema),
       },
@@ -2269,7 +2278,11 @@ export const apiContract = router({
       path: '/work-timer-logs',
       query: workTimerLogsQuerySchema,
       responses: {
-        200: z.array(workTimerLogSchema),
+        200: z.object({
+          items: z.array(workTimerLogSchema),
+          nextCursor: z.string().nullable(),
+        }),
+        400: errorSchema,
         500: errorSchema,
       },
     },
