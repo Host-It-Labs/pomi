@@ -46,21 +46,17 @@ function createService(repository: Record<string, unknown>) {
 
 describe('durable Task reminder schedule', () => {
   it('materializes the user deadline instead of polling future Tasks', async () => {
-    const update = vi.fn();
+    const query = vi.fn();
     const service = createService({
       find: async () => [task],
-      update,
+      query,
     });
 
     await service.rebuildUserSchedule(task.userId);
 
-    expect(update).toHaveBeenCalledWith(
-      task.id,
-      expect.objectContaining({
-        nextReminderAt: new Date('2026-09-10T08:45:00.000Z'),
-        reminderClaimToken: null,
-        reminderClaimedUntil: null,
-      })
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE "tasks"'),
+      [task.id, new Date('2026-09-10T08:45:00.000Z'), expect.any(Date)]
     );
   });
 
@@ -125,24 +121,24 @@ describe('durable Task reminder schedule', () => {
   });
 
   it('serializes reminder schedule rebuilds for one user', async () => {
-    let finishFirstUpdate: (() => void) | undefined;
-    const firstUpdate = new Promise<void>(resolve => {
-      finishFirstUpdate = resolve;
+    let finishFirstQuery: (() => void) | undefined;
+    const firstQuery = new Promise<void>(resolve => {
+      finishFirstQuery = resolve;
     });
     const find = vi.fn(async () => [task]);
-    const update = vi
+    const query = vi
       .fn()
-      .mockImplementationOnce(async () => firstUpdate)
+      .mockImplementationOnce(async () => firstQuery)
       .mockResolvedValue(undefined);
-    const service = createService({ find, update });
+    const service = createService({ find, query });
 
     const first = service.rebuildUserSchedule(task.userId);
-    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(query).toHaveBeenCalledTimes(1));
     const second = service.rebuildUserSchedule(task.userId);
     await Promise.resolve();
     expect(find).toHaveBeenCalledTimes(1);
 
-    finishFirstUpdate?.();
+    finishFirstQuery?.();
     await Promise.all([first, second]);
     expect(find).toHaveBeenCalledTimes(2);
   });

@@ -34,7 +34,7 @@ describe('TimerService durable continuation activation', () => {
 
     await service.activateTimerContinuation(plan);
 
-    expect(clearAutoAdvance).toHaveBeenCalledWith('user-1');
+    expect(clearAutoAdvance).toHaveBeenCalledWith('user-1', true);
     expect(stopCountdown).toHaveBeenCalledWith('user-1', plan.source);
     expect(cancelPausedTimerReminder).toHaveBeenCalledWith('user-1');
     expect(startCountdown).toHaveBeenCalledWith(
