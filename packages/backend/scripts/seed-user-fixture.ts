@@ -1275,6 +1275,9 @@ export async function seedUserFixture({
       await statisticsRepository.delete({ userId: existingUser.id });
       await intentionsRepository.delete({ userId: existingUser.id });
       await preferencesRepository.delete({ userId: existingUser.id });
+      // Delete Lists while the user still exists so the task-list change-feed
+      // trigger can safely record their removal before the user is deleted.
+      await listsRepository.delete({ userId: existingUser.id });
       await userRepository.delete({ id: existingUser.id });
     }
 
