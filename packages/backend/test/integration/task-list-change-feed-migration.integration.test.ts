@@ -1,6 +1,7 @@
 import { DataSource } from 'typeorm';
 import { expect, it } from 'vitest';
 import { AddTaskListChangeFeed1788997300000 } from '../../migrations/1788997300000-addTaskListChangeFeed';
+import { RepairTaskListChangeFeed1789192000000 } from '../../migrations/1789192000000-repairTaskListChangeFeed';
 
 it.runIf(Boolean(process.env.DATABASE_URL))(
   'records committed Task and List changes in isolated user revisions',
@@ -49,6 +50,20 @@ it.runIf(Boolean(process.env.DATABASE_URL))(
 
       const migration = new AddTaskListChangeFeed1788997300000();
       await migration.up(runner);
+      // Simulate a development database that already applied the original
+      // migration, then verify the forward repair replaces its trigger.
+      await runner.query(`
+        CREATE OR REPLACE FUNCTION record_task_list_change() RETURNS trigger AS $$
+        DECLARE
+          changed_row record;
+        BEGIN
+          changed_row := CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+          PERFORM changed_row."itemKind";
+          RETURN changed_row;
+        END;
+        $$ LANGUAGE plpgsql
+      `);
+      await new RepairTaskListChangeFeed1789192000000().up(runner);
       await runner.query(`
         INSERT INTO "tasks" ("id", "userId", "title", "status", "itemKind")
         VALUES (
