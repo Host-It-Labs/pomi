@@ -14,7 +14,10 @@ import { addDays, format, startOfDay, subDays } from 'date-fns';
 import Redis from 'ioredis';
 import { isDeepStrictEqual } from 'node:util';
 import dataSource from '../data-source';
-import { AssistantDebugSettingEntity } from '../src/assistant/assistant-debug.entity';
+import {
+  AssistantDebugLogEntity,
+  AssistantDebugSettingEntity,
+} from '../src/assistant/assistant-debug.entity';
 import { DevelopmentFixtureMarkerEntity } from '../src/development-fixtures/development-fixture-marker.entity';
 import { fixtureCredentialFingerprint } from '../src/development-fixtures/fixture-credential';
 import { generateIntentionSlug } from '../src/intentions/intention-slug';
@@ -200,6 +203,7 @@ function buildFixturePreferences(userId: string) {
     autoStartWork: true,
     autoStartLongBreak: false,
     notifications: false,
+    speakToastMessages: true,
     notifyOnWorkComplete: true,
     notifyOnBreakComplete: true,
     notifyBeforeWorkComplete: true,
@@ -1102,6 +1106,22 @@ async function findFixtureHealthIssues(
     issues.push('unexpected canonical List data');
   }
 
+  if (options.fixtureMarker) {
+    const captureSettings = await dataSource
+      .getRepository(AssistantDebugSettingEntity)
+      .findOne({ where: { userId: user.id } });
+    const captureLogCount = await dataSource
+      .getRepository(AssistantDebugLogEntity)
+      .count({ where: { userId: user.id } });
+    if (
+      !captureSettings?.enabled ||
+      captureSettings.consentVersion !== 1 ||
+      captureLogCount !== 2
+    ) {
+      issues.push('capture log fixture does not match expected diagnostics');
+    }
+  }
+
   const rawCounts = await dataSource
     .getRepository(Statistic)
     .createQueryBuilder('statistic')
@@ -1239,6 +1259,9 @@ export async function seedUserFixture({
     const assistantDebugSettingsRepository = queryRunner.manager.getRepository(
       AssistantDebugSettingEntity
     );
+    const assistantDebugLogsRepository = queryRunner.manager.getRepository(
+      AssistantDebugLogEntity
+    );
     const fixtureMarkerRepository = queryRunner.manager.getRepository(
       DevelopmentFixtureMarkerEntity
     );
@@ -1252,6 +1275,9 @@ export async function seedUserFixture({
       await statisticsRepository.delete({ userId: existingUser.id });
       await intentionsRepository.delete({ userId: existingUser.id });
       await preferencesRepository.delete({ userId: existingUser.id });
+      // Delete Lists while the user still exists so the task-list change-feed
+      // trigger can safely record their removal before the user is deleted.
+      await listsRepository.delete({ userId: existingUser.id });
       await userRepository.delete({ id: existingUser.id });
     }
 
@@ -1280,8 +1306,67 @@ export async function seedUserFixture({
         assistantDebugSettingsRepository.create({
           userId: savedUser.id,
           enabled: true,
+          consentVersion: 1,
+          generation: 1,
         })
       );
+      await assistantDebugLogsRepository.save([
+        assistantDebugLogsRepository.create({
+          userId: savedUser.id,
+          kind: 'taskCapture',
+          source: 'typed',
+          status: 'succeeded',
+          userPrompt: 'Plan the release checklist for tomorrow',
+          processedOutput: {
+            tasks: [
+              {
+                title: 'Plan the release checklist for tomorrow',
+                dueDate: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
+                priority: TASK_PRIORITIES.HIGH,
+                timerType: TIMER_TYPES.WORK,
+              },
+            ],
+          },
+          invalidParserOutput: null,
+          resolutionNotes: [],
+          timings: {
+            contextMs: 18,
+            modelRequestMs: 242,
+            outputProcessingMs: 12,
+            validationMs: 8,
+            taskCreationMs: 15,
+            totalMs: 295,
+          },
+          modelCalls: [],
+          flagged: true,
+          contentTruncated: false,
+          error: null,
+        }),
+        assistantDebugLogsRepository.create({
+          userId: savedUser.id,
+          kind: 'taskCapture',
+          source: 'dictation',
+          status: 'fallback',
+          userPrompt: 'Book the train and add packing notes',
+          processedOutput: {
+            tasks: [
+              { title: 'Book the train' },
+              { title: 'Add packing notes' },
+            ],
+          },
+          invalidParserOutput: null,
+          resolutionNotes: [],
+          timings: {
+            transcriptionMs: 180,
+            modelRequestMs: 310,
+            totalMs: 520,
+          },
+          modelCalls: [],
+          flagged: false,
+          contentTruncated: false,
+          error: null,
+        }),
+      ]);
     }
 
     const userSeedIntentions = getSeedIntentions({

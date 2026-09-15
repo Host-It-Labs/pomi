@@ -106,6 +106,10 @@ export class TimerService implements OnModuleInit {
   private readonly logger = new PomiLogger(TimerService.name);
   private readonly autoAdvanceTimeouts: Map<string, NodeJS.Timeout> = new Map();
   private readonly completingTimerIds = new Set<string>();
+  private readonly pendingAutoStartCompletionHistory = new Map<
+    string,
+    { timer: Timer; before: TimerRuntimeSnapshot }
+  >();
   public readonly onTimerUpdate = this.timerEvents.onTimerUpdate;
   public readonly onClientNotification = this.timerEvents.onClientNotification;
   public readonly onExtensionStateUpdate =
@@ -166,7 +170,7 @@ export class TimerService implements OnModuleInit {
     userId: string,
     type: TimerTypes
   ): Promise<void> {
-    this.clearAutoAdvance(userId);
+    this.clearAutoAdvance(userId, true);
     this.timerIdleService.cancelPausedTimerReminder(userId);
     if (type === TIMER_TYPES.WORK) {
       this.timerEvents.emitExtensionStateUpdate(
@@ -1279,6 +1283,7 @@ export class TimerService implements OnModuleInit {
       subIntentions: {},
       isResetOrSkip: true,
       preserveSessionState: true,
+      isAutoStarted: current.isAutoStarted === true,
       expectedVersion: timerVersion(current),
     });
     const entry = await this.buildHistoryEntry(
@@ -1316,19 +1321,32 @@ export class TimerService implements OnModuleInit {
     }
     const expected = current ? timerVersion(current) : null;
 
-    const timer = await this.restoreRuntimeSnapshot(
-      userId,
-      entry.before,
-      expected,
-      runtimeRevision,
-      { direction: 'undo', serializedEntry: candidate.serializedEntry }
-    );
-    for (const statistic of entry.statistics ?? []) {
-      await this.statisticsService.restoreStatisticHistorySnapshot(
+    if (entry.completionTimerId) {
+      await this.restoreCompletionStatistics(userId, entry, 'undo');
+    }
+    let timer: Timer | null;
+    try {
+      timer = await this.restoreRuntimeSnapshot(
         userId,
-        statistic.after,
-        statistic.before
+        entry.before,
+        expected,
+        runtimeRevision,
+        { direction: 'undo', serializedEntry: candidate.serializedEntry }
       );
+    } catch (error) {
+      if (entry.completionTimerId) {
+        await this.restoreCompletionStatistics(userId, entry, 'redo');
+      }
+      throw error;
+    }
+    if (!entry.completionTimerId) {
+      for (const statistic of entry.statistics ?? []) {
+        await this.statisticsService.restoreStatisticHistorySnapshot(
+          userId,
+          statistic.after,
+          statistic.before
+        );
+      }
     }
 
     await this.emitTimerHistoryStatus(userId, {
@@ -1366,19 +1384,32 @@ export class TimerService implements OnModuleInit {
     }
     const expected = current ? timerVersion(current) : null;
 
-    const timer = await this.restoreRuntimeSnapshot(
-      userId,
-      entry.after,
-      expected,
-      runtimeRevision,
-      { direction: 'redo', serializedEntry: candidate.serializedEntry }
-    );
-    for (const statistic of entry.statistics ?? []) {
-      await this.statisticsService.restoreStatisticHistorySnapshot(
+    if (entry.completionTimerId) {
+      await this.restoreCompletionStatistics(userId, entry, 'redo');
+    }
+    let timer: Timer | null;
+    try {
+      timer = await this.restoreRuntimeSnapshot(
         userId,
-        statistic.before,
-        statistic.after
+        entry.after,
+        expected,
+        runtimeRevision,
+        { direction: 'redo', serializedEntry: candidate.serializedEntry }
       );
+    } catch (error) {
+      if (entry.completionTimerId) {
+        await this.restoreCompletionStatistics(userId, entry, 'undo');
+      }
+      throw error;
+    }
+    if (!entry.completionTimerId) {
+      for (const statistic of entry.statistics ?? []) {
+        await this.statisticsService.restoreStatisticHistorySnapshot(
+          userId,
+          statistic.before,
+          statistic.after
+        );
+      }
     }
 
     await this.emitTimerHistoryStatus(userId, {
@@ -1388,6 +1419,20 @@ export class TimerService implements OnModuleInit {
     });
 
     return timer;
+  }
+
+  private async restoreCompletionStatistics(
+    userId: string,
+    entry: TimerHistoryEntry,
+    direction: 'undo' | 'redo'
+  ): Promise<void> {
+    for (const statistic of entry.statistics ?? []) {
+      await this.statisticsService.restoreStatisticHistorySnapshot(
+        userId,
+        direction === 'undo' ? statistic.after : statistic.before,
+        direction === 'undo' ? statistic.before : statistic.after
+      );
+    }
   }
 
   async stackTimer(userId: string): Promise<Timer | { error: string }> {
@@ -1558,7 +1603,7 @@ export class TimerService implements OnModuleInit {
       });
     }
 
-    this.clearAutoAdvance(userId);
+    this.clearAutoAdvance(userId, true);
     this.timerCountdownService.stopCountdown(userId);
     this.timerIdleService.cancelIdleDetectionCheck(userId);
     this.timerIdleService.cancelPausedTimerReminder(userId);
@@ -1831,7 +1876,7 @@ export class TimerService implements OnModuleInit {
     };
 
     await this.commitCurrentTimer(userId, expected, timer);
-    this.clearAutoAdvance(userId);
+    this.clearAutoAdvance(userId, true);
     this.timerCountdownService.stopCountdown(userId);
     await this.timerCountdownService.startCountdown(
       timer,
@@ -2359,7 +2404,7 @@ export class TimerService implements OnModuleInit {
     }
     if (!(await this.isContinuationTimerCurrent(userId, plan))) return;
 
-    this.clearAutoAdvance(userId);
+    this.clearAutoAdvance(userId, true);
     this.timerCountdownService.stopCountdown(userId, plan.source);
     this.timerIdleService.cancelPausedTimerReminder(userId);
     if (plan.nextTimer.type === TIMER_TYPES.LONG_BREAK) {
@@ -2537,6 +2582,9 @@ export class TimerService implements OnModuleInit {
     try {
       let completionTimer = timer;
       if (userId) {
+        const completionBefore = timer.isAutoStarted
+          ? await this.snapshotRuntime(userId)
+          : null;
         const claim = await this.timerStore.claimRunningTimerCompletionByMode(
           userId,
           timer.id,
@@ -2547,6 +2595,22 @@ export class TimerService implements OnModuleInit {
         completionTimer = claim.timer;
 
         await this.clearTimerHistory(userId);
+        if (completionTimer.isAutoStarted && completionBefore) {
+          completionBefore.timer = {
+            ...completionTimer,
+            id: randomUUID(),
+            scheduleRevision: randomUUID(),
+            status: TIMER_STATUSES.RUNNING,
+            remainingTime: completionTimer.duration,
+            startTime: Date.now(),
+            hasNotifiedBeforeTimeNotification: false,
+            hasNotifiedPausedTimerReminder: false,
+          };
+          this.pendingAutoStartCompletionHistory.set(userId, {
+            timer: completionTimer,
+            before: completionBefore,
+          });
+        }
       } else {
         completionTimer = {
           ...timer,
@@ -2555,7 +2619,12 @@ export class TimerService implements OnModuleInit {
         };
       }
 
-      await this.completeTimer(completionTimer);
+      try {
+        await this.completeTimer(completionTimer);
+      } catch (error) {
+        if (userId) this.pendingAutoStartCompletionHistory.delete(userId);
+        throw error;
+      }
     } finally {
       this.completingTimerIds.delete(timer.id);
     }
@@ -2829,12 +2898,28 @@ export class TimerService implements OnModuleInit {
     delayMs: number,
     run: () => void | Promise<unknown>
   ): void {
-    this.clearAutoAdvance(userId);
+    this.clearAutoAdvance(userId, false);
+    const completionHistory =
+      this.pendingAutoStartCompletionHistory.get(userId);
 
     const timeout = setTimeout(() => {
       this.autoAdvanceTimeouts.delete(userId);
       void Promise.resolve(run())
-        .then(() => {
+        .then(async () => {
+          if (completionHistory) {
+            if (
+              this.pendingAutoStartCompletionHistory.get(userId) ===
+              completionHistory
+            ) {
+              this.pendingAutoStartCompletionHistory.delete(userId);
+            }
+            await this.recordAutoStartCompletionHistory(
+              userId,
+              completionHistory.timer,
+              completionHistory.before,
+              false
+            );
+          }
           this.scheduleIdleDetectionCheck(userId);
         })
         .catch(error => {
@@ -2845,7 +2930,10 @@ export class TimerService implements OnModuleInit {
     this.autoAdvanceTimeouts.set(userId, timeout);
   }
 
-  private clearAutoAdvance(userId: string): void {
+  private clearAutoAdvance(
+    userId: string,
+    reconcileCompletionHistory: boolean
+  ): void {
     const timeout = this.autoAdvanceTimeouts.get(userId);
     if (!timeout) {
       return;
@@ -2853,6 +2941,121 @@ export class TimerService implements OnModuleInit {
 
     clearTimeout(timeout);
     this.autoAdvanceTimeouts.delete(userId);
+    if (reconcileCompletionHistory) {
+      const completionHistory =
+        this.pendingAutoStartCompletionHistory.get(userId);
+      if (completionHistory) {
+        this.pendingAutoStartCompletionHistory.delete(userId);
+        void this.recordAutoStartCompletionHistory(
+          userId,
+          completionHistory.timer,
+          completionHistory.before,
+          false
+        ).catch(error => {
+          this.logger.error(
+            'Failed to retain interrupted auto-start completion history',
+            error
+          );
+        });
+      }
+    }
+  }
+
+  async captureAutoStartCompletionHistoryBefore(
+    timer: Timer
+  ): Promise<NonNullable<TimerContinuationPlanV2['completionHistoryBefore']>> {
+    if (!timer.userId) {
+      throw new ConflictException('Completed Timer user is missing');
+    }
+    const snapshot = await this.snapshotRuntime(timer.userId);
+    return {
+      sessionState: snapshot.sessionState,
+      lastCompletionTimestamp: snapshot.lastCompletionTimestamp,
+      idleDetected: snapshot.idleDetected,
+      extensionState: snapshot.extensionState ?? null,
+    };
+  }
+
+  async recordDurableAutoStartCompletionHistory(
+    timer: Timer,
+    persistedBefore: TimerContinuationPlanV2['completionHistoryBefore']
+  ): Promise<void> {
+    if (!timer.userId || !timer.isAutoStarted) return;
+    await this.recordAutoStartCompletionHistory(
+      timer.userId,
+      timer,
+      {
+        timer: {
+          ...timer,
+          id: randomUUID(),
+          scheduleRevision: randomUUID(),
+          status: TIMER_STATUSES.RUNNING,
+          remainingTime: timer.duration,
+          startTime: Date.now(),
+          hasNotifiedBeforeTimeNotification: false,
+          hasNotifiedPausedTimerReminder: false,
+        },
+        sessionState: persistedBefore?.sessionState ?? null,
+        lastCompletionTimestamp:
+          persistedBefore?.lastCompletionTimestamp ?? null,
+        idleDetected: persistedBefore?.idleDetected ?? false,
+        extensionState: persistedBefore?.extensionState ?? null,
+      },
+      true
+    );
+  }
+
+  private async recordAutoStartCompletionHistory(
+    userId: string,
+    completedTimer: Timer,
+    before: TimerRuntimeSnapshot,
+    preserveRuntimeRevision: boolean
+  ): Promise<void> {
+    const current = await this.timerStore.peekUndoHistoryCandidate(userId);
+    if (current?.entry.completionTimerId === completedTimer.id) return;
+
+    const statisticId = completedTimer.isExtension
+      ? completedTimer.extensionOriginalTimerId
+      : completedTimer.id;
+    const statisticBeforeSnapshots = new Map<
+      string,
+      StatisticHistorySnapshot | null
+    >();
+    if (statisticId) {
+      const after = await this.statisticsService.getStatisticHistorySnapshot(
+        userId,
+        statisticId
+      );
+      if (completedTimer.isExtension && after) {
+        statisticBeforeSnapshots.set(statisticId, {
+          ...after,
+          duration: Math.max(
+            0,
+            after.duration -
+              (completedTimer.duration - completedTimer.remainingTime)
+          ),
+        });
+      } else {
+        statisticBeforeSnapshots.set(statisticId, null);
+      }
+    }
+    const entry = await this.buildHistoryEntry(
+      userId,
+      'Complete auto-started timer',
+      before,
+      statisticBeforeSnapshots,
+      statisticId ? [statisticId] : []
+    );
+    entry.completionTimerId = completedTimer.id;
+    if (preserveRuntimeRevision) {
+      await this.timerStore.pushUndoHistoryPreservingRuntimeRevision(
+        userId,
+        entry
+      );
+      await this.emitTimerHistoryStatus(userId);
+    } else {
+      await this.pushTimerHistory(entry, userId);
+    }
   }
 
   private scheduleIdleDetectionCheck(userId: string): void {

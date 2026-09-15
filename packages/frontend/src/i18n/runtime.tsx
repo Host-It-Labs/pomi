@@ -14,9 +14,15 @@ import {
   isRightToLeft,
   LANGUAGE_STORAGE_KEY,
   normalizeLanguage,
+  SUPPORTED_LANGUAGES,
   type AppLanguage,
 } from './languages';
-import { getTranslationCatalog, type TranslationValues } from './resources';
+import {
+  getTranslationCatalog,
+  isTranslationCatalogLoaded,
+  loadTranslationCatalog,
+  type TranslationValues,
+} from './resources';
 
 type LanguageListener = () => void;
 export type SetLanguageOptions = { persist: boolean };
@@ -27,6 +33,7 @@ export type TranslateFunction = (
 
 let currentLanguage: AppLanguage =
   getStoredLanguage() ?? detectBrowserLanguage();
+let requestedLanguage = currentLanguage;
 const listeners = new Set<LanguageListener>();
 
 function getStoredLanguage() {
@@ -61,11 +68,38 @@ export function getLanguage(): AppLanguage {
   return currentLanguage;
 }
 
+export async function initializeI18n() {
+  try {
+    await loadTranslationCatalog(currentLanguage);
+  } catch {
+    currentLanguage = DEFAULT_LANGUAGE;
+    requestedLanguage = DEFAULT_LANGUAGE;
+  }
+  applyDocumentLanguage(currentLanguage);
+  const preload = () => {
+    void Promise.allSettled(
+      SUPPORTED_LANGUAGES.map(({ code }) => loadTranslationCatalog(code))
+    );
+  };
+  if (typeof navigator === 'undefined' || navigator.onLine) {
+    preload();
+  } else if (typeof window !== 'undefined') {
+    window.addEventListener('online', preload, { once: true });
+  }
+}
+
+function commitLanguage(language: AppLanguage) {
+  currentLanguage = language;
+  applyDocumentLanguage(language);
+  notifyLanguageChanged();
+}
+
 export function setLanguage(
   language: string | null | undefined,
   options: SetLanguageOptions
 ) {
   const normalized = normalizeLanguage(language) ?? DEFAULT_LANGUAGE;
+  requestedLanguage = normalized;
 
   if (options.persist && typeof window !== 'undefined') {
     try {
@@ -80,10 +114,28 @@ export function setLanguage(
     return normalized;
   }
 
-  currentLanguage = normalized;
-  applyDocumentLanguage(normalized);
+  if (isTranslationCatalogLoaded(normalized)) {
+    commitLanguage(normalized);
+    return normalized;
+  }
 
-  notifyLanguageChanged();
+  void loadTranslationCatalog(normalized)
+    .then(() => {
+      if (requestedLanguage === normalized) commitLanguage(normalized);
+    })
+    .catch(() => {
+      if (
+        requestedLanguage === normalized &&
+        options.persist &&
+        typeof window !== 'undefined'
+      ) {
+        try {
+          window.localStorage.setItem(LANGUAGE_STORAGE_KEY, currentLanguage);
+        } catch {
+          // Keep the loaded catalog even when persistence is unavailable.
+        }
+      }
+    });
   return normalized;
 }
 

@@ -19,6 +19,7 @@ import type { Timer, Preferences } from '@pomi/shared';
 import { Namespace, Socket } from 'socket.io';
 import { PreferencesService } from '../preferences/preferences.service';
 import { RealtimeEvents } from '../realtime/realtime-events';
+import { TaskListChangeFeedService } from '../realtime/task-list-change-feed.service';
 import { isTransientDependencyError } from '../logging/dependency-errors';
 import { formatSafeError } from '../logging/sanitize-log';
 import type { UserEntity } from '../users/users.entity';
@@ -74,7 +75,8 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private sessionService: SessionService,
     @Inject(forwardRef(() => PreferencesService))
     private preferencesService: PreferencesService,
-    private realtimeEvents: RealtimeEvents
+    private realtimeEvents: RealtimeEvents,
+    private taskListChangeFeed: TaskListChangeFeedService
   ) {
     this.timerService.onTimerUpdate.subscribe(update => {
       this.sendTimerUpdateToUser(update.userId, update.timer);
@@ -101,7 +103,7 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
 
     this.realtimeEvents.onTasksUpdate.subscribe(({ userId }) => {
-      this.sendTasksUpdateToUser(userId);
+      void this.sendTasksUpdateToUser(userId);
     });
 
     this.realtimeEvents.onUserActionUpdate.subscribe(({ userId, status }) => {
@@ -172,6 +174,13 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       client.emit(SOCKET_EVENTS.EXTENSION_STATE_UPDATE, extensionState ?? null);
       client.emit(SOCKET_EVENTS.TIMER_HISTORY_UPDATE, historyStatus);
+      const taskListRevision = await this.taskListChangeFeed.prime(userId);
+      client.emit(SOCKET_EVENTS.TASKS_UPDATE, {
+        fromRevision: taskListRevision,
+        revision: taskListRevision,
+        resetRequired: true,
+        changes: [],
+      } satisfies import('@pomi/shared').TaskListChangeEnvelope);
       client.emit(SOCKET_EVENTS.SERVER_READY);
     } catch (error) {
       this.reportConnectionFailure(client, error);
@@ -397,11 +406,26 @@ export class TimerGateway implements OnGatewayConnection, OnGatewayDisconnect {
     );
   }
 
-  private sendTasksUpdateToUser(userId: string) {
+  private async sendTasksUpdateToUser(userId: string) {
+    let envelope: import('@pomi/shared').TaskListChangeEnvelope;
+    try {
+      envelope = await this.taskListChangeFeed.readNextEnvelope(userId);
+    } catch {
+      this.logger.warn(
+        'Task and List change feed unavailable; requesting snapshot'
+      );
+      envelope = {
+        fromRevision: 0,
+        revision: 0,
+        resetRequired: true,
+        changes: [],
+      };
+    }
     this.emitToUserRoom(
       userId,
       this.userRoom(userId),
-      SOCKET_EVENTS.TASKS_UPDATE
+      SOCKET_EVENTS.TASKS_UPDATE,
+      envelope
     );
   }
 

@@ -27,6 +27,7 @@ import { setLanguage } from '../i18n';
 import { AppTheme } from '../components/AppTheme';
 import { getTimerAccentColor } from '../config/colors';
 import { ToastProvider } from '../components/toast/ToastContext';
+import { AssistantCaptureLogs } from '../components/assistant/AssistantCaptureLogs';
 
 vi.mock('../utils/userActionQueue', { spy: true });
 vi.mock('../utils/desktopNotificationHandler', () => ({
@@ -126,12 +127,12 @@ beforeEach(async () => {
     intentionPickerOpenRequest: 0,
     taskItemRevealRequest: null,
   });
+  useAuthStore.setState({
+    user: { id: 'user', username: 'copyme', isAdmin: true } as never,
+  });
   usePreferencesStore.setState({
     preferences,
     loadPreferences: vi.fn().mockResolvedValue(undefined),
-  });
-  useAuthStore.setState({
-    user: { id: 'user', username: 'copyme', isAdmin: true } as never,
   });
   useAssistantStore.setState({
     status: null,
@@ -307,6 +308,7 @@ describe('Unified workspace', () => {
     await vi.waitFor(() =>
       expect(filter.getAttribute('aria-expanded')).toBe('false')
     );
+    expect(document.activeElement).not.toBe(filter);
     animationFrame.mockRestore();
     usePreferencesStore.setState({
       preferences: { ...preferences, tasksShowInMinimizedTimer: true },
@@ -744,6 +746,30 @@ describe('Unified workspace', () => {
     root.render(<AiAdministration />);
     await expect.element(page.getByRole('alert')).toBeVisible();
   });
+  it('keeps administrator Capture logs usable at 440 by 700', async () => {
+    vi.spyOn(apiClient.assistant, 'debugStatus').mockResolvedValue({
+      status: 200,
+      body: { enabled: false },
+    } as never);
+    vi.spyOn(apiClient.assistant, 'debugLogs').mockResolvedValue({
+      status: 200,
+      body: [],
+    } as never);
+    root.render(
+      <ToastProvider>
+        <div className="h-[700px] overflow-y-auto p-4">
+          <AssistantCaptureLogs />
+        </div>
+      </ToastProvider>
+    );
+    await expect
+      .element(page.getByRole('button', { name: 'Turn on logging' }))
+      .toBeVisible();
+    await expect
+      .element(page.getByRole('button', { name: 'Refresh' }))
+      .toBeVisible();
+    expect(host.scrollWidth).toBeLessThanOrEqual(440);
+  });
   it('opens a content-sized intention sheet without changing the workspace behind it', async () => {
     root.render(<Timer useTallSafeAreaFallback={false} />);
     await vi.waitFor(() =>
@@ -774,5 +800,34 @@ describe('Unified workspace', () => {
     await dialog.getByRole('button', { name: 'Create', exact: true }).click();
     await expect.element(dialog).not.toBeInTheDocument();
     expect(useUiStore.getState().activeTab).toBe('timer');
+  });
+
+  it('keeps filled and empty expanded Intention slots at equal height', async () => {
+    vi.spyOn(apiClient.intentions, 'list').mockResolvedValue({
+      status: 200,
+      body: intentions.slice(0, 4),
+    } as never);
+    root.render(<Timer useTallSafeAreaFallback={false} />);
+
+    await vi.waitFor(() => {
+      expect(host.querySelectorAll('[data-slot-state="filled"]')).toHaveLength(
+        4
+      );
+      expect(host.querySelectorAll('[data-slot-state="empty"]')).toHaveLength(
+        2
+      );
+    });
+    const slots = Array.from(
+      host.querySelectorAll<HTMLElement>('[data-slot-state]')
+    );
+    const filledHeight = slots.find(
+      slot => slot.dataset.slotState === 'filled'
+    )!.offsetHeight;
+    const emptyHeights = slots
+      .filter(slot => slot.dataset.slotState === 'empty')
+      .map(slot => slot.offsetHeight);
+
+    expect(filledHeight).toBeGreaterThan(0);
+    expect(emptyHeights).toEqual([filledHeight, filledHeight]);
   });
 });

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   forwardRef,
   Inject,
   Injectable,
@@ -16,7 +17,7 @@ import {
 } from '@pomi/shared';
 import { format, startOfDay, subDays } from 'date-fns';
 import { IntentionsService } from 'src/intentions/intentions.service';
-import { Repository, SelectQueryBuilder } from 'typeorm';
+import { EntityManager, Repository, SelectQueryBuilder } from 'typeorm';
 import { Statistic } from './statistics.entity';
 
 type WorkTimerLogUpdateInput = {
@@ -47,6 +48,44 @@ type TodayIntentionCountRow = {
   intention: string | null;
   count: string | number;
 };
+
+type WorkTimerLogsCursor = {
+  completedAt: string;
+  id: string;
+};
+
+const POSTGRES_BIGINT_MAX = BigInt('9223372036854775807');
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type WorkTimerLogsPage = {
+  items: WorkTimerLog[];
+  nextCursor: string | null;
+};
+
+function encodeWorkTimerLogsCursor(cursor: WorkTimerLogsCursor) {
+  return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+}
+
+function decodeWorkTimerLogsCursor(value: string): WorkTimerLogsCursor {
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(value, 'base64url').toString('utf8')
+    ) as Partial<WorkTimerLogsCursor>;
+    if (
+      typeof parsed.completedAt !== 'string' ||
+      !/^\d+$/.test(parsed.completedAt) ||
+      BigInt(parsed.completedAt) > POSTGRES_BIGINT_MAX ||
+      typeof parsed.id !== 'string' ||
+      !UUID_PATTERN.test(parsed.id)
+    ) {
+      throw new Error('Invalid cursor payload');
+    }
+    return { completedAt: parsed.completedAt, id: parsed.id };
+  } catch {
+    throw new BadRequestException('Invalid work timer log cursor');
+  }
+}
 
 export type TodayIntentionCounts = {
   count: number;
@@ -417,42 +456,78 @@ export class StatisticsService {
     before: StatisticHistorySnapshot | null,
     after: StatisticHistorySnapshot | null
   ): Promise<void> {
-    const id = after?.id ?? before?.id;
-    if (!id) {
-      return;
-    }
+    await this.statisticsRepository.manager.transaction(async manager => {
+      const id = after?.id ?? before?.id;
+      if (!id) return;
+      const repository = manager.getRepository(Statistic);
+      const current = await repository.findOne({ where: { userId, id } });
+      const previousIntentions = current
+        ? this.getStatisticIntentions(current)
+        : [];
+      const previousSubs = current
+        ? this.getStatisticSubIntentions(current)
+        : {};
+      const nextIntentions = after ? this.getStatisticIntentions(after) : [];
+      const nextSubs = after ? this.getStatisticSubIntentions(after) : {};
 
-    const current = await this.findStatisticById(userId, id);
-    const currentIntentions = current
-      ? this.getStatisticIntentions(current)
-      : [];
-    const currentSubIntentions = current
-      ? this.getStatisticSubIntentions(current)
-      : {};
-    const nextIntentions = after ? this.getStatisticIntentions(after) : [];
-    const nextSubIntentions = after
-      ? this.getStatisticSubIntentions(after)
-      : {};
+      if (after) {
+        await repository.save(repository.create({ ...after, userId }));
+      } else if (current) {
+        await repository.delete({ userId, id });
+      }
 
-    if (after) {
-      await this.statisticsRepository.save(
-        this.statisticsRepository.create({
-          ...after,
-          userId,
-        })
+      await this.adjustHistoryUsage(
+        manager,
+        userId,
+        previousIntentions,
+        nextIntentions,
+        previousSubs,
+        nextSubs,
+        current ? this.toHistorySnapshot(current) : null,
+        after
       );
-    } else if (current) {
-      await this.statisticsRepository.delete({ userId, id });
-    }
+    });
+  }
 
-    await this.syncStatisticIntentionUsage(
-      userId,
-      currentIntentions,
-      nextIntentions,
-      currentSubIntentions,
-      nextSubIntentions
+  private async adjustHistoryUsage(
+    manager: EntityManager,
+    userId: string,
+    previousIntentions: string[],
+    nextIntentions: string[],
+    previousSubs: Record<string, string>,
+    nextSubs: Record<string, string>,
+    current: StatisticHistorySnapshot | null,
+    after: StatisticHistorySnapshot | null
+  ): Promise<void> {
+    const previous = [...previousIntentions, ...Object.values(previousSubs)];
+    const next = [...nextIntentions, ...Object.values(nextSubs)];
+    const removed = this.getSlugDifference(previous, next);
+    const added = this.getSlugDifference(next, previous);
+    if (
+      current &&
+      after &&
+      current.duration !== after.duration &&
+      removed.length === 0 &&
+      added.length === 0
+    ) {
+      (after.duration > current.duration ? added : removed).push(...next);
+    }
+    await this.updateUsageCounts(manager, userId, removed, -1);
+    await this.updateUsageCounts(manager, userId, added, 1);
+  }
+
+  private async updateUsageCounts(
+    manager: EntityManager,
+    userId: string,
+    slugs: string[],
+    delta: -1 | 1
+  ): Promise<void> {
+    const unique = Array.from(new Set(slugs.filter(Boolean)));
+    if (unique.length === 0) return;
+    await manager.query(
+      `UPDATE "intentions" SET "usageCount" = ${delta > 0 ? '"usageCount" + 1' : 'GREATEST(0, "usageCount" - 1)'}, "updatedAt" = now() WHERE "userId" = $1 AND "slug" = ANY($2::text[])`,
+      [userId, unique]
     );
-    await this.syncDurationOnlyUsageChange(userId, before, after);
   }
 
   private toHistorySnapshot(statistic: Statistic): StatisticHistorySnapshot {
@@ -1134,17 +1209,38 @@ export class StatisticsService {
   async getWorkTimerLogs(
     userId: string,
     limit: number,
-    offset: number
-  ): Promise<WorkTimerLog[]> {
-    const workTimerLogs = await this.statisticsRepository
+    cursor: string | undefined
+  ): Promise<WorkTimerLogsPage> {
+    const query = this.statisticsRepository
       .createQueryBuilder('statistic')
       .where('statistic.userId = :userId', { userId })
       .orderBy('statistic.completedAt', 'DESC')
-      .limit(limit)
-      .offset(offset)
-      .getMany();
+      .addOrderBy('statistic.id', 'DESC')
+      .take(limit + 1);
 
-    return this.formatWorkTimerLogs(userId, workTimerLogs);
+    if (cursor) {
+      const boundary = decodeWorkTimerLogsCursor(cursor);
+      query.andWhere(
+        '(statistic.completedAt, statistic.id) < (:completedAt, :id)',
+        boundary
+      );
+    }
+
+    const page = await query.getMany();
+    const hasMore = page.length > limit;
+    const items = page.slice(0, limit);
+    const last = items[items.length - 1];
+
+    return {
+      items: await this.formatWorkTimerLogs(userId, items),
+      nextCursor:
+        hasMore && last
+          ? encodeWorkTimerLogsCursor({
+              completedAt: String(last.completedAt),
+              id: last.id,
+            })
+          : null,
+    };
   }
 
   private async formatWorkTimerLogs(

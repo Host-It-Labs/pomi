@@ -170,7 +170,7 @@ const usePreferencesStoreBase = create<preferencesStore>((set, get) => ({
 export const usePreferencesStore = createSelectors(usePreferencesStoreBase);
 
 useAuthStoreBase.subscribe((state, prevState) => {
-  if (state.token === prevState.token) {
+  if (state.user?.id === prevState.user?.id) {
     return;
   }
 

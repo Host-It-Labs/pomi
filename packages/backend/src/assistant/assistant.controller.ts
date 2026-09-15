@@ -13,7 +13,6 @@ import {
 } from '../validation/ts-rest-zod4.adapter';
 import { AdminGuard } from '../auth/admin.guard';
 import { AuthGuard } from '../auth/auth.guard';
-import { DebugGuard } from '../auth/debug.guard';
 import { AssistantDebugService } from './assistant-debug.service';
 import { AssistantCaptureService } from './assistant-capture.service';
 import { AssistantService } from './assistant.service';
@@ -243,7 +242,7 @@ export class AssistantController {
     );
   }
 
-  @UseGuards(DebugGuard)
+  @UseGuards(AdminGuard)
   @TsRestHandler(apiContract.assistant.debugStatus)
   async getDebugStatus(@Request() req): Promise<unknown> {
     return tsRestHandler(apiContract.assistant.debugStatus, async () => {
@@ -255,7 +254,7 @@ export class AssistantController {
     });
   }
 
-  @UseGuards(DebugGuard)
+  @UseGuards(AdminGuard)
   @TsRestHandler(apiContract.assistant.updateDebugStatus)
   async updateDebugStatus(
     @Request() req,
@@ -273,7 +272,7 @@ export class AssistantController {
     });
   }
 
-  @UseGuards(DebugGuard)
+  @UseGuards(AdminGuard)
   @TsRestHandler(apiContract.assistant.debugLogs)
   async getDebugLogs(@Request() req): Promise<unknown> {
     return tsRestHandler(apiContract.assistant.debugLogs, async () => {
@@ -285,7 +284,7 @@ export class AssistantController {
     });
   }
 
-  @UseGuards(DebugGuard)
+  @UseGuards(AdminGuard)
   @TsRestHandler(apiContract.assistant.updateDebugLogFlag)
   async updateDebugLogFlag(
     @Request() req,
@@ -302,7 +301,7 @@ export class AssistantController {
     });
   }
 
-  @UseGuards(DebugGuard)
+  @UseGuards(AdminGuard)
   @TsRestHandler(apiContract.assistant.exportFlaggedDebugLogs)
   async exportFlaggedDebugLogs(@Request() req): Promise<unknown> {
     return tsRestHandler(
@@ -316,7 +315,7 @@ export class AssistantController {
     );
   }
 
-  @UseGuards(DebugGuard)
+  @UseGuards(AdminGuard)
   @TsRestHandler(apiContract.assistant.clearDebugLogs)
   async clearDebugLogs(@Request() req): Promise<unknown> {
     return tsRestHandler(apiContract.assistant.clearDebugLogs, async () => {

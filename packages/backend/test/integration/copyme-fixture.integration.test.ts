@@ -121,7 +121,7 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
       [fixtureName]
     );
     assert.equal(marker.rows.length, 1);
-    assert.equal(marker.rows[0].seedVersion, 28);
+    assert.equal(marker.rows[0].seedVersion, 29);
     assert.equal(marker.rows[0].isAdmin, true);
     assert.match(marker.rows[0].credentialFingerprint, /^[a-f0-9]{64}$/);
     const firstUserId = trackRecoveryUser(marker.rows[0].id);
@@ -177,13 +177,17 @@ test('copyme validates an isolated canonical fixture and keeps force rebuild exp
 
     const debugState = await client.query(
       `SELECT s.enabled,
+              s."consentVersion",
+              s.generation,
               (SELECT COUNT(*)::integer FROM assistant_debug_logs l WHERE l."userId" = s."userId") AS "logCount"
        FROM assistant_debug_settings s
        INNER JOIN users u ON u.id = s."userId"
        WHERE u.username = $1`,
       [username]
     );
-    assert.deepEqual(debugState.rows, [{ enabled: true, logCount: 0 }]);
+    assert.deepEqual(debugState.rows, [
+      { enabled: true, consentVersion: 1, generation: 1, logCount: 2 },
+    ]);
 
     const tasks = await client.query(
       `SELECT

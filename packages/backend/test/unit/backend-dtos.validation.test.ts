@@ -770,11 +770,18 @@ describe('statistics DTO validation', () => {
       'intentions'
     );
     const page = await expectValid(WorkTimerLogsQueryDto, {
-      offset: '0',
+      cursor: 'eyJjb21wbGV0ZWRBdCI6IjEyMyIsImlkIjoibG9nLTEifQ',
       limit: '100',
     });
-    expect(page).toMatchObject({ offset: 0, limit: 100 });
-    await expectInvalid(WorkTimerLogsQueryDto, { offset: -1 }, 'offset');
+    expect(page).toMatchObject({
+      cursor: 'eyJjb21wbGV0ZWRBdCI6IjEyMyIsImlkIjoibG9nLTEifQ',
+      limit: 100,
+    });
+    await expectInvalid(
+      WorkTimerLogsQueryDto,
+      { cursor: 'not valid' },
+      'cursor'
+    );
     await expectInvalid(WorkTimerLogsQueryDto, { limit: 0 }, 'limit');
     await expectInvalid(WorkTimerLogsQueryDto, { limit: 101 }, 'limit');
   });

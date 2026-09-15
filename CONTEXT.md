@@ -132,6 +132,10 @@ _Avoid_: Timer-page recording, background microphone session, replayable recordi
 A Task created through AI Task capture. AI-created Tasks remain normal Tasks with a source marker that can be reviewed from active task surfaces.
 _Avoid_: Assistant-created Task, imported task, generated intention, voice-only task
 
+**Capture logs**:
+An administrator-only, per-account diagnostic buffer that requires explicit content consent and records only that administrator's submitted AI Task capture input, allowlisted normalized output, outcome, and stage timings. Disabling it deletes the administrator's retained logs.
+_Avoid_: Global AI logs, provider trace archive, raw audio archive, Assistant command history
+
 **Voice-created Task**:
 A Task created directly from a spoken Assistant request after transcription and AI Task capture. Voice-created Tasks are distinct from Tasks created by typed AI Task capture or by dictating text into the Task workspace input.
 _Avoid_: AI-created Task, dictated-input Task, imported task

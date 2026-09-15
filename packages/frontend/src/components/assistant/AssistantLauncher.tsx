@@ -361,6 +361,9 @@ export function AssistantLauncher() {
                 );
               },
             }
+          : undefined,
+        response.body.spokenAudioBase64 && response.body.spokenAudioMimeType
+          ? { speak: false }
           : undefined
       );
       const audioFinished =

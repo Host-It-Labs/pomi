@@ -117,6 +117,54 @@ describe('TimerService revision conflicts', () => {
     expect(replaceCurrentTimer.mock.calls[0][3]).toBeUndefined();
   });
 
+  it.each([true, false])(
+    'preserves automatic-start provenance=%s when converting a Long break',
+    async isAutoStarted => {
+      const timer = currentTimer({
+        type: TIMER_TYPES.LONG_BREAK,
+        status: TIMER_STATUSES.RUNNING,
+        isAutoStarted,
+        hasConsumedFirstIntentionReset: true,
+      });
+      const converted = currentTimer({
+        id: 'timer-converted',
+        type: TIMER_TYPES.BREAK,
+        status: TIMER_STATUSES.RUNNING,
+        isAutoStarted,
+        hasConsumedFirstIntentionReset: undefined,
+      });
+      const createOrResumeTimer = vi.fn(async () => converted);
+      const service = Object.assign(Object.create(TimerService.prototype), {
+        timerStore: { getCurrentTimer: vi.fn(async () => timer) },
+        preferencesService: {
+          getPreferences: vi.fn(async () => ({
+            longBreakToBreakEnabled: true,
+          })),
+        },
+        snapshotRuntime: vi.fn(async () => ({ timer })),
+        createOrResumeTimer,
+        buildHistoryEntry: vi.fn(async () => ({})),
+        pushTimerHistory: vi.fn(async () => undefined),
+      }) as TimerService;
+
+      await service.convertLongBreakToBreak('user-1');
+
+      expect(createOrResumeTimer).toHaveBeenCalledWith('user-1', {
+        type: TIMER_TYPES.BREAK,
+        intentions: [],
+        subIntentions: {},
+        isResetOrSkip: true,
+        preserveSessionState: true,
+        isAutoStarted,
+        expectedVersion: {
+          timerId: 'timer-current',
+          scheduleRevision: 'revision-current',
+        },
+      });
+      expect(converted.hasConsumedFirstIntentionReset).toBeUndefined();
+    }
+  );
+
   it('resets only the first intention on an eligible running auto-started break', async () => {
     const timer = currentTimer({
       type: TIMER_TYPES.BREAK,
@@ -1389,4 +1437,35 @@ describe('logging extension time', () => {
       }
     }
   );
+
+  it('records pending completion history when another transition cancels auto-advance', async () => {
+    const timer = currentTimer();
+    const before = { timer, statistics: [] };
+    const recordAutoStartCompletionHistory = vi.fn(async () => undefined);
+    const service = Object.assign(Object.create(TimerService.prototype), {
+      autoAdvanceTimeouts: new Map([
+        ['user-1', setTimeout(() => undefined, 60_000)],
+      ]),
+      pendingAutoStartCompletionHistory: new Map([
+        ['user-1', { timer, before }],
+      ]),
+      recordAutoStartCompletionHistory,
+      logger: { error: vi.fn() },
+    }) as TimerService;
+
+    (
+      service as unknown as {
+        clearAutoAdvance(userId: string, reconcile: boolean): void;
+      }
+    ).clearAutoAdvance('user-1', true);
+
+    await vi.waitFor(() => {
+      expect(recordAutoStartCompletionHistory).toHaveBeenCalledWith(
+        'user-1',
+        timer,
+        before,
+        false
+      );
+    });
+  });
 });

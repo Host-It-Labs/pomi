@@ -173,6 +173,7 @@ export interface Preferences {
   autoStartWork?: boolean;
   autoStartLongBreak?: boolean;
   notifications: boolean;
+  speakToastMessages?: boolean;
   notifyOnWorkComplete: boolean;
   notifyOnBreakComplete: boolean;
   notifyBeforeWorkComplete: boolean;
@@ -461,6 +462,36 @@ export interface ListItem {
   updatedAt: string;
 }
 
+export type TaskListChange =
+  | {
+      revision: number;
+      entityType: 'task';
+      entityId: string;
+      operation: 'upsert' | 'delete';
+      payload: Task | null;
+    }
+  | {
+      revision: number;
+      entityType: 'list';
+      entityId: string;
+      operation: 'upsert' | 'delete';
+      payload: List | null;
+    }
+  | {
+      revision: number;
+      entityType: 'listItem';
+      entityId: string;
+      operation: 'upsert' | 'delete';
+      payload: ListItem | null;
+    };
+
+export interface TaskListChangeEnvelope {
+  fromRevision: number;
+  revision: number;
+  resetRequired: boolean;
+  changes: TaskListChange[];
+}
+
 export interface VacationState {
   active: boolean;
   runId: string | null;
@@ -608,6 +639,7 @@ export interface AssistantDebugLogEntry {
   timings: AssistantDebugTimings;
   modelCalls: AssistantDebugModelCall[];
   flagged: boolean;
+  contentTruncated: boolean;
   error: string | null;
   createdAt: string;
 }

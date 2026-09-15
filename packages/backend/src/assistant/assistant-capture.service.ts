@@ -163,6 +163,8 @@ export class AssistantCaptureService {
       );
     }
     const totalStartedAt = performance.now();
+    const captureConsent =
+      await this.assistantDebugService.beginCapture(userId);
     const timings: AssistantDebugTimings = {};
     let processedOutput: AssistantDebugProcessedOutput | null = null;
     let resolutionNotes: string[] = [];
@@ -236,6 +238,7 @@ export class AssistantCaptureService {
         listId,
         responseLanguage: interpreted.responseLanguage,
         debugLogId: debugLogId ?? null,
+        captureGeneration: captureConsent?.generation ?? null,
         taskDrafts,
         usedFallback: interpreted.usedFallback,
         invalidParserOutput: interpreted.invalidParserOutput,
@@ -267,6 +270,7 @@ export class AssistantCaptureService {
         modelCalls,
         timings,
         error: this.formatError(error),
+        captureGeneration: captureConsent?.generation ?? null,
       });
       throw error;
     }
@@ -366,6 +370,7 @@ export class AssistantCaptureService {
           modelCalls: prepared.modelCalls,
           timings,
           error: prepared.interpretationError,
+          captureGeneration: prepared.captureGeneration,
         })
         .catch(() => undefined);
       return {
@@ -392,6 +397,7 @@ export class AssistantCaptureService {
           modelCalls: prepared.modelCalls,
           timings,
           error: this.formatError(error),
+          captureGeneration: prepared.captureGeneration,
         })
         .catch(() => undefined);
       throw error;
@@ -407,6 +413,8 @@ export class AssistantCaptureService {
     }
   ): Promise<AssistantTranscriptionResult> {
     const totalStartedAt = performance.now();
+    const captureConsent =
+      await this.assistantDebugService.beginCapture(userId);
     const timings: AssistantDebugTimings = {};
     const modelCalls: AssistantDebugModelCall[] = [];
     try {
@@ -430,6 +438,7 @@ export class AssistantCaptureService {
         userPrompt: transcription.text.trim(),
         modelCalls,
         timings,
+        captureGeneration: captureConsent?.generation ?? null,
       });
       return {
         transcript: transcription.text.trim(),
@@ -447,6 +456,7 @@ export class AssistantCaptureService {
         modelCalls,
         timings,
         error: this.formatError(error),
+        captureGeneration: captureConsent?.generation ?? null,
       });
       throw error;
     }
@@ -695,6 +705,8 @@ export class AssistantCaptureService {
     input: AssistantVoiceInput
   ): Promise<PreparedAssistantVoiceCapture> {
     const totalStartedAt = performance.now();
+    const captureConsent =
+      await this.assistantDebugService.beginCapture(userId);
     const timings: AssistantDebugTimings = {};
     let transcript = '';
     const transcriptionModelCalls: AssistantDebugModelCall[] = [
@@ -766,6 +778,7 @@ export class AssistantCaptureService {
       return {
         transcript,
         debugLogId: input.debugLogId ?? null,
+        captureGeneration: captureConsent?.generation ?? null,
         interpretation,
         transcriptionCostUsd: transcription.costUsd,
         transcriptionModelCalls,
@@ -791,6 +804,7 @@ export class AssistantCaptureService {
         modelCalls: transcriptionModelCalls,
         timings,
         error: this.formatError(error),
+        captureGeneration: captureConsent?.generation ?? null,
       });
       throw error;
     }
@@ -975,6 +989,7 @@ export class AssistantCaptureService {
             ...prepared.interpretation.modelCalls,
           ],
           timings,
+          captureGeneration: prepared.captureGeneration,
         })
         .catch(() => undefined);
       return durableCommit;
@@ -995,6 +1010,7 @@ export class AssistantCaptureService {
         ],
         timings,
         error: this.formatError(error),
+        captureGeneration: prepared.captureGeneration,
       });
       throw error;
     }
@@ -1391,6 +1407,6 @@ export class AssistantCaptureService {
   }
 
   private formatError(error: unknown) {
-    return error instanceof Error ? error.message : 'Unknown error';
+    return error instanceof Error ? error.name : 'AssistantCaptureError';
   }
 }

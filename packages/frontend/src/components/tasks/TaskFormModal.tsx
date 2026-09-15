@@ -850,6 +850,7 @@ export function TaskFormModal({
                       clearLabel={t('task.general')}
                       emptyLabel={t('task.general')}
                       noSelectionLabel={t('task.general')}
+                      returnFocusOnEscape
                       searchAriaLabel={t('task.intentionOrList')}
                       searchPlaceholder={t('common.search')}
                       maxHeight={260}

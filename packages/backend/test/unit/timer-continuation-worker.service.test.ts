@@ -35,6 +35,22 @@ describe('TimerContinuationWorkerService', () => {
     );
   });
 
+  it('records history after activating an auto-started completion', async () => {
+    const harness = createHarness();
+    const autoStartedJob = job();
+    autoStartedJob.payload.timer.isAutoStarted = true;
+
+    await harness.processJob(autoStartedJob);
+
+    expect(harness.recordCompletionHistory).toHaveBeenCalledWith(
+      autoStartedJob.payload.timer,
+      expect.objectContaining({ idleDetected: false })
+    );
+    expect(
+      harness.recordCompletionHistory.mock.invocationCallOrder[0]
+    ).toBeLessThan(harness.markProcessed.mock.invocationCallOrder[0]);
+  });
+
   it('reactivates a stored plan after Redis applied it before a crash', async () => {
     const harness = createHarness();
     const initialJob = job();
@@ -277,6 +293,13 @@ describe('TimerContinuationWorkerService', () => {
     const renewUserLock = vi.fn(async () => true);
     const releaseUserLock = vi.fn(async () => true);
     const activatePlan = vi.fn(async () => undefined);
+    const recordCompletionHistory = vi.fn(async () => undefined);
+    const captureCompletionHistory = vi.fn(async () => ({
+      sessionState: null,
+      lastCompletionTimestamp: null,
+      idleDetected: false,
+      extensionState: null,
+    }));
     const service = new TimerContinuationWorkerService(
       {
         storeClaimedTimerContinuationPlan: storePlan,
@@ -293,7 +316,11 @@ describe('TimerContinuationWorkerService', () => {
         renewTimerContinuationUserLock: renewUserLock,
         releaseTimerContinuationUserLock: releaseUserLock,
       } as never,
-      { activateTimerContinuation: activatePlan } as never
+      {
+        activateTimerContinuation: activatePlan,
+        captureAutoStartCompletionHistoryBefore: captureCompletionHistory,
+        recordDurableAutoStartCompletionHistory: recordCompletionHistory,
+      } as never
     );
     Object.assign(service, { logger: { error: vi.fn(), warn: vi.fn() } });
     const internals = service as unknown as {
@@ -314,6 +341,8 @@ describe('TimerContinuationWorkerService', () => {
       renewUserLock,
       releaseUserLock,
       activatePlan,
+      recordCompletionHistory,
+      captureCompletionHistory,
       processJob: internals.processJob.bind(service),
       processJobs: internals.processJobs.bind(service),
     };

@@ -31,6 +31,12 @@ export class AssistantDebugSettingEntity {
   @Column({ default: false })
   enabled: boolean;
 
+  @Column({ type: 'integer', nullable: true })
+  consentVersion: number | null;
+
+  @Column({ type: 'integer', default: 0 })
+  generation: number;
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -76,6 +82,9 @@ export class AssistantDebugLogEntity {
 
   @Column({ type: 'boolean', default: false })
   flagged: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  contentTruncated: boolean;
 
   @Column({ type: 'text', nullable: true })
   error: string | null;

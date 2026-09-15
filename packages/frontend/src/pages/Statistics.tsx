@@ -56,6 +56,8 @@ export function Statistics() {
     useStatisticsStore.use.setTopIntentionsPeriod();
   const invalidateHeatmapYears =
     useStatisticsStore.use.invalidateHeatmapYears();
+  const invalidateStatisticsRequests =
+    useStatisticsStore.use.invalidateStatisticsRequests();
   const metricMode = useStatisticsStore.use.metricMode();
   const setMetricMode = useStatisticsStore.use.setMetricMode();
 
@@ -231,6 +233,7 @@ export function Statistics() {
   );
 
   const refreshStatisticsAfterLogMutation = () => {
+    invalidateStatisticsRequests();
     invalidateHeatmapYears();
     void fetchStatistics(
       currentIntention,
@@ -508,6 +511,7 @@ export function Statistics() {
                         clearLabel={t('intention.all')}
                         parentSelectionLabel={t('intention.allSubIntentions')}
                         noSelectionLabel={t('intention.all')}
+                        returnFocusOnEscape
                         showLabel={false}
                         searchPlaceholder={t('intention.search')}
                         triggerClassName="h-8 text-xs"

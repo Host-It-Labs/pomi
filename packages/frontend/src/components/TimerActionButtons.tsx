@@ -1,6 +1,5 @@
 import { TimerSkipLogMode } from '@pomi/shared';
 import { TIMER_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
-import { AnimatePresence, motion } from 'framer-motion';
 import { PointerEvent, useEffect, useRef } from 'react';
 import {
   FaExpandAlt,
@@ -22,6 +21,7 @@ import { IntentionEmojiPair } from './ui/IntentionEmojiPair';
 import { KeyboardShortcut } from './ui/KeyboardShortcut';
 import { useI18n } from '../i18n';
 import { canStackSessionTimer } from '../utils/sessionStacking';
+import { useNativePresence } from './ui/useNativePresence';
 
 type TimerActionButtonsProps = {
   size?: 'sm' | 'md' | 'lg';
@@ -209,6 +209,14 @@ export function TimerActionButtons({
     (preferences?.intentionExtension === false
       ? true
       : isTimerRunning && !expanded);
+  const leftButtonsPresence = useNativePresence(
+    !expanded && showLeftButtons
+      ? isExtensionTimer
+        ? 'extension'
+        : 'standard'
+      : null,
+    400
+  );
 
   // Determine button text based on context
   const getStartButtonText = () => {
@@ -289,104 +297,98 @@ export function TimerActionButtons({
           />
         ) : (
           <>
-            <AnimatePresence mode="wait">
-              {!expanded && showLeftButtons && !isExtensionTimer && (
-                <motion.div
-                  className="flex items-center space-x-3 overflow-hidden"
-                  initial={{ opacity: 0, width: 0, marginRight: 0 }}
-                  animate={{
-                    opacity: 1,
-                    width: 'auto',
-                    marginRight: '0.75rem',
-                  }}
-                  exit={{ opacity: 0, width: 0, marginRight: 0 }}
-                  transition={{ duration: 0.4, ease: 'easeInOut' }}
-                >
-                  <IconButton
-                    onClick={handleResetTimer}
-                    label={t('timer.reset')}
-                    variant="secondary"
-                    size={size}
-                    disabled={isDisconnected}
+            <>
+              {leftButtonsPresence.shouldRender &&
+                leftButtonsPresence.value === 'standard' && (
+                  <div
+                    data-presence={leftButtonsPresence.phase}
+                    onAnimationEnd={leftButtonsPresence.finish}
+                    aria-hidden={leftButtonsPresence.isExiting || undefined}
+                    inert={leftButtonsPresence.isExiting || undefined}
+                    className="native-action-strip flex items-center space-x-3 overflow-hidden"
                   >
-                    <FaRepeat />
-                    <KeyboardShortcut text="R" showModIcon={false} />
-                  </IconButton>
+                    <IconButton
+                      onClick={handleResetTimer}
+                      label={t('timer.reset')}
+                      variant="secondary"
+                      size={size}
+                      disabled={isDisconnected}
+                    >
+                      <FaRepeat />
+                      <KeyboardShortcut text="R" showModIcon={false} />
+                    </IconButton>
 
-                  <IconButton
-                    onPointerDown={handleAddFiveMinutesDown}
-                    onPointerUp={handleAddFiveMinutesUp}
-                    onPointerLeave={handleAddFiveMinutesLeave}
-                    onPointerCancel={handleAddFiveMinutesLeave}
-                    label={
-                      canStackTimer
-                        ? t('timer.addFiveMinutesHold')
-                        : t('timer.addFiveMinutes')
-                    }
-                    variant="secondary"
-                    size={size}
-                    disabled={isDisconnected}
+                    <IconButton
+                      onPointerDown={handleAddFiveMinutesDown}
+                      onPointerUp={handleAddFiveMinutesUp}
+                      onPointerLeave={handleAddFiveMinutesLeave}
+                      onPointerCancel={handleAddFiveMinutesLeave}
+                      label={
+                        canStackTimer
+                          ? t('timer.addFiveMinutesHold')
+                          : t('timer.addFiveMinutes')
+                      }
+                      variant="secondary"
+                      size={size}
+                      disabled={isDisconnected}
+                    >
+                      <FaPlusCircle />
+                      <KeyboardShortcut text="A" showModIcon={false} />
+                    </IconButton>
+                    <IconButton
+                      onClick={handleSkipClick}
+                      label={t('timer.skipTo', {
+                        target:
+                          timer?.type === TIMER_TYPES.WORK
+                            ? t('common.break')
+                            : t('common.work'),
+                      })}
+                      variant="secondary"
+                      disabled={!timer || isDisconnected}
+                      size={size}
+                    >
+                      <FaForward />
+                      <KeyboardShortcut text="S" showModIcon={false} />
+                    </IconButton>
+                    <div className="inline-block h-10 min-h-[0em] w-0.5 self-stretch bg-slate-700/60" />
+                  </div>
+                )}
+              {leftButtonsPresence.shouldRender &&
+                leftButtonsPresence.value === 'extension' && (
+                  <div
+                    data-presence={leftButtonsPresence.phase}
+                    onAnimationEnd={leftButtonsPresence.finish}
+                    aria-hidden={leftButtonsPresence.isExiting || undefined}
+                    inert={leftButtonsPresence.isExiting || undefined}
+                    className="native-action-strip flex items-center space-x-3 overflow-hidden"
                   >
-                    <FaPlusCircle />
-                    <KeyboardShortcut text="A" showModIcon={false} />
-                  </IconButton>
-                  <IconButton
-                    onClick={handleSkipClick}
-                    label={t('timer.skipTo', {
-                      target:
-                        timer?.type === TIMER_TYPES.WORK
-                          ? t('common.break')
-                          : t('common.work'),
-                    })}
-                    variant="secondary"
-                    disabled={!timer || isDisconnected}
-                    size={size}
-                  >
-                    <FaForward />
-                    <KeyboardShortcut text="S" showModIcon={false} />
-                  </IconButton>
-                  <div className="inline-block h-10 min-h-[0em] w-0.5 self-stretch bg-slate-700/60" />
-                </motion.div>
-              )}
-              {!expanded && showLeftButtons && isExtensionTimer && (
-                <motion.div
-                  className="flex items-center space-x-3 overflow-hidden"
-                  initial={{ opacity: 0, width: 0, marginRight: 0 }}
-                  animate={{
-                    opacity: 1,
-                    width: 'auto',
-                    marginRight: '0.75rem',
-                  }}
-                  exit={{ opacity: 0, width: 0, marginRight: 0 }}
-                  transition={{ duration: 0.4, ease: 'easeInOut' }}
-                >
-                  <IconButton
-                    onPointerDown={handleAddFiveMinutesDown}
-                    onPointerUp={handleAddFiveMinutesUp}
-                    onPointerLeave={handleAddFiveMinutesLeave}
-                    onPointerCancel={handleAddFiveMinutesLeave}
-                    label={t('timer.addFiveMinutes')}
-                    variant="secondary"
-                    size={size}
-                    disabled={isDisconnected}
-                  >
-                    <FaPlusCircle />
-                    <KeyboardShortcut text="A" showModIcon={false} />
-                  </IconButton>
-                  <IconButton
-                    onClick={handleSkipClick}
-                    label={t('timer.skipTo', { target: t('common.break') })}
-                    variant="secondary"
-                    disabled={!timer || isDisconnected}
-                    size={size}
-                  >
-                    <FaForward />
-                    <KeyboardShortcut text="S" showModIcon={false} />
-                  </IconButton>
-                  <div className="inline-block h-10 min-h-[1em] w-0.5 self-stretch bg-slate-700/60" />
-                </motion.div>
-              )}
-            </AnimatePresence>
+                    <IconButton
+                      onPointerDown={handleAddFiveMinutesDown}
+                      onPointerUp={handleAddFiveMinutesUp}
+                      onPointerLeave={handleAddFiveMinutesLeave}
+                      onPointerCancel={handleAddFiveMinutesLeave}
+                      label={t('timer.addFiveMinutes')}
+                      variant="secondary"
+                      size={size}
+                      disabled={isDisconnected}
+                    >
+                      <FaPlusCircle />
+                      <KeyboardShortcut text="A" showModIcon={false} />
+                    </IconButton>
+                    <IconButton
+                      onClick={handleSkipClick}
+                      label={t('timer.skipTo', { target: t('common.break') })}
+                      variant="secondary"
+                      disabled={!timer || isDisconnected}
+                      size={size}
+                    >
+                      <FaForward />
+                      <KeyboardShortcut text="S" showModIcon={false} />
+                    </IconButton>
+                    <div className="inline-block h-10 min-h-[1em] w-0.5 self-stretch bg-slate-700/60" />
+                  </div>
+                )}
+            </>
 
             <div className="flex items-center space-x-3">
               {expanded && !isExtensionTimer && (

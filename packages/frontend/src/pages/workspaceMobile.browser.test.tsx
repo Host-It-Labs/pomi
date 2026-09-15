@@ -106,12 +106,12 @@ beforeEach(async () => {
     activeTab: 'timer',
     taskCreateRequested: false,
   });
+  useAuthStore.setState({
+    user: { id: 'user', username: 'copyme', isAdmin: true } as never,
+  });
   usePreferencesStore.setState({
     preferences,
     loadPreferences: vi.fn().mockResolvedValue(undefined),
-  });
-  useAuthStore.setState({
-    user: { id: 'user', username: 'copyme', isAdmin: true } as never,
   });
   useAssistantStore.setState({
     status: null,

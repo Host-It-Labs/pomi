@@ -780,6 +780,7 @@ export interface TimerHistoryEntry {
   label: string;
   logEffect?: 'added' | 'removed' | 'restored' | 'updated';
   statistics?: TimerHistoryStatisticSnapshot[];
+  completionTimerId?: string;
 }
 
 export interface TimerUserDataSnapshot {
@@ -2348,6 +2349,17 @@ export class TimerStore {
       .rpush(this.undoHistoryKey(userId), JSON.stringify(entry))
       .del(this.redoHistoryKey(userId))
       .set(this.runtimeRevisionKey(userId), randomUUID())
+      .exec();
+  }
+
+  async pushUndoHistoryPreservingRuntimeRevision(
+    userId: string,
+    entry: TimerHistoryEntry
+  ): Promise<void> {
+    await this.redis
+      .multi()
+      .rpush(this.undoHistoryKey(userId), JSON.stringify(entry))
+      .del(this.redoHistoryKey(userId))
       .exec();
   }
 

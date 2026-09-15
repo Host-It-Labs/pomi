@@ -25,10 +25,12 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
   let dataSource: DataSource;
   let redis: Redis;
   let token: string;
+  let nonAdminToken: string;
   const usernames = [
     'testuser_vitest_http_contract',
     'testuser_vitest_http_contract_secondary',
     'testuser_vitest_http_rate_limit',
+    'testuser_vitest_http_contract_created',
   ];
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -48,6 +50,14 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
       bootstrapToken: ADMIN_BOOTSTRAP_TOKEN,
     });
     token = session.body.token;
+    const nonAdminSession = await request(app.getHttpServer())
+      .post('/sessions')
+      .send({
+        username: usernames[1],
+        password: 'vitest-password',
+        bootstrapToken: ADMIN_BOOTSTRAP_TOKEN,
+      });
+    nonAdminToken = nonAdminSession.body.token;
   });
 
   afterAll(async () => {
@@ -101,6 +111,20 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
     });
   });
 
+  it('returns one revisioned Task and List snapshot', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/tasks/snapshot')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(response.body).toEqual({
+      revision: expect.any(Number),
+      tasks: expect.any(Array),
+      lists: expect.any(Array),
+      listItems: expect.any(Array),
+    });
+  });
+
   it('rejects oversized ordinary JSON bodies before controller dispatch', async () => {
     const response = await request(app.getHttpServer())
       .post('/sessions')
@@ -112,14 +136,44 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
 
   it('creates an authenticated database-backed session', async () => {
     const response = await request(app.getHttpServer()).post('/sessions').send({
-      username: usernames[1],
+      username: usernames[3],
       password: 'vitest-password',
       bootstrapToken: ADMIN_BOOTSTRAP_TOKEN,
     });
 
     expect(response.status).toBe(200);
-    expect(response.body.user.username).toBe(usernames[1]);
+    expect(response.body.user.username).toBe(usernames[3]);
     expect(response.body.token).toEqual(expect.any(String));
+  });
+
+  it('denies every capture-log operation to non-admins in the test environment', async () => {
+    const authorization = `Bearer ${nonAdminToken}`;
+    await request(app.getHttpServer())
+      .get('/assistant/debug')
+      .set('authorization', authorization)
+      .expect(403);
+    await request(app.getHttpServer())
+      .patch('/assistant/debug')
+      .set('authorization', authorization)
+      .send({ enabled: true })
+      .expect(403);
+    await request(app.getHttpServer())
+      .get('/assistant/debug/logs')
+      .set('authorization', authorization)
+      .expect(403);
+    await request(app.getHttpServer())
+      .patch(`/assistant/debug/logs/${randomUUID()}`)
+      .set('authorization', authorization)
+      .send({ flagged: true })
+      .expect(403);
+    await request(app.getHttpServer())
+      .get('/assistant/debug/logs/export')
+      .set('authorization', authorization)
+      .expect(403);
+    await request(app.getHttpServer())
+      .delete('/assistant/debug/logs')
+      .set('authorization', authorization)
+      .expect(403);
   });
 
   it('rotates the HttpOnly refresh cookie and renews access', async () => {
@@ -348,6 +402,67 @@ describe.runIf(hasInfrastructure)('production Nest HTTP integration', () => {
       .set('authorization', `Bearer ${token}`)
       .expect(200);
     expect(secondPage.body.items.map(item => item.id)).toEqual([olderId]);
+  });
+
+  it('seeks deterministically through equal-timestamp Work Timer logs', async () => {
+    const [{ id: userId }] = await dataSource.query(
+      'SELECT id FROM users WHERE username = $1',
+      [usernames[0]]
+    );
+    const [{ id: otherUserId }] = await dataSource.query(
+      'SELECT id FROM users WHERE username = $1',
+      [usernames[1]]
+    );
+    await dataSource.query('DELETE FROM statistics WHERE "userId" = $1', [
+      userId,
+    ]);
+    const ids = Array.from({ length: 1_001 }, () => randomUUID());
+    await dataSource.query(
+      `INSERT INTO statistics (id, "userId", type, date, duration, "completedAt", "createdAt", "updatedAt")
+       SELECT source.id::uuid, $1, 'work', '2026-09-10', 1500000, 1789038000000, now(), now()
+       FROM unnest($2::text[]) AS source(id)`,
+      [userId, ids]
+    );
+    const otherLogId = randomUUID();
+    await dataSource.query(
+      `INSERT INTO statistics (id, "userId", type, date, duration, "completedAt", "createdAt", "updatedAt")
+       VALUES ($1, $2, 'work', '2026-09-10', 1500000, 1789050000000, now(), now())`,
+      [otherLogId, otherUserId]
+    );
+    const seen = new Set<string>();
+    const firstPage = await request(app.getHttpServer())
+      .get('/work-timer-logs?limit=100')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    for (const item of firstPage.body.items) seen.add(item.id);
+    let cursor: string | null = firstPage.body.nextCursor;
+
+    const newerLogId = randomUUID();
+    await dataSource.query(
+      `INSERT INTO statistics (id, "userId", type, date, duration, "completedAt", "createdAt", "updatedAt")
+       VALUES ($1, $2, 'work', '2026-09-10', 1500000, 1789040000000, now(), now())`,
+      [newerLogId, userId]
+    );
+
+    while (cursor) {
+      const page = await request(app.getHttpServer())
+        .get(`/work-timer-logs?limit=100&cursor=${encodeURIComponent(cursor)}`)
+        .set('authorization', `Bearer ${token}`)
+        .expect(200);
+      for (const item of page.body.items) {
+        expect(seen.has(item.id)).toBe(false);
+        seen.add(item.id);
+      }
+      cursor = page.body.nextCursor;
+    }
+
+    expect(seen).toEqual(new Set(ids));
+    expect(seen.has(newerLogId)).toBe(false);
+    expect(seen.has(otherLogId)).toBe(false);
+    await request(app.getHttpServer())
+      .get('/work-timer-logs?cursor=bm90LWpzb24')
+      .set('authorization', `Bearer ${token}`)
+      .expect(400);
   });
 
   it('logs out through the authenticated production contract', async () => {

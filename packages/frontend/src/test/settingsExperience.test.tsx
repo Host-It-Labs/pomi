@@ -273,13 +273,13 @@ describe('Settings experience', () => {
     expect(screen.queryByTestId('ai-infrastructure')).toBeNull();
   });
 
-  it('finds AI administration in the General section for administrators', async () => {
+  it('finds Admin capture logs in the General section for administrators', async () => {
     mocks.user = { id: 'admin-1', username: 'admin', isAdmin: true } as User;
     const user = userEvent.setup();
     render(<Settings />);
     await user.type(
       screen.getByRole('searchbox', { name: 'Search' }),
-      'AI administration'
+      'Capture logs'
     );
     expect(sectionKeys()).toEqual(['general']);
     expect(screen.queryByTestId('ai-infrastructure')).toBeNull();

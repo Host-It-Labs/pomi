@@ -672,7 +672,7 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           );
         }
         if (action.operation === 'updateDebugStatus') {
-          await this.ensureDebugAccess(userId);
+          await this.ensureAdmin(userId);
           const enabled = action.payload?.enabled;
           if (typeof enabled !== 'boolean') {
             throw new BadRequestException('Assistant debug status is required');
@@ -680,7 +680,7 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           return this.assistantDebugService.updateStatus(userId, enabled);
         }
         if (action.operation === 'updateDebugLogFlag') {
-          await this.ensureDebugAccess(userId);
+          await this.ensureAdmin(userId);
           const id = action.payload?.id;
           const flagged = action.payload?.flagged;
           if (typeof id !== 'string' || typeof flagged !== 'boolean') {
@@ -691,7 +691,7 @@ export class UserActionsService implements OnModuleInit, OnModuleDestroy {
           return this.assistantDebugService.updateFlag(userId, id, flagged);
         }
         if (action.operation === 'clearDebugLogs') {
-          await this.ensureDebugAccess(userId);
+          await this.ensureAdmin(userId);
           await this.assistantDebugService.clearLogs(userId);
           return { success: true };
         }

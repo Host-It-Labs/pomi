@@ -1,6 +1,6 @@
-import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect } from 'react';
 import { useI18n } from '../../i18n';
+import { useNativePresence } from '../ui/useNativePresence';
 import type { ToastAction } from './ToastContext';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
@@ -118,12 +118,9 @@ export function Toast({
   };
 
   return (
-    <motion.div
+    <div
       role="alert"
       aria-live="assertive"
-      initial={{ opacity: 0, y: 50 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 20 }}
       className={`flex items-center px-3 py-2 rounded-lg shadow-lg border text-sm max-w-md ${getToastStyles()}`}
     >
       <div className="flex min-w-0 items-center">
@@ -162,7 +159,7 @@ export function Toast({
           />
         </svg>
       </button>
-    </motion.div>
+    </div>
   );
 }
 
@@ -172,21 +169,30 @@ interface ToastContainerProps {
 }
 
 export function ToastContainer({ toast, onClose }: ToastContainerProps) {
+  const presence = useNativePresence(toast, 300);
+  const displayedToast = presence.value;
+
   return (
     <div className="fixed bottom-2 right-2 left-2 z-50 flex flex-col items-center md:items-end">
-      <AnimatePresence>
-        {toast && (
+      {presence.shouldRender && displayedToast && (
+        <div
+          className="native-fade-up"
+          data-presence={presence.phase}
+          onAnimationEnd={presence.finish}
+          aria-hidden={presence.isExiting || undefined}
+          inert={presence.isExiting || undefined}
+        >
           <Toast
-            key={toast.id}
-            id={toast.id}
-            message={toast.message}
-            type={toast.type}
-            duration={toast.duration}
-            action={toast.action}
+            key={displayedToast.id}
+            id={displayedToast.id}
+            message={displayedToast.message}
+            type={displayedToast.type}
+            duration={displayedToast.duration}
+            action={displayedToast.action}
             onClose={onClose}
           />
-        )}
-      </AnimatePresence>
+        </div>
+      )}
     </div>
   );
 }

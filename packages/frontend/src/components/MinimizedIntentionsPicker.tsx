@@ -1,7 +1,6 @@
 import { Intention, IntentionType, TimerTypes } from '@pomi/shared';
 import { TIMER_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
 import clsx from 'clsx';
-import { AnimatePresence, motion } from 'framer-motion';
 import {
   KeyboardEvent,
   useCallback,
@@ -41,6 +40,7 @@ import { HabitSummary } from './intentions/HabitSummary';
 import { PaginationControls } from './PaginationControls';
 import { IntentionEmojiPair } from './ui/IntentionEmojiPair';
 import { KeyboardShortcut } from './ui/KeyboardShortcut';
+import { useNativePresence } from './ui/useNativePresence';
 
 const MINIMIZED_INTENTIONS_PAGE_SIZE = 4;
 const COMPACT_TASKS_INTENTIONS_PAGE_SIZE = 3;
@@ -304,6 +304,10 @@ export function MinimizedIntentionsPicker({
   const getMaxStartIndex = (length: number, pageSize: number) =>
     Math.max(0, Math.ceil(length / pageSize) - 1) * pageSize;
   const shouldRenderPicker = isOpen || timer?.status !== TIMER_STATUSES.RUNNING;
+  const pickerPresence = useNativePresence(
+    shouldRenderPicker ? true : null,
+    200
+  );
   const addSlotIndex =
     shouldRenderPicker && !subPickerState && !isLoadingIntentions
       ? activeIntentions.length
@@ -996,20 +1000,17 @@ export function MinimizedIntentionsPicker({
         )}
         <KeyboardShortcut text={`${index + 1}`} position="topRight" />
         {!isCountLoading && showDailyCounts && count > 0 && (
-          <motion.span
+          <span
             data-testid="intention-count-badge"
-            initial={{ opacity: 0, scale: 0.85 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.16, ease: 'easeOut' }}
             className={clsx(
-              'absolute text-[9px] font-bold bg-indigo-600 text-ink rounded-full min-w-3.5 h-3.5 flex items-center justify-center px-0.5',
+              'native-badge-enter absolute text-[9px] font-bold bg-indigo-600 text-ink rounded-full min-w-3.5 h-3.5 flex items-center justify-center px-0.5',
               selectedSubIntention
                 ? 'top-[1.35rem] -right-1'
                 : '-bottom-1 -right-1'
             )}
           >
             {count}
-          </motion.span>
+          </span>
         )}
       </button>
     );
@@ -1070,15 +1071,12 @@ export function MinimizedIntentionsPicker({
           showModIcon={false}
         />
         {!isCountLoading && showDailyCounts && count > 0 && (
-          <motion.span
+          <span
             data-testid="intention-count-badge"
-            initial={{ opacity: 0, scale: 0.85 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.16, ease: 'easeOut' }}
-            className="absolute top-[1.35rem] -right-1 text-[9px] font-bold bg-cyan-600 text-ink rounded-full min-w-3.5 h-3.5 flex items-center justify-center px-0.5"
+            className="native-badge-enter absolute top-[1.35rem] -right-1 text-[9px] font-bold bg-cyan-600 text-ink rounded-full min-w-3.5 h-3.5 flex items-center justify-center px-0.5"
           >
             {count}
-          </motion.span>
+          </span>
         )}
       </button>
     );
@@ -1140,13 +1138,17 @@ export function MinimizedIntentionsPicker({
   };
 
   return (
-    <AnimatePresence mode="wait">
-      {shouldRenderPicker && (
-        <motion.div
+    <>
+      {pickerPresence.shouldRender && (
+        <div
           key="minimized-intentions"
+          data-presence={pickerPresence.phase}
+          onAnimationEnd={pickerPresence.finish}
+          aria-hidden={pickerPresence.isExiting || undefined}
+          inert={pickerPresence.isExiting || undefined}
           data-testid={isOpen ? 'minimized-intentions-picker' : undefined}
           className={clsx(
-            'pointer-events-auto relative z-20 flex items-center',
+            'native-fade-scale pointer-events-auto relative z-20 flex items-center',
             compactForTasks
               ? 'h-8 min-h-8 max-h-8 shrink-0 overflow-visible'
               : 'mt-5',
@@ -1158,10 +1160,6 @@ export function MinimizedIntentionsPicker({
               ? { minWidth: compactPickerMinWidth }
               : undefined
           }
-          initial={{ opacity: 0, scale: compactForTasks ? 1 : 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: compactForTasks ? 1 : 0.96 }}
-          transition={{ duration: 0.18, ease: 'easeOut' }}
         >
           {habitsEnabled && (
             <HabitSummary
@@ -1322,8 +1320,8 @@ export function MinimizedIntentionsPicker({
                 </div>
               )}
           </div>
-        </motion.div>
+        </div>
       )}
-    </AnimatePresence>
+    </>
   );
 }

@@ -762,6 +762,7 @@ function TaskIntentionControl({
           allowClear
           emptyLabel={t('intention.choose')}
           noSelectionLabel={t('intention.choose')}
+          returnFocusOnEscape
           searchAriaLabel={t('task.intentionOrList')}
           maxHeight={208}
           triggerClassName="h-9 text-xs"

@@ -33,6 +33,7 @@ export type PreparedAssistantTaskCapture = {
   /** Detected source language for localized assistant confirmations. */
   responseLanguage?: string;
   debugLogId: string | null;
+  captureGeneration: number | null;
   taskDrafts: ParsedTaskDraft[];
   usedFallback: boolean;
   invalidParserOutput: string | null;
@@ -47,6 +48,7 @@ export type PreparedAssistantTaskCapture = {
 export type PreparedAssistantVoiceCapture = {
   transcript: string;
   debugLogId: string | null;
+  captureGeneration: number | null;
   interpretation: AssistantPreparedInterpretation;
   transcriptionCostUsd: number;
   transcriptionModelCalls: AssistantDebugModelCall[];
@@ -122,7 +124,7 @@ type VoiceCommitPreparation = Pick<
 > & { interpretation: VoiceInterpretationCommit };
 type VoiceDebugPreparation = Pick<
   PreparedAssistantVoiceCapture,
-  'debugLogId' | 'transcriptionModelCalls' | 'timings'
+  'debugLogId' | 'captureGeneration' | 'transcriptionModelCalls' | 'timings'
 > & {
   interpretationModelCalls: AssistantDebugModelCall[];
   interpretationTimings: AssistantPreparedInterpretation['timings'];
@@ -190,6 +192,7 @@ const VOICE_CODEC: PreparationCodec<
       },
       debug: {
         debugLogId: prepared.debugLogId,
+        captureGeneration: prepared.captureGeneration,
         transcriptionModelCalls: sanitizeModelCalls(
           prepared.transcriptionModelCalls
         ),
@@ -202,6 +205,7 @@ const VOICE_CODEC: PreparationCodec<
   merge: (commit, debug) => ({
     transcript: commit.transcript,
     debugLogId: debug.debugLogId,
+    captureGeneration: debug.captureGeneration,
     interpretation: {
       ...commit.interpretation,
       modelCalls: debug.interpretationModelCalls,

@@ -1,5 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'node:crypto';
 import {
   CLIENT_NOTIFICATION_TYPES,
   ClientNotificationType,
@@ -10,45 +11,243 @@ import {
   TIMER_TYPES,
   Timer,
 } from '@pomi/shared';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
+import type { Subscription } from 'rxjs';
 import { PomiLogger } from '../logging/pomi-logger';
 import { translateNotification } from '../i18n/notification-localization';
 import { NotificationService } from '../notifications/notifications.service';
 import { PreferencesService } from '../preferences/preferences.service';
+import { RealtimeEvents } from '../realtime/realtime-events';
 import { TimerService } from '../timer/timer.service';
 import { TaskEntity } from './tasks.entity';
 
-const TASK_REMINDER_SCAN_INTERVAL_MS = 60 * 1000;
+const TASK_REMINDER_POLL_INTERVAL_MS = 1000;
+const TASK_REMINDER_RECONCILE_INTERVAL_MS = 15 * 60 * 1000;
+const TASK_REMINDER_CLAIM_LEASE_MS = 30 * 1000;
+const TASK_REMINDER_CLAIM_BATCH_SIZE = 25;
 const DEFAULT_DUE_TIME = '10:00';
 
 @Injectable()
 export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new PomiLogger(TaskNotificationService.name);
-  private readonly lastUrgentReminderAt = new Map<string, number>();
-  private scanInterval: NodeJS.Timeout | null = null;
+  private pollInterval: NodeJS.Timeout | null = null;
+  private reconcileInterval: NodeJS.Timeout | null = null;
+  private readonly subscriptions: Subscription[] = [];
+  private readonly scheduleRebuilds = new Map<string, Promise<void>>();
 
   constructor(
     @InjectRepository(TaskEntity)
     private tasksRepository: Repository<TaskEntity>,
     private preferencesService: PreferencesService,
     private notificationService: NotificationService,
-    private timerService: TimerService
+    private timerService: TimerService,
+    private realtimeEvents: RealtimeEvents
   ) {}
 
   onModuleInit(): void {
-    this.scanInterval = setInterval(
-      () => void this.scanDueTasks(),
-      TASK_REMINDER_SCAN_INTERVAL_MS
+    this.subscriptions.push(
+      this.realtimeEvents.onTasksUpdate.subscribe(({ userId }) => {
+        void this.rebuildUserSchedule(userId);
+      }),
+      this.preferencesService.onPreferencesUpdate.subscribe(({ userId }) => {
+        void this.rebuildUserSchedule(userId);
+      })
     );
-    void this.scanDueTasks();
+    this.pollInterval = setInterval(
+      () => void this.scanDueSchedules(new Date()),
+      TASK_REMINDER_POLL_INTERVAL_MS
+    );
+    this.reconcileInterval = setInterval(
+      () => void this.rebuildAllSchedules(),
+      TASK_REMINDER_RECONCILE_INTERVAL_MS
+    );
+    void this.rebuildAllSchedules().then(() =>
+      this.scanDueSchedules(new Date())
+    );
   }
 
   onModuleDestroy(): void {
-    if (this.scanInterval) clearInterval(this.scanInterval);
-    this.scanInterval = null;
+    if (this.pollInterval) clearInterval(this.pollInterval);
+    if (this.reconcileInterval) clearInterval(this.reconcileInterval);
+    this.pollInterval = null;
+    this.reconcileInterval = null;
+    this.subscriptions
+      .splice(0)
+      .forEach(subscription => subscription.unsubscribe());
   }
 
-  async scanDueTasks(now = new Date()): Promise<void> {
+  async scanDueSchedules(now: Date): Promise<void> {
+    const claimToken = randomUUID();
+    const claimedUntil = new Date(now.getTime() + TASK_REMINDER_CLAIM_LEASE_MS);
+    let claimedRows: Array<{ id: string }>;
+    try {
+      claimedRows = await this.tasksRepository.query(
+        `
+          WITH due AS (
+            SELECT "id"
+            FROM "tasks"
+            WHERE "status" = $1
+              AND "itemKind" IN ('task', 'followUp')
+              AND "nextReminderAt" <= $2
+              AND (
+                "reminderClaimedUntil" IS NULL
+                OR "reminderClaimedUntil" <= $2
+              )
+            ORDER BY "nextReminderAt", "id"
+            FOR UPDATE SKIP LOCKED
+            LIMIT $3
+          )
+          UPDATE "tasks" AS task
+          SET "reminderClaimToken" = $4,
+              "reminderClaimedUntil" = $5
+          FROM due
+          WHERE task."id" = due."id"
+          RETURNING task."id"
+        `,
+        [
+          TASK_STATUSES.ACTIVE,
+          now,
+          TASK_REMINDER_CLAIM_BATCH_SIZE,
+          claimToken,
+          claimedUntil,
+        ]
+      );
+    } catch {
+      this.logger.warn('Task reminder schedule unavailable');
+      return;
+    }
+
+    if (claimedRows.length === 0) return;
+    try {
+      const tasks = await this.tasksRepository.findBy({
+        id: In(claimedRows.map(row => row.id)),
+      });
+      const tasksByUser = new Map<string, TaskEntity[]>();
+      for (const task of tasks) {
+        const userTasks = tasksByUser.get(task.userId) ?? [];
+        userTasks.push(task);
+        tasksByUser.set(task.userId, userTasks);
+      }
+
+      await Promise.all(
+        [...tasksByUser].map(async ([userId, userTasks]) => {
+          await this.processUserReminderTasks(userId, userTasks, now);
+          await Promise.all(
+            userTasks.map(task =>
+              this.rescheduleClaimedTask(task.id, claimToken, now)
+            )
+          );
+        })
+      );
+    } catch {
+      this.logger.warn('Task reminder post-claim processing unavailable');
+    }
+  }
+
+  async rebuildAllSchedules(): Promise<void> {
+    let tasks: TaskEntity[];
+    try {
+      tasks = await this.getReminderCandidates();
+    } catch {
+      this.logger.warn('Task reminder reconciliation unavailable');
+      return;
+    }
+    const userIds = [...new Set(tasks.map(task => task.userId))];
+    await Promise.all(userIds.map(userId => this.rebuildUserSchedule(userId)));
+  }
+
+  async rebuildUserSchedule(userId: string): Promise<void> {
+    const previous = this.scheduleRebuilds.get(userId) ?? Promise.resolve();
+    const rebuild = previous
+      .catch(() => undefined)
+      .then(() => this.performUserScheduleRebuild(userId));
+    this.scheduleRebuilds.set(userId, rebuild);
+    try {
+      await rebuild;
+    } finally {
+      if (this.scheduleRebuilds.get(userId) === rebuild) {
+        this.scheduleRebuilds.delete(userId);
+      }
+    }
+  }
+
+  private async performUserScheduleRebuild(userId: string): Promise<void> {
+    try {
+      const now = new Date();
+      const [tasks, preferences] = await Promise.all([
+        this.tasksRepository.find({
+          where: {
+            userId,
+            status: TASK_STATUSES.ACTIVE,
+            itemKind: In(['task', 'followUp']),
+          },
+        }),
+        this.preferencesService.getPreferences(userId),
+      ]);
+      const candidates = tasks.filter(
+        task => task.dueDate || task.nextReminderAt
+      );
+      for (let offset = 0; offset < candidates.length; offset += 25) {
+        await Promise.all(
+          candidates.slice(offset, offset + 25).map(task =>
+            this.tasksRepository.query(
+              `UPDATE "tasks"
+               SET "nextReminderAt" = $2,
+                   "reminderClaimToken" = NULL,
+                   "reminderClaimedUntil" = NULL
+               WHERE "id" = $1
+                 AND (
+                   "reminderClaimedUntil" IS NULL
+                   OR "reminderClaimedUntil" <= $3
+                 )`,
+              [task.id, this.getNextReminderAt(task, preferences, now), now]
+            )
+          )
+        );
+      }
+    } catch {
+      this.logger.warn('Failed to rebuild a task reminder schedule');
+    }
+  }
+
+  private async rescheduleClaimedTask(
+    taskId: string,
+    claimToken: string,
+    now: Date
+  ): Promise<void> {
+    try {
+      const task = await this.tasksRepository.findOneBy({ id: taskId });
+      if (!task) return;
+      const preferences = await this.preferencesService.getPreferences(
+        task.userId
+      );
+      await this.tasksRepository.update(
+        { id: taskId, reminderClaimToken: claimToken },
+        {
+          nextReminderAt: this.getNextReminderAt(task, preferences, now),
+          reminderClaimToken: null,
+          reminderClaimedUntil: null,
+        }
+      );
+    } catch {
+      try {
+        await this.tasksRepository.update(
+          { id: taskId, reminderClaimToken: claimToken },
+          {
+            nextReminderAt: new Date(
+              now.getTime() + TASK_REMINDER_POLL_INTERVAL_MS
+            ),
+            reminderClaimToken: null,
+            reminderClaimedUntil: null,
+          }
+        );
+      } catch {
+        this.logger.warn('Failed release Task reminder claim');
+      }
+    }
+  }
+
+  async scanDueTasks(now: Date): Promise<void> {
     let tasks: TaskEntity[];
     try {
       tasks = await this.getReminderCandidates();
@@ -90,19 +289,21 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    for (const task of tasks) {
-      try {
-        const dueReminderHandled = await this.sendDueReminderIfNeeded(
-          task,
-          now,
-          preferences
-        );
-        if (!dueReminderHandled) continue;
-        await this.repeatUrgentReminderIfNeeded(task, now, preferences);
-      } catch {
-        this.logger.warn('Failed to process a task reminder');
-      }
-    }
+    await Promise.all(
+      tasks.map(async task => {
+        try {
+          const dueReminderHandled = await this.sendDueReminderIfNeeded(
+            task,
+            now,
+            preferences
+          );
+          if (!dueReminderHandled) return;
+          await this.repeatUrgentReminderIfNeeded(task, now, preferences);
+        } catch {
+          this.logger.warn('Failed to process a task reminder');
+        }
+      })
+    );
   }
 
   private async getReminderCandidates(): Promise<TaskEntity[]> {
@@ -167,10 +368,11 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
     );
     task.lastReminderKey = reminderKey;
     if (task.priority === TASK_PRIORITIES.URGENT) {
-      this.lastUrgentReminderAt.set(task.id, now.getTime());
+      task.lastUrgentReminderAt = now;
     }
     await this.tasksRepository.update(task.id, {
       lastReminderKey: reminderKey,
+      lastUrgentReminderAt: task.lastUrgentReminderAt,
     });
     return true;
   }
@@ -194,7 +396,7 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const lastReminderAt = this.lastUrgentReminderAt.get(task.id);
+    const lastReminderAt = task.lastUrgentReminderAt?.getTime();
     if (lastReminderAt && now.getTime() - lastReminderAt < intervalMs) {
       return;
     }
@@ -214,7 +416,8 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn('Task push notification unavailable');
       }
     }
-    this.lastUrgentReminderAt.set(task.id, now.getTime());
+    task.lastUrgentReminderAt = now;
+    await this.tasksRepository.update(task.id, { lastUrgentReminderAt: now });
     this.emitClientTaskNotification(
       task,
       CLIENT_NOTIFICATION_TYPES.TASK_REMINDER,
@@ -273,6 +476,48 @@ export class TaskNotificationService implements OnModuleInit, OnModuleDestroy {
 
     return new Date(
       this.getDueAt(task, timeZone).getTime() - beforeDueMinutes * 60 * 1000
+    );
+  }
+
+  private getNextReminderAt(
+    task: TaskEntity,
+    preferences: Awaited<ReturnType<PreferencesService['getPreferences']>>,
+    now: Date
+  ): Date | null {
+    if (
+      task.status !== TASK_STATUSES.ACTIVE ||
+      !['task', 'followUp'].includes(task.itemKind) ||
+      !task.dueDate ||
+      !preferences.tasksExtension ||
+      !preferences.notifications ||
+      !preferences.taskReminderPriorities.includes(task.priority)
+    ) {
+      return null;
+    }
+
+    const reminderKey = `${task.id}:${task.dueDate}:${task.dueTime ?? DEFAULT_DUE_TIME}`;
+    if (task.lastReminderKey !== reminderKey) {
+      return this.getReminderAt(
+        task,
+        preferences.timeZone,
+        preferences.taskBeforeDueReminderMinutes
+      );
+    }
+
+    if (
+      task.priority !== TASK_PRIORITIES.URGENT ||
+      !preferences.taskUrgentReminderRepeatEnabled
+    ) {
+      return null;
+    }
+
+    const intervalMs =
+      preferences.taskUrgentReminderRepeatIntervalMinutes * 60 * 1000;
+    const overdueAt = this.getOverdueAt(task, preferences.timeZone).getTime();
+    if (task.createdAt.getTime() >= overdueAt) return null;
+    const lastSentAt = task.lastUrgentReminderAt?.getTime() ?? overdueAt;
+    return new Date(
+      Math.max(overdueAt + intervalMs, lastSentAt + intervalMs, now.getTime())
     );
   }
 

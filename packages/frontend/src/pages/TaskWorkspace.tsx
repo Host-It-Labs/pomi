@@ -16,7 +16,6 @@ import {
 } from '@pomi/shared';
 import { TASK_STATUSES, TIMER_TYPES } from '@pomi/shared/src/constants';
 import clsx from 'clsx';
-import { AnimatePresence, motion } from 'framer-motion';
 import {
   useCallback,
   useEffect,
@@ -24,6 +23,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
   type Ref,
 } from 'react';
 import {
@@ -42,6 +42,7 @@ import {
   FaTimes,
   FaUndo,
 } from 'react-icons/fa';
+import { useNativePresenceList } from '../components/ui/useNativePresence';
 import {
   IntentionAssignmentPicker,
   type IntentionAssignmentPickerChange,
@@ -96,6 +97,8 @@ import { VacationControl } from '../components/vacation/VacationControl';
 import { isMobile } from '../utils/osUtils';
 import {
   requestListRefresh,
+  reduceRealtimeListItems,
+  reduceRealtimeLists,
   subscribeToListRefresh,
 } from '../utils/listRefresh';
 import { subscribeToIntentionRefresh } from '../utils/recoveryRefresh';
@@ -107,6 +110,11 @@ import { useI18n } from '../i18n';
 import { useDefaultTaskSort } from './taskDefaultSort';
 import { useUpdatedTaskReveal } from './taskUpdatedReveal';
 import { shouldHideVacationCoveredTasks } from '../utils/vacationVisibility';
+import {
+  buildWorkspaceTaskSearchIndex,
+  matchesWorkspaceTaskSearch,
+  normalizeWorkspaceTaskSearch,
+} from '../utils/taskSearchIndex';
 
 type TaskIntentionFilterValue = string | null;
 type TaskIntentionFilterOption = {
@@ -121,7 +129,7 @@ type TaskIntentionFilterOption = {
 const TASKS_PER_PAGE = 5;
 
 export function TaskWorkspace() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const tasks = useTasksStore.use.tasks();
   const completingTaskIds = useTasksStore.use.completingTaskIds();
   const isLoading = useTasksStore.use.isLoading();
@@ -307,7 +315,16 @@ export function TaskWorkspace() {
       return;
     }
     void loadLists();
-    return subscribeToListRefresh(() => void loadLists());
+    return subscribeToListRefresh(update => {
+      if (!update) return void loadLists();
+      if (!Array.isArray(update)) {
+        setLists(update.snapshot.lists);
+        setListItems(update.snapshot.listItems);
+        return;
+      }
+      setLists(current => reduceRealtimeLists(current, update));
+      setListItems(current => reduceRealtimeListItems(current, update));
+    });
   }, [loadLists, preferences?.listsExtension]);
 
   useEffect(() => {
@@ -917,14 +934,28 @@ export function TaskWorkspace() {
       updateTask,
     ]
   );
-  const isTaskSearchActive = normalizeSearchText(taskSearchQuery).length > 0;
+  const taskSearchIndex = useMemo(
+    () => buildWorkspaceTaskSearchIndex(taskView.tasks, intentions, locale),
+    [intentions, locale, taskView.tasks]
+  );
+  const normalizedTaskSearchQuery = normalizeWorkspaceTaskSearch(
+    taskSearchQuery,
+    locale
+  );
+  const isTaskSearchActive = normalizedTaskSearchQuery.length > 0;
   const visibleTasks = useMemo(() => {
     const filteredTasks = taskView.tasks
       .filter(
         task => taskMode !== 'intention' || isTaskLinkedToTimer(task, timer)
       )
       .filter(task => doesTaskMatchIntentionFilter(task, selectedFilterOption))
-      .filter(task => doesTaskMatchSearch(task, taskSearchQuery, intentions))
+      .filter(task =>
+        matchesWorkspaceTaskSearch(
+          taskSearchIndex,
+          task.id,
+          normalizedTaskSearchQuery
+        )
+      )
       .filter(task => matchesTaskPropertyFilters(task, propertyFilters));
     const sorted = sortTasksForMode(filteredTasks, taskSortMode);
     const ranked = rankTasksForSearch(
@@ -934,12 +965,12 @@ export function TaskWorkspace() {
     );
     return ranked;
   }, [
-    intentions,
     isTaskSearchActive,
+    normalizedTaskSearchQuery,
     propertyFilters,
     selectedFilterOption,
     taskSortMode,
-    taskSearchQuery,
+    taskSearchIndex,
     taskView.tasks,
     taskMode,
     timer,
@@ -1843,6 +1874,7 @@ export function TaskIntentionFilterDropdown({
       clearLabel={t('common.all')}
       emptyLabel={t('common.all')}
       noSelectionLabel={t('common.all')}
+      returnFocusOnEscape={false}
       shortcut="I"
       shortcutShowModIcon
       shortcutPosition="topRight"
@@ -2471,6 +2503,51 @@ function ListItemEditModal({
   );
 }
 
+function NativeTaskListRow({
+  phase,
+  className,
+  children,
+}: {
+  phase: 'entering' | 'entered' | 'exiting';
+  className: string;
+  children: ReactNode;
+}) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const lastLayout = useRef<{ top: number; height: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (phase !== 'exiting' && rowRef.current) {
+      lastLayout.current = {
+        top: rowRef.current.offsetTop,
+        height: rowRef.current.offsetHeight,
+      };
+    }
+  }, [phase]);
+
+  const exitLayout = phase === 'exiting' ? lastLayout.current : null;
+  return (
+    <div
+      ref={rowRef}
+      data-presence={phase}
+      aria-hidden={phase === 'exiting' || undefined}
+      inert={phase === 'exiting' || undefined}
+      style={
+        exitLayout
+          ? {
+              position: 'absolute',
+              insetInline: 0,
+              top: exitLayout.top,
+              height: exitLayout.height,
+            }
+          : undefined
+      }
+      className={className}
+    >
+      {children}
+    </div>
+  );
+}
+
 function MixedTaskList({
   entries,
   completingTaskIds,
@@ -2537,69 +2614,73 @@ function MixedTaskList({
   showTypeBadge: boolean;
   highlightedTaskId: string | null;
 }) {
+  const renderedEntries = useNativePresenceList(
+    entries,
+    entry =>
+      entry.kind === 'listItem'
+        ? `list-item:${entry.item.id}`
+        : `task:${entry.task.id}`,
+    70
+  );
+
   return (
     <section
       data-testid="task-list"
       className="relative overflow-visible rounded-xl border border-slate-800/75 bg-slate-900/30 shadow-sm shadow-black/15"
     >
-      <AnimatePresence initial={false} mode="popLayout">
-        {entries.map(entry => {
-          if (entry.kind === 'listItem') {
-            const isCompleting = completingListItemIds.includes(entry.item.id);
-            return (
-              <motion.div
-                key={`list-item:${entry.item.id}`}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: isCompleting ? 0.5 : 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.07 }}
-                className="border-b border-slate-800/65 last:border-b-0"
-              >
-                <ListItemTaskRow
-                  item={entry.item}
-                  list={entry.list}
-                  intentions={intentions}
-                  isCompleting={isCompleting}
-                  onEdit={onEditListItem}
-                  onComplete={onCompleteListItem}
-                  onArchive={onArchiveListItem}
-                  onUpdate={onUpdateListItem}
-                  onConvertToTask={onConvertListItemToTask}
-                />
-              </motion.div>
-            );
-          }
-          const task = entry.task;
-          const isCompleting = completingTaskIds.includes(task.id);
+      {renderedEntries.map(({ key, value: entry, phase }) => {
+        if (entry.kind === 'listItem') {
+          const isCompleting = completingListItemIds.includes(entry.item.id);
           return (
-            <motion.div
-              key={task.id}
-              initial={{ opacity: 0 }}
-              animate={
-                task.status === TASK_STATUSES.COMPLETED || isCompleting
-                  ? { opacity: 0.5 }
-                  : { opacity: 1 }
-              }
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.07 }}
-              className="border-b border-slate-800/65 last:border-b-0"
+            <NativeTaskListRow
+              key={key}
+              phase={phase}
+              className={clsx(
+                'native-list-row border-b border-slate-800/65 last:border-b-0',
+                isCompleting && 'opacity-50'
+              )}
             >
-              <TaskRow
-                task={task}
-                isCompleting={isCompleting}
+              <ListItemTaskRow
+                item={entry.item}
+                list={entry.list}
                 intentions={intentions}
-                lists={lists}
-                onEdit={onEdit}
-                onOpenDescription={onOpenDescription}
-                onUpdate={onUpdate}
-                onConvertToListItem={onConvertToListItem}
-                showTypeBadge={showTypeBadge}
-                isHighlighted={highlightedTaskId === task.id}
+                isCompleting={isCompleting}
+                onEdit={onEditListItem}
+                onComplete={onCompleteListItem}
+                onArchive={onArchiveListItem}
+                onUpdate={onUpdateListItem}
+                onConvertToTask={onConvertListItemToTask}
               />
-            </motion.div>
+            </NativeTaskListRow>
           );
-        })}
-      </AnimatePresence>
+        }
+        const task = entry.task;
+        const isCompleting = completingTaskIds.includes(task.id);
+        return (
+          <NativeTaskListRow
+            key={key}
+            phase={phase}
+            className={clsx(
+              'native-list-row border-b border-slate-800/65 last:border-b-0',
+              (task.status === TASK_STATUSES.COMPLETED || isCompleting) &&
+                'opacity-50'
+            )}
+          >
+            <TaskRow
+              task={task}
+              isCompleting={isCompleting}
+              intentions={intentions}
+              lists={lists}
+              onEdit={onEdit}
+              onOpenDescription={onOpenDescription}
+              onUpdate={onUpdate}
+              onConvertToListItem={onConvertToListItem}
+              showTypeBadge={showTypeBadge}
+              isHighlighted={highlightedTaskId === task.id}
+            />
+          </NativeTaskListRow>
+        );
+      })}
     </section>
   );
 }
@@ -2927,43 +3008,4 @@ function doesTaskMatchIntentionFilter(
   }
 
   return task.subIntentionSlug === option.subIntention.slug;
-}
-
-function doesTaskMatchSearch(
-  task: Task,
-  query: string,
-  intentions: Intention[]
-) {
-  const normalizedQuery = normalizeSearchText(query);
-  if (!normalizedQuery) {
-    return true;
-  }
-
-  const parentIntention = intentions.find(
-    intention =>
-      intention.type === task.timerType &&
-      !intention.parentIntentionId &&
-      intention.slug === task.intentionSlug
-  );
-  const subIntention = intentions.find(
-    intention =>
-      intention.type === task.timerType &&
-      intention.parentIntentionId &&
-      intention.slug === task.subIntentionSlug
-  );
-  const candidates = [
-    task.title,
-    task.description ?? '',
-    task.priority,
-    task.dueDate ?? '',
-    task.dueTime ?? '',
-    parentIntention?.title ?? '',
-    parentIntention?.emoji ?? '',
-    subIntention?.title ?? '',
-    subIntention?.emoji ?? '',
-  ];
-
-  return candidates.some(candidate =>
-    candidate.toLocaleLowerCase().includes(normalizedQuery)
-  );
 }

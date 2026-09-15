@@ -60,6 +60,18 @@ export class TaskEntity {
   @Column({ type: 'varchar', nullable: true })
   lastReminderKey: string | null;
 
+  @Column({ type: 'timestamptz', nullable: true })
+  nextReminderAt: Date | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  reminderClaimToken: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  reminderClaimedUntil: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  lastUrgentReminderAt: Date | null;
+
   @Column({ type: 'varchar', default: TASK_PRIORITIES.NORMAL })
   priority: TaskPriority;
 

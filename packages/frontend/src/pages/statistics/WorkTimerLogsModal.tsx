@@ -1,7 +1,6 @@
 import { Intention, Preferences, WorkTimerLog } from '@pomi/shared';
 import { TIMER_TYPES } from '@pomi/shared/src/constants';
-import { motion } from 'framer-motion';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FaTimes, FaTrash } from 'react-icons/fa';
 import { IntentionAssignmentPicker } from '../../components/intentions/IntentionAssignmentPicker';
 import { Spinner } from '../../components/ui/Spinner';
@@ -14,6 +13,7 @@ import { subscribeToWorkTimerLogRefresh } from '../../utils/recoveryRefresh';
 import { submitUserMutation } from '../../utils/userActionQueue';
 import { useOpenModalRegistration } from '../../utils/modalRegistry';
 import { useI18n } from '../../i18n';
+import { useNativePresence } from '../../components/ui/useNativePresence';
 
 interface WorkTimerLogsModalProps {
   isOpen: boolean;
@@ -67,8 +67,7 @@ export function WorkTimerLogsModal({
   const [workTimerLogs, setWorkTimerLogs] = useState<WorkTimerLog[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [offset, setOffset] = useState(0);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [selectedLog, setSelectedLog] = useState<WorkTimerLog | null>(null);
   const [availableIntentions, setAvailableIntentions] = useState<
     IntentionOption[]
@@ -89,8 +88,11 @@ export function WorkTimerLogsModal({
   const [isIntentionDropdownOpen, setIsIntentionDropdownOpen] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const requestGenerationRef = useRef(0);
+  const activeRequestRef = useRef<symbol | null>(null);
   const LIMIT = 20;
   const isMultiSelectEnabled = preferences?.intentionMultiSelect === true;
+  const hasMore = nextCursor !== null;
 
   useOpenModalRegistration(isOpen, () => {
     if (isIntentionDropdownOpen) {
@@ -101,16 +103,6 @@ export function WorkTimerLogsModal({
       onClose();
     }
   });
-
-  useEffect(() => {
-    if (isOpen) {
-      setWorkTimerLogs([]);
-      setOffset(0);
-      setHasMore(true);
-      closeLogEditor();
-      fetchWorkTimerLogs(0);
-    }
-  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -138,53 +130,95 @@ export function WorkTimerLogsModal({
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [isIntentionDropdownOpen, isOpen, onClose, selectedLog]);
 
-  const fetchWorkTimerLogs = async (currentOffset: number) => {
-    if (currentOffset === 0) {
-      setIsLoading(true);
-    } else {
-      setIsLoadingMore(true);
-    }
+  const fetchWorkTimerLogs = useCallback(
+    async (
+      cursor: string | undefined,
+      mode: 'replace' | 'append',
+      generation: number
+    ) => {
+      if (mode === 'append' && activeRequestRef.current) return;
 
-    try {
-      const response = await apiClient.workTimerLogs.list({
-        query: {
-          offset: currentOffset,
-          limit: LIMIT,
-        },
-      });
-      if (response.status === 200) {
-        if (response.body.length < LIMIT) {
-          setHasMore(false);
-        }
-
-        if (currentOffset === 0) {
-          setWorkTimerLogs(response.body);
-        } else {
-          setWorkTimerLogs(prev => [...prev, ...response.body]);
-        }
-
-        setOffset(currentOffset + response.body.length);
+      const requestToken = Symbol('work-timer-logs-request');
+      activeRequestRef.current = requestToken;
+      if (mode === 'replace') {
+        setIsLoading(true);
+      } else {
+        setIsLoadingMore(true);
       }
-    } catch (error) {
-      console.error('Failed to fetch work timer logs:', error);
-    } finally {
-      setIsLoading(false);
-      setIsLoadingMore(false);
+
+      try {
+        const response = await apiClient.workTimerLogs.list({
+          query: { cursor, limit: LIMIT },
+        });
+        if (
+          response.status !== 200 ||
+          requestGenerationRef.current !== generation
+        ) {
+          return;
+        }
+
+        setNextCursor(response.body.nextCursor);
+        setWorkTimerLogs(current => {
+          if (mode === 'replace') return response.body.items;
+          const existingIds = new Set(current.map(entry => entry.id));
+          return [
+            ...current,
+            ...response.body.items.filter(entry => !existingIds.has(entry.id)),
+          ];
+        });
+      } catch (error) {
+        if (requestGenerationRef.current === generation) {
+          console.error('Failed to fetch work timer logs:', error);
+        }
+      } finally {
+        if (activeRequestRef.current === requestToken) {
+          activeRequestRef.current = null;
+          setIsLoading(false);
+          setIsLoadingMore(false);
+        }
+      }
+    },
+    []
+  );
+
+  const refreshWorkTimerLogs = useCallback(async () => {
+    const generation = requestGenerationRef.current + 1;
+    requestGenerationRef.current = generation;
+    activeRequestRef.current = null;
+    await fetchWorkTimerLogs(undefined, 'replace', generation);
+  }, [fetchWorkTimerLogs]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      requestGenerationRef.current += 1;
+      activeRequestRef.current = null;
+      return;
     }
-  };
+
+    closeLogEditor();
+    void refreshWorkTimerLogs();
+    return () => {
+      requestGenerationRef.current += 1;
+      activeRequestRef.current = null;
+    };
+  }, [isOpen, refreshWorkTimerLogs]);
 
   useEffect(() => {
     if (!isOpen) return;
-    return subscribeToWorkTimerLogRefresh(() => void fetchWorkTimerLogs(0));
-  }, [isOpen]);
+    return subscribeToWorkTimerLogRefresh(() => void refreshWorkTimerLogs());
+  }, [isOpen, refreshWorkTimerLogs]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
     const scrollBottom =
       target.scrollHeight - target.scrollTop - target.clientHeight;
 
-    if (scrollBottom < 100 && !isLoadingMore && hasMore) {
-      fetchWorkTimerLogs(offset);
+    if (scrollBottom < 100 && !isLoadingMore && nextCursor) {
+      void fetchWorkTimerLogs(
+        nextCursor,
+        'append',
+        requestGenerationRef.current
+      );
     }
   };
 
@@ -574,7 +608,7 @@ export function WorkTimerLogsModal({
         label: t('statistics.updateWorkLog'),
         payload: { operation: 'update', logId: selectedLog.id, payload: body },
         reconcile: async () => {
-          await fetchWorkTimerLogs(0);
+          await refreshWorkTimerLogs();
         },
       });
       const response =
@@ -589,6 +623,8 @@ export function WorkTimerLogsModal({
         setWorkTimerLogs(logs =>
           logs.map(log => (log.id === selectedLog.id ? response.body : log))
         );
+        setNextCursor(null);
+        await refreshWorkTimerLogs();
         closeLogEditor();
         clearTimerHistory();
         void onLogsMutated?.();
@@ -611,7 +647,7 @@ export function WorkTimerLogsModal({
         payload: { operation: 'delete', logId: selectedLog.id },
         successStatus: 204,
         reconcile: async () => {
-          await fetchWorkTimerLogs(0);
+          await refreshWorkTimerLogs();
         },
       });
       const response =
@@ -621,7 +657,8 @@ export function WorkTimerLogsModal({
 
       if (response.status === 204) {
         setWorkTimerLogs(logs => logs.filter(log => log.id !== selectedLog.id));
-        setOffset(currentOffset => Math.max(0, currentOffset - 1));
+        setNextCursor(null);
+        await refreshWorkTimerLogs();
         closeLogEditor();
         clearTimerHistory();
         void onLogsMutated?.();
@@ -697,6 +734,7 @@ export function WorkTimerLogsModal({
       isOpen={isIntentionDropdownOpen}
       onOpenChange={setIsIntentionDropdownOpen}
       onChange={handleLogIntentionPickerChange}
+      returnFocusOnEscape
       disabled={isLoadingIntentions || isSavingLog || isDeletingLog}
       listTestId="work-timer-log-intention-list"
       clearTestId="work-timer-log-intention-none"
@@ -779,19 +817,21 @@ export function WorkTimerLogsModal({
     );
   };
 
-  if (!isOpen) return null;
+  const modalPresence = useNativePresence(isOpen ? true : null, 200);
+
+  if (!modalPresence.shouldRender) return null;
 
   return (
     <div
       className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        transition={{ duration: 0.2 }}
-        className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
+      <div
+        data-presence={modalPresence.phase}
+        onAnimationEnd={modalPresence.finish}
+        aria-hidden={modalPresence.isExiting || undefined}
+        inert={modalPresence.isExiting || undefined}
+        className="native-fade-scale bg-slate-900 border border-slate-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
@@ -810,6 +850,7 @@ export function WorkTimerLogsModal({
 
         <div
           ref={scrollContainerRef}
+          data-testid="work-timer-logs-scroll"
           className="overflow-y-auto max-h-[calc(80vh-52px)] p-3"
           onScroll={handleScroll}
         >
@@ -855,7 +896,7 @@ export function WorkTimerLogsModal({
             </div>
           )}
         </div>
-      </motion.div>
+      </div>
       {selectedLog && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-2"

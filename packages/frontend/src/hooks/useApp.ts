@@ -9,7 +9,7 @@ import { useSystemStore } from '../stores/systemStore';
 import { useTimerStore } from '../stores/timerStore';
 import { useUiStore } from '../stores/uiStore';
 
-import { isDesktop, isLinux, isMobile, isTauri } from '../utils/osUtils';
+import { isDesktop, isMobile, isTauri } from '../utils/osUtils';
 import {
   reconcileAndroidForegroundSync,
   stopAndroidForegroundSync,
@@ -26,8 +26,6 @@ type UseAppOptions = {
 export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
   const initializeSocket = useTimerStore.use.initializeSocket();
   const setAppWindow = useUiStore.use.setAppWindow();
-  const setExpanded = useUiStore.use.setExpanded();
-  const hasLoggedIn = useUiStore.use.hasLoggedIn();
   const setActiveTab = useUiStore.use.setActiveTab();
   const isAuthenticated = useAuthStore.use.isAuthenticated();
   const token = useAuthStore.use.token();
@@ -87,21 +85,9 @@ export function useApp({ pauseBootstrap = false }: UseAppOptions = {}) {
 
     if (isAuthenticated) {
       initializeSocket();
-
-      // never collapse on linux; desktop windows start minimized for first login on other platforms
-      if (isDesktop === true && hasLoggedIn === false && !isLinux)
-        setExpanded(false);
-
       setActiveTab('timer');
     }
-  }, [
-    isAuthenticated,
-    hasLoggedIn,
-    pauseBootstrap,
-    setExpanded,
-    setActiveTab,
-    initializeSocket,
-  ]);
+  }, [isAuthenticated, pauseBootstrap, setActiveTab, initializeSocket]);
 
   useEffect(() => {
     if (pauseBootstrap) {

@@ -1162,6 +1162,7 @@ export function TaskImportModal({
                           }
                           disabled={!task.include}
                           returnFocusOnClose={false}
+                          returnFocusOnEscape={false}
                           direction="down"
                           maxHeight={260}
                           triggerClassName="flex h-8 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-slate-700/50 bg-slate-900 px-2 text-left text-xs text-slate-100 outline-none transition-colors hover:bg-slate-800 focus:border-indigo-400/60 disabled:opacity-60"
@@ -1306,6 +1307,7 @@ export function TaskImportModal({
                       }
                       disabled={!selectedTask}
                       returnFocusOnClose={false}
+                      returnFocusOnEscape={false}
                       shortcut="I"
                       direction="up"
                       maxHeight={220}

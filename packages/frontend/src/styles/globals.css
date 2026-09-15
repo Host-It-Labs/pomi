@@ -13,3 +13,210 @@
 }
 
 /* ...existing styles... */
+@keyframes pomi-native-fade-up-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pomi-native-fade-up-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
+@keyframes pomi-native-fade-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pomi-native-fade-scale-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+@keyframes pomi-native-notification-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--native-notification-y, -100px)) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes pomi-native-notification-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(var(--native-notification-exit-y, -50px)) scale(0.95);
+  }
+}
+
+@keyframes pomi-native-badge-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pomi-native-picker-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--native-picker-y, 20px));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pomi-native-completion-pop {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  55% {
+    transform: scale(1.16);
+  }
+}
+
+@keyframes pomi-native-action-strip-in {
+  from {
+    max-width: 0;
+    margin-right: 0;
+    opacity: 0;
+  }
+  to {
+    max-width: 20rem;
+    margin-right: 0.75rem;
+    opacity: 1;
+  }
+}
+
+@keyframes pomi-native-action-strip-out {
+  from {
+    max-width: 20rem;
+    margin-right: 0.75rem;
+    opacity: 1;
+  }
+  to {
+    max-width: 0;
+    margin-right: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes pomi-native-list-row-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pomi-native-list-row-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.native-fade-up[data-presence='entering'] {
+  animation: pomi-native-fade-up-in 300ms ease-out both;
+}
+.native-fade-up[data-presence='exiting'] {
+  animation: pomi-native-fade-up-out 300ms ease-in both;
+  pointer-events: none;
+}
+.native-fade-scale[data-presence='entering'] {
+  animation: pomi-native-fade-scale-in 200ms ease-out both;
+}
+.native-fade-scale[data-presence='exiting'] {
+  animation: pomi-native-fade-scale-out 200ms ease-in both;
+  pointer-events: none;
+}
+.native-notification[data-presence='entering'] {
+  animation: pomi-native-notification-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1)
+    both;
+}
+.native-notification[data-presence='exiting'] {
+  animation: pomi-native-notification-out 200ms ease-in both;
+  pointer-events: none;
+}
+.native-badge-enter {
+  animation: pomi-native-badge-in 160ms ease-out both;
+}
+.native-picker-enter {
+  animation: pomi-native-picker-in 300ms ease-out both;
+}
+.native-completion-pop {
+  animation: pomi-native-completion-pop 280ms ease-out both;
+}
+.native-action-strip[data-presence='entering'] {
+  animation: pomi-native-action-strip-in 400ms ease-in-out both;
+}
+.native-action-strip[data-presence='exiting'] {
+  animation: pomi-native-action-strip-out 400ms ease-in-out both;
+  pointer-events: none;
+}
+.native-list-row[data-presence='entering'] {
+  animation: pomi-native-list-row-in 70ms linear both;
+}
+.native-list-row[data-presence='exiting'] {
+  animation: pomi-native-list-row-out 70ms linear both;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .native-fade-up,
+  .native-fade-scale,
+  .native-notification,
+  .native-badge-enter,
+  .native-picker-enter,
+  .native-completion-pop {
+    animation: none !important;
+    transition: none !important;
+  }
+  .native-action-strip {
+    animation: none !important;
+    transition: none !important;
+  }
+  .native-list-row {
+    animation: none !important;
+    transition: none !important;
+  }
+}

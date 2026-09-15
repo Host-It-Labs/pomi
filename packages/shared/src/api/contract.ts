@@ -152,6 +152,7 @@ const preferencesSchema = z.object({
   autoStartWork: z.boolean().optional(),
   autoStartLongBreak: z.boolean().optional(),
   notifications: z.boolean(),
+  speakToastMessages: z.boolean().default(true),
   notifyOnWorkComplete: z.boolean(),
   notifyOnBreakComplete: z.boolean(),
   notifyBeforeWorkComplete: z.boolean(),
@@ -494,6 +495,13 @@ const listItemSchema = z.object({
   updatedAt: z.string(),
 });
 
+const taskListSnapshotSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  tasks: z.array(taskSchema),
+  lists: z.array(listSchema),
+  listItems: z.array(listItemSchema),
+});
+
 const vacationStateSchema = z.object({
   active: z.boolean(),
   runId: z.string().nullable(),
@@ -811,7 +819,11 @@ const assistantDebugStatusSchema = z.object({
 });
 
 const assistantDebugProcessedOutputSchema = z.object({
-  tasks: z.array(taskCreateSchema),
+  tasks: z.array(
+    taskCreateSchema.extend({
+      listId: z.string().uuid().nullable().optional(),
+    })
+  ),
   timerCommand: z
     .object({
       action: z.enum(['startTimer', 'pauseTimer', 'addFiveMinutes', 'none']),
@@ -865,6 +877,7 @@ const assistantDebugLogSchema = z.object({
   }),
   modelCalls: z.array(assistantDebugModelCallSchema),
   flagged: z.boolean(),
+  contentTruncated: z.boolean(),
   error: z.string().nullable(),
   createdAt: z.string(),
 });
@@ -1001,6 +1014,15 @@ const statisticsQuerySchema = z.object({
 });
 
 const workTimerLogsQuerySchema = z.object({
+  cursor: z
+    .string()
+    .min(1)
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+const taskEventLogsQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
@@ -1782,6 +1804,13 @@ export const apiContract = router({
     },
   }),
   tasks: router({
+    snapshot: {
+      method: 'GET',
+      path: '/tasks/snapshot',
+      responses: {
+        200: taskListSnapshotSchema,
+      },
+    },
     importStatus: {
       method: 'GET',
       path: '/tasks/import-status',
@@ -1803,7 +1832,7 @@ export const apiContract = router({
     logs: {
       method: 'GET',
       path: '/tasks/logs',
-      query: workTimerLogsQuerySchema,
+      query: taskEventLogsQuerySchema,
       responses: {
         200: z.array(taskEventLogSchema),
       },
@@ -2173,6 +2202,7 @@ export const apiContract = router({
       body: z.object({ flagged: z.boolean() }),
       responses: {
         200: assistantDebugLogSchema,
+        400: errorSchema,
         403: errorSchema,
         404: errorSchema,
       },
@@ -2254,7 +2284,11 @@ export const apiContract = router({
       path: '/work-timer-logs',
       query: workTimerLogsQuerySchema,
       responses: {
-        200: z.array(workTimerLogSchema),
+        200: z.object({
+          items: z.array(workTimerLogSchema),
+          nextCursor: z.string().nullable(),
+        }),
+        400: errorSchema,
         500: errorSchema,
       },
     },
