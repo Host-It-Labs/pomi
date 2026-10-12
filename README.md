@@ -1,9 +1,33 @@
-# Pomi
+<p align="center">
+  <img src="docs/readme/icon.png" alt="" width="96" height="96">
+</p>
 
-Pomi is a self-hostable focus timer for work and break sessions, intentions,
-tasks, statistics, and optional AI-assisted task capture. The repository
-contains a NestJS backend, a React web client, Tauri desktop and mobile shells,
-and a Wear OS companion.
+<h1 align="center">Pomi</h1>
+
+<p align="center">
+  A focus timer built around intentions: pick what the session is for, work through its tasks, and see where your time went.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Host-It-Labs/pomi/releases/latest"><b>Download the latest release →</b></a>
+  &nbsp;·&nbsp; macOS · Android · Wear OS · self-hosted server
+</p>
+
+<p align="center">
+  <img src="docs/readme/hero.jpg" alt="Pomi's desktop window mid work session with the Work intention's tasks, between the statistics and the full task list on phones">
+</p>
+
+- **Intentions.** Work and break sessions belong to an intention (Work, Learning, Personal…), each with its own tasks and count for the day.
+- **Tasks.** Due dates, priorities, favourites and lists; pin the task you're on to the top of the timer.
+- **Statistics.** Today, week, month and year totals, a calendar heatmap and a ranking of your intentions.
+- **AI task capture.** Dictate one or several tasks and Pomi files them under the right intention or list, with due dates.
+- **Your own server.** The backend runs in Docker with PostgreSQL and Redis; your sessions and tasks stay on it.
+
+<p align="center">
+  <img src="docs/readme/stats-and-tasks.jpg" alt="The statistics screen with a heatmap and intention ranking, and the task editor">
+</p>
+
+Pomi has a NestJS backend, a React web client, Tauri desktop and mobile shells, and a Wear OS companion.
 
 ## Local development
 
