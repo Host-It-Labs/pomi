@@ -128,6 +128,31 @@ const LIST_ROUTE_MARKERS = [
 
 @Injectable()
 export class AssistantListRoutingService {
+  mentionsList(
+    sourceText: string,
+    lists: Array<Pick<ListEntity, 'id' | 'title'>>
+  ) {
+    const sourceTokens = this.normalizeRoutingText(sourceText)
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    return (
+      this.hasExplicitListDestination(sourceTokens) ||
+      lists.some(list => {
+        const titleTokens = this.normalizeRoutingText(list.title)
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean);
+        return (
+          titleTokens.length > 0 &&
+          sourceTokens.some((_token, start) =>
+            this.tokensMatch(sourceTokens, start, titleTokens)
+          )
+        );
+      })
+    );
+  }
+
   routeExplicitListItems(
     drafts: ParsedTaskDraft[],
     sourceText: string,

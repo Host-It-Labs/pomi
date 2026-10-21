@@ -196,6 +196,10 @@ export class AssistantCaptureService {
         userId,
         normalizedText,
         captureIntentions,
+        this.assistantListRoutingService.mentionsList(
+          normalizedText,
+          preferences.listsExtension ? lists : []
+        ),
         runtime.today,
         modelCalls,
         usagePersistence
@@ -1302,11 +1306,12 @@ export class AssistantCaptureService {
     userId: string,
     text: string,
     intentions: AssistantCaptureIntention[],
+    mentionsList: boolean,
     today: string,
     modelCalls: AssistantDebugModelCall[],
     usagePersistence: Promise<void>[]
   ): Promise<{ localParse: AssistantLocalParse | null; costUsd: number }> {
-    if (!shouldAskParsingGate(text, intentions)) {
+    if (!shouldAskParsingGate(text, intentions, mentionsList)) {
       return { localParse: null, costUsd: 0 };
     }
     try {

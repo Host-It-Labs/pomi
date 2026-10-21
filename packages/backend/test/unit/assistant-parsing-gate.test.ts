@@ -132,12 +132,16 @@ afterEach(() => {
 
 describe('Assistant parsing gate', () => {
   it('asks only about short single-line input', () => {
-    expect(shouldAskParsingGate('Buy milk', intentions)).toBe(true);
-    expect(shouldAskParsingGate('Buy milk\nCall mom', intentions)).toBe(false);
+    expect(shouldAskParsingGate('Buy milk', intentions, false)).toBe(true);
+    expect(shouldAskParsingGate('Buy milk', intentions, true)).toBe(false);
+    expect(shouldAskParsingGate('Buy milk\nCall mom', intentions, false)).toBe(
+      false
+    );
     expect(
       shouldAskParsingGate(
         'one two three four five six seven eight nine ten eleven',
-        intentions
+        intentions,
+        false
       )
     ).toBe(false);
   });
@@ -152,7 +156,9 @@ describe('Assistant parsing gate', () => {
       projects: 'Projects',
       pomi: 'Projects / Pomi: The Pomodoro app',
     });
-    expect(request.questions.intention.criteria).toHaveProperty('no-intention');
+    expect(request.questions.intention.criteria).toHaveProperty([
+      'no intention',
+    ]);
   });
 
   it('parses locally only when both answers are confident', () => {
@@ -163,16 +169,46 @@ describe('Assistant parsing gate', () => {
       )
     ).toEqual({ intentionSlug: 'cooking-groceries', subIntentionSlug: null });
     expect(
-      readParsingGateDecision(answers(0.95, 'no-intention', 0.9), intentions)
+      readParsingGateDecision(answers(0.95, 'no intention', 0.9), intentions)
     ).toEqual({ intentionSlug: null, subIntentionSlug: null });
     expect(
-      readParsingGateDecision(answers(0.85, 'no-intention', 0.99), intentions)
+      readParsingGateDecision(answers(0.85, 'no intention', 0.99), intentions)
     ).toBeNull();
     expect(
       readParsingGateDecision(answers(0.99, 'projects', 0.5), intentions)
     ).toBeNull();
     expect(
       readParsingGateDecision(answers(0.99, 'unknown', 0.99), intentions)
+    ).toBeNull();
+  });
+
+  it('keeps a real Intention whose slug resembles the no-intention option', () => {
+    const withLookalike = [
+      ...intentions,
+      {
+        slug: 'no-intention',
+        title: 'No Intention',
+        type: 'work' as const,
+        parentSlug: null,
+        description: null,
+      },
+    ];
+
+    expect(
+      buildParsingGateRequest('Buy milk', withLookalike).questions.intention
+        .criteria
+    ).toMatchObject({
+      'no intention': 'No existing Intention clearly fits this Task.',
+      'no-intention': 'No Intention',
+    });
+    expect(
+      readParsingGateDecision(answers(0.99, 'no-intention', 0.9), withLookalike)
+    ).toEqual({ intentionSlug: 'no-intention', subIntentionSlug: null });
+  });
+
+  it('leaves a parent with Sub-intentions to the text model', () => {
+    expect(
+      readParsingGateDecision(answers(0.99, 'projects', 0.99), intentions)
     ).toBeNull();
   });
 
@@ -207,6 +243,19 @@ describe('Assistant parsing gate', () => {
       subIntentionSlug: null,
     });
   });
+
+  it.each(['Research priority queues', 'Review due process', 'Read today'])(
+    'keeps metadata-like words in the plain title %s',
+    text => {
+      const result = new AssistantInputInterpreter().interpretLocally(
+        { text, today: '2026-10-21', intentions },
+        { intentionSlug: null, subIntentionSlug: null }
+      );
+
+      expect(result.tasks[0].title).toBe(text);
+      expect(result.tasks[0].priority).toBeUndefined();
+    }
+  );
 
   it('builds a plain local Task without repeating the input as its description', () => {
     const result = new AssistantInputInterpreter().interpretLocally(
@@ -302,6 +351,18 @@ describe('Assistant parsing gate', () => {
     expect(prepared.modelCalls.map(call => call.stage)).toEqual(['gate']);
   });
 
+  it('skips the gate for an explicit List destination', async () => {
+    const context = createCaptureService(async () => {
+      throw new Error('unexpected gate call');
+    });
+
+    await context
+      .prepareTaskCapture('user-1', 'Add milk to the Groceries list')
+      .catch(() => undefined);
+
+    expect(context.assistantService.requestDecision).not.toHaveBeenCalled();
+  });
+
   it('skips the gate for long input', async () => {
     const context = createCaptureService(async () => {
       throw new Error('unexpected gate call');
@@ -341,7 +402,7 @@ describe('AssistantService decision transport', () => {
 
   it('posts typed questions beside the versioned chat API and records the cost', async () => {
     const context = stubDecisionResponse(200, {
-      answers: answers(0.98, 'no-intention', 0.99),
+      answers: answers(0.98, 'no intention', 0.99),
       usage: { input_tokens: 120, output_tokens: 0, cost: 0.000003 },
     });
     const request = buildParsingGateRequest('Buy milk', intentions);
@@ -372,6 +433,41 @@ describe('AssistantService decision transport', () => {
       0.000003,
       '2026-10-21'
     );
+  });
+
+  it('aborts a decision whose body stalls after its headers', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-key');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_input: string, init: RequestInit) => ({
+        status: 200,
+        ok: true,
+        headers: { get: () => null },
+        text: () =>
+          new Promise((_resolve, reject) =>
+            init.signal?.addEventListener('abort', () =>
+              reject(new DOMException('Aborted', 'AbortError'))
+            )
+          ),
+      }))
+    );
+    const service = new AssistantService({} as never, {} as never, {} as never);
+
+    const decision = service.requestDecision(
+      'user-1',
+      PARSING_GATE_MODEL,
+      buildParsingGateRequest('Buy milk', intentions),
+      assistantParsingGateAnswersSchema,
+      '2026-10-21'
+    );
+    const rejection = expect(decision).rejects.toBeInstanceOf(
+      AssistantModelRequestError
+    );
+    await vi.advanceTimersByTimeAsync(3_000);
+
+    await rejection;
+    vi.useRealTimers();
   });
 
   it('rejects answers that do not match the requested questions', async () => {

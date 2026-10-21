@@ -11,7 +11,8 @@ export const PARSING_GATE_MODEL = 'inception/mercury-decide';
 const LOCAL_PARSE_MIN_PROBABILITY = 0.9;
 const INTENTION_MIN_PROBABILITY = 0.7;
 const MAX_CHOICE_OPTIONS = 255;
-const NO_INTENTION_OPTION = 'no-intention';
+// Generated Intention slugs never contain spaces, so this key cannot collide with one.
+const NO_INTENTION_OPTION = 'no intention';
 
 const LOCAL_PARSE_INSTRUCTIONS =
   'Can this to-do input become exactly one Task whose title is the input text, optionally without an English priority word, without losing any information?';
@@ -21,7 +22,7 @@ const LOCAL_PARSE_CRITERIA = {
     'Mentions a date, weekday, time, relative day (tomorrow, demain, mañana), deadline, recurrence (every, each month), several Tasks or items, or needs rewriting into a clean title.',
 };
 const INTENTION_INSTRUCTIONS =
-  'Which existing Intention does this Task clearly belong to? Choose no-intention unless one fits clearly.';
+  'Which existing Intention does this Task clearly belong to? Choose no intention unless one fits clearly.';
 
 export const assistantParsingGateAnswersSchema = z.object({
   localParse: z.object({ noul: z.number().min(0).max(1) }),
@@ -37,10 +38,13 @@ export type AssistantParsingGateAnswers = z.infer<
 
 export function shouldAskParsingGate(
   text: string,
-  intentions: AssistantCaptureIntention[]
+  intentions: AssistantCaptureIntention[],
+  mentionsList: boolean
 ) {
-  // Longer input would be truncated by the local title rules.
+  // Longer input would be truncated by the local title rules, and List
+  // destinations need the text model to separate the item from its route.
   return (
+    !mentionsList &&
     !/\n/.test(text) &&
     text.split(/\s+/).filter(Boolean).length <= FALLBACK_TITLE_WORDS &&
     intentions.length < MAX_CHOICE_OPTIONS
@@ -94,7 +98,13 @@ export function readParsingGateDecision(
     return { intentionSlug: null, subIntentionSlug: null };
   }
   const intention = intentions.find(candidate => candidate.slug === choice);
-  if (!intention) return null;
+  // A parent with Sub-intentions needs one of them, which the text model resolves.
+  if (
+    !intention ||
+    intentions.some(candidate => candidate.parentSlug === intention.slug)
+  ) {
+    return null;
+  }
   return intention.parentSlug
     ? { intentionSlug: intention.parentSlug, subIntentionSlug: intention.slug }
     : { intentionSlug: intention.slug, subIntentionSlug: null };

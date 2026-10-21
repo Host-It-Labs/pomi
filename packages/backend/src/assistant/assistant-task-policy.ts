@@ -18,6 +18,8 @@ const MAX_TITLE_WORDS = 15;
 const TARGET_TITLE_WORDS = 10;
 const MIN_NATURAL_TITLE_SPLIT_WORDS = 8;
 export const FALLBACK_TITLE_WORDS = 10;
+const PLAIN_PRIORITY_PATTERN =
+  /\b(?:(low|normal|high|urgent)\s+priority|priority\s+(?:is\s+|to\s+)?(low|normal|high|urgent))\b/i;
 const MAX_DESCRIPTION_SOURCE_MATCH_CHARS = 20_000;
 const DEFAULT_TRANSCRIPT_MIN_WORDS = 15;
 const DAYPART_DUE_TIMES = [
@@ -583,13 +585,32 @@ export class AssistantTaskPolicy {
     const fallbackDescription = sourceTranscript
       ? defaults?.description
       : this.appendDescription(defaults?.description, sourceText);
+    let title = this.normalizeWhitespace(sourceText)
+      .replace(
+        /^(?:please\s+)?(?:create|add|make)\s+(?:a\s+)?task(?:\s+to)?\s+/i,
+        ''
+      )
+      .replace(/^remind\s+me\s+to\s+/i, '');
+    title = title
+      .replace(/\bfor\s+[^,.;]{1,60}\s+intention\b/gi, ' ')
+      .replace(/\bintention\s+[^,.;]+/gi, ' ');
+    title = title.split(
+      /\b(?:today|tomorrow|due|priority|intention)\b|\b(?:on|by|at)\s+(?=\d)/i
+    )[0];
+    title = this.cleanTitlePunctuation(title);
+    const words = title
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, FALLBACK_TITLE_WORDS);
+    const fallbackTitle = words.join(' ');
+    const safeTitle = fallbackTitle || localizedFallbackTitle || sourceText;
+    const capitalizedTitle = safeTitle
+      ? `${safeTitle.charAt(0).toUpperCase()}${safeTitle.slice(1)}`
+      : safeTitle;
     const withDefaults = this.applyRecurrenceDueDateInvariant(
       this.applyDefaults(
         {
-          title: this.buildLocalTitle(
-            sourceText,
-            localizedFallbackTitle || sourceText
-          ),
+          title: capitalizedTitle,
           description: fallbackDescription,
           priority: this.extractSourcePriority(sourceText),
         },
@@ -639,26 +660,32 @@ export class AssistantTaskPolicy {
         null
       )
     );
+    // Plain input becomes the title verbatim; only an explicit priority phrase is
+    // metadata, because no description keeps words the title would drop.
+    const priorityMatch = sourceText.match(PLAIN_PRIORITY_PATTERN);
+    const title = this.cleanTitlePunctuation(
+      priorityMatch
+        ? `${sourceText.slice(0, priorityMatch.index)} ${sourceText.slice(
+            (priorityMatch.index ?? 0) + priorityMatch[0].length
+          )}`
+        : sourceText
+    );
     const draft = this.applyRecurrenceDueDateInvariant(
       this.applyDefaults(
         {
-          title: this.buildLocalTitle(sourceText, sourceText),
-          priority: this.extractSourcePriority(sourceText),
+          title: title
+            ? `${title.charAt(0).toUpperCase()}${title.slice(1)}`
+            : sourceText,
+          priority: priorityMatch
+            ? this.sanitizePriority(priorityMatch[1] ?? priorityMatch[2])
+            : undefined,
         },
         defaults
       ),
       today
     );
-    // The decision model already chose the Intention, so title cleanup must not
-    // strip words that merely match an Intention title.
-    const titled = this.cleanTaskTitle(
-      { ...draft, intentionSlug: null, subIntentionSlug: null },
-      intentions,
-      null,
-      sourceText
-    );
     const linked: ParsedTaskDraft = {
-      ...titled,
+      ...draft,
       ...(defaults?.intentionSlug
         ? {
             intentionSlug: defaults.intentionSlug,
@@ -671,30 +698,6 @@ export class AssistantTaskPolicy {
       timerType: this.resolveTimerType(linked, sourceText, intentions),
       sourceTranscript,
     };
-  }
-
-  private buildLocalTitle(sourceText: string, emptyTitle: string) {
-    let title = this.normalizeWhitespace(sourceText)
-      .replace(
-        /^(?:please\s+)?(?:create|add|make)\s+(?:a\s+)?task(?:\s+to)?\s+/i,
-        ''
-      )
-      .replace(/^remind\s+me\s+to\s+/i, '');
-    title = title
-      .replace(/\bfor\s+[^,.;]{1,60}\s+intention\b/gi, ' ')
-      .replace(/\bintention\s+[^,.;]+/gi, ' ');
-    title = title.split(
-      /\b(?:today|tomorrow|due|priority|intention)\b|\b(?:on|by|at)\s+(?=\d)/i
-    )[0];
-    title = this.cleanTitlePunctuation(title);
-    const words = title
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, FALLBACK_TITLE_WORDS);
-    const localTitle = words.join(' ') || emptyTitle;
-    return localTitle
-      ? `${localTitle.charAt(0).toUpperCase()}${localTitle.slice(1)}`
-      : localTitle;
   }
 
   private normalizeTask(

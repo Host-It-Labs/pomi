@@ -210,8 +210,7 @@ export class AssistantService {
         {
           method: 'GET',
           headers: this.openRouterHeaders(),
-        },
-        OPENROUTER_TIMEOUT_MS
+        }
       );
     } catch {
       throw new BadRequestException(
@@ -300,8 +299,7 @@ export class AssistantService {
               data: input.audioBase64,
             },
           }),
-        },
-        OPENROUTER_TIMEOUT_MS
+        }
       );
       responseStatus = response.status;
       body = await this.readResponseBody(response);
@@ -444,8 +442,7 @@ export class AssistantService {
             input: result.message,
             response_format: 'mp3',
           }),
-        },
-        OPENROUTER_TIMEOUT_MS
+        }
       );
       if (!response.ok) {
         this.logger.warn(
@@ -520,8 +517,7 @@ export class AssistantService {
             method: 'POST',
             headers: this.openRouterHeaders(),
             body: JSON.stringify(requestBody),
-          },
-          OPENROUTER_TIMEOUT_MS
+          }
         );
         responseStatus = response.status;
         const responseBody = await this.readResponseBody(response);
@@ -635,8 +631,9 @@ export class AssistantService {
     const startedAt = performance.now();
     const attempts: AssistantDebugModelCall['attempts'] = [];
     let response: Response;
+    let responseBody: unknown;
     try {
-      response = await this.fetchWithTimeout(
+      ({ response, body: responseBody } = await this.fetchBodyWithTimeout(
         this.openRouterEndpoint(OPENROUTER_DECISIONS_PATH),
         {
           method: 'POST',
@@ -644,7 +641,7 @@ export class AssistantService {
           body: JSON.stringify(requestBody),
         },
         OPENROUTER_DECISION_TIMEOUT_MS
-      );
+      ));
     } catch (error) {
       attempts.push({
         request: requestBody,
@@ -665,7 +662,6 @@ export class AssistantService {
         )
       );
     }
-    const responseBody = await this.readResponseBody(response);
     attempts.push({
       request: requestBody,
       status: response.status,
@@ -1140,13 +1136,31 @@ export class AssistantService {
     ).toString();
   }
 
-  private async fetchWithTimeout(
+  // Unlike fetchWithTimeout, the deadline also covers a body that stalls after its headers.
+  private async fetchBodyWithTimeout(
     input: string,
     init: RequestInit,
     timeoutMs: number
-  ): Promise<Response> {
+  ): Promise<{ response: Response; body: unknown }> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(input, {
+        ...init,
+        signal: controller.signal,
+      });
+      return { response, body: await this.readResponseBody(response) };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private async fetchWithTimeout(
+    input: string,
+    init: RequestInit
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), OPENROUTER_TIMEOUT_MS);
     try {
       return await fetch(input, {
         ...init,
