@@ -9,6 +9,12 @@ const {
   AssistantInputInterpreter,
 } = require('../dist/src/assistant/assistant-input-interpreter');
 const { AssistantService } = require('../dist/src/assistant/assistant.service');
+const {
+  assistantParsingGateAnswersSchema,
+  buildParsingGateRequest,
+  PARSING_GATE_MODEL,
+  readParsingGateDecision,
+} = require('../dist/src/assistant/assistant-parsing-gate');
 
 const MODEL = 'google/gemini-2.5-flash-lite';
 const TODAY = '2026-07-22';
@@ -254,5 +260,41 @@ test(
     assert.equal(result.timerCommand.timerType, 'break');
     assert.equal(result.tasks.length, 1);
     assert.equal(result.tasks[0].timerType, 'work');
+  }
+);
+
+test(
+  'live parsing gate keeps plain Tasks local and sends detailed input to the text model',
+  liveTestOptions,
+  async () => {
+    requireApiKey();
+    const service = new AssistantService({}, {}, {});
+    service.recordCostForLocalDate = async () => {};
+    const cases = [
+      [
+        'Buy milk',
+        { intentionSlug: 'cooking-groceries', subIntentionSlug: null },
+      ],
+      ['Call mom', { intentionSlug: null, subIntentionSlug: null }],
+      ['Zahnarzt anrufen', { intentionSlug: null, subIntentionSlug: null }],
+      ['Buy milk tomorrow', null],
+      ['Water plants every 2 days', null],
+      ['Buy eggs and call mom', null],
+      ['Acheter du pain demain', null],
+    ];
+    for (const [text, expected] of cases) {
+      const decision = await service.requestDecision(
+        'assistant-live-suite',
+        PARSING_GATE_MODEL,
+        buildParsingGateRequest(text, intentions),
+        assistantParsingGateAnswersSchema,
+        TODAY
+      );
+      assert.deepEqual(
+        readParsingGateDecision(decision.answers, intentions),
+        expected,
+        `${text}: ${JSON.stringify(decision.answers)}`
+      );
+    }
   }
 );

@@ -844,7 +844,7 @@ const assistantDebugModelCallAttemptSchema = z.object({
 const assistantDebugModelCallSchema = z.object({
   provider: z.literal('openrouter'),
   endpoint: z.string().url(),
-  stage: z.enum(['transcription', 'initial', 'repair', 'review']),
+  stage: z.enum(['transcription', 'gate', 'initial', 'repair', 'review']),
   request: z.record(z.string(), z.unknown()),
   attempts: z.array(assistantDebugModelCallAttemptSchema),
   response: z.any(),

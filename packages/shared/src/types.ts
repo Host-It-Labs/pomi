@@ -606,7 +606,7 @@ export interface AssistantDebugProcessedOutput {
 }
 
 export type AssistantDebugModelCallStage =
-  'transcription' | 'initial' | 'repair' | 'review';
+  'transcription' | 'gate' | 'initial' | 'repair' | 'review';
 
 export interface AssistantDebugModelCallAttempt {
   request: Record<string, unknown>;

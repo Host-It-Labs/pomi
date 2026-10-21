@@ -21,6 +21,7 @@ import {
   AssistantInterpretationResult,
   AssistantPreparedInterpretation,
   AssistantInterpretationTimings,
+  AssistantLocalParse,
   AssistantModelRequestOptions,
   AssistantModelRequestError,
   AssistantModelOutputError,
@@ -180,6 +181,37 @@ export class AssistantInputInterpreter {
       timings,
       responseLanguage:
         parsed.responseLanguage.trim() || input.accountLanguage || 'en',
+    };
+  }
+
+  interpretLocally(
+    input: AssistantInterpretationResolutionInput &
+      Pick<AssistantInterpretationInput, 'text'>,
+    localParse: AssistantLocalParse
+  ): AssistantInterpretationResult {
+    const processingStartedAt = performance.now();
+    const resolutionNotes = [
+      'Parsed locally: the decision model judged the input a plain Task.',
+    ];
+    const task = this.taskPolicy.createPlainTask(
+      input.text,
+      input.today,
+      input.defaults,
+      input.intentions,
+      localParse,
+      this.buildTranscriptSettings(input)
+    );
+    return {
+      tasks: [task],
+      timerCommand: EMPTY_TIMER_COMMAND,
+      costUsd: 0,
+      usedFallback: false,
+      invalidParserOutput: null,
+      error: null,
+      resolutionNotes,
+      modelCalls: [],
+      timings: { outputProcessingMs: elapsedMs(processingStartedAt) },
+      responseLanguage: input.accountLanguage ?? 'en',
     };
   }
 
