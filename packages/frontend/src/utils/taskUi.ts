@@ -223,8 +223,8 @@ export function formatCompactTaskDue(task: Pick<Task, 'dueDate' | 'dueTime'>) {
 export function getTaskPriorityAccentClass(priority: Task['priority']) {
   if (priority === 'urgent') return 'bg-red-400';
   if (priority === 'high') return 'bg-amber-400';
-  if (priority === 'low') return 'bg-sky-500/70';
-  return 'bg-slate-600';
+  if (priority === 'low') return 'bg-sky-400/50';
+  return 'bg-transparent';
 }
 
 export function getTaskPriorityBadgeClass(priority: Task['priority']) {

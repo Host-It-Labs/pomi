@@ -10,7 +10,7 @@ export function Card({ children, className, ...props }: CardProps) {
     <div
       {...props}
       className={clsx(
-        'rounded-lg border border-slate-800 bg-slate-900',
+        'rounded-2xl bg-surface shadow-[inset_0_0_0_1px_var(--hairline)]',
         className
       )}
     >

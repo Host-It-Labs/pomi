@@ -1,3 +1,4 @@
+import { captureObject } from '../helpers/assistant-output';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
@@ -23,8 +24,8 @@ function run(interpreter, { text, intentions, tasks, ...options }) {
     today: '2026-07-22',
     intentions,
     ...options,
-    requestJson: async () => ({
-      content: JSON.stringify({ tasks, ...confidence }),
+    requestObject: async () => ({
+      object: captureObject({ tasks, ...confidence }),
       costUsd: 0,
     }),
   });
@@ -115,8 +116,8 @@ test('keeps explicit model timer type ahead of conflicting transcript wording', 
     text: 'Start a break timer and add a note to review the lights.',
     today: '2026-07-22',
     intentions: [],
-    requestJson: async () => ({
-      content: JSON.stringify({
+    requestObject: async () => ({
+      object: captureObject({
         tasks: [],
         timerAction: { action: 'startTimer', timerType: 'work' },
         ...confidence,
@@ -282,8 +283,8 @@ test('does not duplicate an explicit voice timer as a Task', async () => {
       { slug: 'pomi', title: 'Pomi', type: 'work', parentSlug: 'projects' },
       { slug: 'news', title: 'News', type: 'break', parentSlug: null },
     ],
-    requestJson: async () => ({
-      content: JSON.stringify({
+    requestObject: async () => ({
+      object: captureObject({
         tasks: [
           {
             title: 'Start a break timer',
@@ -478,8 +479,8 @@ test('rejects overlapping source ownership instead of creating a fallback Task',
       text: 'Buy milk today',
       today: '2026-07-22',
       intentions: [],
-      requestJson: async () => ({
-        content: JSON.stringify(responses.shift()),
+      requestObject: async () => ({
+        object: captureObject(responses.shift()),
         costUsd: 0,
       }),
     }),

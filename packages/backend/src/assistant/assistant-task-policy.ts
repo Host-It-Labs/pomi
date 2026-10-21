@@ -1,5 +1,9 @@
 import { TASK_PRIORITIES, TIMER_TYPES } from '@pomi/shared';
-import { normalizeOptionalString, toRecord } from './assistant-input-utils';
+import { normalizeOptionalString } from './assistant-input-utils';
+import {
+  type AssistantModelTask,
+  MAX_SOURCE_SEGMENTS_PER_TASK,
+} from './assistant-output-schemas';
 import { AssistantIntentionResolver } from './assistant-intention-resolver';
 import {
   AssistantCaptureIntention,
@@ -13,7 +17,6 @@ const MAX_TITLE_WORDS = 15;
 const TARGET_TITLE_WORDS = 10;
 const MIN_NATURAL_TITLE_SPLIT_WORDS = 8;
 const FALLBACK_TITLE_WORDS = 10;
-const MAX_SOURCE_SEGMENTS_PER_TASK = 32;
 const MAX_DESCRIPTION_SOURCE_MATCH_CHARS = 20_000;
 const DEFAULT_TRANSCRIPT_MIN_WORDS = 15;
 const DAYPART_DUE_TIMES = [
@@ -75,7 +78,7 @@ const MULTILINGUAL_TIMER_ONLY_PATTERNS = [
   /^(?:ٹائمر|پومودورو|سیشن)\s+میں\s+(?:پانچ|۵|5)\s+منٹ\s+شامل\s+کریں$/u,
 ] as const;
 
-type RawTask = Record<string, unknown>;
+type RawTask = AssistantModelTask & { __listExpanded?: boolean };
 
 type SourceSpan = {
   taskIndex: number;
@@ -87,7 +90,7 @@ export class AssistantTaskPolicy {
   private readonly intentionResolver = new AssistantIntentionResolver();
 
   normalizeTasks(
-    rawTasks: unknown[],
+    rawTasks: RawTask[],
     sourceText: string,
     today: string,
     intentions: AssistantCaptureIntention[],
@@ -107,7 +110,7 @@ export class AssistantTaskPolicy {
     const groupedTasks = this.mergeContinuationTasks(taskCandidates);
     const tasks = groupedTasks.slice(0, MAX_TASKS_PER_REQUEST).map(task => {
       const sourceSegments = this.readSourceSegments(
-        toRecord(task).sourceSegments,
+        task.sourceSegments,
         sourceText
       );
       return this.normalizeTask(
@@ -122,9 +125,9 @@ export class AssistantTaskPolicy {
         this.sourceUrlsForTask(
           task,
           sourceUrls,
-          taskCandidates.length === 1 || toRecord(task).__listExpanded === true
+          taskCandidates.length === 1 || task.__listExpanded === true
         ),
-        toRecord(task).__listExpanded === true || groupedTasks.length === 1
+        task.__listExpanded === true || groupedTasks.length === 1
           ? sourceText
           : sourceSegments.join(' ')
       );
@@ -156,7 +159,7 @@ export class AssistantTaskPolicy {
     return tasks;
   }
 
-  private expandIndependentListTasks(rawTasks: unknown[], sourceText: string) {
+  private expandIndependentListTasks(rawTasks: RawTask[], sourceText: string) {
     const list = this.findIndependentList(sourceText);
     if (!list) return rawTasks;
 
@@ -171,12 +174,8 @@ export class AssistantTaskPolicy {
       return rawTasks;
     }
 
-    const rawTask = toRecord(rawTasks[listTaskIndex.index]);
-    const sourceCandidates = Array.isArray(rawTask.sourceSegments)
-      ? rawTask.sourceSegments.filter(
-          (segment): segment is string => typeof segment === 'string'
-        )
-      : [];
+    const rawTask = rawTasks[listTaskIndex.index];
+    const sourceCandidates = rawTask.sourceSegments;
     if (
       sourceCandidates.length > 0 &&
       !list.items.every(item =>
@@ -211,35 +210,27 @@ export class AssistantTaskPolicy {
     return [...expanded, ...remaining];
   }
 
-  private scoreIndependentListTask(rawTask: unknown, items: string[]) {
-    const value = toRecord(rawTask);
+  private scoreIndependentListTask(rawTask: RawTask, items: string[]) {
+    const value = rawTask;
     const candidates = [
       value.title,
       value.description,
-      ...(Array.isArray(value.sourceSegments) ? value.sourceSegments : []),
-      ...(Array.isArray(value.essentialDetails) ? value.essentialDetails : []),
-    ].filter((candidate): candidate is string => typeof candidate === 'string');
+      ...value.sourceSegments,
+      ...value.essentialDetails,
+    ].filter((candidate): candidate is string => candidate !== null);
     return items.filter(item =>
       candidates.some(candidate => this.findSourceSegment(item, candidate))
     ).length;
   }
 
   private isDuplicateIndependentListTask(
-    candidate: unknown,
+    candidate: RawTask,
     listTask: RawTask,
     items: string[]
   ) {
-    const value = toRecord(candidate);
-    const listCandidates = Array.isArray(listTask.sourceSegments)
-      ? listTask.sourceSegments.filter(
-          (segment): segment is string => typeof segment === 'string'
-        )
-      : [];
-    const candidateSegments = Array.isArray(value.sourceSegments)
-      ? value.sourceSegments.filter(
-          (segment): segment is string => typeof segment === 'string'
-        )
-      : [];
+    const value = candidate;
+    const listCandidates = listTask.sourceSegments;
+    const candidateSegments = value.sourceSegments;
     if (
       listCandidates.length === 0 ||
       candidateSegments.length === 0 ||
@@ -252,12 +243,8 @@ export class AssistantTaskPolicy {
       return false;
     }
 
-    const taskText = [
-      value.title,
-      value.description,
-      ...(Array.isArray(value.essentialDetails) ? value.essentialDetails : []),
-    ]
-      .filter((candidate): candidate is string => typeof candidate === 'string')
+    const taskText = [value.title, value.description, ...value.essentialDetails]
+      .filter((candidate): candidate is string => candidate !== null)
       .join(' ');
     return !items.some(item => this.findSourceSegment(item, taskText));
   }
@@ -372,22 +359,18 @@ export class AssistantTaskPolicy {
    * echo "start a break timer" as a Task as well; discard that echo while
    * retaining any real Task that shares the same recording.
    */
-  private removeTimerOnlyTasks(rawTasks: unknown[]): unknown[] {
+  private removeTimerOnlyTasks(rawTasks: RawTask[]): RawTask[] {
     return rawTasks.filter(rawTask => !this.isTimerOnlyTask(rawTask));
   }
 
-  private isTimerOnlyTask(rawTask: unknown) {
-    const value = toRecord(rawTask);
+  private isTimerOnlyTask(rawTask: RawTask) {
+    const value = rawTask;
     const titleAndDescription = [value.title, value.description]
-      .filter((candidate): candidate is string => typeof candidate === 'string')
+      .filter((candidate): candidate is string => candidate !== null)
       .join(' ');
     if (!this.isTimerOnlyPhrase(titleAndDescription)) return false;
 
-    const sourceSegments = Array.isArray(value.sourceSegments)
-      ? value.sourceSegments.filter(
-          (segment): segment is string => typeof segment === 'string'
-        )
-      : [];
+    const sourceSegments = value.sourceSegments;
     return (
       sourceSegments.length === 0 ||
       sourceSegments.every(segment => this.isTimerOnlyPhrase(segment))
@@ -405,11 +388,11 @@ export class AssistantTaskPolicy {
    * continuation marker plus shared outcome language covers models that emit
    * different keys while keeping unrelated Tasks independent.
    */
-  private mergeContinuationTasks(rawTasks: unknown[]): RawTask[] {
+  private mergeContinuationTasks(rawTasks: RawTask[]): RawTask[] {
     const grouped: RawTask[] = [];
     const indexes = new Map<string, number>();
     for (const rawTask of rawTasks) {
-      const value = { ...toRecord(rawTask) };
+      const value = { ...rawTask };
       const key = normalizeOptionalString(value.outcomeKey)?.toLowerCase();
       const index = key ? indexes.get(key) : undefined;
       if (index === undefined) {
@@ -483,10 +466,10 @@ export class AssistantTaskPolicy {
     return [
       value.title,
       value.description,
-      ...(Array.isArray(value.sourceSegments) ? value.sourceSegments : []),
-      ...(Array.isArray(value.essentialDetails) ? value.essentialDetails : []),
+      ...value.sourceSegments,
+      ...value.essentialDetails,
     ]
-      .filter((candidate): candidate is string => typeof candidate === 'string')
+      .filter((candidate): candidate is string => candidate !== null)
       .join(' ');
   }
 
@@ -561,26 +544,17 @@ export class AssistantTaskPolicy {
       'intentionSlug',
       'subIntentionSlug',
       'intentionMention',
-    ]) {
-      if (
-        (current[field] === undefined || current[field] === null) &&
-        value[field] !== undefined &&
-        value[field] !== null
-      ) {
-        current[field] = value[field];
+    ] as const) {
+      if (current[field] === null && value[field] !== null) {
+        Object.assign(current, { [field]: value[field] });
       }
     }
   }
 
-  private mergeStringArrays(left: unknown, right: unknown) {
-    return [
-      ...(Array.isArray(left) ? left : []),
-      ...(Array.isArray(right) ? right : []),
-    ].filter(
+  private mergeStringArrays(left: string[], right: string[]) {
+    return [...left, ...right].filter(
       (value, index, all): value is string =>
-        typeof value === 'string' &&
-        value.trim().length > 0 &&
-        all.indexOf(value) === index
+        value.trim().length > 0 && all.indexOf(value) === index
     );
   }
 
@@ -642,7 +616,7 @@ export class AssistantTaskPolicy {
       today
     );
     const resolved = this.intentionResolver.resolve(
-      {},
+      { intentionSlug: null, subIntentionSlug: null, intentionMention: null },
       sourceText,
       intentions,
       resolutionNotes
@@ -666,7 +640,7 @@ export class AssistantTaskPolicy {
   }
 
   private normalizeTask(
-    input: unknown,
+    input: RawTask,
     sourceText: string,
     today: string,
     intentions: AssistantCaptureIntention[],
@@ -677,7 +651,7 @@ export class AssistantTaskPolicy {
     sourceUrls: string[],
     metadataSourceText: string
   ): ParsedTaskDraft {
-    const value = toRecord(input);
+    const value = input;
     const base: ParsedTaskDraft = {
       title: normalizeOptionalString(value.title) ?? sourceText,
       description: this.normalizeModelDescription(
@@ -692,14 +666,12 @@ export class AssistantTaskPolicy {
         resolutionNotes
       ),
       priority: this.resolvePriority(value.priority, metadataSourceText),
-      timerType: this.sanitizeTimerType(value.timerType),
+      timerType: value.timerType ?? undefined,
       recurrenceRule: this.sanitizeRecurrenceRule(value.recurrenceRule),
       recurrenceInterval: this.sanitizeRecurrenceInterval(
         value.recurrenceInterval
       ),
-      recurrenceAnchorMode: this.sanitizeRecurrenceAnchor(
-        value.recurrenceAnchorMode
-      ),
+      recurrenceAnchorMode: value.recurrenceAnchorMode ?? undefined,
     };
     const withDefaults = this.applyRecurrenceDueDateInvariant(
       this.applyDefaults(base, defaults),
@@ -788,7 +760,7 @@ export class AssistantTaskPolicy {
     };
   }
 
-  needsReview(rawTasks: unknown[], sourceText?: string) {
+  needsReview(rawTasks: RawTask[], sourceText?: string) {
     if (
       sourceText !== undefined &&
       this.hasAmbiguousSourceOwnership(rawTasks, sourceText)
@@ -797,15 +769,14 @@ export class AssistantTaskPolicy {
     }
 
     return rawTasks.some(rawTask => {
-      const task = toRecord(rawTask);
+      const task = rawTask;
       const title = normalizeOptionalString(task.title);
       if (!title || title.split(/\s+/).length > MAX_TITLE_WORDS) return true;
 
       if (
-        !Array.isArray(task.sourceSegments) ||
         task.sourceSegments.length === 0 ||
         task.sourceSegments.some(segment => {
-          if (typeof segment !== 'string' || !segment.trim()) return true;
+          if (!segment.trim()) return true;
           return (
             sourceText !== undefined &&
             this.findSourceSegment(segment, sourceText) === null
@@ -825,35 +796,23 @@ export class AssistantTaskPolicy {
         this.isInvalidOptionalValue(task.dueTime, value =>
           this.sanitizeDueTime(value)
         ) ||
-        this.isInvalidOptionalValue(task.priority, value =>
-          this.sanitizePriority(value)
-        ) ||
-        this.isInvalidOptionalValue(task.timerType, value =>
-          this.sanitizeTimerType(value)
-        ) ||
         this.isInvalidOptionalValue(task.recurrenceRule, value =>
           this.sanitizeRecurrenceRule(value)
         ) ||
-        (task.recurrenceInterval !== undefined &&
-          task.recurrenceInterval !== null &&
+        (task.recurrenceInterval !== null &&
           this.sanitizeRecurrenceInterval(task.recurrenceInterval) ===
-            undefined) ||
-        this.isInvalidOptionalValue(task.recurrenceAnchorMode, value =>
-          this.sanitizeRecurrenceAnchor(value)
-        )
+            undefined)
       );
     });
   }
 
-  hasInvalidSourceSegments(rawTasks: unknown[], sourceText: string) {
+  hasInvalidSourceSegments(rawTasks: RawTask[], sourceText: string) {
     return rawTasks.some(rawTask => {
-      const sourceSegments = toRecord(rawTask).sourceSegments;
+      const sourceSegments = rawTask.sourceSegments;
       return (
-        !Array.isArray(sourceSegments) ||
         sourceSegments.length === 0 ||
         sourceSegments.some(
           segment =>
-            typeof segment !== 'string' ||
             !segment.trim() ||
             this.findSourceSegment(segment, sourceText) === null
         )
@@ -861,18 +820,17 @@ export class AssistantTaskPolicy {
     });
   }
 
-  hasAmbiguousSourceOwnership(rawTasks: unknown[], sourceText: string) {
+  hasAmbiguousSourceOwnership(rawTasks: RawTask[], sourceText: string) {
     const ownershipTasks = this.expandIndependentListTasks(
       rawTasks,
       sourceText
     );
     const spans: SourceSpan[] = [];
     for (const [taskIndex, rawTask] of ownershipTasks.entries()) {
-      const sourceSegments = toRecord(rawTask).sourceSegments;
-      if (!Array.isArray(sourceSegments)) continue;
+      const sourceSegments = rawTask.sourceSegments;
 
       for (const segment of sourceSegments) {
-        if (typeof segment !== 'string' || !segment.trim()) continue;
+        if (!segment.trim()) continue;
         const matches = this.findSourceSegmentMatches(segment, sourceText);
         if (matches.length !== 1) return true;
         const [match] = matches;
@@ -902,29 +860,22 @@ export class AssistantTaskPolicy {
     );
   }
 
-  hasUnassignedSourceUrls(rawTasks: unknown[], sourceText: string) {
+  hasUnassignedSourceUrls(rawTasks: RawTask[], sourceText: string) {
     const sourceUrls = this.extractSourceUrls(sourceText);
     return sourceUrls.some(
       url =>
         !rawTasks.some(rawTask => {
-          const value = toRecord(rawTask);
-          return [
-            value.title,
-            value.description,
-            ...(Array.isArray(value.sourceSegments)
-              ? value.sourceSegments
-              : []),
-          ].some(
-            candidate =>
-              typeof candidate === 'string' && candidate.includes(url)
+          const value = rawTask;
+          return [value.title, value.description, ...value.sourceSegments].some(
+            candidate => candidate !== null && candidate.includes(url)
           );
         })
     );
   }
 
   private isInvalidOptionalValue(
-    value: unknown,
-    sanitize: (value: unknown) => unknown
+    value: string | null,
+    sanitize: (value: string | null) => unknown
   ) {
     return (
       normalizeOptionalString(value) !== null && sanitize(value) === undefined
@@ -944,7 +895,7 @@ export class AssistantTaskPolicy {
     };
   }
 
-  private sanitizeRecurrenceRule(value: unknown): string | undefined {
+  private sanitizeRecurrenceRule(value: string | null): string | undefined {
     const recurrenceRule = normalizeOptionalString(value);
     if (!recurrenceRule) return undefined;
 
@@ -990,9 +941,9 @@ export class AssistantTaskPolicy {
     return recurrenceRule;
   }
 
-  private sanitizeRecurrenceInterval(value: unknown): number | undefined {
-    if (value === undefined || value === null || value === '') return undefined;
-    const interval = typeof value === 'number' ? value : Number(value);
+  private sanitizeRecurrenceInterval(value: number | null): number | undefined {
+    if (value === null) return undefined;
+    const interval = value;
     return Number.isFinite(interval) && interval >= 1 ? interval : undefined;
   }
 
@@ -1198,21 +1149,13 @@ export class AssistantTaskPolicy {
     };
   }
 
-  private sanitizePriority(value: unknown) {
+  private sanitizePriority(value: string) {
     const priority = normalizeOptionalString(value)?.toLowerCase();
     return priority === TASK_PRIORITIES.LOW ||
       priority === TASK_PRIORITIES.NORMAL ||
       priority === TASK_PRIORITIES.HIGH ||
       priority === TASK_PRIORITIES.URGENT
       ? priority
-      : undefined;
-  }
-
-  private sanitizeTimerType(value: unknown) {
-    return value === TIMER_TYPES.WORK ||
-      value === TIMER_TYPES.BREAK ||
-      value === TIMER_TYPES.LONG_BREAK
-      ? value
       : undefined;
   }
 
@@ -1242,16 +1185,12 @@ export class AssistantTaskPolicy {
     return TIMER_TYPES.WORK;
   }
 
-  private sanitizeRecurrenceAnchor(value: unknown) {
-    return value === 'planned' || value === 'completion' ? value : undefined;
-  }
-
-  private sanitizeDueDate(value: unknown) {
+  private sanitizeDueDate(value: string | null) {
     const text = normalizeOptionalString(value);
     return text && /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : undefined;
   }
 
-  private sanitizeDueTime(value: unknown) {
+  private sanitizeDueTime(value: string | null) {
     const text = normalizeOptionalString(value);
     return text && /^([01]\d|2[0-3]):[0-5]\d$/.test(text) ? text : undefined;
   }
@@ -1348,9 +1287,9 @@ export class AssistantTaskPolicy {
     );
   }
 
-  private hasConcreteDueTime(rawTasks: unknown[]) {
+  private hasConcreteDueTime(rawTasks: RawTask[]) {
     return rawTasks.some(rawTask => {
-      const dueTime = this.sanitizeDueTime(toRecord(rawTask).dueTime);
+      const dueTime = this.sanitizeDueTime(rawTask.dueTime);
       return dueTime !== undefined;
     });
   }
@@ -1464,11 +1403,9 @@ export class AssistantTaskPolicy {
       : null;
   }
 
-  private readEssentialDetails(value: unknown, sourceText: string) {
-    if (!Array.isArray(value)) return [];
+  private readEssentialDetails(value: string[], sourceText: string) {
     const details: string[] = [];
     for (const candidate of value) {
-      if (typeof candidate !== 'string') continue;
       const match = this.findSourceSegmentWithIndex(candidate, sourceText);
       if (!match || this.isMetadataOnlyDetail(match.text)) continue;
       if (!details.includes(match.text)) details.push(match.text);
@@ -1620,27 +1557,25 @@ export class AssistantTaskPolicy {
   }
 
   private sourceUrlsForTask(
-    input: unknown,
+    input: RawTask,
     sourceUrls: string[],
     includeAll: boolean
   ) {
     if (includeAll) return sourceUrls;
-    const value = toRecord(input);
+    const value = input;
     const sourceCandidates = [
       value.title,
       value.description,
-      ...(Array.isArray(value.sourceSegments) ? value.sourceSegments : []),
+      ...value.sourceSegments,
     ]
-      .filter((candidate): candidate is string => typeof candidate === 'string')
+      .filter((candidate): candidate is string => candidate !== null)
       .join(' ');
     return sourceUrls.filter(url => sourceCandidates.includes(url));
   }
 
-  private readSourceSegments(value: unknown, sourceText: string) {
-    if (!Array.isArray(value)) return [];
+  private readSourceSegments(value: string[], sourceText: string) {
     const segments: Array<{ text: string; index: number }> = [];
     for (const candidate of value.slice(0, MAX_SOURCE_SEGMENTS_PER_TASK)) {
-      if (typeof candidate !== 'string') continue;
       const match = this.findSourceSegmentWithIndex(candidate, sourceText);
       if (match && !segments.some(segment => segment.text === match.text)) {
         segments.push(match);
@@ -1735,10 +1670,11 @@ export class AssistantTaskPolicy {
     return this.extractSourcePriority(sourceText) === priority;
   }
 
-  private resolvePriority(value: unknown, sourceText: string) {
-    return (
-      this.extractSourcePriority(sourceText) ?? this.sanitizePriority(value)
-    );
+  private resolvePriority(
+    value: AssistantModelTask['priority'],
+    sourceText: string
+  ) {
+    return this.extractSourcePriority(sourceText) ?? value ?? undefined;
   }
 
   private extractSourcePriority(sourceText: string) {

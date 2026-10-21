@@ -1,3 +1,4 @@
+import { captureObject } from '../helpers/assistant-output';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
@@ -22,7 +23,7 @@ const confidence = {
 
 function response(tasks) {
   return {
-    content: JSON.stringify({ tasks, ...confidence }),
+    object: captureObject({ tasks, ...confidence }),
     costUsd: 0,
   };
 }
@@ -36,7 +37,7 @@ test('keeps descriptions concise and leaves transcripts disabled by default', as
     text,
     today: '2026-07-22',
     intentions,
-    requestJson: async () =>
+    requestObject: async () =>
       response([
         {
           title: 'Milk',
@@ -64,7 +65,7 @@ test('stores one exact transcript per enabled Task above the strict word thresho
     intentions,
     taskTranscriptEnabled: true,
     taskTranscriptMinWords: 5,
-    requestJson: async () =>
+    requestObject: async () =>
       response([
         {
           title: 'Migration checklist',
@@ -93,7 +94,7 @@ test('does not store a transcript at the configured word threshold', async () =>
     intentions,
     taskTranscriptEnabled: true,
     taskTranscriptMinWords: 7,
-    requestJson: async () =>
+    requestObject: async () =>
       response([{ title: 'Keep short task', sourceSegments: [text] }]),
   });
 
@@ -111,7 +112,7 @@ test('preserves exact URLs in concise descriptions without copying source passag
     intentions,
     taskTranscriptEnabled: true,
     taskTranscriptMinWords: 4,
-    requestJson: async () =>
+    requestObject: async () =>
       response([
         {
           title: 'Review API proposal',
@@ -136,7 +137,7 @@ test('removes repeated transcript passages from the description', async () => {
     intentions,
     taskTranscriptEnabled: true,
     taskTranscriptMinWords: 4,
-    requestJson: async () =>
+    requestObject: async () =>
       response([
         {
           title: 'Describe rollout steps',
@@ -158,7 +159,7 @@ test('removes implicit linked category context from a Task title', async () => {
     text,
     today: '2026-07-22',
     intentions,
-    requestJson: async () =>
+    requestObject: async () =>
       response([
         {
           title: 'Buy groceries milk and eggs',

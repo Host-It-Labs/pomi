@@ -1666,7 +1666,7 @@ function TaskSearchInput({
         value={value}
         onChange={event => onChange(event.target.value)}
         placeholder={t('common.search')}
-        className="h-9 w-full rounded-md border border-slate-800 bg-slate-900/70 py-0 pl-7 pr-8 text-xs text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-indigo-400/70"
+        className="h-8 w-full rounded-lg border border-transparent bg-white/[0.04] py-0 pl-7 pr-8 text-xs text-slate-100 outline-none transition-colors placeholder:text-slate-500 focus:border-indigo-400/60"
       />
       {value.trim().length === 0 && (
         <KeyboardShortcut text="K" showModIcon position="topRight" />
@@ -2274,14 +2274,14 @@ function ListItemTaskRow({
       data-list-item-id={item.id}
       data-completing={isCompletionPending}
       className={clsx(
-        'group/task-row relative transition-all duration-200 hover:bg-slate-800/25',
+        'group/task-row relative rounded-[11px] transition-[background-color,opacity] duration-200 hover:bg-white/[0.04]',
         (isCompleted || isCompletionPending) && 'opacity-50'
       )}
     >
       <div
         aria-hidden="true"
         className={clsx(
-          'absolute inset-y-2 left-0 w-0.5 rounded-r-full',
+          'absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full',
           getTaskPriorityAccentClass(item.priority)
         )}
       />
@@ -2296,7 +2296,7 @@ function ListItemTaskRow({
         <div className="min-w-0">
           <p
             className={clsx(
-              'truncate text-[13px] font-semibold text-slate-100',
+              'truncate text-[13px] font-medium text-slate-100',
               (isCompleted || isCompletionPending) &&
                 'text-slate-500 line-through'
             )}
@@ -2334,14 +2334,14 @@ function ListItemTaskRow({
             />
           </div>
         </div>
-        <div className="flex items-center gap-0.5 opacity-80 transition-opacity group-hover/task-row:opacity-100 group-focus-within/task-row:opacity-100">
+        <div className="task-row-actions flex items-center gap-0.5">
           <IconButton
             label={t('task.editFor', { title: item.title })}
             title={t('common.edit')}
             size="sm"
             variant="secondary"
             onClick={() => onEdit(item)}
-            className="!rounded-full"
+            className="h-7 w-7 !p-0"
           >
             <FaEdit />
           </IconButton>
@@ -2765,20 +2765,19 @@ function TaskRow({
       data-completing={isCompleting}
       tabIndex={-1}
       className={clsx(
-        'group/task-row relative transition-all duration-200',
+        'group/task-row relative transition-[background-color,opacity,box-shadow] duration-200',
         isPinned &&
-          'bg-indigo-950/30 shadow-[inset_0_0_0_1px_rgba(129,140,248,0.24)]',
-        !isPinned && !isOverdue && 'bg-transparent hover:bg-slate-800/25',
-        task.followUpParent && 'ml-4 border-l-2 border-indigo-500/40',
+          'bg-indigo-400/[0.08] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--accent)_28%,transparent)]',
+        task.followUpParent &&
+          'ml-4 before:absolute before:inset-y-3 before:-left-2 before:w-px before:bg-indigo-400/40',
         isCompleted && 'opacity-50',
-        isHighlighted &&
-          'ring-2 ring-inset ring-amber-300 shadow-[0_0_18px_rgba(252,211,77,0.18)]'
+        isHighlighted && 'ring-2 ring-inset ring-amber-300/80'
       )}
     >
       <div
         aria-hidden="true"
         className={clsx(
-          'absolute inset-y-2 left-0 w-0.5 rounded-r-full',
+          'absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full',
           getTaskPriorityAccentClass(task.priority)
         )}
       />
@@ -2809,14 +2808,14 @@ function TaskRow({
             {isPinned && (
               <FaThumbtack
                 aria-hidden="true"
-                className="shrink-0 text-xs text-indigo-200"
+                className="shrink-0 text-[11px] text-indigo-300"
               />
             )}
             <OverflowTaskTitle
               title={task.title}
               maxLines={2}
               className={clsx(
-                'text-[13px] font-semibold text-slate-100',
+                'text-[13px] font-medium text-slate-100',
                 isCompleted && 'line-through'
               )}
             />
@@ -2837,7 +2836,7 @@ function TaskRow({
             />
           </div>
         </div>
-        <div className="flex items-center gap-0.5 opacity-80 transition-opacity group-hover/task-row:opacity-100 group-focus-within/task-row:opacity-100">
+        <div className="task-row-actions flex items-center gap-0.5">
           {!task.followUpParent && (
             <IconButton
               label={t(isPinned ? 'task.unpinFor' : 'task.pinFor', {
@@ -2845,10 +2844,11 @@ function TaskRow({
               })}
               title={t(isPinned ? 'task.unpin' : 'task.pin')}
               size="sm"
-              variant={isPinned ? 'primary' : 'secondary'}
+              variant="secondary"
               onClick={() => void updatePinned()}
               disabled={saving}
-              className="!rounded-full"
+              aria-pressed={isPinned}
+              className={clsx('h-7 w-7 !p-0', isPinned && '!text-indigo-300')}
             >
               <FaThumbtack />
             </IconButton>
@@ -2860,7 +2860,7 @@ function TaskRow({
             variant="secondary"
             onClick={() => onEdit(task)}
             disabled={saving}
-            className="!rounded-full"
+            className="h-7 w-7 !p-0"
           >
             <FaEdit />
           </IconButton>

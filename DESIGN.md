@@ -9,6 +9,8 @@
 
 Desktop and mobile use blue for Work, sage for Break, and dark teal-green for Long break across decorative accents, with task quick-create Add always blue. Use the accepted Midnight navy background palette, with distinct raised task surfaces. Preserve semantic status colors. Keep contrast clear without purple foundations, glow, or stark white chrome. Use subtle pressed, selection, paging, and sheet transitions; respect reduced motion. Wear OS and the public website keep their own visual systems.
 
+Surfaces separate by tone and hairlines rather than outlines: canvas, a raised surface for the task workspace and intention slots, and a further raised tone for menus. All colors, hairlines, fills, and radii come from the tokens at the top of `packages/frontend/src/App.css`; components use those tokens or the remapped Tailwind palette instead of new literal colors. Secondary icon buttons are quiet ghost squares that fill on hover; only the primary play/pause action is a filled circle. The countdown is a large light-weight tabular figure under a small uppercase timer-type label. On hover-capable devices, Task row actions appear on row hover or focus and stay visible for Pinned Tasks; touch layouts always show them.
+
 ## Desktop Window and workspace
 
 - Keep the expanded desktop window at 440 × 700. Navigation, six intentions, and the compact timer remain stationary. Give task rows at least half the usable main-page height.

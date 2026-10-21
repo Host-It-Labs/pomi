@@ -16,6 +16,7 @@ import {
   AssistantVoiceCommandResult,
 } from '@pomi/shared';
 import { Repository } from 'typeorm';
+import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { PomiLogger } from '../logging/pomi-logger';
 import { PreferencesService } from '../preferences/preferences.service';
@@ -24,6 +25,7 @@ import { AssistantUsageEntity } from './assistant-usage.entity';
 import {
   type AssistantModelResponse,
   AssistantModelRequestError,
+  AssistantModelOutputError,
   type AssistantModelRequestOptions,
 } from './assistant-input-types';
 import { translateAssistant } from '../i18n/assistant-localization';
@@ -41,12 +43,6 @@ type OpenRouterMessage = {
         text?: string;
       }>
     | null;
-  tool_calls?: Array<{
-    function?: {
-      name?: string;
-      arguments?: string;
-    };
-  }>;
 };
 
 type OpenRouterChatResponse = {
@@ -452,13 +448,15 @@ export class AssistantService {
     }
   }
 
-  async requestJson(
+  async requestObject<S extends z.ZodType>(
     userId: string,
     model: string | null,
     messages: Array<{ role: 'system' | 'user'; content: string }>,
-    options: AssistantModelRequestOptions,
+    options: AssistantModelRequestOptions<S>,
     preparedLocalDate?: string
-  ): Promise<AssistantModelResponse & { modelCall: AssistantDebugModelCall }> {
+  ): Promise<
+    AssistantModelResponse<S> & { modelCall: AssistantDebugModelCall }
+  > {
     if (!model) {
       const preferences = await this.preferencesService.getPreferences(userId);
       throw new BadRequestException(
@@ -476,11 +474,18 @@ export class AssistantService {
       model,
       messages,
     };
-    const modelOptions = this.buildModelRequestBody(options);
     const jsonBody = {
       ...baseBody,
-      ...modelOptions,
-      response_format: { type: 'json_object' },
+      usage: { include: true },
+      // Structured output must never be combined with forced tool calls (Gemini).
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: options.schemaName,
+          strict: true,
+          schema: z.toJSONSchema(options.schema, { target: 'draft-7' }),
+        },
+      },
     };
     const startedAt = performance.now();
     const attempts: AssistantDebugModelCall['attempts'] = [];
@@ -551,13 +556,6 @@ export class AssistantService {
       );
     }
 
-    const content = this.getMessageText(body.choices?.[0]?.message);
-    if (!content) {
-      throw new AssistantModelRequestError(
-        'Assistant model returned no content',
-        responseModelCall
-      );
-    }
     const costUsd = this.readUsageCost(body.usage, 'chat');
     const usagePersistence =
       costUsd === null
@@ -572,22 +570,27 @@ export class AssistantService {
           : this.recordCost(userId, 'chat', costUsd);
     void usagePersistence?.catch(() => undefined);
 
-    responseModelCall.content = content;
+    const content = this.getMessageText(body.choices?.[0]?.message);
+    responseModelCall.content = content || null;
     responseModelCall.costUsd = costUsd ?? 0;
+    let object: z.infer<S>;
+    try {
+      object = options.schema.parse(JSON.parse(content));
+    } catch {
+      // Even rejected output is billable. Finish accounting before returning the error.
+      await usagePersistence?.catch(() => undefined);
+      throw new AssistantModelOutputError(
+        translateAssistant(options.language, 'assistantResponseInvalid'),
+        responseModelCall
+      );
+    }
     return {
+      object,
       content,
       costUsd: costUsd ?? 0,
       modelCall: responseModelCall,
       usagePersistence,
     };
-  }
-
-  private buildModelRequestBody(options: AssistantModelRequestOptions) {
-    // Do not combine structured JSON extraction with forced function calls.
-    // Gemini rejects that transport and the old adapter retried the same bad
-    // request several times before succeeding.
-    void options;
-    return {};
   }
 
   private buildModelCall(
@@ -854,68 +857,6 @@ export class AssistantService {
   }
 
   private getMessageText(message: OpenRouterMessage | undefined) {
-    if (message?.tool_calls?.length) {
-      const merged: Record<string, unknown> = {};
-      for (const call of message.tool_calls) {
-        const name = call.function?.name;
-        const argumentsText = call.function?.arguments;
-        if (!name || !argumentsText) continue;
-        let argumentsValue: Record<string, unknown>;
-        try {
-          argumentsValue = JSON.parse(argumentsText) as Record<string, unknown>;
-        } catch {
-          continue;
-        }
-        if (name === 'create_tasks') {
-          const existingTasks = Array.isArray(merged.tasks) ? merged.tasks : [];
-          const nextTasks = Array.isArray(argumentsValue.tasks)
-            ? argumentsValue.tasks
-            : [];
-          merged.tasks = [...existingTasks, ...nextTasks];
-          if (argumentsValue.reviewRequired !== undefined) {
-            merged.reviewRequired =
-              Boolean(merged.reviewRequired) ||
-              Boolean(argumentsValue.reviewRequired);
-          }
-          if (argumentsValue.confidence !== undefined) {
-            merged.confidence = argumentsValue.confidence;
-          }
-          if (Array.isArray(argumentsValue.unresolvedMetadata)) {
-            const existingMetadata = Array.isArray(merged.unresolvedMetadata)
-              ? merged.unresolvedMetadata
-              : [];
-            merged.unresolvedMetadata = [
-              ...new Set([
-                ...existingMetadata,
-                ...argumentsValue.unresolvedMetadata,
-              ]),
-            ];
-          }
-        } else if (name === 'start_timer') {
-          merged.timerAction = {
-            action: 'startTimer',
-            timerType: argumentsValue.timerType ?? null,
-            intentionSlugs: argumentsValue.intentionSlugs ?? [],
-            subIntentions: argumentsValue.subIntentions ?? {},
-          };
-        } else if (name === 'pause_timer') {
-          merged.timerAction = {
-            action: 'pauseTimer',
-            intentionSlugs: [],
-            subIntentions: {},
-          };
-        } else if (name === 'add_five_minutes') {
-          merged.timerAction = {
-            action: 'addFiveMinutes',
-            intentionSlugs: [],
-            subIntentions: {},
-          };
-        }
-      }
-      if (Object.keys(merged).length > 0) {
-        return JSON.stringify(merged);
-      }
-    }
     const content = message?.content;
     if (typeof content === 'string') {
       return content;

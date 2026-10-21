@@ -1,3 +1,4 @@
+import { captureObject } from '../helpers/assistant-output';
 import { describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { AssistantCaptureService } from '../../src/assistant/assistant-capture.service';
@@ -20,7 +21,7 @@ const modelContent = JSON.stringify({
     action: 'pauseTimer',
     timerType: null,
     intentionSlugs: [],
-    subIntentions: {},
+    subIntentions: [],
   },
 });
 
@@ -45,8 +46,11 @@ function createVoiceService(language: 'en' | 'fr') {
       costUsd: 0.01,
       modelCall: null,
     })),
-    requestJson: vi.fn(async () => ({
-      content: modelContent,
+    requestObject: vi.fn(async () => ({
+      object: captureObject({
+        ...JSON.parse(modelContent),
+        responseLanguage: language,
+      }),
       costUsd: 0.02,
       modelCall: null,
     })),
@@ -194,7 +198,7 @@ describe('Assistant voice phases', () => {
     });
 
     expect(context.assistantService.transcribe).toHaveBeenCalledOnce();
-    expect(context.assistantService.requestJson).toHaveBeenCalledOnce();
+    expect(context.assistantService.requestObject).toHaveBeenCalledOnce();
     expect(context.timerService.getTimerByUserId).not.toHaveBeenCalled();
     expect(context.timerService.pauseTimer).not.toHaveBeenCalled();
 
@@ -209,7 +213,7 @@ describe('Assistant voice phases', () => {
     expect(context.timerService.getTimerByUserId).toHaveBeenCalledOnce();
     expect(context.timerService.pauseTimer).toHaveBeenCalledOnce();
     expect(context.assistantService.transcribe).toHaveBeenCalledOnce();
-    expect(context.assistantService.requestJson).toHaveBeenCalledOnce();
+    expect(context.assistantService.requestObject).toHaveBeenCalledOnce();
     expect(context.assistantService.addSpokenAudio).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       actions: ['pauseTimer'],
@@ -280,7 +284,7 @@ describe('Assistant voice phases', () => {
     await context.service.prepareVoiceChunks('user-1', 'voice-chunks');
 
     expect(context.assistantService.transcribe).toHaveBeenCalledTimes(3);
-    expect(context.assistantService.requestJson).toHaveBeenCalledOnce();
+    expect(context.assistantService.requestObject).toHaveBeenCalledOnce();
     expect(
       context.preparationStore.getOrCreateVoiceChunk
     ).toHaveBeenCalledTimes(4);

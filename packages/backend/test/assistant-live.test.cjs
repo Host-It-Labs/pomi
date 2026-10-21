@@ -52,8 +52,8 @@ function createInterpreter() {
         intentions,
         taskTranscriptEnabled: input.taskTranscriptEnabled ?? false,
         taskTranscriptMinWords: input.taskTranscriptMinWords ?? 15,
-        requestJson: (messages, options) =>
-          service.requestJson('assistant-live-suite', MODEL, messages, options),
+        requestObject: (messages, options) =>
+          service.requestObject('assistant-live-suite', MODEL, messages, options),
       });
     },
   };

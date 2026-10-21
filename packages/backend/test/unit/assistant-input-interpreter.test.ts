@@ -1,3 +1,5 @@
+import { AssistantModelOutputError } from '../../src/assistant/assistant-input-types';
+import { captureObject } from '../helpers/assistant-output';
 import assert from 'node:assert/strict';
 import { expect, test } from 'vitest';
 
@@ -37,36 +39,11 @@ const intentions = [
 ];
 
 function response(content, costUsd?: number) {
-  const responseCostUsd = costUsd ?? 0.01;
-  try {
-    const parsed = JSON.parse(content);
-    if (Array.isArray(parsed.tasks)) {
-      parsed.tasks = parsed.tasks.map(task =>
-        task && typeof task === 'object' && !Array.isArray(task)
-          ? {
-              sourceSegments:
-                Array.isArray(task.sourceSegments) &&
-                task.sourceSegments.length > 0
-                  ? task.sourceSegments
-                  : [task.title ?? ''],
-              ...task,
-            }
-          : task
-      );
-      return {
-        content: JSON.stringify({
-          ...parsed,
-          ...(typeof parsed.reviewRequired === 'boolean'
-            ? {}
-            : confidentExtraction),
-        }),
-        costUsd: responseCostUsd,
-      };
-    }
-  } catch {
-    // Preserve malformed model output for repair tests.
-  }
-  return { content, costUsd: responseCostUsd };
+  return {
+    object: captureObject(JSON.parse(content)),
+    content,
+    costUsd: costUsd ?? 0.01,
+  };
 }
 
 const confidentExtraction = {
@@ -90,7 +67,7 @@ test('uses one AI pass for confident valid Task extraction', async () => {
     text: 'Submit report next Tuesday',
     today: '2026-07-10',
     intentions,
-    requestJson: async () => {
+    requestObject: async () => {
       calls += 1;
       return response(
         JSON.stringify({
@@ -116,7 +93,7 @@ test('normalizes requested due times without inventing date-only times', async (
       text,
       today: '2026-07-10',
       intentions,
-      requestJson: async () =>
+      requestObject: async () =>
         response(
           JSON.stringify({
             tasks: [
@@ -162,7 +139,7 @@ test('preserves explicit clock phrases without adopting incidental meeting times
       text,
       today: '2026-07-10',
       intentions,
-      requestJson: async () =>
+      requestObject: async () =>
         response(
           JSON.stringify({
             tasks: [
@@ -204,7 +181,7 @@ test('does not retry a valid extraction solely for an ambiguous due time', async
     text,
     today: '2026-07-10',
     intentions,
-    requestJson: async () => {
+    requestObject: async () => {
       calls += 1;
       return response(
         JSON.stringify({
@@ -237,7 +214,7 @@ test('accepts a null recurrence interval without an extra review pass', async ()
     text: 'Submit report',
     today: '2026-07-10',
     intentions,
-    requestJson: async () => {
+    requestObject: async () => {
       calls += 1;
       return response(
         JSON.stringify({
@@ -252,7 +229,7 @@ test('accepts a null recurrence interval without an extra review pass', async ()
   assert.equal(result.tasks[0].recurrenceInterval, undefined);
 });
 
-test('reviews otherwise valid extraction when review metadata is missing', async () => {
+test('reviews otherwise valid extraction when the model requests review', async () => {
   const interpreter = new AssistantInputInterpreter();
   let calls = 0;
   await interpreter.interpret({
@@ -260,11 +237,14 @@ test('reviews otherwise valid extraction when review metadata is missing', async
     text: 'Submit report',
     today: '2026-07-10',
     intentions,
-    requestJson: async () => {
+    requestObject: async () => {
       calls += 1;
       return calls === 1
         ? {
-            content: JSON.stringify({ tasks: [{ title: 'Submit report' }] }),
+            object: captureObject({
+              tasks: [{ title: 'Submit report' }],
+              reviewRequired: true,
+            }),
             costUsd: 0.01,
           }
         : response(
@@ -285,7 +265,7 @@ test('keeps valid first extraction when review output is structurally unusable',
     text: 'Submit report next Tuesday',
     today: '2026-07-10',
     intentions,
-    requestJson: async () => {
+    requestObject: async () => {
       calls += 1;
       return calls === 1
         ? response(
@@ -316,7 +296,7 @@ test('preserves timer action when reviewing an uncertain voice Task', async () =
     text: 'Start timer and submit report next Tuesday',
     today: '2026-07-10',
     intentions,
-    requestJson: async () => {
+    requestObject: async () => {
       calls += 1;
       return calls === 1
         ? response(
@@ -351,7 +331,7 @@ test('recovers an explicit voice timer action when the model returns none', asyn
     text: 'Start a break timer and add a note to check the garden light',
     today: '2026-07-10',
     intentions,
-    requestJson: async () =>
+    requestObject: async () =>
       response(
         JSON.stringify({
           tasks: [{ title: 'Check the garden light' }],
@@ -371,7 +351,7 @@ test('defaults recurring AI Tasks without an explicit due date to tomorrow', asy
     text: 'Review metrics every two weeks',
     today: '2026-07-10',
     intentions,
-    requestJson: async () =>
+    requestObject: async () =>
       response(
         JSON.stringify({
           tasks: [
@@ -397,7 +377,7 @@ test('reviews uncertain extraction once and uses corrected Tasks', async () => {
     text: 'Prepare invoice every other week due next Friday urgent',
     today: '2026-07-10',
     intentions,
-    requestJson: async () => {
+    requestObject: async () => {
       calls += 1;
       return calls === 1
         ? response(
@@ -450,7 +430,7 @@ test('reviews malformed structured Task metadata even when confidence is high', 
     text: 'Review metrics daily',
     today: '2026-07-10',
     intentions,
-    requestJson: async () => {
+    requestObject: async () => {
       calls += 1;
       return calls === 1
         ? response(
@@ -493,14 +473,14 @@ test('typed and voice modes apply the same task normalization policy', async () 
     text: 'Buy milk for Groceries intention tomorrow at 9 urgent',
     today: '2026-07-10',
     intentions,
-    requestJson: async () => response(JSON.stringify({ tasks: [task] })),
+    requestObject: async () => response(JSON.stringify({ tasks: [task] })),
   });
   const voice = await interpreter.interpret({
     mode: 'voiceCommand',
     text: 'Buy milk for Groceries intention tomorrow at 9 urgent',
     today: '2026-07-10',
     intentions,
-    requestJson: async () =>
+    requestObject: async () =>
       response(
         JSON.stringify({
           tasks: [task],
@@ -521,7 +501,7 @@ test('uses the linked Intention type even when the request mentions a break', as
     text: 'Buy tea for Groceries intention as a break task',
     today: '2026-07-10',
     intentions,
-    requestJson: async () =>
+    requestObject: async () =>
       response(
         JSON.stringify({
           tasks: [
@@ -555,7 +535,7 @@ test('links a Break Task to a Break Intention', async () => {
         parentSlug: null,
       },
     ],
-    requestJson: async () =>
+    requestObject: async () =>
       response(
         JSON.stringify({
           tasks: [
@@ -581,7 +561,7 @@ test('drops malformed optional recurrence rules from model drafts', async () => 
     text: 'Buy milk',
     today: '2026-07-10',
     intentions,
-    requestJson: async () =>
+    requestObject: async () =>
       response(
         JSON.stringify({
           tasks: [{ title: 'Buy milk', recurrenceRule: 'daily' }],
@@ -601,7 +581,7 @@ test('moves title overflow beyond fifteen words into description', async () => {
     text: longTitle,
     today: '2026-07-10',
     intentions,
-    requestJson: async () =>
+    requestObject: async () =>
       response(JSON.stringify({ tasks: [{ title: longTitle }] })),
   });
 
@@ -618,7 +598,7 @@ test('uses a natural boundary near ten words before the flexible maximum', async
     text: title,
     today: '2026-07-10',
     intentions,
-    requestJson: async () => response(JSON.stringify({ tasks: [{ title }] })),
+    requestObject: async () => response(JSON.stringify({ tasks: [{ title }] })),
   });
 
   assert.equal(
@@ -635,7 +615,7 @@ test('resolves confident ASR intention matches and rejects ambiguous parent-only
     text: 'Buy milk for intention Grocerries',
     today: '2026-07-10',
     intentions,
-    requestJson: async () =>
+    requestObject: async () =>
       response(JSON.stringify({ tasks: [{ title: 'Buy milk' }] })),
   });
   const parentOnly = await interpreter.interpret({
@@ -643,7 +623,7 @@ test('resolves confident ASR intention matches and rejects ambiguous parent-only
     text: 'Review backlog for Projects intention',
     today: '2026-07-10',
     intentions,
-    requestJson: async () =>
+    requestObject: async () =>
       response(JSON.stringify({ tasks: [{ title: 'Review backlog' }] })),
   });
 
@@ -660,7 +640,7 @@ test('does not retain an inherited intention after an explicit unmatched request
     today: '2026-07-10',
     intentions,
     defaults: { intentionSlug: 'groceries' },
-    requestJson: async () =>
+    requestObject: async () =>
       response(JSON.stringify({ tasks: [{ title: 'Buy milk' }] })),
   });
 
@@ -678,7 +658,7 @@ test('source intention wording outranks a conflicting valid model slug', async (
     text: 'Fix task capture for Pomi intention',
     today: '2026-07-10',
     intentions,
-    requestJson: async () =>
+    requestObject: async () =>
       response(
         JSON.stringify({
           tasks: [
@@ -703,7 +683,7 @@ test('resolves separate explicit intentions for separate model drafts', async ()
     text: 'Buy milk for Groceries intention and fix capture for Pomi intention',
     today: '2026-07-10',
     intentions,
-    requestJson: async () =>
+    requestObject: async () =>
       response(
         JSON.stringify({
           tasks: [
@@ -737,7 +717,7 @@ test('explicit intention marker outranks incidental exact intention words', asyn
     text: 'Review Pomi behavior for Groceries intention',
     today: '2026-07-10',
     intentions,
-    requestJson: async () =>
+    requestObject: async () =>
       response(JSON.stringify({ tasks: [{ title: 'Review Pomi behavior' }] })),
   });
 
@@ -752,7 +732,7 @@ test('keeps the clean action title returned by AI', async () => {
     text: 'Buy milk for Groceries on July 11',
     today: '2026-07-10',
     intentions,
-    requestJson: async () =>
+    requestObject: async () =>
       response(
         JSON.stringify({
           tasks: [
@@ -776,7 +756,7 @@ test('links a confidently named sub-intention with its parent', async () => {
     text: 'Fix task capture for Pomi intention',
     today: '2026-07-10',
     intentions,
-    requestJson: async () =>
+    requestObject: async () =>
       response(JSON.stringify({ tasks: [{ title: 'Fix task capture' }] })),
   });
 
@@ -784,38 +764,52 @@ test('links a confidently named sub-intention with its parent', async () => {
   assert.equal(result.tasks[0].subIntentionSlug, 'pomi');
 });
 
-test('repairs invalid JSON once and counts both model calls', async () => {
+test('rejects schema-invalid extraction immediately without repair or typed fallback', async () => {
   const interpreter = new AssistantInputInterpreter();
   let calls = 0;
-  const result = await interpreter.interpret({
-    mode: 'taskCapture',
-    text: 'Buy milk',
-    today: '2026-07-10',
-    intentions,
-    requestJson: async () => {
-      calls += 1;
-      return calls === 1
-        ? response('not json', 0.01)
-        : response(JSON.stringify({ tasks: [{ title: 'Buy milk' }] }), 0.02);
-    },
-  });
-
-  assert.equal(calls, 2);
-  assert.equal(result.costUsd, 0.03);
-  assert.equal(result.usedFallback, false);
-  assert.equal(result.invalidParserOutput, 'not json');
-  assert.equal(typeof result.timings.modelRepairMs, 'number');
+  for (const mode of ['taskCapture', 'voiceCommand'] as const) {
+    await expect(
+      interpreter.interpret({
+        mode,
+        text: 'Buy milk',
+        today: '2026-07-10',
+        intentions,
+        requestObject: async () => {
+          calls += 1;
+          throw new AssistantModelOutputError(
+            'Assistant response was not JSON',
+            {
+              provider: 'openrouter',
+              endpoint: 'test',
+              stage: 'initial',
+              request: {},
+              attempts: [],
+              response: null,
+              content: 'invalid',
+              costUsd: 0.01,
+              durationMs: 1,
+            }
+          );
+        },
+      })
+    ).rejects.toMatchObject({
+      diagnostics: { costUsd: 0.01, invalidParserOutput: 'invalid' },
+    });
+  }
+  expect(calls).toBe(2);
 });
 
 test('creates a safe typed fallback but never guesses a voice task', async () => {
   const interpreter = new AssistantInputInterpreter();
-  const requestJson = async () => response('still not json');
+  const requestObject = async () => {
+    throw new Error('provider unavailable');
+  };
   const typed = await interpreter.interpret({
     mode: 'taskCapture',
     text: 'Create a task to buy milk for Groceries intention',
     today: '2026-07-10',
     intentions,
-    requestJson,
+    requestObject,
   });
 
   assert.equal(typed.usedFallback, true);
@@ -829,9 +823,9 @@ test('creates a safe typed fallback but never guesses a voice task', async () =>
       text: 'Start my timer',
       today: '2026-07-10',
       intentions,
-      requestJson,
+      requestObject,
     }),
-    /Assistant response was not JSON/
+    /provider unavailable/
   );
 });
 
@@ -842,7 +836,9 @@ test('prefers the longest complete explicit intention name in fallback', async (
     text: 'Create a task to review roadmap for Client Projects intention',
     today: '2026-07-10',
     intentions,
-    requestJson: async () => response('still not json'),
+    requestObject: async () => {
+      throw new Error('provider unavailable');
+    },
   });
 
   assert.equal(result.usedFallback, true);
@@ -861,7 +857,9 @@ test('applies defaults before cleaning a fallback title', async () => {
       dueDate: '2026-07-11',
       intentionSlug: 'groceries',
     },
-    requestJson: async () => response('invalid'),
+    requestObject: async () => {
+      throw new Error('provider unavailable');
+    },
   });
 
   assert.equal(result.tasks[0].title, 'Buy milk');
@@ -876,7 +874,7 @@ test('rebinds mutable context after provider extraction without another model ca
     today: '2026-07-10',
     intentions,
     defaults: { timerType: 'work' as const, intentionSlug: 'projects' },
-    requestJson: async () => {
+    requestObject: async () => {
       calls += 1;
       return response(
         JSON.stringify({
@@ -890,7 +888,7 @@ test('rebinds mutable context after provider extraction without another model ca
             action: 'startTimer',
             timerType: null,
             intentionSlugs: ['projects'],
-            subIntentions: {},
+            subIntentions: [],
           },
           ...confidentExtraction,
         })

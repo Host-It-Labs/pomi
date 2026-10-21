@@ -2,12 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { normalizeAppLanguage, TIMER_TYPES, TimerTypes } from '@pomi/shared';
 import { Intention } from '../intentions/intentions.entity';
 import { TaskEntity } from '../tasks/tasks.entity';
-import { toRecord } from './assistant-input-utils';
+import type { AssistantModelTask } from './assistant-output-schemas';
 import { ParsedTaskDraft } from './assistant-input-interpreter';
 import { translateAssistant } from '../i18n/assistant-localization';
 
 type VoiceTaskReadbackSource = {
-  rawTask: Record<string, unknown>;
+  rawTask: AssistantModelTask | undefined;
   text: string;
 };
 
@@ -16,7 +16,7 @@ export class AssistantVoiceReadbackService {
   formatVoiceTasksCreatedMessage(
     tasks: TaskEntity[],
     drafts: ParsedTaskDraft[],
-    rawTasks: unknown[],
+    rawTasks: AssistantModelTask[],
     sourceText: string,
     intentions: Intention[],
     language: string | null | undefined,
@@ -153,19 +153,15 @@ export class AssistantVoiceReadbackService {
 
   private findVoiceTaskMetadataSource(
     draft: ParsedTaskDraft,
-    rawTasks: unknown[],
+    rawTasks: AssistantModelTask[],
     sourceText: string,
     taskIndex: number,
     taskCount: number
   ): VoiceTaskReadbackSource {
     const normalizedTitle = this.normalizeReadbackText(draft.title);
-    const candidates = rawTasks.map(rawTask => toRecord(rawTask));
+    const candidates = rawTasks;
     const matchedTask = candidates.find(rawTask => {
-      const sourceSegments = Array.isArray(rawTask.sourceSegments)
-        ? rawTask.sourceSegments.filter(
-            (segment): segment is string => typeof segment === 'string'
-          )
-        : [];
+      const sourceSegments = rawTask.sourceSegments;
       return sourceSegments.some(segment => {
         const normalizedSegment = this.normalizeReadbackText(segment);
         return Boolean(
@@ -177,12 +173,8 @@ export class AssistantVoiceReadbackService {
     });
     const rawTask =
       matchedTask ??
-      (candidates.length === taskCount ? (candidates[taskIndex] ?? {}) : {});
-    const sourceSegments = Array.isArray(rawTask?.sourceSegments)
-      ? rawTask.sourceSegments.filter(
-          (segment): segment is string => typeof segment === 'string'
-        )
-      : [];
+      (candidates.length === taskCount ? candidates[taskIndex] : undefined);
+    const sourceSegments = rawTask?.sourceSegments ?? [];
     return {
       rawTask,
       text:
@@ -194,13 +186,13 @@ export class AssistantVoiceReadbackService {
     };
   }
 
-  private hasExplicitVoiceDueDate(rawTask: Record<string, unknown>) {
+  private hasExplicitVoiceDueDate(rawTask: AssistantModelTask | undefined) {
     return /^\d{4}-\d{2}-\d{2}$/.test(this.voiceTaskString(rawTask, 'dueDate'));
   }
 
   private hasExplicitVoiceDueTime(
     sourceText: string,
-    rawTask: Record<string, unknown>
+    rawTask: AssistantModelTask | undefined
   ) {
     if (
       /^([01]\d|2[0-3]):[0-5]\d$/.test(this.voiceTaskString(rawTask, 'dueTime'))
@@ -219,7 +211,7 @@ export class AssistantVoiceReadbackService {
 
   private hasExplicitVoicePriority(
     sourceText: string,
-    rawTask: Record<string, unknown>
+    rawTask: AssistantModelTask | undefined
   ) {
     const rawPriority = this.voiceTaskString(rawTask, 'priority');
     if (
@@ -240,7 +232,7 @@ export class AssistantVoiceReadbackService {
 
   private hasExplicitVoiceTimerType(
     sourceText: string,
-    rawTask: Record<string, unknown>
+    rawTask: AssistantModelTask | undefined
   ) {
     const rawTimerType = this.voiceTaskString(rawTask, 'timerType');
     if (
@@ -266,7 +258,7 @@ export class AssistantVoiceReadbackService {
 
   private hasExplicitVoiceRecurrence(
     sourceText: string,
-    rawTask: Record<string, unknown>
+    rawTask: AssistantModelTask | undefined
   ) {
     if (
       this.hasVoiceTaskValue(rawTask, 'recurrenceRule') ||
@@ -282,7 +274,7 @@ export class AssistantVoiceReadbackService {
 
   private hasExplicitVoiceRecurrenceAnchor(
     sourceText: string,
-    rawTask: Record<string, unknown>
+    rawTask: AssistantModelTask | undefined
   ) {
     if (this.hasVoiceTaskValue(rawTask, 'recurrenceAnchorMode')) return true;
     return /\b(?:from completion|after completion|when completed|when complete|from the due date|from planned date)\b|(?:完成后|पूरा होने के बाद|بعد الإكمال|সম্পন্ন হওয়ার পর|após a conclusão|setelah selesai|تکمیل کے بعد)/iu.test(
@@ -362,17 +354,29 @@ export class AssistantVoiceReadbackService {
     return date.toISOString().slice(0, 10) === value ? date : null;
   }
 
-  private voiceTaskString(rawTask: Record<string, unknown>, key: string) {
-    const value = rawTask[key];
-    return typeof value === 'string' ? value.trim() : '';
+  private voiceTaskString(
+    rawTask: AssistantModelTask | undefined,
+    key:
+      | 'intentionSlug'
+      | 'subIntentionSlug'
+      | 'intentionMention'
+      | 'dueDate'
+      | 'dueTime'
+      | 'priority'
+      | 'timerType'
+  ) {
+    return rawTask?.[key]?.trim() ?? '';
   }
 
-  private hasVoiceTaskValue(rawTask: Record<string, unknown>, key: string) {
-    const value = rawTask[key];
-    return (
-      (typeof value === 'string' && value.trim().length > 0) ||
-      (typeof value === 'number' && Number.isFinite(value))
-    );
+  private hasVoiceTaskValue(
+    rawTask: AssistantModelTask | undefined,
+    key: 'recurrenceRule' | 'recurrenceInterval' | 'recurrenceAnchorMode'
+  ) {
+    if (key === 'recurrenceInterval') {
+      const interval = rawTask?.recurrenceInterval;
+      return interval != null && Number.isFinite(interval);
+    }
+    return Boolean(rawTask?.[key]?.trim());
   }
 
   private normalizeReadbackText(value: string) {

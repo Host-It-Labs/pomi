@@ -35,10 +35,7 @@ import {
   ParsedTaskDraft,
   ParsedTimerCommand,
 } from './assistant-input-interpreter';
-import {
-  AssistantModelRequestError,
-  type AssistantModelRequestOptions,
-} from './assistant-input-types';
+import { AssistantModelRequestError } from './assistant-input-types';
 import { AssistantListRoutingService } from './assistant-list-routing.service';
 import { elapsedMs } from './assistant-timing';
 import { AssistantService } from './assistant.service';
@@ -192,11 +189,8 @@ export class AssistantCaptureService {
         defaults,
         taskTranscriptEnabled: preferences.assistantTaskTranscriptsEnabled,
         taskTranscriptMinWords: preferences.assistantTaskTranscriptMinWords,
-        requestJson: async (
-          messages,
-          options: AssistantModelRequestOptions
-        ) => {
-          const response = await this.assistantService.requestJson(
+        requestObject: async (messages, options) => {
+          const response = await this.assistantService.requestObject(
             userId,
             runtime.settings.textModel,
             messages,
@@ -756,11 +750,8 @@ export class AssistantCaptureService {
             today: runtime.today,
             accountLanguage: runtime.preferences.language,
             intentions: this.formatCaptureIntentions(intentions),
-            requestJson: async (
-              messages,
-              options: AssistantModelRequestOptions
-            ) => {
-              const response = await this.assistantService.requestJson(
+            requestObject: async (messages, options) => {
+              const response = await this.assistantService.requestObject(
                 userId,
                 runtime.settings.textModel,
                 messages,
@@ -1060,8 +1051,9 @@ export class AssistantCaptureService {
           action: 'none',
           timerType: null,
           intentionSlugs: [],
-          subIntentions: {},
+          subIntentions: [],
         },
+        responseLanguage: language ?? 'en',
       },
       rawTasks: [],
       costUsd: 0,

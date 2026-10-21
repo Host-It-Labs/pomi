@@ -1,8 +1,56 @@
+import { captureObject, modelTask } from '../helpers/assistant-output';
 import { describe, expect, it } from 'vitest';
 import { AssistantTaskPolicy } from '../../src/assistant/assistant-task-policy';
 import { AssistantInputInterpreter } from '../../src/assistant/assistant-input-interpreter';
+import { AssistantTimerCommandPolicy } from '../../src/assistant/assistant-timer-command-policy';
+import { assistantTimerActionSchema } from '../../src/assistant/assistant-output-schemas';
 
 describe('AssistantTaskPolicy timer-only voice guard', () => {
+  it('maps validated child links to public timer commands and filters incompatible intentions', () => {
+    const action = assistantTimerActionSchema.parse({
+      action: 'startTimer',
+      timerType: 'work',
+      intentionSlugs: ['unknown', 'rest'],
+      subIntentions: [
+        { intentionSlug: 'projects', subIntentionSlug: 'pomi' },
+        { intentionSlug: 'projects', subIntentionSlug: 'unknown' },
+        { intentionSlug: 'rest', subIntentionSlug: 'pomi' },
+      ],
+    });
+    const result = new AssistantTimerCommandPolicy().normalize(
+      action,
+      [
+        {
+          slug: 'projects',
+          title: 'Projects',
+          type: 'work',
+          parentSlug: null,
+          description: null,
+        },
+        {
+          slug: 'pomi',
+          title: 'Pomi',
+          type: 'work',
+          parentSlug: 'projects',
+          description: null,
+        },
+        {
+          slug: 'rest',
+          title: 'Rest',
+          type: 'break',
+          parentSlug: null,
+          description: null,
+        },
+      ],
+      'Start a work timer'
+    );
+    expect(result).toEqual({
+      action: 'startTimer',
+      timerType: 'work',
+      intentionSlugs: ['projects'],
+      subIntentions: { projects: 'pomi' },
+    });
+  });
   it.each([
     'Démarrer un minuteur',
     'Iniciar un temporizador',
@@ -18,7 +66,7 @@ describe('AssistantTaskPolicy timer-only voice guard', () => {
     const policy = new AssistantTaskPolicy();
 
     const tasks = policy.normalizeTasks(
-      [{ title: phrase, sourceSegments: [phrase] }],
+      [modelTask({ title: phrase, sourceSegments: [phrase] })],
       phrase,
       '2026-08-08',
       [],
@@ -44,7 +92,7 @@ describe('AssistantTaskPolicy timer-only voice guard', () => {
           title: 'Préparer le rapport',
           sourceSegments: ['Préparer le rapport'],
         },
-      ],
+      ].map(modelTask),
       'Démarrer un minuteur, puis préparer le rapport',
       '2026-08-08',
       [],
@@ -65,8 +113,8 @@ describe('AssistantTaskPolicy timer-only voice guard', () => {
       text: 'Add milk and add eggs',
       today: '2026-08-08',
       intentions: [],
-      requestJson: async () => ({
-        content: JSON.stringify({
+      requestObject: async () => ({
+        object: captureObject({
           tasks: [
             {
               title: 'Add milk and add eggs',
@@ -104,8 +152,8 @@ describe('AssistantTaskPolicy timer-only voice guard', () => {
       text,
       today: '2026-08-08',
       intentions: [],
-      requestJson: async () => ({
-        content: JSON.stringify({
+      requestObject: async () => ({
+        object: captureObject({
           tasks: [
             {
               title: text,
