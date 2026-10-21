@@ -35,7 +35,18 @@ import {
   ParsedTaskDraft,
   ParsedTimerCommand,
 } from './assistant-input-interpreter';
-import { AssistantModelRequestError } from './assistant-input-types';
+import {
+  type AssistantCaptureIntention,
+  type AssistantLocalParse,
+  AssistantModelRequestError,
+} from './assistant-input-types';
+import {
+  assistantParsingGateAnswersSchema,
+  buildParsingGateRequest,
+  PARSING_GATE_MODEL,
+  readParsingGateDecision,
+  shouldAskParsingGate,
+} from './assistant-parsing-gate';
 import { AssistantListRoutingService } from './assistant-list-routing.service';
 import { elapsedMs } from './assistant-timing';
 import { AssistantService } from './assistant.service';
@@ -180,12 +191,25 @@ export class AssistantCaptureService {
           ])
       );
       const { preferences } = runtime;
-      const interpreted = await this.inputInterpreter.interpret({
-        mode: 'taskCapture',
+      const captureIntentions = this.formatCaptureIntentions(intentions);
+      const gate = await this.decideLocalParse(
+        userId,
+        normalizedText,
+        captureIntentions,
+        this.assistantListRoutingService.mentionsList(
+          normalizedText,
+          preferences.listsExtension ? lists : []
+        ),
+        runtime.today,
+        modelCalls,
+        usagePersistence
+      );
+      const interpretationInput = {
+        mode: 'taskCapture' as const,
         text: normalizedText,
         today: runtime.today,
         accountLanguage: preferences.language,
-        intentions: this.formatCaptureIntentions(intentions),
+        intentions: captureIntentions,
         defaults,
         taskTranscriptEnabled: preferences.assistantTaskTranscriptsEnabled,
         taskTranscriptMinWords: preferences.assistantTaskTranscriptMinWords,
@@ -202,9 +226,15 @@ export class AssistantCaptureService {
           }
           return response;
         },
-      });
+      };
+      const interpreted = gate.localParse
+        ? this.inputInterpreter.interpretLocally(
+            interpretationInput,
+            gate.localParse
+          )
+        : await this.inputInterpreter.interpret(interpretationInput);
       Object.assign(timings, interpreted.timings);
-      modelCalls = interpreted.modelCalls;
+      modelCalls = [...modelCalls, ...interpreted.modelCalls];
       const routedTaskDrafts = listId
         ? this.assistantListRoutingService.routeSelectedListItems(
             interpreted.tasks,
@@ -241,7 +271,7 @@ export class AssistantCaptureService {
         modelCalls,
         timings,
         preparationMs: elapsedMs(totalStartedAt),
-        costUsd: interpreted.costUsd,
+        costUsd: gate.costUsd + interpreted.costUsd,
       };
     } catch (error) {
       await Promise.allSettled(usagePersistence);
@@ -1270,6 +1300,44 @@ export class AssistantCaptureService {
 
   private async getActiveIntentions(userId: string) {
     return this.intentionsService.getActiveIntentionsForAssistant(userId);
+  }
+
+  private async decideLocalParse(
+    userId: string,
+    text: string,
+    intentions: AssistantCaptureIntention[],
+    mentionsList: boolean,
+    today: string,
+    modelCalls: AssistantDebugModelCall[],
+    usagePersistence: Promise<void>[]
+  ): Promise<{ localParse: AssistantLocalParse | null; costUsd: number }> {
+    if (!shouldAskParsingGate(text, intentions, mentionsList)) {
+      return { localParse: null, costUsd: 0 };
+    }
+    try {
+      const decision = await this.assistantService.requestDecision(
+        userId,
+        PARSING_GATE_MODEL,
+        buildParsingGateRequest(text, intentions),
+        assistantParsingGateAnswersSchema,
+        today
+      );
+      modelCalls.push(decision.modelCall);
+      if (decision.usagePersistence) {
+        usagePersistence.push(decision.usagePersistence);
+      }
+      return {
+        localParse: readParsingGateDecision(decision.answers, intentions),
+        costUsd: decision.costUsd,
+      };
+    } catch (error) {
+      // The gate only saves cost and time; any failure leaves parsing to the text model.
+      if (error instanceof AssistantModelRequestError) {
+        modelCalls.push(error.modelCall);
+        return { localParse: null, costUsd: error.modelCall.costUsd };
+      }
+      return { localParse: null, costUsd: 0 };
+    }
   }
 
   private formatCaptureIntentions(intentions: Intention[]) {

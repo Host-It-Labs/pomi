@@ -37,6 +37,12 @@ export type AssistantTaskTranscriptSettings = {
 
 export type ParsedTimerCommand = AssistantTimerCommand;
 
+/** Intention link for input the decision model judged plain enough to parse locally. */
+export type AssistantLocalParse = {
+  intentionSlug: string | null;
+  subIntentionSlug: string | null;
+};
+
 export type AssistantCaptureIntention = {
   slug: string;
   title: string;

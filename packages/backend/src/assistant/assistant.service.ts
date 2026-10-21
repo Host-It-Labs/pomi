@@ -46,6 +46,11 @@ type OpenRouterMessage = {
     | null;
 };
 
+type OpenRouterDecisionResponse = {
+  answers?: unknown;
+  usage?: OpenRouterUsage;
+};
+
 type OpenRouterChatResponse = {
   choices?: Array<{
     message?: OpenRouterMessage;
@@ -70,8 +75,12 @@ type OpenRouterModel = {
 };
 
 const DEFAULT_OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1/';
+// Decision models are served beside the versioned chat API, not under it.
+const OPENROUTER_DECISIONS_PATH = '../alpha/decisions';
 const ASSISTANT_SETTINGS_ID = 'default';
 const OPENROUTER_TIMEOUT_MS = 30_000;
+// The parsing gate only saves time and cost, so a slow answer goes to the text model instead.
+const OPENROUTER_DECISION_TIMEOUT_MS = 3_000;
 
 export type AssistantRuntimeSettings = Pick<
   AssistantSettingsEntity,
@@ -603,6 +612,110 @@ export class AssistantService {
     };
   }
 
+  async requestDecision<S extends z.ZodType>(
+    userId: string,
+    model: string,
+    request: {
+      state: Record<string, unknown>;
+      questions: Record<string, unknown>;
+    },
+    schema: S,
+    preparedLocalDate: string
+  ): Promise<{
+    answers: z.infer<S>;
+    costUsd: number;
+    modelCall: AssistantDebugModelCall;
+    usagePersistence?: Promise<void>;
+  }> {
+    const requestBody = { model, ...request };
+    const startedAt = performance.now();
+    const attempts: AssistantDebugModelCall['attempts'] = [];
+    let response: Response;
+    let responseBody: unknown;
+    try {
+      ({ response, body: responseBody } = await this.fetchBodyWithTimeout(
+        this.openRouterEndpoint(OPENROUTER_DECISIONS_PATH),
+        {
+          method: 'POST',
+          headers: this.openRouterHeaders(),
+          body: JSON.stringify(requestBody),
+        },
+        OPENROUTER_DECISION_TIMEOUT_MS
+      ));
+    } catch (error) {
+      attempts.push({
+        request: requestBody,
+        status: null,
+        response: null,
+        error: this.formatErrorForLog(error),
+      });
+      throw new AssistantModelRequestError(
+        this.getOpenRouterFailureMessage(null, 'decision request'),
+        this.buildModelCall(
+          'gate',
+          requestBody,
+          attempts,
+          null,
+          null,
+          0,
+          startedAt
+        )
+      );
+    }
+    attempts.push({
+      request: requestBody,
+      status: response.status,
+      response: responseBody,
+      error: null,
+    });
+    const modelCall = this.buildModelCall(
+      'gate',
+      requestBody,
+      attempts,
+      responseBody,
+      null,
+      0,
+      startedAt
+    );
+    if (!response.ok) {
+      throw new AssistantModelRequestError(
+        this.getOpenRouterFailureMessage(response.status, 'decision request'),
+        modelCall
+      );
+    }
+
+    const body =
+      responseBody && typeof responseBody === 'object'
+        ? (responseBody as OpenRouterDecisionResponse)
+        : {};
+    const costUsd = this.readUsageCost(body.usage, 'decision');
+    const usagePersistence =
+      costUsd === null
+        ? undefined
+        : this.recordCostForLocalDate(
+            userId,
+            'chat',
+            costUsd,
+            preparedLocalDate
+          );
+    void usagePersistence?.catch(() => undefined);
+    modelCall.costUsd = costUsd ?? 0;
+    const answers = schema.safeParse(body.answers);
+    if (!answers.success) {
+      await usagePersistence?.catch(() => undefined);
+      throw new AssistantModelOutputError(
+        'Decision model returned invalid answers',
+        modelCall
+      );
+    }
+    return {
+      answers: answers.data,
+      costUsd: costUsd ?? 0,
+      modelCall,
+      usagePersistence,
+    };
+  }
+
   private buildModelCall(
     stage: AssistantDebugModelCall['stage'],
     request: Record<string, unknown>,
@@ -614,10 +727,13 @@ export class AssistantService {
   ): AssistantDebugModelCall {
     return {
       provider: 'openrouter',
-      endpoint:
+      endpoint: this.openRouterEndpoint(
         stage === 'transcription'
-          ? this.openRouterEndpoint('audio/transcriptions')
-          : this.openRouterEndpoint('chat/completions'),
+          ? 'audio/transcriptions'
+          : stage === 'gate'
+            ? OPENROUTER_DECISIONS_PATH
+            : 'chat/completions'
+      ),
       stage,
       request,
       attempts: [...attempts],
@@ -1018,6 +1134,25 @@ export class AssistantService {
       path,
       baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
     ).toString();
+  }
+
+  // Unlike fetchWithTimeout, the deadline also covers a body that stalls after its headers.
+  private async fetchBodyWithTimeout(
+    input: string,
+    init: RequestInit,
+    timeoutMs: number
+  ): Promise<{ response: Response; body: unknown }> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(input, {
+        ...init,
+        signal: controller.signal,
+      });
+      return { response, body: await this.readResponseBody(response) };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private async fetchWithTimeout(

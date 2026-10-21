@@ -7,6 +7,7 @@ import {
 import { AssistantIntentionResolver } from './assistant-intention-resolver';
 import {
   AssistantCaptureIntention,
+  AssistantLocalParse,
   AssistantTaskDefaults,
   AssistantTaskTranscriptSettings,
   MAX_TASKS_PER_REQUEST,
@@ -16,7 +17,9 @@ import {
 const MAX_TITLE_WORDS = 15;
 const TARGET_TITLE_WORDS = 10;
 const MIN_NATURAL_TITLE_SPLIT_WORDS = 8;
-const FALLBACK_TITLE_WORDS = 10;
+export const FALLBACK_TITLE_WORDS = 10;
+const PLAIN_PRIORITY_PATTERN =
+  /\b(?:(low|normal|high|urgent)\s+priority|priority\s+(?:is\s+|to\s+)?(low|normal|high|urgent))\b/i;
 const MAX_DESCRIPTION_SOURCE_MATCH_CHARS = 20_000;
 const DEFAULT_TRANSCRIPT_MIN_WORDS = 15;
 const DAYPART_DUE_TIMES = [
@@ -635,6 +638,64 @@ export class AssistantTaskPolicy {
     linked.timerType = this.resolveTimerType(linked, sourceText, intentions);
     return {
       ...this.cleanTaskTitle(linked, intentions, null, sourceText),
+      sourceTranscript,
+    };
+  }
+
+  createPlainTask(
+    sourceText: string,
+    today: string,
+    defaults: AssistantTaskDefaults | undefined,
+    intentions: AssistantCaptureIntention[],
+    localParse: AssistantLocalParse,
+    transcriptSettings: AssistantTaskTranscriptSettings
+  ): ParsedTaskDraft {
+    const sourceTranscript = this.buildSourceTranscript(
+      [sourceText],
+      this.normalizeTranscriptSettings(transcriptSettings),
+      this.buildTranscriptSemanticText(
+        [sourceText],
+        defaults ?? {},
+        intentions,
+        null
+      )
+    );
+    // Plain input becomes the title verbatim; only an explicit priority phrase is
+    // metadata, because no description keeps words the title would drop.
+    const priorityMatch = sourceText.match(PLAIN_PRIORITY_PATTERN);
+    const title = this.cleanTitlePunctuation(
+      priorityMatch
+        ? `${sourceText.slice(0, priorityMatch.index)} ${sourceText.slice(
+            (priorityMatch.index ?? 0) + priorityMatch[0].length
+          )}`
+        : sourceText
+    );
+    const draft = this.applyRecurrenceDueDateInvariant(
+      this.applyDefaults(
+        {
+          title: title
+            ? `${title.charAt(0).toUpperCase()}${title.slice(1)}`
+            : sourceText,
+          priority: priorityMatch
+            ? this.sanitizePriority(priorityMatch[1] ?? priorityMatch[2])
+            : undefined,
+        },
+        defaults
+      ),
+      today
+    );
+    const linked: ParsedTaskDraft = {
+      ...draft,
+      ...(defaults?.intentionSlug
+        ? {
+            intentionSlug: defaults.intentionSlug,
+            subIntentionSlug: defaults.subIntentionSlug ?? null,
+          }
+        : localParse),
+    };
+    return {
+      ...linked,
+      timerType: this.resolveTimerType(linked, sourceText, intentions),
       sourceTranscript,
     };
   }
