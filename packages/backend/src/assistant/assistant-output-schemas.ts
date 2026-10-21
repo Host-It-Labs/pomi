@@ -76,6 +76,17 @@ export const assistantDescriptionsSchema = z.strictObject({
     .max(MAX_DESCRIPTION_DESTINATIONS),
 });
 
+// Gemini rejects array length bounds as too many grammar states, so providers
+// get unbounded arrays and the reply's Zod parse enforces the limits instead.
+export function toProviderJsonSchema(schema: z.ZodType) {
+  return z.toJSONSchema(schema, {
+    target: 'draft-7',
+    override: ({ jsonSchema }) => {
+      delete jsonSchema.maxItems;
+    },
+  });
+}
+
 export type AssistantModelTask = z.infer<typeof assistantTaskSchema>;
 export type AssistantCaptureOutput = z.infer<typeof assistantCaptureSchema>;
 export type AssistantVoiceOutput = z.infer<typeof assistantVoiceSchema>;

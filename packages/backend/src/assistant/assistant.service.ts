@@ -28,6 +28,7 @@ import {
   AssistantModelOutputError,
   type AssistantModelRequestOptions,
 } from './assistant-input-types';
+import { toProviderJsonSchema } from './assistant-output-schemas';
 import { translateAssistant } from '../i18n/assistant-localization';
 import { AssistantPreparationStore } from './assistant-task-preparation.store';
 
@@ -492,7 +493,7 @@ export class AssistantService {
         json_schema: {
           name: options.schemaName,
           strict: true,
-          schema: z.toJSONSchema(options.schema, { target: 'draft-7' }),
+          schema: toProviderJsonSchema(options.schema),
         },
       },
     };

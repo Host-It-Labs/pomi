@@ -1,9 +1,11 @@
-import { z } from 'zod';
 import {
   assistantCaptureSchema,
   assistantVoiceSchema,
   assistantReviewSchema,
   assistantDescriptionsSchema,
+  assistantTimerActionSchema,
+  MAX_TASKS_PER_REQUEST,
+  toProviderJsonSchema,
 } from '../../src/assistant/assistant-output-schemas';
 import { captureObject, modelTask } from '../helpers/assistant-output';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -78,9 +80,33 @@ describe('AssistantService transport', () => {
       json_schema: {
         name: 'taskCapture',
         strict: true,
-        schema: z.toJSONSchema(assistantCaptureSchema, { target: 'draft-7' }),
+        schema: toProviderJsonSchema(assistantCaptureSchema),
       },
     });
+  });
+
+  it.each([
+    ['capture', assistantCaptureSchema],
+    ['voice', assistantVoiceSchema],
+    ['descriptions', assistantDescriptionsSchema],
+    ['timer', assistantTimerActionSchema],
+  ])(
+    'omits array length bounds Gemini rejects from the %s provider schema',
+    (_name, schema) => {
+      expect(JSON.stringify(toProviderJsonSchema(schema))).not.toContain(
+        'maxItems'
+      );
+    }
+  );
+
+  it('still rejects replies above the Task limit after loosening the provider schema', () => {
+    const tasks = Array.from({ length: MAX_TASKS_PER_REQUEST + 1 }, () =>
+      modelTask({ title: 'Buy milk' })
+    );
+
+    expect(
+      assistantCaptureSchema.safeParse({ ...capturePayload, tasks }).success
+    ).toBe(false);
   });
 
   it.each([
