@@ -27,13 +27,13 @@ describe('DescriptionsService destination filtering', () => {
         parentIntention: null,
       },
     ];
-    const requestJson = vi.fn().mockResolvedValue({
-      content: JSON.stringify({
+    const requestObject = vi.fn().mockResolvedValue({
+      object: {
         descriptions: [
           { kind: 'intention', id: 'enabled', description: 'Enabled work.' },
           { kind: 'list', id: 'list-1', description: 'Launch items.' },
         ],
-      }),
+      },
       costUsd: 0.001,
     });
     const service = new DescriptionsService(
@@ -52,12 +52,14 @@ describe('DescriptionsService destination filtering', () => {
           settings: { textModel: 'model' },
           today: '2026-07-31',
         }),
-        requestJson,
+        requestObject,
       } as never
     );
 
     const result = await service.generate('user-1');
-    const messages = requestJson.mock.calls[0][2] as Array<{ content: string }>;
+    const messages = requestObject.mock.calls[0][2] as Array<{
+      content: string;
+    }>;
     expect(messages[1].content).toContain('enabled');
     expect(messages[1].content).toContain('list-1');
     expect(messages[1].content).not.toContain('disabled-child');
@@ -65,8 +67,8 @@ describe('DescriptionsService destination filtering', () => {
   });
 
   it('uses Task and contextual follow-up titles as Intention examples', async () => {
-    const requestJson = vi.fn().mockResolvedValue({
-      content: JSON.stringify({ descriptions: [] }),
+    const requestObject = vi.fn().mockResolvedValue({
+      object: { descriptions: [] },
       costUsd: 0.001,
     });
     const service = new DescriptionsService(
@@ -107,13 +109,15 @@ describe('DescriptionsService destination filtering', () => {
           settings: { textModel: 'model' },
           today: '2026-08-23',
         }),
-        requestJson,
+        requestObject,
       } as never
     );
 
     await service.generate('user-1');
 
-    const messages = requestJson.mock.calls[0][2] as Array<{ content: string }>;
+    const messages = requestObject.mock.calls[0][2] as Array<{
+      content: string;
+    }>;
     const destinations = JSON.parse(messages[1].content) as Array<{
       id: string;
       titles: string[];

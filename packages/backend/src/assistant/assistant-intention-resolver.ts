@@ -1,3 +1,4 @@
+import type { AssistantModelTask } from './assistant-output-schemas';
 import { normalizeOptionalString } from './assistant-input-utils';
 import { AssistantCaptureIntention } from './assistant-input-types';
 
@@ -13,7 +14,10 @@ const FUZZY_MATCH_MARGIN = 0.08;
 
 export class AssistantIntentionResolver {
   resolve(
-    value: Record<string, unknown>,
+    value: Pick<
+      AssistantModelTask,
+      'intentionSlug' | 'subIntentionSlug' | 'intentionMention'
+    >,
     sourceText: string,
     intentions: AssistantCaptureIntention[],
     resolutionNotes: string[]
@@ -346,7 +350,10 @@ export class AssistantIntentionResolver {
     return Array.from(phrases);
   }
 
-  private findBySlug(value: unknown, intentions: AssistantCaptureIntention[]) {
+  private findBySlug(
+    value: string | null | undefined,
+    intentions: AssistantCaptureIntention[]
+  ) {
     const slug = normalizeOptionalString(value);
     return slug
       ? (intentions.find(intention => intention.slug === slug) ?? null)

@@ -32,12 +32,12 @@ export function CompletionButton({
       disabled={disabled === true}
       onClick={onClick}
       className={clsx(
-        'relative inline-flex shrink-0 items-center justify-center rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400/45 disabled:cursor-not-allowed disabled:opacity-55',
-        isCompact ? 'h-6 w-6' : 'h-8 w-8',
+        'relative inline-flex shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors after:absolute after:-inset-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/45 disabled:cursor-not-allowed disabled:opacity-55',
+        isCompact ? 'h-5 w-5' : 'h-[22px] w-[22px]',
         isUndo && 'native-completion-pop',
         isUndo
-          ? 'border-emerald-400 bg-emerald-400 text-slate-950 shadow-sm shadow-emerald-500/30'
-          : 'border-slate-600 bg-slate-950/60 text-transparent hover:border-emerald-400 hover:bg-emerald-500/10'
+          ? 'border-emerald-400 bg-emerald-400 text-slate-950'
+          : 'border-slate-500 bg-transparent text-transparent hover:border-emerald-400 hover:bg-emerald-400/10'
       )}
     >
       {iconPresence.shouldRender ? (

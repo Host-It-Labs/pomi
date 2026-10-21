@@ -1,5 +1,26 @@
+import {
+  assistantCaptureSchema,
+  assistantVoiceSchema,
+  assistantReviewSchema,
+  assistantDescriptionsSchema,
+  assistantTimerActionSchema,
+  MAX_TASKS_PER_REQUEST,
+  toProviderJsonSchema,
+} from '../../src/assistant/assistant-output-schemas';
+import { captureObject, modelTask } from '../helpers/assistant-output';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AssistantService } from '../../src/assistant/assistant.service';
+import { AssistantInputInterpreter } from '../../src/assistant/assistant-input-interpreter';
+
+const emptyCapture = captureObject({});
+const capturePayload = {
+  tasks: emptyCapture.tasks,
+  confidence: emptyCapture.confidence,
+  reviewRequired: emptyCapture.reviewRequired,
+  unresolvedMetadata: emptyCapture.unresolvedMetadata,
+  responseLanguage: emptyCapture.responseLanguage,
+};
+const captureContent = JSON.stringify(capturePayload);
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -7,7 +28,7 @@ afterEach(() => {
 });
 
 describe('AssistantService transport', () => {
-  it('uses one JSON object request without tools, reasoning, or schema retries', async () => {
+  it('sends the Zod-derived strict schema without tools, reasoning, or retries', async () => {
     const requests: Record<string, unknown>[] = [];
     vi.stubEnv('OPENROUTER_API_KEY', 'test-key');
     vi.stubGlobal(
@@ -20,7 +41,7 @@ describe('AssistantService transport', () => {
           headers: { get: () => null },
           text: async () =>
             JSON.stringify({
-              choices: [{ message: { content: '{"tasks":[]}' } }],
+              choices: [{ message: { content: captureContent } }],
               usage: { cost: 0 },
             }),
         };
@@ -30,37 +51,382 @@ describe('AssistantService transport', () => {
     service.ensureWithinUsageBudget = async () => undefined;
     service.recordCost = async () => undefined;
 
-    await service.requestJson(
+    const result = await service.requestObject(
       'user-1',
       'google/gemini-2.5-flash-lite',
       [{ role: 'user', content: 'capture this' }],
       {
-        responseSchema: {
-          type: 'object',
-          properties: { tasks: { type: 'array' } },
-          required: ['tasks'],
-          additionalProperties: false,
-        },
-        tools: [
-          {
-            type: 'function',
-            function: {
-              name: 'legacy_tool',
-              description: 'must not be sent with structured output',
-              parameters: { type: 'object' },
-            },
-          },
-        ],
+        schema: assistantCaptureSchema,
+        schemaName: 'taskCapture',
       }
     );
 
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({
-      response_format: { type: 'json_object' },
+      provider: { require_parameters: true },
+      response_format: {
+        type: 'json_schema',
+        json_schema: { name: 'taskCapture', strict: true },
+      },
+      usage: { include: true },
     });
+    expect(result.modelCall.request).toEqual(requests[0]);
+    expect(result.modelCall.attempts[0].request).toEqual(requests[0]);
     expect(requests[0]).not.toHaveProperty('tools');
     expect(requests[0]).not.toHaveProperty('tool_choice');
     expect(requests[0]).not.toHaveProperty('reasoning');
+    expect(requests[0].response_format).toEqual({
+      type: 'json_schema',
+      json_schema: {
+        name: 'taskCapture',
+        strict: true,
+        schema: toProviderJsonSchema(assistantCaptureSchema),
+      },
+    });
+  });
+
+  it.each([
+    ['capture', assistantCaptureSchema],
+    ['voice', assistantVoiceSchema],
+    ['descriptions', assistantDescriptionsSchema],
+    ['timer', assistantTimerActionSchema],
+  ])(
+    'omits array length bounds Gemini rejects from the %s provider schema',
+    (_name, schema) => {
+      expect(JSON.stringify(toProviderJsonSchema(schema))).not.toContain(
+        'maxItems'
+      );
+    }
+  );
+
+  it('still rejects replies above the Task limit after loosening the provider schema', () => {
+    const tasks = Array.from({ length: MAX_TASKS_PER_REQUEST + 1 }, () =>
+      modelTask({ title: 'Buy milk' })
+    );
+
+    expect(
+      assistantCaptureSchema.safeParse({ ...capturePayload, tasks }).success
+    ).toBe(false);
+  });
+
+  it.each([
+    [
+      'capture',
+      assistantCaptureSchema,
+      { ...capturePayload, tasks: [modelTask({ title: 'Buy milk' })] },
+    ],
+    ['review', assistantReviewSchema, capturePayload],
+    [
+      'voice',
+      assistantVoiceSchema,
+      captureObject({
+        timerAction: {
+          action: 'startTimer',
+          timerType: 'work',
+          intentionSlugs: ['projects'],
+          subIntentions: [
+            { intentionSlug: 'projects', subIntentionSlug: 'pomi' },
+          ],
+        },
+      }),
+    ],
+    [
+      'descriptions',
+      assistantDescriptionsSchema,
+      {
+        descriptions: [
+          { kind: 'list', id: 'list-1', description: 'Groceries to buy.' },
+        ],
+      },
+    ],
+  ] as const)(
+    'validates the %s contract using the schema sent to OpenRouter',
+    async (schemaName, schema, object) => {
+      vi.stubEnv('OPENROUTER_API_KEY', 'test-key');
+      const fetch = vi.fn(async () =>
+        response(200, {
+          choices: [{ message: { content: JSON.stringify(object) } }],
+          usage: { cost: 0.0042 },
+        })
+      );
+      vi.stubGlobal('fetch', fetch);
+      const service = transportService();
+      service.recordCost = vi.fn(async () => undefined);
+      const result = await service.requestObject('user-1', 'test/model', [], {
+        schema,
+        schemaName,
+      });
+      await result.usagePersistence;
+
+      expect(result.object).toEqual(object);
+      expect(service.recordCost).toHaveBeenCalledExactlyOnceWith(
+        'user-1',
+        'chat',
+        0.0042
+      );
+      expect(result.modelCall).toMatchObject({
+        provider: 'openrouter',
+        stage: 'initial',
+        content: JSON.stringify(object),
+        costUsd: 0.0042,
+        attempts: [{ status: 200, error: null }],
+        durationMs: expect.any(Number),
+      });
+      expect(result.modelCall.request).toEqual(
+        result.modelCall.attempts[0].request
+      );
+      expect(result.modelCall.response).toEqual(
+        result.modelCall.attempts[0].response
+      );
+    }
+  );
+
+  it.each([
+    'not json',
+    '```json\n' + captureContent + '\n```',
+    'Here is the result: ' + captureContent,
+    '[]',
+    '{}',
+    JSON.stringify({
+      ...capturePayload,
+      confidence: { ...capturePayload.confidence, title: 'certain' },
+    }),
+    JSON.stringify({ ...capturePayload, unexpected: true }),
+    JSON.stringify({
+      ...capturePayload,
+      tasks: [modelTask({ title: 'Buy milk', priority: 'critical' as never })],
+    }),
+    JSON.stringify({
+      ...capturePayload,
+      tasks: [modelTask({ title: 'Buy milk', sourceSegments: [] })],
+    }),
+    JSON.stringify({
+      ...capturePayload,
+      tasks: [
+        modelTask({ title: 'Buy milk', recurrenceInterval: '2' as never }),
+      ],
+    }),
+    JSON.stringify({ ...capturePayload, tasks: [{ title: 'Buy milk' }] }),
+    JSON.stringify({
+      ...capturePayload,
+      tasks: Array.from({ length: 26 }, () => modelTask({ title: 'Buy milk' })),
+    }),
+  ])(
+    'rejects invalid model output without repair and still records its cost: %#',
+    async content => {
+      vi.stubEnv('OPENROUTER_API_KEY', 'test-key');
+      const fetch = vi.fn(async () =>
+        response(200, {
+          choices: [{ message: { content } }],
+          usage: { cost: 0.002 },
+        })
+      );
+      vi.stubGlobal('fetch', fetch);
+      const service = transportService();
+      service.recordCost = vi.fn(async () => undefined);
+
+      await expect(
+        service.requestObject('user-1', 'test/model', [], {
+          schema: assistantCaptureSchema,
+          schemaName: 'taskCapture',
+          language: 'fr',
+        })
+      ).rejects.toMatchObject({
+        status: 400,
+        message: 'La réponse de l’assistant n’était pas un JSON valide.',
+        modelCall: { content, costUsd: 0.002, attempts: [{ status: 200 }] },
+      });
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(service.recordCost).toHaveBeenCalledExactlyOnceWith(
+        'user-1',
+        'chat',
+        0.002
+      );
+    }
+  );
+
+  it('rejects legacy tool calls rather than merging unvalidated arguments', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-key');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        response(200, {
+          choices: [
+            {
+              message: {
+                tool_calls: [
+                  {
+                    function: {
+                      name: 'create_tasks',
+                      arguments: captureContent,
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { cost: 0.001 },
+        })
+      )
+    );
+    await expect(
+      transportService().requestObject('user-1', 'test/model', [], {
+        schema: assistantCaptureSchema,
+        schemaName: 'taskCapture',
+      })
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('retains valid extraction and accounts for a schema-invalid optional review', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-key');
+    const first = {
+      ...capturePayload,
+      reviewRequired: true,
+      tasks: [modelTask({ title: 'Buy milk' })],
+    };
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(200, {
+          choices: [{ message: { content: JSON.stringify(first) } }],
+          usage: { cost: 0.01 },
+        })
+      )
+      .mockResolvedValueOnce(
+        response(200, {
+          choices: [{ message: { content: '{}' } }],
+          usage: { cost: 0.02 },
+        })
+      );
+    vi.stubGlobal('fetch', fetch);
+    const service = transportService();
+    service.recordCost = vi.fn(async () => undefined);
+
+    const result = await new AssistantInputInterpreter().interpret({
+      mode: 'taskCapture',
+      text: 'Buy milk',
+      today: '2026-10-21',
+      intentions: [],
+      requestObject: (messages, options) =>
+        service.requestObject('user-1', 'test/model', messages, options),
+    });
+
+    expect(result.tasks).toMatchObject([{ title: 'Buy milk' }]);
+    expect(result.usedFallback).toBe(false);
+    expect(result.costUsd).toBe(0.03);
+    expect(result.modelCalls).toMatchObject([
+      { stage: 'initial', costUsd: 0.01 },
+      { stage: 'review', costUsd: 0.02 },
+    ]);
+    expect(service.recordCost).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not call OpenRouter when the per-user budget check rejects the request', async () => {
+    const service = transportService();
+    service.ensureWithinUsageBudget = vi.fn(async () => {
+      throw new Error('budget exhausted');
+    });
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    await expect(
+      service.requestObject('user-1', 'test/model', [], {
+        schema: assistantCaptureSchema,
+        schemaName: 'taskCapture',
+      })
+    ).rejects.toThrow('budget exhausted');
+    expect(service.ensureWithinUsageBudget).toHaveBeenCalledExactlyOnceWith(
+      'user-1'
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('accepts a valid response without inventing a missing usage cost', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-key');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        response(200, { choices: [{ message: { content: captureContent } }] })
+      )
+    );
+    const service = transportService();
+    service.recordCost = vi.fn(async () => undefined);
+    const warning = vi
+      .spyOn(service['logger'], 'warn')
+      .mockImplementation(() => undefined);
+    const result = await service.requestObject('user-1', 'test/model', [], {
+      schema: assistantCaptureSchema,
+      schemaName: 'taskCapture',
+    });
+    expect(result.costUsd).toBe(0);
+    expect(service.recordCost).not.toHaveBeenCalled();
+    expect(warning).toHaveBeenCalledExactlyOnceWith(
+      'OpenRouter chat response did not include usage.cost.'
+    );
+  });
+
+  it('preserves endpoint settings and application headers', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-key');
+    vi.stubEnv('OPENROUTER_BASE_URL', 'https://router.example/api/v1');
+    vi.stubEnv('OPENROUTER_HTTP_REFERER', 'https://pomi.example');
+    const fetch = vi.fn(async () =>
+      response(200, {
+        choices: [{ message: { content: captureContent } }],
+        usage: { cost: 0 },
+      })
+    );
+    vi.stubGlobal('fetch', fetch);
+    const result = await transportService().requestObject(
+      'user-1',
+      'test/model',
+      [],
+      { schema: assistantCaptureSchema, schemaName: 'taskCapture' }
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      'https://router.example/api/v1/chat/completions',
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Bearer test-key',
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://pomi.example',
+          'X-Title': 'Pomi',
+        },
+        signal: expect.any(AbortSignal),
+      })
+    );
+    expect(result.modelCall.endpoint).toBe(
+      'https://router.example/api/v1/chat/completions'
+    );
+  });
+
+  it('aborts the provider request after 30 seconds without retries', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubEnv('OPENROUTER_API_KEY', 'test-key');
+      const fetch = vi.fn(
+        (_input, init: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () =>
+              reject(new Error('aborted'))
+            );
+          })
+      );
+      vi.stubGlobal('fetch', fetch);
+      const request = transportService().requestObject(
+        'user-1',
+        'test/model',
+        [],
+        { schema: assistantCaptureSchema, schemaName: 'taskCapture' }
+      );
+      const assertion = expect(request).rejects.toMatchObject({
+        modelCall: { attempts: [{ status: null, error: 'Error' }] },
+      });
+      await vi.advanceTimersByTimeAsync(30_000);
+      await assertion;
+      expect(fetch).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('reuses prepared context instead of repeating budget and timezone reads', async () => {
@@ -82,7 +448,7 @@ describe('AssistantService transport', () => {
         headers: { get: () => null },
         text: async () =>
           JSON.stringify({
-            choices: [{ message: { content: '{"tasks":[]}' } }],
+            choices: [{ message: { content: captureContent } }],
             usage: { cost: 0.001 },
           }),
       }))
@@ -96,11 +462,11 @@ describe('AssistantService transport', () => {
       throw new Error('prepared request must not repeat budget preflight');
     });
 
-    await service.requestJson(
+    await service.requestObject(
       'user-1',
       'google/gemini-2.5-flash-lite',
       [{ role: 'user', content: 'capture this' }],
-      {},
+      { schema: assistantCaptureSchema, schemaName: 'taskCapture' },
       '2026-07-27'
     );
 
@@ -220,7 +586,7 @@ describe('AssistantService transport', () => {
         headers: { get: () => null },
         text: async () =>
           JSON.stringify({
-            choices: [{ message: { content: '{"tasks":[]}' } }],
+            choices: [{ message: { content: captureContent } }],
             usage: { cost: 0.001 },
           }),
       }))
@@ -231,15 +597,15 @@ describe('AssistantService transport', () => {
       {} as never
     );
 
-    const response = await service.requestJson(
+    const response = await service.requestObject(
       'user-1',
       'google/gemini-2.5-flash-lite',
       [{ role: 'user', content: 'capture this' }],
-      {},
+      { schema: assistantCaptureSchema, schemaName: 'taskCapture' },
       '2026-07-27'
     );
 
-    expect(response.content).toBe('{"tasks":[]}');
+    expect(response.object.tasks).toEqual([]);
     expect(usageRepository.save).toHaveBeenCalledOnce();
     finishSave();
     await pendingSave;
@@ -345,7 +711,7 @@ describe('AssistantService transport', () => {
     expect(usageRepository.createQueryBuilder).not.toHaveBeenCalled();
   });
 
-  it('does not retry a rejected JSON object request', async () => {
+  it('does not retry a rejected structured output request', async () => {
     vi.stubEnv('OPENROUTER_API_KEY', 'test-key');
     const requests: Record<string, unknown>[] = [];
     vi.stubGlobal(
@@ -358,17 +724,21 @@ describe('AssistantService transport', () => {
     const service = transportService();
 
     await expect(
-      service.requestJson(
+      service.requestObject(
         'user-1',
         'test/model',
         [{ role: 'user', content: 'capture' }],
-        { responseSchema: taskSchema('tasks') }
+        { schema: assistantCaptureSchema, schemaName: 'taskCapture' }
       )
     ).rejects.toThrow('OpenRouter model request failed. Try again shortly.');
 
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({
-      response_format: { type: 'json_object' },
+      response_format: {
+        type: 'json_schema',
+        json_schema: { name: 'taskCapture', strict: true },
+      },
+      usage: { include: true },
     });
   });
 
@@ -377,15 +747,6 @@ describe('AssistantService transport', () => {
     service.ensureWithinUsageBudget = async () => undefined;
     service.recordCost = async () => undefined;
     return service;
-  }
-
-  function taskSchema(property: string) {
-    return {
-      type: 'object',
-      properties: { [property]: { type: 'array' } },
-      required: [property],
-      additionalProperties: false,
-    };
   }
 
   function response(status: number, body: unknown) {

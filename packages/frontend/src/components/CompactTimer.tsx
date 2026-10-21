@@ -92,7 +92,7 @@ export function CompactTimerDisplay({
                       cy="22"
                       r="18"
                       fill="none"
-                      stroke="var(--stone-border)"
+                      stroke="var(--hairline-strong)"
                       strokeWidth="7"
                       strokeDasharray={`${Math.max(0, length - 3)} 113.1`}
                     >
@@ -109,7 +109,7 @@ export function CompactTimerDisplay({
                       cy="22"
                       r="18"
                       fill="none"
-                      stroke="var(--stone-accent)"
+                      stroke="var(--accent)"
                       strokeWidth="4"
                       strokeDasharray={`${Math.max(0, length - 3) * filled} 113.1`}
                     />

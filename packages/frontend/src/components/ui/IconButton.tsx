@@ -31,17 +31,18 @@ export function IconButton({
       aria-label={label}
       title={tooltipLabel}
       className={clsx(
-        'z-10 inline-flex items-center justify-center rounded-full transition-all cursor-pointer relative',
-        'hover:brightness-95 focus:outline-none focus:ring-2',
+        'relative z-10 inline-flex cursor-pointer items-center justify-center transition-[background-color,color,transform] duration-150',
+        'focus:outline-none focus-visible:ring-2 active:scale-95',
+        variant === 'primary' ? 'rounded-full' : 'rounded-[10px]',
         sizeClasses[size],
         {
-          'text-on-accent focus:ring-indigo-500/50 bg-indigo-600/90 hover:bg-indigo-500 ':
+          'bg-indigo-500 text-on-accent hover:bg-indigo-400 focus-visible:ring-indigo-400/50':
             variant === 'primary' && !disabled,
-          'focus:ring-slate-500/50 bg-slate-800/80 text-slate-300 hover:bg-slate-700 border border-slate-700/40':
+          'bg-transparent text-slate-400 hover:bg-white/[0.07] hover:text-ink focus-visible:ring-slate-400/40':
             variant === 'secondary' && !disabled,
-          'bg-emerald-500 text-slate-950 shadow-sm shadow-emerald-500/20 hover:bg-emerald-400 focus:ring-emerald-400/50':
+          'bg-emerald-500 text-slate-950 hover:bg-emerald-400 focus-visible:ring-emerald-400/50':
             variant === 'success' && !disabled,
-          'bg-slate-700 text-slate-500 cursor-not-allowed opacity-50 hover:scale-100':
+          'cursor-not-allowed bg-transparent text-slate-500 opacity-40 active:scale-100':
             disabled,
         },
         className

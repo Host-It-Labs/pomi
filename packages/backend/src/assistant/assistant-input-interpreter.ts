@@ -1,6 +1,13 @@
-import { BadRequestException } from '@nestjs/common';
 import type { AssistantDebugModelCall } from '@pomi/shared';
-import { normalizeOptionalString, toRecord } from './assistant-input-utils';
+import { z } from 'zod';
+import {
+  assistantCaptureSchema,
+  assistantReviewSchema,
+  assistantVoiceSchema,
+  type AssistantCaptureOutput,
+  type AssistantVoiceOutput,
+  type AssistantModelTask,
+} from './assistant-output-schemas';
 import { AssistantTaskPolicy } from './assistant-task-policy';
 import { elapsedMs } from './assistant-timing';
 import {
@@ -9,15 +16,14 @@ import {
 } from './assistant-timer-command-policy';
 import {
   AssistantInterpretationError,
-  AssistantExtractionReviewMetadata,
   AssistantInterpretationInput,
   AssistantInterpretationResolutionInput,
   AssistantInterpretationResult,
   AssistantPreparedInterpretation,
   AssistantInterpretationTimings,
   AssistantModelRequestOptions,
-  AssistantModelResponse,
   AssistantModelRequestError,
+  AssistantModelOutputError,
   MAX_TASKS_PER_REQUEST,
 } from './assistant-input-types';
 import { translateAssistant } from '../i18n/assistant-localization';
@@ -28,133 +34,6 @@ export {
   ParsedTaskDraft,
   ParsedTimerCommand,
 } from './assistant-input-types';
-
-const MAX_SOURCE_SEGMENTS_PER_TASK = 32;
-const CONFIDENCE_FIELDS = [
-  'title',
-  'dueDate',
-  'dueTime',
-  'recurrence',
-  'priority',
-  'intention',
-] as const;
-const CONFIDENCE_LEVELS = new Set(['high', 'medium', 'low']);
-
-/**
- * One response shape is used for initial extraction, repair, and review.  We
- * used to force a function call and JSON mode at the same time; Gemini rejects
- * that combination and the service then burned through several fallback
- * requests before returning the useful response. JSON object mode plus the
- * explicit prompt shape keeps extraction deterministic without that rejected
- * request.
- */
-const ASSISTANT_CAPTURE_RESPONSE_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    tasks: {
-      type: 'array',
-      maxItems: MAX_TASKS_PER_REQUEST,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          title: { type: 'string' },
-          description: { type: ['string', 'null'] },
-          sourceSegments: {
-            type: 'array',
-            minItems: 1,
-            maxItems: MAX_SOURCE_SEGMENTS_PER_TASK,
-            items: { type: 'string', minLength: 1 },
-          },
-          // Exact source fragments that carry concrete nouns, names, places,
-          // numbers, or other constraints which must survive normalization.
-          essentialDetails: {
-            type: 'array',
-            items: { type: 'string', minLength: 1 },
-          },
-          // Same key means the passages describe one outcome, even when the
-          // user returns to it after discussing another outcome.
-          outcomeKey: { type: 'string' },
-          dueDate: { type: ['string', 'null'] },
-          dueTime: { type: ['string', 'null'] },
-          priority: {
-            type: ['string', 'null'],
-            enum: ['low', 'normal', 'high', 'urgent', null],
-          },
-          timerType: {
-            type: ['string', 'null'],
-            enum: ['work', 'break', 'longBreak', null],
-          },
-          recurrenceRule: { type: ['string', 'null'] },
-          recurrenceInterval: { type: ['number', 'null'] },
-          recurrenceAnchorMode: {
-            type: ['string', 'null'],
-            enum: ['planned', 'completion', null],
-          },
-          intentionSlug: { type: ['string', 'null'] },
-          subIntentionSlug: { type: ['string', 'null'] },
-          intentionMention: { type: ['string', 'null'] },
-        },
-        required: [
-          'title',
-          'description',
-          'sourceSegments',
-          'essentialDetails',
-          'outcomeKey',
-          'dueDate',
-          'dueTime',
-          'priority',
-          'timerType',
-          'recurrenceRule',
-          'recurrenceInterval',
-          'recurrenceAnchorMode',
-          'intentionSlug',
-          'subIntentionSlug',
-          'intentionMention',
-        ],
-      },
-    },
-    reviewRequired: { type: 'boolean' },
-    confidence: {
-      type: 'object',
-      additionalProperties: false,
-      properties: Object.fromEntries(
-        CONFIDENCE_FIELDS.map(field => [
-          field,
-          { type: 'string', enum: ['high', 'medium', 'low'] },
-        ])
-      ),
-      required: [...CONFIDENCE_FIELDS],
-    },
-    unresolvedMetadata: {
-      type: 'array',
-      items: { type: 'string' },
-    },
-    responseLanguage: { type: 'string', minLength: 2, maxLength: 32 },
-    timerAction: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        action: {
-          type: 'string',
-          enum: ['startTimer', 'pauseTimer', 'addFiveMinutes', 'none'],
-        },
-        timerType: {
-          type: ['string', 'null'],
-          enum: ['work', 'break', 'longBreak', null],
-        },
-        intentionSlugs: { type: 'array', items: { type: 'string' } },
-        subIntentions: {
-          type: 'object',
-          additionalProperties: { type: 'string' },
-        },
-      },
-      required: ['action', 'timerType', 'intentionSlugs', 'subIntentions'],
-    },
-  },
-  required: ['tasks', 'reviewRequired', 'confidence', 'unresolvedMetadata'],
-};
 
 export class AssistantInputInterpreter {
   private readonly taskPolicy = new AssistantTaskPolicy();
@@ -174,16 +53,35 @@ export class AssistantInputInterpreter {
     const modelCalls: AssistantDebugModelCall[] = [];
     let costUsd = 0;
     const requestStartedAt = performance.now();
-    let firstResponse: AssistantModelResponse;
+    let parsed: AssistantCaptureOutput | AssistantVoiceOutput;
     try {
-      firstResponse = await this.requestJson(
+      const schema =
+        input.mode === 'voiceCommand'
+          ? assistantVoiceSchema
+          : assistantCaptureSchema;
+      const firstResponse = await this.requestObject(
         input,
         this.buildMessages(input),
-        this.buildRequestOptions(input, 'initial'),
+        {
+          schema,
+          schemaName: input.mode,
+          debugStage: 'initial',
+          language: input.accountLanguage,
+        },
         modelCalls
       );
+      costUsd += firstResponse.costUsd;
+      parsed = firstResponse.object;
     } catch (error) {
       timings.modelRequestMs = elapsedMs(requestStartedAt);
+      if (error instanceof AssistantModelOutputError) {
+        throw new AssistantInterpretationError(error.message, {
+          costUsd: error.modelCall.costUsd,
+          invalidParserOutput: error.modelCall.content ?? '',
+          timings,
+          modelCalls,
+        });
+      }
       return this.handleModelFailure(
         input,
         error,
@@ -194,117 +92,44 @@ export class AssistantInputInterpreter {
       );
     }
     timings.modelRequestMs = elapsedMs(requestStartedAt);
-    costUsd += firstResponse.costUsd;
-
-    let parsed: Record<string, unknown>;
-    let invalidParserOutput: string | null = null;
-    try {
-      parsed = this.parseJsonObject(
-        firstResponse.content,
-        input.accountLanguage
-      );
-    } catch {
-      invalidParserOutput = firstResponse.content;
-      const repairStartedAt = performance.now();
-      let repairResponse: AssistantModelResponse;
-      try {
-        repairResponse = await this.requestJson(
-          input,
-          this.buildRepairMessages(input, firstResponse.content),
-          this.buildRequestOptions(input, 'repair'),
-          modelCalls
-        );
-      } catch (error) {
-        timings.modelRepairMs = elapsedMs(repairStartedAt);
-        return this.handleModelFailure(
-          input,
-          error,
-          costUsd,
-          invalidParserOutput,
-          timings,
-          modelCalls
-        );
-      }
-      timings.modelRepairMs = elapsedMs(repairStartedAt);
-      costUsd += repairResponse.costUsd;
-      try {
-        parsed = this.parseJsonObject(
-          repairResponse.content,
-          input.accountLanguage
-        );
-      } catch {
-        invalidParserOutput = repairResponse.content;
-        return this.handleModelFailure(
-          input,
-          new Error(
-            translateAssistant(
-              input.accountLanguage,
-              'assistantResponseInvalid'
-            )
-          ),
-          costUsd,
-          invalidParserOutput,
-          timings,
-          modelCalls
-        );
-      }
-    }
-
-    let rawTasks = this.readTasks(parsed, input.mode === 'voiceCommand');
+    const invalidParserOutput = null;
+    let rawTasks = parsed.tasks;
     if (this.shouldReviewExtraction(parsed, rawTasks, input.text)) {
       const reviewStartedAt = performance.now();
       try {
-        const reviewResponse = await this.requestJson(
+        const reviewResponse = await this.requestObject(
           input,
           this.buildReviewMessages(input, parsed),
-          this.buildRequestOptions(input, 'review'),
+          {
+            schema: assistantReviewSchema,
+            schemaName: 'taskReview',
+            debugStage: 'review',
+            language: input.accountLanguage,
+          },
           modelCalls
         );
         costUsd += reviewResponse.costUsd;
-        const reviewed = this.parseJsonObject(
-          reviewResponse.content,
-          input.accountLanguage
-        );
-        const reviewedTasks = this.readTasks(
-          reviewed,
-          input.mode === 'voiceCommand'
-        );
+        const reviewed = reviewResponse.object;
         if (
-          reviewedTasks.length > 0 &&
-          reviewedTasks.length <= MAX_TASKS_PER_REQUEST &&
-          !this.taskPolicy.needsReview(reviewedTasks, input.text)
+          reviewed.tasks.length > 0 &&
+          !this.taskPolicy.needsReview(reviewed.tasks, input.text)
         ) {
           parsed = {
             ...parsed,
             ...reviewed,
-            ...(input.mode === 'voiceCommand'
+            ...('timerAction' in parsed
               ? { timerAction: parsed.timerAction }
               : {}),
           };
-          rawTasks = reviewedTasks;
+          rawTasks = reviewed.tasks;
         }
-      } catch {
-        // Keep first valid extraction when optional review fails.
+      } catch (error) {
+        // Keep first valid extraction when optional review fails, including its billed cost.
+        if (error instanceof AssistantModelRequestError)
+          costUsd += error.modelCall.costUsd;
       } finally {
         timings.modelReviewMs = elapsedMs(reviewStartedAt);
       }
-    }
-    if (rawTasks.length > MAX_TASKS_PER_REQUEST) {
-      throw new AssistantInterpretationError(
-        translateAssistant(
-          input.accountLanguage,
-          'assistantTasksLimitExceeded',
-          {
-            count: MAX_TASKS_PER_REQUEST,
-          }
-        ),
-        {
-          costUsd,
-          invalidParserOutput: '',
-          modelCalls,
-          timings,
-        }
-      );
     }
     if (
       rawTasks.length > 0 &&
@@ -353,10 +178,8 @@ export class AssistantInputInterpreter {
       modelFailure: null,
       modelCalls,
       timings,
-      responseLanguage: this.readResponseLanguage(
-        parsed,
-        input.accountLanguage
-      ),
+      responseLanguage:
+        parsed.responseLanguage.trim() || input.accountLanguage || 'en',
     };
   }
 
@@ -399,7 +222,7 @@ export class AssistantInputInterpreter {
       input.intentions,
       input.defaults,
       resolutionNotes,
-      this.readReviewMetadata(prepared.parsed)?.unresolvedMetadata ?? [],
+      prepared.parsed.unresolvedMetadata,
       prepared.mode === 'voiceCommand',
       this.buildTranscriptSettings(input)
     );
@@ -419,7 +242,7 @@ export class AssistantInputInterpreter {
       usedFallback = true;
     }
     const timerCommand =
-      prepared.mode === 'voiceCommand'
+      prepared.mode === 'voiceCommand' && 'timerAction' in prepared.parsed
         ? this.timerPolicy.normalize(
             prepared.parsed.timerAction,
             input.intentions,
@@ -474,14 +297,14 @@ export class AssistantInputInterpreter {
     };
   }
 
-  private async requestJson(
+  private async requestObject<S extends z.ZodType>(
     input: AssistantInterpretationInput,
     messages: Array<{ role: 'system' | 'user'; content: string }>,
-    options: AssistantModelRequestOptions,
+    options: AssistantModelRequestOptions<S>,
     modelCalls: AssistantDebugModelCall[]
   ) {
     try {
-      const response = await input.requestJson(messages, options);
+      const response = await input.requestObject(messages, options);
       if (response.modelCall) {
         modelCalls.push(response.modelCall);
       }
@@ -541,74 +364,9 @@ export class AssistantInputInterpreter {
           today: input.today,
           text: input.text,
           intentions: input.intentions,
-          shape: {
-            tasks: [
-              {
-                title: 'string',
-                description: 'string|null',
-                sourceSegments: ['exact contiguous source passage'],
-                essentialDetails: [
-                  'exact source fragments for concrete details',
-                ],
-                outcomeKey: 'stable grouping key for one outcome',
-                dueDate: 'YYYY-MM-DD|null',
-                dueTime: 'HH:mm|null',
-                priority: 'low|normal|high|urgent',
-                timerType: 'work|break|longBreak',
-                recurrenceRule: 'RRULE|null',
-                recurrenceInterval: 'number|null',
-                recurrenceAnchorMode: 'planned|completion',
-                intentionSlug: 'existing parent slug|null',
-                subIntentionSlug: 'existing child slug|null',
-                intentionMention: 'heard or typed intention wording|null',
-              },
-            ],
-            reviewRequired: 'boolean',
-            confidence: {
-              title: 'high|medium|low',
-              dueDate: 'high|medium|low',
-              dueTime: 'high|medium|low',
-              recurrence: 'high|medium|low',
-              priority: 'high|medium|low',
-              intention: 'high|medium|low',
-            },
-            unresolvedMetadata: ['string'],
-            responseLanguage:
-              'BCP-47 language code for the primary request language',
-            timerAction: {
-              action: 'startTimer|pauseTimer|addFiveMinutes|none',
-              timerType: 'work|break|longBreak|null',
-              intentionSlugs: ['existing parent intention slug'],
-              subIntentions: {
-                parentIntentionSlug: 'existing child intention slug',
-              },
-            },
-          },
         }),
       },
     ];
-  }
-
-  private buildRequestOptions(
-    input: AssistantInterpretationInput,
-    phase: 'initial' | 'repair' | 'review'
-  ): AssistantModelRequestOptions {
-    const schemaProperties =
-      ASSISTANT_CAPTURE_RESPONSE_SCHEMA.properties as Record<string, unknown>;
-    const schemaRequired = [
-      ...((ASSISTANT_CAPTURE_RESPONSE_SCHEMA.required as string[]) ?? []),
-    ];
-    if (input.mode === 'voiceCommand') {
-      schemaRequired.push('timerAction');
-    }
-    return {
-      debugStage: phase,
-      responseSchema: {
-        ...ASSISTANT_CAPTURE_RESPONSE_SCHEMA,
-        properties: schemaProperties,
-        required: schemaRequired,
-      },
-    };
   }
 
   private buildTranscriptSettings(
@@ -623,28 +381,9 @@ export class AssistantInputInterpreter {
     };
   }
 
-  private buildRepairMessages(
-    input: AssistantInterpretationInput,
-    invalidOutput: string
-  ) {
-    const messages = this.buildMessages(input);
-    return [
-      messages[0],
-      {
-        role: 'user' as const,
-        content: JSON.stringify({
-          instruction:
-            'Repair invalid output below. Return exactly one JSON object matching the requested shape and no surrounding text. Do not drop sourceSegments, essentialDetails, or outcomeKey.',
-          originalRequest: JSON.parse(messages[1].content),
-          invalidOutput,
-        }),
-      },
-    ];
-  }
-
   private buildReviewMessages(
     input: AssistantInterpretationInput,
-    firstExtraction: Record<string, unknown>
+    firstExtraction: AssistantCaptureOutput
   ) {
     return [
       {
@@ -659,104 +398,24 @@ export class AssistantInputInterpreter {
           intentions: input.intentions,
           firstExtraction,
           instruction:
-            'Return corrected tasks plus responseLanguage, reviewRequired, confidence, unresolvedMetadata, and timerAction.',
+            'Return corrected tasks plus responseLanguage, reviewRequired, confidence, and unresolvedMetadata.',
         }),
       },
     ];
   }
 
   private shouldReviewExtraction(
-    parsed: Record<string, unknown>,
-    rawTasks: unknown[],
+    parsed: AssistantCaptureOutput,
+    rawTasks: AssistantModelTask[],
     sourceText: string
   ) {
-    const metadata = this.readReviewMetadata(parsed);
-    if (!metadata) return true;
-    if (metadata.reviewRequired || metadata.unresolvedMetadata.length > 0)
+    if (parsed.reviewRequired || parsed.unresolvedMetadata.length > 0)
       return true;
-    if (Object.values(metadata.confidence).some(value => value !== 'high'))
+    if (Object.values(parsed.confidence).some(value => value !== 'high'))
       return true;
-    if (rawTasks.length > MAX_TASKS_PER_REQUEST) return true;
     return (
       this.taskPolicy.needsReview(rawTasks, sourceText) ||
       this.taskPolicy.hasUnassignedSourceUrls(rawTasks, sourceText)
     );
-  }
-
-  private readReviewMetadata(
-    parsed: Record<string, unknown>
-  ): AssistantExtractionReviewMetadata | null {
-    if (typeof parsed.reviewRequired !== 'boolean') return null;
-    if (
-      !Array.isArray(parsed.unresolvedMetadata) ||
-      !parsed.unresolvedMetadata.every(value => typeof value === 'string')
-    ) {
-      return null;
-    }
-    const confidence = toRecord(parsed.confidence);
-    if (
-      !CONFIDENCE_FIELDS.every(field =>
-        CONFIDENCE_LEVELS.has(String(confidence[field]))
-      )
-    ) {
-      return null;
-    }
-    return {
-      reviewRequired: parsed.reviewRequired,
-      confidence: Object.fromEntries(
-        CONFIDENCE_FIELDS.map(field => [field, confidence[field]])
-      ) as AssistantExtractionReviewMetadata['confidence'],
-      unresolvedMetadata: parsed.unresolvedMetadata,
-    };
-  }
-
-  private readTasks(input: Record<string, unknown>, allowEmpty: boolean) {
-    if (Array.isArray(input.tasks)) return input.tasks;
-    if (normalizeOptionalString(input.title)) return [input];
-    return allowEmpty ? [] : [{}];
-  }
-
-  private readResponseLanguage(
-    parsed: Record<string, unknown>,
-    fallback: string | undefined
-  ): string {
-    const value = normalizeOptionalString(parsed.responseLanguage);
-    return value?.slice(0, 32) ?? fallback ?? 'en';
-  }
-
-  private parseJsonObject(
-    content: string,
-    language: string | null | undefined
-  ) {
-    const normalizeParsed = (value: unknown) => {
-      if (Array.isArray(value)) {
-        return {
-          tasks: value,
-          reviewRequired: false,
-          confidence: Object.fromEntries(
-            CONFIDENCE_FIELDS.map(field => [field, 'high'])
-          ),
-          unresolvedMetadata: [],
-        } as Record<string, unknown>;
-      }
-      const record = toRecord(value);
-      if (Object.keys(record).length === 0) {
-        throw new BadRequestException(
-          translateAssistant(language, 'assistantResponseInvalid')
-        );
-      }
-      return record;
-    };
-    try {
-      return normalizeParsed(JSON.parse(content));
-    } catch {
-      const match = content.match(/(?:\{[\s\S]*\}|\[[\s\S]*\])/);
-      if (!match) {
-        throw new BadRequestException(
-          translateAssistant(language, 'assistantResponseInvalid')
-        );
-      }
-      return normalizeParsed(JSON.parse(match[0]));
-    }
   }
 }

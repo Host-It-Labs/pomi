@@ -1,4 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
+import { z } from 'zod';
+import type {
+  AssistantCaptureOutput,
+  AssistantVoiceOutput,
+  AssistantModelTask,
+} from './assistant-output-schemas';
+export { MAX_TASKS_PER_REQUEST } from './assistant-output-schemas';
 import {
   AssistantDebugModelCall,
   AssistantDebugModelCallStage,
@@ -14,26 +21,11 @@ export type ParsedTaskDraft = AssistantTaskDraft & {
   listId?: string | null;
 };
 
-export const MAX_TASKS_PER_REQUEST = 25;
-
-export type AssistantModelTool = {
-  type: 'function';
-  function: {
-    name: string;
-    description: string;
-    parameters: Record<string, unknown>;
-  };
-};
-
-export type AssistantModelRequestOptions = {
+export type AssistantModelRequestOptions<S extends z.ZodType> = {
+  schema: S;
+  schemaName: string;
   debugStage?: AssistantDebugModelCallStage;
-  /** Provider-neutral schema for structured JSON extraction. */
-  responseSchema?: Record<string, unknown>;
-  tools?: AssistantModelTool[];
-  toolChoice?:
-    | 'auto'
-    | 'required'
-    | { type: 'function'; function: { name: string } };
+  language?: string;
 };
 
 export type AssistantTaskDefaults = Omit<Partial<AssistantTaskDraft>, 'title'>;
@@ -55,31 +47,16 @@ export type AssistantCaptureIntention = {
 
 export type AssistantInterpretationTimings = {
   modelRequestMs?: number;
-  modelRepairMs?: number;
   modelReviewMs?: number;
   outputProcessingMs?: number;
 };
 
-export type AssistantModelResponse = {
+export type AssistantModelResponse<S extends z.ZodType> = {
+  object: z.infer<S>;
   content: string;
   costUsd: number;
   modelCall?: AssistantDebugModelCall;
   usagePersistence?: Promise<void>;
-};
-
-export type AssistantExtractionConfidenceLevel = 'high' | 'medium' | 'low';
-
-export type AssistantExtractionReviewMetadata = {
-  reviewRequired: boolean;
-  confidence: {
-    title: AssistantExtractionConfidenceLevel;
-    dueDate: AssistantExtractionConfidenceLevel;
-    dueTime: AssistantExtractionConfidenceLevel;
-    recurrence: AssistantExtractionConfidenceLevel;
-    priority: AssistantExtractionConfidenceLevel;
-    intention: AssistantExtractionConfidenceLevel;
-  };
-  unresolvedMetadata: string[];
 };
 
 export type AssistantInterpretationInput = {
@@ -91,10 +68,10 @@ export type AssistantInterpretationInput = {
   defaults?: AssistantTaskDefaults;
   taskTranscriptEnabled?: boolean;
   taskTranscriptMinWords?: number;
-  requestJson: (
+  requestObject: <S extends z.ZodType>(
     messages: Array<{ role: 'system' | 'user'; content: string }>,
-    options: AssistantModelRequestOptions
-  ) => Promise<AssistantModelResponse>;
+    options: AssistantModelRequestOptions<S>
+  ) => Promise<AssistantModelResponse<S>>;
 };
 
 export type AssistantInterpretationResult = {
@@ -113,8 +90,8 @@ export type AssistantInterpretationResult = {
 export type AssistantPreparedInterpretation = {
   mode: AssistantInterpretationInput['mode'];
   text: string;
-  parsed: Record<string, unknown> | null;
-  rawTasks: unknown[];
+  parsed: AssistantCaptureOutput | AssistantVoiceOutput | null;
+  rawTasks: AssistantModelTask[];
   costUsd: number;
   invalidParserOutput: string | null;
   modelFailure: string | null;
@@ -155,3 +132,5 @@ export class AssistantModelRequestError extends BadRequestException {
     super(message);
   }
 }
+
+export class AssistantModelOutputError extends AssistantModelRequestError {}

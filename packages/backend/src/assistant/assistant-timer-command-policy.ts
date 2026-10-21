@@ -1,5 +1,6 @@
 import { TIMER_TYPES, TimerTypes } from '@pomi/shared';
-import { normalizeOptionalString, toRecord } from './assistant-input-utils';
+import { normalizeOptionalString } from './assistant-input-utils';
+import type { AssistantTimerActionOutput } from './assistant-output-schemas';
 import {
   AssistantCaptureIntention,
   ParsedTimerCommand,
@@ -13,37 +14,30 @@ export const EMPTY_TIMER_COMMAND: ParsedTimerCommand = {
 
 export class AssistantTimerCommandPolicy {
   normalize(
-    input: unknown,
+    input: AssistantTimerActionOutput,
     intentions: AssistantCaptureIntention[],
-    sourceText = ''
+    sourceText: string
   ): ParsedTimerCommand {
-    const value = toRecord(input);
+    const value = input;
     const action =
-      this.sanitizeAction(value.action) === 'none'
-        ? this.inferAction(sourceText)
-        : this.sanitizeAction(value.action);
+      value.action === 'none' ? this.inferAction(sourceText) : value.action;
     const timerType =
-      this.sanitizeTimerType(value.timerType) ??
-      this.inferTimerType(sourceText) ??
-      TIMER_TYPES.WORK;
+      value.timerType ?? this.inferTimerType(sourceText) ?? TIMER_TYPES.WORK;
     if (action !== 'startTimer') {
       return { action, timerType, intentionSlugs: [], subIntentions: {} };
     }
 
     const intentionSlugs = new Set<string>();
     const subIntentions: Record<string, string> = {};
-    const rawSlugs = Array.isArray(value.intentionSlugs)
-      ? value.intentionSlugs
-      : value.intentionSlug
-        ? [value.intentionSlug]
-        : [];
-    for (const rawSlug of rawSlugs) {
+    for (const rawSlug of value.intentionSlugs) {
       const parent = this.findParent(rawSlug, timerType, intentions);
       if (parent) intentionSlugs.add(parent.slug);
     }
 
-    const rawSubs = toRecord(value.subIntentions);
-    for (const [rawParent, rawChild] of Object.entries(rawSubs)) {
+    for (const {
+      intentionSlug: rawParent,
+      subIntentionSlug: rawChild,
+    } of value.subIntentions) {
       const parent = this.findParent(rawParent, timerType, intentions);
       const child = this.findChild(
         rawChild,
@@ -57,18 +51,6 @@ export class AssistantTimerCommandPolicy {
       }
     }
 
-    const parent = this.findParent(value.intentionSlug, timerType, intentions);
-    const child = this.findChild(
-      value.subIntentionSlug,
-      parent?.slug,
-      timerType,
-      intentions
-    );
-    if (parent && child) {
-      intentionSlugs.add(parent.slug);
-      subIntentions[parent.slug] = child.slug;
-    }
-
     return {
       action,
       timerType,
@@ -78,7 +60,7 @@ export class AssistantTimerCommandPolicy {
   }
 
   private findParent(
-    value: unknown,
+    value: string,
     timerType: TimerTypes,
     intentions: AssistantCaptureIntention[]
   ) {
@@ -94,7 +76,7 @@ export class AssistantTimerCommandPolicy {
   }
 
   private findChild(
-    value: unknown,
+    value: string,
     parentSlug: string | undefined,
     timerType: TimerTypes,
     intentions: AssistantCaptureIntention[]
@@ -108,22 +90,6 @@ export class AssistantTimerCommandPolicy {
             intention.parentSlug === parentSlug
         ) ?? null)
       : null;
-  }
-
-  private sanitizeTimerType(value: unknown): TimerTypes | undefined {
-    return value === TIMER_TYPES.WORK ||
-      value === TIMER_TYPES.BREAK ||
-      value === TIMER_TYPES.LONG_BREAK
-      ? value
-      : undefined;
-  }
-
-  private sanitizeAction(value: unknown): ParsedTimerCommand['action'] {
-    return value === 'startTimer' ||
-      value === 'pauseTimer' ||
-      value === 'addFiveMinutes'
-      ? value
-      : 'none';
   }
 
   private inferAction(sourceText: string): ParsedTimerCommand['action'] {

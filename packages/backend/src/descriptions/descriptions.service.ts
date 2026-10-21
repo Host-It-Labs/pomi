@@ -1,12 +1,15 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import {
+  assistantDescriptionsSchema,
+  MAX_DESCRIPTION_DESTINATIONS,
+} from '../assistant/assistant-output-schemas';
 import { AssistantService } from '../assistant/assistant.service';
 import { Intention } from '../intentions/intentions.entity';
 import { ListEntity } from '../lists/lists.entity';
 import { TaskEntity } from '../tasks/tasks.entity';
 
-const MAX_DESTINATIONS = 25;
 const MAX_TASK_TITLES = 8;
 
 @Injectable()
@@ -75,53 +78,38 @@ export class DescriptionsService {
           .slice(0, MAX_TASK_TITLES)
           .map(task => task.title.slice(0, 120)),
       })),
-    ].slice(0, MAX_DESTINATIONS);
+    ].slice(0, MAX_DESCRIPTION_DESTINATIONS);
     if (!destinations.length) return { drafts: [], costUsd: 0 };
-    const response = await this.assistantService.requestJson(
+    const response = await this.assistantService.requestObject(
       userId,
       context.settings.textModel,
       [
         {
           role: 'system',
           content:
-            'Write one concise plain-language description per destination. Use at most 18 words. Explain what belongs there. Return JSON only: {"descriptions":[{"kind":"intention|list","id":"...","description":"..."}]}.',
+            'Write one concise plain-language description per destination. Use at most 18 words. Explain what belongs there. Return JSON only, matching the supplied schema.',
         },
         { role: 'user', content: JSON.stringify(destinations) },
       ],
-      { debugStage: 'initial' },
+      {
+        schema: assistantDescriptionsSchema,
+        schemaName: 'destinationDescriptions',
+        debugStage: 'initial',
+        language: context.preferences.language,
+      },
       context.today
     );
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(response.content);
-    } catch {
-      throw new BadRequestException(
-        'Description generation returned invalid JSON'
-      );
-    }
-    const rows =
-      parsed &&
-      typeof parsed === 'object' &&
-      Array.isArray((parsed as { descriptions?: unknown[] }).descriptions)
-        ? (parsed as { descriptions: unknown[] }).descriptions
-        : [];
+    const rows = response.object.descriptions;
     const drafts = destinations
       .map(destination => {
         const match = rows.find(
-          row =>
-            row &&
-            typeof row === 'object' &&
-            (row as { kind?: unknown }).kind === destination.kind &&
-            (row as { id?: unknown }).id === destination.id
-        ) as { description?: unknown } | undefined;
+          row => row.kind === destination.kind && row.id === destination.id
+        );
         return {
           kind: destination.kind,
           id: destination.id,
           title: destination.title,
-          description:
-            typeof match?.description === 'string'
-              ? match.description.trim().slice(0, 240)
-              : '',
+          description: match?.description.trim().slice(0, 240) ?? '',
         };
       })
       .filter(draft => draft.description);
