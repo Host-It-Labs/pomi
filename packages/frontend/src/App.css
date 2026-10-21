@@ -1144,15 +1144,41 @@ body::-webkit-scrollbar-thumb:hover,
   .compact-session {
     gap: 4px;
   }
+  .compact-timer .compact-countdown {
+    font-size: 34px;
+  }
+  .compact-timer-actions button {
+    min-width: 26px;
+    padding: 5px;
+  }
+  .compact-timer-actions > button:first-child {
+    width: 32px;
+    height: 32px;
+  }
+  .timer-action-separator {
+    margin-inline: 2px;
+  }
 }
 @media (max-width: 380px) {
   .compact-timer .compact-countdown {
-    font-size: 36px;
+    font-size: 32px;
   }
   .compact-timer-actions button {
     min-width: 24px;
     min-height: 28px;
     padding: 4px;
+  }
+}
+@media (max-width: 340px) {
+  .compact-timer {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .compact-timer .compact-countdown {
+    font-size: 28px;
+  }
+  .session-ring {
+    width: 34px;
+    height: 34px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
