@@ -191,6 +191,8 @@ export class AssistantService {
     this.requireApiKey();
     const inputFilter = this.splitModalities(filter.inputModalities);
     const outputFilter = this.splitModalities(filter.outputModalities);
+    const requiresStructuredOutputs =
+      outputFilter.length === 0 || outputFilter.includes('text');
     let response: Response;
     try {
       response = await this.fetchWithTimeout(
@@ -223,6 +225,12 @@ export class AssistantService {
       )
       .filter(model =>
         this.modelHasOutputModalities(model.outputModalities, outputFilter)
+      )
+      .filter(
+        model =>
+          !requiresStructuredOutputs ||
+          (model.outputModalities.includes('text') &&
+            model.supportedParameters.includes('structured_outputs'))
       )
       .sort((a, b) => a.id.localeCompare(b.id));
   }
@@ -477,6 +485,7 @@ export class AssistantService {
     const jsonBody = {
       ...baseBody,
       usage: { include: true },
+      provider: { require_parameters: true },
       // Structured output must never be combined with forced tool calls (Gemini).
       response_format: {
         type: 'json_schema',

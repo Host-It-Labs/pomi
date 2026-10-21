@@ -941,7 +941,11 @@ body::-webkit-scrollbar-thumb:hover,
     opacity: 0;
     transition: opacity 120ms;
   }
-  [data-testid='task-row']:is(:hover, :focus-within) .task-row-actions,
+  :is([data-testid='task-row'], [data-testid='list-item-row']):is(
+      :hover,
+      :focus-within
+    )
+    .task-row-actions,
   [data-testid='task-row'][data-pinned='true'] .task-row-actions {
     opacity: 1;
   }

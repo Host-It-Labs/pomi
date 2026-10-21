@@ -49,7 +49,7 @@ describe('AssistantService transport', () => {
     service.ensureWithinUsageBudget = async () => undefined;
     service.recordCost = async () => undefined;
 
-    await service.requestObject(
+    const result = await service.requestObject(
       'user-1',
       'google/gemini-2.5-flash-lite',
       [{ role: 'user', content: 'capture this' }],
@@ -61,12 +61,15 @@ describe('AssistantService transport', () => {
 
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({
+      provider: { require_parameters: true },
       response_format: {
         type: 'json_schema',
         json_schema: { name: 'taskCapture', strict: true },
       },
       usage: { include: true },
     });
+    expect(result.modelCall.request).toEqual(requests[0]);
+    expect(result.modelCall.attempts[0].request).toEqual(requests[0]);
     expect(requests[0]).not.toHaveProperty('tools');
     expect(requests[0]).not.toHaveProperty('tool_choice');
     expect(requests[0]).not.toHaveProperty('reasoning');
